@@ -25,6 +25,8 @@ export interface Conversation {
   id: string;
   type: 'personal' | 'group' | 'event';
   name: string | null;
+  event_id: string | null;
+  created_by: string;
   created_at: string;
   updated_at: string;
   members: ConversationMember[];
@@ -55,7 +57,7 @@ export function useConversations() {
     const [convRes, membersRes] = await Promise.all([
       supabase
         .from('conversations')
-        .select('id, type, name, created_at, updated_at')
+        .select('id, type, name, event_id, created_by, created_at, updated_at')
         .in('id', convIds)
         .order('updated_at', { ascending: false }),
       supabase
@@ -115,6 +117,8 @@ export function useConversations() {
       id: c.id,
       type: c.type as 'personal' | 'group' | 'event',
       name: c.name,
+      event_id: c.event_id,
+      created_by: c.created_by,
       created_at: c.created_at,
       updated_at: c.updated_at,
       members: membersByConv[c.id] || [],
@@ -177,5 +181,56 @@ export function useConversations() {
     return data as string;
   }, [user, fetchConversations]);
 
-  return { conversations, loading, refresh: fetchConversations, createDirectConversation, createGroupConversation };
+  const createEventConversation = useCallback(async (eventId: string): Promise<string | null> => {
+    if (!user) return null;
+    const existing = conversations.find(c => c.type === 'event' && c.event_id === eventId);
+    if (existing) return existing.id;
+
+    const { data, error } = await supabase.rpc('create_event_conversation', {
+      p_event_id: eventId,
+    });
+    if (error || !data) return null;
+
+    await fetchConversations();
+    return data as string;
+  }, [user, conversations, fetchConversations]);
+
+  const requestDeleteConversation = useCallback(async (conversationId: string): Promise<boolean> => {
+    if (!user) return false;
+    const { error } = await supabase.rpc('request_conversation_delete', {
+      p_conversation_id: conversationId,
+    });
+    if (!error) await fetchConversations();
+    return !error;
+  }, [user, fetchConversations]);
+
+  const confirmDeleteConversation = useCallback(async (conversationId: string): Promise<boolean> => {
+    if (!user) return false;
+    const { error } = await supabase.rpc('confirm_conversation_delete', {
+      p_conversation_id: conversationId,
+    });
+    if (!error) await fetchConversations();
+    return !error;
+  }, [user, fetchConversations]);
+
+  const deleteConversationAsCreator = useCallback(async (conversationId: string): Promise<boolean> => {
+    if (!user) return false;
+    const { error } = await supabase.rpc('delete_conversation_as_creator', {
+      p_conversation_id: conversationId,
+    });
+    if (!error) await fetchConversations();
+    return !error;
+  }, [user, fetchConversations]);
+
+  return {
+    conversations,
+    loading,
+    refresh: fetchConversations,
+    createDirectConversation,
+    createGroupConversation,
+    createEventConversation,
+    requestDeleteConversation,
+    confirmDeleteConversation,
+    deleteConversationAsCreator,
+  };
 }

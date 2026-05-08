@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Send, ImageIcon, X, Pin, CornerUpLeft,
   MessageCircle, Plus, Search, Trash2, MoreHorizontal, ChevronRight, Check,
+  CalendarDays, Music2,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useConversations, type Conversation } from '../hooks/useConversations';
@@ -43,11 +44,22 @@ function formatDateDivider(iso: string): string {
   return date.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
-type MsgContent = { type: 'text'; text: string } | { type: 'image'; url: string };
+type MsgContent =
+  | { type: 'text'; text: string }
+  | { type: 'image'; url: string }
+  | { type: 'delete_request'; requestedBy: string; requesterName: string; requestedAt: string };
 function parseContent(content: string): MsgContent {
   try {
     const p = JSON.parse(content);
     if (p.type === 'image' && typeof p.url === 'string') return p;
+    if (p.type === 'delete_request' && typeof p.requestedBy === 'string') {
+      return {
+        type: 'delete_request',
+        requestedBy: p.requestedBy,
+        requesterName: typeof p.requesterName === 'string' ? p.requesterName : 'Someone',
+        requestedAt: typeof p.requestedAt === 'string' ? p.requestedAt : '',
+      };
+    }
   } catch {
     // Treat non-JSON content as a plain text message.
   }
@@ -75,6 +87,7 @@ function getSenderName(sender: { first_name: string | null; last_name: string | 
 function previewContent(content: string): string {
   const parsed = parseContent(content);
   if (parsed.type === 'image') return '📷 Photo';
+  if (parsed.type === 'delete_request') return 'Delete chat request';
   return parsed.text.length > 60 ? parsed.text.slice(0, 60) + '…' : parsed.text;
 }
 
@@ -151,18 +164,28 @@ function ConvItem({ conv, selected, myUserId, onSelect }: {
 
 // ─── New Message Modal ───────────────────────────────────────────────────────
 
-function NewMessageModal({ open, onClose, onSelect, onCreateGroup, currentUserId }: {
+type EventChoice = {
+  id: string;
+  title: string;
+  event_date: string;
+  start_time: string | null;
+  event_type: string | null;
+};
+
+function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEventChat, currentUserId }: {
   open: boolean;
   onClose: () => void;
   onSelect: (userId: string) => void;
   onCreateGroup: (userIds: string[], groupName: string) => void;
+  onCreateEventChat: (eventId: string) => void;
   currentUserId: string;
 }) {
-  const [mode, setMode] = useState<'direct' | 'group'>('direct');
+  const [mode, setMode] = useState<'direct' | 'group' | 'event'>('direct');
   const [query, setQuery] = useState('');
   const [groupName, setGroupName] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [people, setPeople] = useState<Array<{ id: string; first_name: string | null; last_name: string | null; nickname: string | null; avatar_url: string | null }>>([]);
+  const [events, setEvents] = useState<EventChoice[]>([]);
 
   useEffect(() => {
     if (!open) return;
@@ -170,13 +193,22 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, currentUserId
     setQuery('');
     setGroupName('');
     setSelectedIds(new Set());
-    supabase.from('profiles').select('id, first_name, last_name, nickname, avatar_url').order('first_name')
-      .then(({ data }) => setPeople((data || []).filter(p => p.id !== currentUserId)));
+    Promise.all([
+      supabase.from('profiles').select('id, first_name, last_name, nickname, avatar_url').order('first_name'),
+      supabase.from('events').select('id, title, event_date, start_time, event_type').order('event_date', { ascending: false }).limit(60),
+    ]).then(([peopleRes, eventsRes]) => {
+      setPeople((peopleRes.data || []).filter(p => p.id !== currentUserId));
+      setEvents(eventsRes.data || []);
+    });
   }, [currentUserId, open]);
 
   const filtered = people.filter(p => {
     const name = `${p.nickname || ''} ${p.first_name || ''} ${p.last_name || ''}`.toLowerCase();
     return name.includes(query.toLowerCase());
+  });
+  const filteredEvents = events.filter(event => {
+    const label = `${event.title} ${event.event_type || ''} ${event.event_date}`.toLowerCase();
+    return label.includes(query.toLowerCase());
   });
   const selectedCount = selectedIds.size;
 
@@ -213,8 +245,8 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, currentUserId
           >
             <div className="px-4 pt-4 pb-3 border-b border-gray-100 dark:border-white/[0.06]">
               <div className="flex items-center gap-2 mb-3">
-                <div className="grid grid-cols-2 gap-1 flex-1 rounded-2xl bg-gray-100 dark:bg-white/[0.06] p-1">
-                  {(['direct', 'group'] as const).map(option => (
+                <div className="grid grid-cols-3 gap-1 flex-1 rounded-2xl bg-gray-100 dark:bg-white/[0.06] p-1">
+                  {(['direct', 'group', 'event'] as const).map(option => (
                     <button
                       key={option}
                       onClick={() => setMode(option)}
@@ -224,7 +256,7 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, currentUserId
                           : 'text-gray-500 dark:text-white/45'
                       }`}
                     >
-                      {option === 'direct' ? 'Direct' : 'Group'}
+                      {option === 'direct' ? 'Direct' : option === 'group' ? 'Group' : 'Event'}
                     </button>
                   ))}
                 </div>
@@ -246,16 +278,46 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, currentUserId
                 autoFocus
                 value={query}
                 onChange={e => setQuery(e.target.value)}
-                placeholder={mode === 'direct' ? 'Search people...' : 'Add people...'}
+                placeholder={mode === 'event' ? 'Search events...' : mode === 'direct' ? 'Search people...' : 'Add people...'}
                 className="flex-1 text-[14px] bg-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/25 outline-none"
               />
               </div>
             </div>
             <div className="overflow-y-auto max-h-72 p-2">
-              {filtered.length === 0 && (
-                <p className="text-center text-[13px] text-gray-400 dark:text-white/30 py-6">No people found</p>
-              )}
-              {filtered.map(p => {
+              {mode === 'event' ? (
+                <>
+                  {filteredEvents.length === 0 && (
+                    <p className="text-center text-[13px] text-gray-400 dark:text-white/30 py-6">No events found</p>
+                  )}
+                  {filteredEvents.map(event => (
+                    <button
+                      key={event.id}
+                      onClick={() => {
+                        onCreateEventChat(event.id);
+                        onClose();
+                      }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-white/[0.05] transition-colors"
+                    >
+                      <span className="shrink-0 h-9 w-9 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 flex items-center justify-center">
+                        <CalendarDays className="h-4 w-4" />
+                      </span>
+                      <span className="flex-1 min-w-0 text-left">
+                        <span className="block text-[13px] font-semibold text-gray-900 dark:text-white truncate">{event.title}</span>
+                        <span className="block text-[11px] text-gray-400 dark:text-white/30 truncate">
+                          {new Date(event.event_date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                          {event.event_type ? ` · ${event.event_type}` : ''}
+                        </span>
+                      </span>
+                      <ChevronRight className="h-4 w-4 text-gray-300 dark:text-white/20" />
+                    </button>
+                  ))}
+                </>
+              ) : (
+                <>
+                  {filtered.length === 0 && (
+                    <p className="text-center text-[13px] text-gray-400 dark:text-white/30 py-6">No people found</p>
+                  )}
+                  {filtered.map(p => {
                 const name = p.nickname || `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown';
                 return (
                   <button
@@ -284,6 +346,8 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, currentUserId
                   </button>
                 );
               })}
+                </>
+              )}
             </div>
             {mode === 'group' && (
               <div className="p-3 border-t border-gray-100 dark:border-white/[0.06]">
@@ -515,6 +579,7 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
 
 function ConvInfoPanel({
   conv, messages, myUserId, onClose, onBack, onScrollToMessage, onConvUpdate,
+  onRequestDelete, onDeleteAsCreator,
 }: {
   conv: Conversation;
   messages: ReturnType<typeof import('../hooks/useMessages').useMessages>['messages'];
@@ -523,6 +588,8 @@ function ConvInfoPanel({
   onBack: () => void;
   onScrollToMessage: (id: string) => void;
   onConvUpdate: () => void;
+  onRequestDelete: (conversationId: string) => Promise<boolean>;
+  onDeleteAsCreator: (conversationId: string) => Promise<boolean>;
 }) {
   const { user } = useAuth();
   const [search, setSearch] = useState('');
@@ -554,15 +621,25 @@ function ConvInfoPanel({
       })
     : [];
 
-  const leaveChat = async () => {
+  const handleDeleteChat = async () => {
     if (!user) return;
     setLeaving(true);
-    await supabase.from('conversation_members').delete()
-      .eq('conversation_id', conv.id).eq('user_id', user.id);
+    const ok = conv.type === 'personal'
+      ? await onRequestDelete(conv.id)
+      : await onDeleteAsCreator(conv.id);
     setLeaving(false);
-    onBack();
-    onConvUpdate();
+    if (!ok) return;
+    if (conv.type === 'personal') {
+      setLeaveConfirm(false);
+      onClose();
+    } else {
+      onBack();
+      onConvUpdate();
+    }
   };
+
+  const isCreator = conv.created_by === myUserId;
+  const canDelete = conv.type === 'personal' || isCreator;
 
   return (
     <div className="flex flex-col h-full bg-[#f5f5f7] dark:bg-[#0d0d0f]">
@@ -700,14 +777,19 @@ function ConvInfoPanel({
           {!leaveConfirm ? (
             <button
               onClick={() => setLeaveConfirm(true)}
-              className="w-full h-11 flex items-center justify-center gap-2 rounded-2xl text-[13px] font-semibold text-red-500 bg-white dark:bg-[#111013] border border-red-200 dark:border-red-500/20 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
+              disabled={!canDelete}
+              className="w-full h-11 flex items-center justify-center gap-2 rounded-2xl text-[13px] font-semibold text-red-500 bg-white dark:bg-[#111013] border border-red-200 dark:border-red-500/20 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors disabled:opacity-45 disabled:cursor-not-allowed"
             >
               <Trash2 className="h-4 w-4" />
-              Delete Chat
+              {canDelete ? 'Delete Chat' : 'Only Creator Can Delete'}
             </button>
           ) : (
             <div className="rounded-2xl bg-white dark:bg-[#111013] border border-gray-100 dark:border-white/[0.06] p-4 space-y-3">
-              <p className="text-center text-[13px] text-gray-500 dark:text-white/40">Remove this chat from your list?</p>
+              <p className="text-center text-[13px] text-gray-500 dark:text-white/40">
+                {conv.type === 'personal'
+                  ? 'Send a delete request? The chat will be removed for both sides after the other person confirms.'
+                  : 'Delete this chat for everyone? This cannot be undone.'}
+              </p>
               <div className="flex gap-2">
                 <button
                   onClick={() => setLeaveConfirm(false)}
@@ -716,11 +798,11 @@ function ConvInfoPanel({
                   Cancel
                 </button>
                 <button
-                  onClick={leaveChat}
+                  onClick={handleDeleteChat}
                   disabled={leaving}
                   className="flex-1 h-10 rounded-xl bg-red-500 hover:bg-red-600 text-white text-[13px] font-semibold disabled:opacity-40 transition-colors"
                 >
-                  {leaving ? 'Removing…' : 'Yes, Delete'}
+                  {leaving ? 'Working…' : conv.type === 'personal' ? 'Send Request' : 'Yes, Delete'}
                 </button>
               </div>
             </div>
@@ -733,14 +815,132 @@ function ConvInfoPanel({
 
 // ─── Chat Window ─────────────────────────────────────────────────────────────
 
-function ChatWindow({ conv, myUserId, onBack, onConvUpdate }: {
-  conv: Conversation; myUserId: string; onBack: () => void; onConvUpdate: () => void;
+type EventDiscussionDetails = {
+  id: string;
+  title: string;
+  event_date: string;
+  start_time: string | null;
+  event_type: string | null;
+  songs: Array<{ id: string; title: string; artist: string | null; performed_key: string | null; song_key: string | null }>;
+};
+
+function EventDiscussionCard({ eventId }: { eventId: string }) {
+  const navigate = useNavigate();
+  const [details, setDetails] = useState<EventDiscussionDetails | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const { data: event } = await supabase
+        .from('events')
+        .select('id, title, event_date, start_time, event_type')
+        .eq('id', eventId)
+        .maybeSingle();
+      const { data: setlist } = await supabase
+        .from('setlists')
+        .select('id, setlist_songs(id, position, performed_key, songs(id, title, artist, song_key))')
+        .eq('event_id', eventId)
+        .maybeSingle();
+      if (cancelled || !event) return;
+      const songs = ((setlist as any)?.setlist_songs || [])
+        .sort((a: any, b: any) => (a.position || 0) - (b.position || 0))
+        .map((item: any) => ({
+          id: item.songs?.id || item.id,
+          title: item.songs?.title || 'Untitled song',
+          artist: item.songs?.artist || null,
+          performed_key: item.performed_key || null,
+          song_key: item.songs?.song_key || null,
+        }));
+      setDetails({ ...(event as EventDiscussionDetails), songs });
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [eventId]);
+
+  if (!details) return null;
+
+  return (
+    <div className="shrink-0 border-b border-emerald-100 dark:border-emerald-500/10 bg-emerald-50/70 dark:bg-emerald-500/[0.06] px-4 py-3">
+      <button
+        onClick={() => navigate(`/events/${eventId}`)}
+        className="w-full text-left rounded-2xl bg-white dark:bg-[#161619] border border-emerald-100 dark:border-emerald-500/15 px-3.5 py-3 shadow-sm shadow-emerald-900/5"
+      >
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 h-9 w-9 rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0">
+            <CalendarDays className="h-4 w-4" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[13px] font-bold text-gray-900 dark:text-white truncate">{details.title}</span>
+            <span className="block text-[11px] text-gray-500 dark:text-white/40 mt-0.5">
+              {new Date(details.event_date).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+              {details.event_type ? ` · ${details.event_type}` : ''}
+            </span>
+            <span className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+              <Music2 className="h-3.5 w-3.5" />
+              {details.songs.length > 0 ? `${details.songs.length} songs` : 'No songs added yet'}
+            </span>
+            {details.songs.length > 0 && (
+              <span className="mt-1.5 block text-[11px] text-gray-500 dark:text-white/45 truncate">
+                {details.songs.slice(0, 4).map(song => song.title).join(' · ')}
+                {details.songs.length > 4 ? ` · +${details.songs.length - 4} more` : ''}
+              </span>
+            )}
+          </span>
+          <ChevronRight className="h-4 w-4 text-gray-300 dark:text-white/20 mt-2 shrink-0" />
+        </div>
+      </button>
+    </div>
+  );
+}
+
+function DeleteRequestCard({
+  content, isMine, onConfirm, confirming,
+}: {
+  content: Extract<MsgContent, { type: 'delete_request' }>;
+  isMine: boolean;
+  onConfirm: () => void;
+  confirming: boolean;
+}) {
+  return (
+    <div className="my-3 flex justify-center">
+      <div className="w-full max-w-sm rounded-2xl border border-red-100 dark:border-red-500/20 bg-red-50 dark:bg-red-500/[0.08] px-4 py-3 text-center">
+        <p className="text-[13px] font-bold text-red-700 dark:text-red-300">Delete chat request</p>
+        <p className="mt-1 text-[12px] leading-relaxed text-red-700/75 dark:text-red-200/70">
+          {isMine
+            ? 'You asked to delete this chat. It will be removed for both sides after the other person confirms.'
+            : `${content.requesterName} wants to delete this chat for both sides.`}
+        </p>
+        {!isMine && (
+          <button
+            onClick={onConfirm}
+            disabled={confirming}
+            className="mt-3 h-9 px-4 rounded-full bg-red-500 hover:bg-red-600 text-white text-[12px] font-bold disabled:opacity-45 transition-colors"
+          >
+            {confirming ? 'Deleting…' : 'Confirm Delete'}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ChatWindow({
+  conv, myUserId, onBack, onConvUpdate, onRequestDelete, onConfirmDelete, onDeleteAsCreator,
+}: {
+  conv: Conversation;
+  myUserId: string;
+  onBack: () => void;
+  onConvUpdate: () => void;
+  onRequestDelete: (conversationId: string) => Promise<boolean>;
+  onConfirmDelete: (conversationId: string) => Promise<boolean>;
+  onDeleteAsCreator: (conversationId: string) => Promise<boolean>;
 }) {
   const [replyTo, setReplyTo] = useState<{ id: string; preview: string } | null>(null);
   const [activeMsg, setActiveMsg] = useState<string | null>(null);
   const [emojiMsgId, setEmojiMsgId] = useState<string | null>(null);
   const [tappedMsgId, setTappedMsgId] = useState<string | null>(null);
   const [showInfo, setShowInfo] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -821,6 +1021,13 @@ function ChatWindow({ conv, myUserId, onBack, onConvUpdate }: {
     await sendMessage(text, replyTo?.id);
     setReplyTo(null);
   }, [sendMessage, replyTo]);
+
+  const handleConfirmDelete = useCallback(async () => {
+    setConfirmingDelete(true);
+    const ok = await onConfirmDelete(conv.id);
+    setConfirmingDelete(false);
+    if (ok) onBack();
+  }, [conv.id, onBack, onConfirmDelete]);
 
   const scrollToMessage = useCallback((id: string) => {
     setShowInfo(false);
@@ -926,6 +1133,10 @@ function ChatWindow({ conv, myUserId, onBack, onConvUpdate }: {
         )}
       </div>
 
+      {conv.type === 'event' && conv.event_id && (
+        <EventDiscussionCard eventId={conv.event_id} />
+      )}
+
       {/* Pinned messages panel */}
       <AnimatePresence>
         {showPinned && pinnedMessages.length > 0 && (
@@ -940,7 +1151,7 @@ function ChatWindow({ conv, myUserId, onBack, onConvUpdate }: {
                 return (
                   <p key={m.id} className="text-[12px] text-amber-800 dark:text-amber-300/80 leading-snug">
                     <span className="font-semibold">{getSenderName(m.sender)}: </span>
-                    {c.type === 'image' ? '📷 Photo' : c.text}
+                    {c.type === 'image' ? '📷 Photo' : c.type === 'delete_request' ? 'Delete chat request' : c.text}
                   </p>
                 );
               })}
@@ -984,6 +1195,15 @@ function ChatWindow({ conv, myUserId, onBack, onConvUpdate }: {
                 </div>
               )}
 
+              {content.type === 'delete_request' ? (
+                <DeleteRequestCard
+                  content={content}
+                  isMine={isMe}
+                  confirming={confirmingDelete}
+                  onConfirm={handleConfirmDelete}
+                />
+              ) : (
+              <>
               <div className={`flex items-end gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'} ${isGrouped && !showDateDivider ? 'mt-0.5' : 'mt-3'}`}>
                 {/* Avatar spacer */}
                 {!isMe && (
@@ -1197,6 +1417,8 @@ function ChatWindow({ conv, myUserId, onBack, onConvUpdate }: {
                   <span className="text-[10px] font-medium text-gray-400 dark:text-white/25 self-center">{seenLabel}</span>
                 </div>
               )}
+              </>
+              )}
             </div>
           );
         })}
@@ -1257,6 +1479,8 @@ function ChatWindow({ conv, myUserId, onBack, onConvUpdate }: {
                 onBack={() => { setShowInfo(false); onBack(); }}
                 onScrollToMessage={scrollToMessage}
                 onConvUpdate={onConvUpdate}
+                onRequestDelete={onRequestDelete}
+                onDeleteAsCreator={onDeleteAsCreator}
               />
             </motion.div>
           )}
@@ -1362,7 +1586,17 @@ export function Messages() {
   const [newMsgOpen, setNewMsgOpen] = useState(false);
   const [mobileShowChat, setMobileShowChat] = useState(Boolean(paramConvId));
 
-  const { conversations, loading: convsLoading, refresh, createDirectConversation, createGroupConversation } = useConversations();
+  const {
+    conversations,
+    loading: convsLoading,
+    refresh,
+    createDirectConversation,
+    createGroupConversation,
+    createEventConversation,
+    requestDeleteConversation,
+    confirmDeleteConversation,
+    deleteConversationAsCreator,
+  } = useConversations();
   useMessagesKeyboardInset(!isDesktop && mobileShowChat);
 
   const myUserId = user?.id ?? '';
@@ -1394,6 +1628,11 @@ export function Messages() {
 
   const handleNewGroup = async (userIds: string[], groupName: string) => {
     const id = await createGroupConversation(userIds, groupName);
+    if (id) selectConversation(id);
+  };
+
+  const handleNewEventChat = async (eventId: string) => {
+    const id = await createEventConversation(eventId);
     if (id) selectConversation(id);
   };
 
@@ -1474,7 +1713,15 @@ export function Messages() {
         transition={slideTransition}
       >
         {selectedConv ? (
-          <ChatWindow conv={selectedConv} myUserId={myUserId} onBack={handleBack} onConvUpdate={refresh} />
+          <ChatWindow
+            conv={selectedConv}
+            myUserId={myUserId}
+            onBack={handleBack}
+            onConvUpdate={refresh}
+            onRequestDelete={requestDeleteConversation}
+            onConfirmDelete={confirmDeleteConversation}
+            onDeleteAsCreator={deleteConversationAsCreator}
+          />
         ) : selectedConvId && convsLoading ? (
           <div className="flex items-center justify-center h-full">
             <span className="h-6 w-6 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
@@ -1489,6 +1736,7 @@ export function Messages() {
         onClose={() => setNewMsgOpen(false)}
         onSelect={handleNewMessage}
         onCreateGroup={handleNewGroup}
+        onCreateEventChat={handleNewEventChat}
         currentUserId={myUserId}
       />
     </div>

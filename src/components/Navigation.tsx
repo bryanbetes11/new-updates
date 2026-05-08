@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LogOut, ChevronLeft, ChevronRight, Music2, Menu, X, Bell } from 'lucide-react';
+import { LogOut, ChevronLeft, ChevronRight, Music2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useUnreadCounts } from '../hooks/useUnreadCounts';
 import { NotificationBell } from './NotificationBell';
@@ -136,7 +136,7 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
   useEffect(() => {
     const timer = setTimeout(() => { setMounted(true); updateIndicator(); }, 50);
     return () => clearTimeout(timer);
-  }, []);
+  }, [updateIndicator]);
 
   useEffect(() => {
     const handleStyleChange = () => setMobileNavStyle(getStoredMobileNavStyle());
@@ -533,7 +533,7 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
         <div
           className={`fixed bottom-0 left-0 right-0 z-50 lg:hidden ${useDockedMobileNav ? 'pointer-events-auto' : 'pointer-events-none'}`}
           style={{
-            paddingBottom: useDockedMobileNav ? '0px' : 'calc(env(safe-area-inset-bottom) + 12px)',
+            paddingBottom: useDockedMobileNav ? '0px' : 'calc(env(safe-area-inset-bottom) + 2px)',
             paddingTop: useDockedMobileNav ? '0px' : '6px',
             background: useDockedMobileNav ? 'var(--sidebar-bg)' : undefined,
             WebkitBackdropFilter: useDockedMobileNav ? 'blur(28px) saturate(180%)' : undefined,
@@ -544,8 +544,9 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
         >
           <div className={`flex ${useDockedMobileNav ? 'justify-stretch px-0' : 'justify-center px-4'}`}>
             <nav
-              className={`pointer-events-auto relative flex items-center w-full overflow-hidden ${useDockedMobileNav ? 'h-[68px] px-2' : 'p-1.5 rounded-full'}`}
+              className={`pointer-events-auto relative flex w-full ${useDockedMobileNav ? 'items-start overflow-visible px-2 pt-2' : 'items-center overflow-hidden p-1.5 rounded-full'}`}
               style={{
+                height: useDockedMobileNav ? 'calc(76px + env(safe-area-inset-bottom))' : undefined,
                 background: useDockedMobileNav ? 'var(--sidebar-bg)' : 'var(--nav-bg)',
                 WebkitBackdropFilter: useDockedMobileNav ? undefined : 'blur(28px) saturate(180%)',
                 backdropFilter: useDockedMobileNav ? undefined : 'blur(28px) saturate(180%)',
@@ -553,7 +554,7 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
                 boxShadow: useDockedMobileNav
                   ? 'none'
                   : '0 12px 36px -8px rgba(0,0,0,0.22), 0 2px 8px -2px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.06)',
-                paddingBottom: useDockedMobileNav ? 'env(safe-area-inset-bottom)' : undefined,
+                paddingBottom: useDockedMobileNav ? 'calc(env(safe-area-inset-bottom) + 8px)' : undefined,
               }}
             >
               {mounted && !useDockedMobileNav && (
@@ -578,12 +579,12 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
                     key={item.path}
                     ref={el => { itemRefs.current[idx] = el; }}
                     onClick={() => navigate(item.path)}
-                    className={`relative flex flex-1 items-center justify-center min-w-[44px] ${useDockedMobileNav ? 'h-[52px]' : 'h-12'}`}
+                    className={`relative flex flex-1 items-center justify-center min-w-[44px] ${useDockedMobileNav ? 'h-[56px]' : 'h-12'}`}
                     style={{ WebkitTapHighlightColor: 'transparent' }}
                   >
                     {useDockedMobileNav && active && (
                       <span
-                        className="absolute left-1/2 top-0 h-[3px] w-8 -translate-x-1/2 rounded-b-full bg-brand-600 dark:bg-brand-400"
+                        className="absolute left-1/2 top-1 h-[3px] w-8 -translate-x-1/2 rounded-full bg-brand-600 dark:bg-brand-400"
                         style={{ boxShadow: '0 0 10px rgba(16,185,129,0.28)' }}
                       />
                     )}

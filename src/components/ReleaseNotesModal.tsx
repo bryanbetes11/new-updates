@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Bell, UserX, Circle, ArrowLeft, ArrowRight, Timer } from 'lucide-react';
+import { Sparkles, Bell, UserX, Circle, ArrowLeft, ArrowRight, Timer, PanelBottom } from 'lucide-react';
 import { Modal } from './Modal';
 
 interface ReleaseNotesModalProps {
@@ -9,6 +9,53 @@ interface ReleaseNotesModalProps {
 }
 
 const features = [
+  {
+    icon: PanelBottom,
+    title: 'Mobile Navigation Styles',
+    description: 'Choose the mobile nav style that feels right for your device.',
+    highlight: (
+      <div
+        className="rounded-2xl p-4"
+        style={{
+          background: 'linear-gradient(135deg, rgba(14,165,233,0.10), rgba(16,185,129,0.03))',
+          border: '1px solid rgba(14,165,233,0.22)',
+        }}
+      >
+        <div className="space-y-3">
+          <div className="rounded-xl border border-sky-300/80 dark:border-sky-400/30 bg-sky-50 dark:bg-sky-500/[0.12] px-3 py-2.5">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-sky-700 dark:text-sky-300">Find it on mobile</p>
+            <p className="mt-1 text-[12px] font-bold text-gray-900 dark:text-white">
+              More <span className="text-sky-600 dark:text-sky-300">→</span> Mobile Navigation <span className="text-sky-600 dark:text-sky-300">→</span> Floating or Docked
+            </p>
+          </div>
+
+          <div className="rounded-2xl bg-white/75 dark:bg-white/[0.06] border border-sky-200/70 dark:border-sky-400/20 p-3">
+            <div className="mx-auto flex h-10 max-w-[220px] items-center justify-around rounded-full bg-white/90 dark:bg-white/[0.10] border border-black/[0.06] dark:border-white/[0.10] shadow-sm">
+              {[0, 1, 2, 3, 4].map((item) => (
+                <span
+                  key={item}
+                  className={`h-3 w-3 rounded-full ${item === 0 ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-white/35'}`}
+                />
+              ))}
+            </div>
+            <p className="mt-2 text-center text-[10px] font-bold uppercase tracking-[0.16em] text-sky-700 dark:text-sky-300">Floating</p>
+          </div>
+
+          <div className="rounded-2xl bg-white/75 dark:bg-white/[0.06] border border-emerald-200/70 dark:border-emerald-400/20 p-3">
+            <div className="mx-auto flex h-10 max-w-[240px] items-center justify-around rounded-xl bg-gray-100 dark:bg-white/[0.10] border-t border-black/[0.06] dark:border-white/[0.10]">
+              {[0, 1, 2, 3, 4].map((item) => (
+                <span
+                  key={item}
+                  className={`h-3 w-3 rounded-full ${item === 0 ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-white/35'}`}
+                />
+              ))}
+            </div>
+            <p className="mt-2 text-center text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-300">Docked</p>
+          </div>
+        </div>
+      </div>
+    ),
+  },
   {
     icon: Timer,
     title: 'Live Attendance Countdown',

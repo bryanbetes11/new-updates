@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import {
   Music, Upload, CheckCircle, AlertTriangle, Calendar, Search,
   ChevronDown, Trash2, Square, CheckSquare, X,
-  ListMusic, Clock, Music2, ArrowUpDown, BarChart2,
+  ListMusic, Clock, Music2, ArrowUpDown, BarChart2, ArrowRight,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -79,8 +79,8 @@ function StatCard({ label, value, color = 'default', onClick, active }: { label:
     >
       <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.05] dark:via-white/[0.08] to-transparent" />
       {onClick && (
-        <span className="absolute right-2 top-2 rounded-full bg-emerald-50 dark:bg-emerald-500/[0.12] px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300 opacity-80 group-hover:opacity-100">
-          Filter
+        <span className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-50 dark:bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 opacity-80 transition-all group-hover:translate-x-0.5 group-hover:opacity-100">
+          <ArrowRight className="h-3 w-3" />
         </span>
       )}
       <div className="flex items-center gap-1.5">
@@ -126,7 +126,7 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
   const [importProgress, setImportProgress] = useState({ songsDone: 0, eventsDone: 0, totalSongs: 0, totalEvents: 0 });
   const [songLeaderMap, setSongLeaderMap] = useState<Record<string, string>>({});
   const [songLeaderAvatarMap, setSongLeaderAvatarMap] = useState<Record<string, { avatarUrl: string | null; firstName: string; lastName: string }>>({});
-  const [view, setView] = useState<'setlists' | 'songs'>(initialView);
+  const [showSongResults, setShowSongResults] = useState(initialView === 'songs');
   const [selectedSetlists, setSelectedSetlists] = useState<Set<string>>(new Set());
   const [selectedSongs, setSelectedSongs] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
@@ -475,37 +475,12 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
   const neverUsed = songUsages.filter(s => s.days_since === null).length;
 
   const showSongFilter = (filter: typeof activeFilter) => {
-    setActiveFilter(filter);
+    const shouldClear = showSongResults && activeFilter === filter && filter !== 'all';
+    setActiveFilter(shouldClear ? 'all' : filter);
     setSelectedSongs(new Set());
     setSelectModeSongs(false);
-    setView('songs');
+    setShowSongResults(!shouldClear);
   };
-
-  const viewSwitch = (
-    <div className="inline-flex w-full sm:w-auto rounded-2xl bg-gray-100/80 dark:bg-white/[0.04] p-1 ring-1 ring-black/[0.05] dark:ring-white/[0.07]">
-      {[
-        { id: 'setlists' as const, label: 'Setlists', icon: ListMusic },
-        { id: 'songs' as const, label: 'Song Tracker', icon: BarChart2 },
-      ].map(option => {
-        const active = view === option.id;
-        return (
-          <button
-            key={option.id}
-            type="button"
-            onClick={() => setView(option.id)}
-            className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-xl text-[11px] font-bold transition-all active:scale-[0.97] ${
-              active
-                ? 'bg-white dark:bg-white/[0.08] text-gray-900 dark:text-white shadow-sm ring-1 ring-black/[0.06] dark:ring-white/[0.08]'
-                : 'text-gray-500 dark:text-white/45 hover:text-gray-800 dark:hover:text-white/75 hover:bg-white/60 dark:hover:bg-white/[0.04]'
-            }`}
-          >
-            <option.icon className={`h-3.5 w-3.5 ${active ? 'text-emerald-600 dark:text-emerald-400' : ''}`} />
-            {option.label}
-          </button>
-        );
-      })}
-    </div>
-  );
 
   if (loading) {
     return (
@@ -530,12 +505,9 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
   }
 
   /* ────────────────────────── Setlists View ────────────────────────── */
-  if (view === 'setlists') {
+  if (!showSongResults) {
     return (
       <div className="space-y-5 pb-2">
-        <div className="flex justify-end">
-          {viewSwitch}
-        </div>
 
         {/* ── Header row: section label + import ── */}
         <SectionLabel
@@ -563,7 +535,12 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
           className="grid grid-cols-2 sm:grid-cols-5 gap-2"
         >
           <StatCard label="Total" value={setlists.length} />
-          <StatCard label="Songs" value={setlists.reduce((acc, s) => acc + (s.setlist_songs?.length ?? 0), 0)} />
+          <StatCard
+            label="Songs"
+            value={setlists.reduce((acc, s) => acc + (s.setlist_songs?.length ?? 0), 0)}
+            active={showSongResults && activeFilter === 'all'}
+            onClick={() => showSongFilter('all')}
+          />
           <StatCard
             label="Never Used"
             value={neverUsed}
@@ -912,23 +889,30 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
     );
   }
 
-  /* ────────────────────────── Song Tracker View ────────────────────────── */
+  /* ────────────────────────── Song Results View ────────────────────────── */
   return (
     <div className="space-y-5 pb-2">
-      <div className="flex justify-end">
-        {viewSwitch}
-      </div>
 
       {/* ── Header row ── */}
       <SectionLabel
-        index="02"
+        index="01"
         action={
-          <span className="text-[10px] font-mono font-medium text-gray-400 dark:text-white/30 tracking-wide">
-            90-day rule
-          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setShowSongResults(false);
+              setActiveFilter('all');
+              setSearch('');
+              setSelectedSongs(new Set());
+              setSelectModeSongs(false);
+            }}
+            className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
+          >
+            Back to setlists
+          </button>
         }
       >
-        <span className="flex items-center gap-1.5"><BarChart2 className="h-3 w-3" /> Song Rotation Tracker</span>
+        <span className="flex items-center gap-1.5"><BarChart2 className="h-3 w-3" /> Song Results</span>
       </SectionLabel>
 
       {/* ── Stats strip ── */}
@@ -972,7 +956,10 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
           <span className="text-[11px] font-mono text-gray-500 dark:text-white/40 tracking-wide">Showing:</span>
           <button
             type="button"
-            onClick={() => setActiveFilter('all')}
+            onClick={() => {
+              setActiveFilter('all');
+              setShowSongResults(false);
+            }}
             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors ${
               activeFilter === 'safe' ? 'bg-emerald-100 dark:bg-emerald-500/[0.18] text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/25'
               : activeFilter === 'not_ready' ? 'bg-red-100 dark:bg-red-500/[0.18] text-red-700 dark:text-red-300 border border-red-200 dark:border-red-500/25'

@@ -66,7 +66,7 @@ export function MediaIcon({ active, className }: IconProps) {
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" className={className}>
         <rect x="2" y="4" width="20" height="16" rx="2" fill="currentColor" />
-        <path d="M10 8.5v7l5.5-3.5L10 8.5Z" className="fill-white dark:fill-[#111013]" />
+        <path d="M10 8.5v7l5.5-3.5L10 8.5Z" className="fill-white dark:fill-black" />
       </svg>
     );
   }

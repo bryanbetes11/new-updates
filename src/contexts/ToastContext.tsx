@@ -7,10 +7,12 @@ interface Toast {
   id: string;
   type: ToastType;
   message: string;
+  actionLabel?: string;
+  onClick?: () => void;
 }
 
 interface ToastContextValue {
-  toast: (type: ToastType, message: string) => void;
+  toast: (type: ToastType, message: string, options?: { actionLabel?: string; onClick?: () => void }) => void;
 }
 
 const ToastContext = createContext<ToastContextValue>({ toast: () => {} });
@@ -32,9 +34,9 @@ const colors: Record<ToastType, string> = {
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const addToast = useCallback((type: ToastType, message: string) => {
+  const addToast = useCallback((type: ToastType, message: string, options?: { actionLabel?: string; onClick?: () => void }) => {
     const id = crypto.randomUUID();
-    setToasts(prev => [...prev, { id, type, message }]);
+    setToasts(prev => [...prev, { id, type, message, ...options }]);
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 4000);
@@ -53,18 +55,38 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       >
         {toasts.map(t => {
           const Icon = icons[t.type];
+          const runAction = () => {
+            if (!t.onClick) return;
+            t.onClick();
+            removeToast(t.id);
+          };
+
           return (
             <div
               key={t.id}
-              className={`animate-slide-up flex items-center gap-3 rounded-full px-4 py-3 shadow-lg ring-1 backdrop-blur-md ${colors[t.type]}`}
+              onClick={runAction}
+              onKeyDown={(e) => {
+                if (!t.onClick || (e.key !== 'Enter' && e.key !== ' ')) return;
+                e.preventDefault();
+                runAction();
+              }}
+              className={`animate-slide-up flex items-center gap-3 rounded-full px-4 py-3 shadow-lg ring-1 backdrop-blur-md ${colors[t.type]} ${t.onClick ? 'cursor-pointer hover:scale-[1.01] active:scale-[0.99] transition-transform' : ''}`}
               style={{ boxShadow: '0 10px 30px rgba(15,23,42,0.14)' }}
+              role={t.onClick ? 'button' : undefined}
+              tabIndex={t.onClick ? 0 : undefined}
             >
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/55 dark:bg-white/[0.08]">
                 <Icon className="h-4.5 w-4.5 shrink-0" />
               </div>
-              <p className="text-sm font-semibold flex-1 leading-snug">{t.message}</p>
+              <div className="flex-1 leading-snug">
+                <p className="text-sm font-semibold">{t.message}</p>
+                {t.actionLabel && <p className="text-[11px] font-bold opacity-75 mt-0.5">{t.actionLabel}</p>}
+              </div>
               <button
-                onClick={() => removeToast(t.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeToast(t.id);
+                }}
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/45 dark:bg-white/[0.06] opacity-70 hover:opacity-100 transition-opacity"
               >
                 <X className="h-4 w-4" />

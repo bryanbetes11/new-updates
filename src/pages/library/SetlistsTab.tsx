@@ -532,9 +532,8 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-          className="grid grid-cols-2 sm:grid-cols-5 gap-2"
+          className="grid grid-cols-2 sm:grid-cols-4 gap-2"
         >
-          <StatCard label="Total" value={setlists.length} />
           <StatCard
             label="Songs"
             value={setlists.reduce((acc, s) => acc + (s.setlist_songs?.length ?? 0), 0)}

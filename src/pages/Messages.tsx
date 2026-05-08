@@ -1145,6 +1145,10 @@ function ChatWindow({ conv, myUserId, onBack, onConvUpdate }: {
         onCancelReply={() => setReplyTo(null)}
         onTyping={handleTyping}
       />
+      <div
+        className="fixed inset-x-0 bottom-0 z-[25] bg-white dark:bg-[#111013] pointer-events-none lg:hidden"
+        style={{ height: 'var(--messages-keyboard-inset, 0px)' }}
+      />
 
       {/* Info panel slide-over — absolute inset, clips its own overflow */}
       <div className="absolute inset-0 z-20 overflow-hidden pointer-events-none">

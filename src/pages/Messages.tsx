@@ -579,7 +579,7 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
 
 function ConvInfoPanel({
   conv, messages, myUserId, onClose, onBack, onScrollToMessage, onConvUpdate,
-  onRequestDelete, onDeleteAsCreator,
+  onRequestDelete, onDeleteAsCreator, onRenameGroup,
 }: {
   conv: Conversation;
   messages: ReturnType<typeof import('../hooks/useMessages').useMessages>['messages'];
@@ -590,11 +590,15 @@ function ConvInfoPanel({
   onConvUpdate: () => void;
   onRequestDelete: (conversationId: string) => Promise<boolean>;
   onDeleteAsCreator: (conversationId: string) => Promise<boolean>;
+  onRenameGroup: (conversationId: string, name: string) => Promise<boolean>;
 }) {
   const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [leaveConfirm, setLeaveConfirm] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState(conv.name || '');
+  const [savingName, setSavingName] = useState(false);
 
   const otherMember = conv.type === 'personal' ? conv.members.find(m => m.user_id !== myUserId) : null;
   const p = otherMember?.profile;
@@ -641,6 +645,18 @@ function ConvInfoPanel({
   const isCreator = conv.created_by === myUserId;
   const canDelete = conv.type === 'personal' || isCreator;
 
+  const saveGroupName = async () => {
+    const nextName = renameValue.trim();
+    if (!nextName) return;
+    setSavingName(true);
+    const ok = await onRenameGroup(conv.id, nextName);
+    setSavingName(false);
+    if (ok) {
+      setRenaming(false);
+      onConvUpdate();
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-[#f5f5f7] dark:bg-[#0d0d0f]">
       {/* Header */}
@@ -669,6 +685,52 @@ function ConvInfoPanel({
             {conv.members.length} {conv.members.length === 1 ? 'member' : 'members'}
           </p>
         </div>
+
+        {conv.type === 'group' && (
+          <div className="mx-4 mt-3 rounded-2xl bg-white dark:bg-[#111013] border border-gray-100 dark:border-white/[0.06] p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[12px] font-semibold text-gray-500 dark:text-white/35">Group name</p>
+                {!renaming && (
+                  <p className="mt-0.5 text-[14px] font-bold text-gray-900 dark:text-white truncate">{conv.name || 'Group Chat'}</p>
+                )}
+              </div>
+              {!renaming && (
+                <button
+                  onClick={() => { setRenameValue(conv.name || ''); setRenaming(true); }}
+                  className="shrink-0 h-8 px-3 rounded-full bg-emerald-50 dark:bg-emerald-500/10 text-[12px] font-bold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/15 transition-colors"
+                >
+                  Rename
+                </button>
+              )}
+            </div>
+            {renaming && (
+              <div className="mt-3 flex items-center gap-2">
+                <input
+                  value={renameValue}
+                  onChange={e => setRenameValue(e.target.value)}
+                  maxLength={80}
+                  autoFocus
+                  className="min-w-0 flex-1 h-10 rounded-xl bg-gray-100 dark:bg-white/[0.06] px-3 text-[13px] font-semibold text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/25 outline-none"
+                  placeholder="Group name"
+                />
+                <button
+                  onClick={() => setRenaming(false)}
+                  className="h-10 w-10 rounded-xl border border-gray-200 dark:border-white/[0.08] text-gray-400 dark:text-white/35 flex items-center justify-center"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={saveGroupName}
+                  disabled={savingName || !renameValue.trim()}
+                  className="h-10 w-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center disabled:opacity-45"
+                >
+                  <Check className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Search card */}
         <div className="mx-4 mt-3 rounded-2xl bg-white dark:bg-[#111013] border border-gray-100 dark:border-white/[0.06] overflow-hidden">
@@ -925,7 +987,7 @@ function DeleteRequestCard({
 }
 
 function ChatWindow({
-  conv, myUserId, onBack, onConvUpdate, onRequestDelete, onConfirmDelete, onDeleteAsCreator,
+  conv, myUserId, onBack, onConvUpdate, onRequestDelete, onConfirmDelete, onDeleteAsCreator, onRenameGroup,
 }: {
   conv: Conversation;
   myUserId: string;
@@ -934,6 +996,7 @@ function ChatWindow({
   onRequestDelete: (conversationId: string) => Promise<boolean>;
   onConfirmDelete: (conversationId: string) => Promise<boolean>;
   onDeleteAsCreator: (conversationId: string) => Promise<boolean>;
+  onRenameGroup: (conversationId: string, name: string) => Promise<boolean>;
 }) {
   const [replyTo, setReplyTo] = useState<{ id: string; preview: string } | null>(null);
   const [activeMsg, setActiveMsg] = useState<string | null>(null);
@@ -1481,6 +1544,7 @@ function ChatWindow({
                 onConvUpdate={onConvUpdate}
                 onRequestDelete={onRequestDelete}
                 onDeleteAsCreator={onDeleteAsCreator}
+                onRenameGroup={onRenameGroup}
               />
             </motion.div>
           )}
@@ -1596,12 +1660,16 @@ export function Messages() {
     requestDeleteConversation,
     confirmDeleteConversation,
     deleteConversationAsCreator,
+    renameGroupConversation,
+    discardEmptyConversation,
   } = useConversations();
   useMessagesKeyboardInset(!isDesktop && mobileShowChat);
 
   const myUserId = user?.id ?? '';
 
-  const filteredConvs = conversations.filter(c => {
+  const visibleConversations = conversations.filter(c => c.last_message);
+
+  const filteredConvs = visibleConversations.filter(c => {
     if (!search.trim()) return true;
     const name = getConvName(c, myUserId).toLowerCase();
     return name.includes(search.toLowerCase());
@@ -1615,7 +1683,11 @@ export function Messages() {
     navigate(`/messages/${id}`, { replace: true });
   };
 
-  const handleBack = () => {
+  const handleBack = async () => {
+    const selected = conversations.find(c => c.id === selectedConvId);
+    if (selected && !selected.last_message) {
+      await discardEmptyConversation(selected.id);
+    }
     setMobileShowChat(false);
     setSelectedConvId(null);
     navigate('/messages', { replace: true });
@@ -1721,6 +1793,7 @@ export function Messages() {
             onRequestDelete={requestDeleteConversation}
             onConfirmDelete={confirmDeleteConversation}
             onDeleteAsCreator={deleteConversationAsCreator}
+            onRenameGroup={renameGroupConversation}
           />
         ) : selectedConvId && convsLoading ? (
           <div className="flex items-center justify-center h-full">

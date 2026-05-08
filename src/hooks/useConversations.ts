@@ -222,6 +222,25 @@ export function useConversations() {
     return !error;
   }, [user, fetchConversations]);
 
+  const renameGroupConversation = useCallback(async (conversationId: string, name: string): Promise<boolean> => {
+    if (!user) return false;
+    const { error } = await supabase.rpc('rename_group_conversation', {
+      p_conversation_id: conversationId,
+      p_name: name,
+    });
+    if (!error) await fetchConversations();
+    return !error;
+  }, [user, fetchConversations]);
+
+  const discardEmptyConversation = useCallback(async (conversationId: string): Promise<boolean> => {
+    if (!user) return false;
+    const { error } = await supabase.rpc('discard_empty_conversation', {
+      p_conversation_id: conversationId,
+    });
+    if (!error) await fetchConversations();
+    return !error;
+  }, [user, fetchConversations]);
+
   return {
     conversations,
     loading,
@@ -232,5 +251,7 @@ export function useConversations() {
     requestDeleteConversation,
     confirmDeleteConversation,
     deleteConversationAsCreator,
+    renameGroupConversation,
+    discardEmptyConversation,
   };
 }

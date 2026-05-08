@@ -1050,6 +1050,37 @@ function ChatWindow({
 
   const otherMember = conv.type === 'personal' ? getOtherMember(conv, myUserId) : null;
 
+  useEffect(() => {
+    let stopped = false;
+
+    const setActive = async () => {
+      if (stopped || document.visibilityState !== 'visible') return;
+      await supabase.rpc('set_active_conversation', { p_conversation_id: conv.id });
+    };
+
+    const clearActive = () => {
+      supabase.rpc('clear_active_conversation', { p_conversation_id: conv.id });
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') setActive();
+      else clearActive();
+    };
+
+    setActive();
+    const interval = window.setInterval(setActive, 25000);
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('pagehide', clearActive);
+
+    return () => {
+      stopped = true;
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('pagehide', clearActive);
+      clearActive();
+    };
+  }, [conv.id]);
+
   // Track scroll position to decide whether to auto-scroll
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;

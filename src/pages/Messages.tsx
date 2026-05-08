@@ -661,6 +661,22 @@ function ChatWindow({ conv, myUserId, onBack, onConvUpdate }: {
     }
   }, [messages]);
 
+  useEffect(() => {
+    const keepLatestVisible = () => {
+      if (!atBottomRef.current) return;
+      requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({ block: 'end' });
+      });
+    };
+
+    window.addEventListener('messages-keyboard-inset-change', keepLatestVisible);
+    window.visualViewport?.addEventListener('resize', keepLatestVisible);
+    return () => {
+      window.removeEventListener('messages-keyboard-inset-change', keepLatestVisible);
+      window.visualViewport?.removeEventListener('resize', keepLatestVisible);
+    };
+  }, []);
+
   // Close action menu on outside click
   useEffect(() => {
     if (!activeMsg && !emojiMsgId && !tappedMsgId) return;
@@ -1150,9 +1166,16 @@ function useIsDesktop() {
 function useMessagesKeyboardInset(active: boolean) {
   useEffect(() => {
     if (!active) return;
+    const scrollY = window.scrollY;
     const previousBodyOverflow = document.body.style.overflow;
+    const previousBodyPosition = document.body.style.position;
+    const previousBodyTop = document.body.style.top;
+    const previousBodyWidth = document.body.style.width;
     const previousHtmlOverflow = document.documentElement.style.overflow;
     document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = '100%';
     document.documentElement.style.overflow = 'hidden';
 
     const setInset = () => {
@@ -1162,6 +1185,7 @@ function useMessagesKeyboardInset(active: boolean) {
         : 0;
       document.documentElement.style.setProperty('--messages-keyboard-inset', `${Math.round(inset)}px`);
       window.scrollTo(0, 0);
+      window.dispatchEvent(new Event('messages-keyboard-inset-change'));
     };
 
     setInset();
@@ -1175,7 +1199,11 @@ function useMessagesKeyboardInset(active: boolean) {
       window.removeEventListener('resize', setInset);
       document.documentElement.style.removeProperty('--messages-keyboard-inset');
       document.body.style.overflow = previousBodyOverflow;
+      document.body.style.position = previousBodyPosition;
+      document.body.style.top = previousBodyTop;
+      document.body.style.width = previousBodyWidth;
       document.documentElement.style.overflow = previousHtmlOverflow;
+      window.scrollTo(0, scrollY);
     };
   }, [active]);
 }

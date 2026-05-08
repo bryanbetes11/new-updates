@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { getMobilePlatform } from './device';
+import { getMobilePlatform, hasBottomSafeAreaInset } from './device';
 
 export type MobileNavStyle = 'floating' | 'docked';
 
@@ -7,7 +7,7 @@ const MOBILE_NAV_STYLE_KEY = 'servesync_mobile_nav_style';
 export const MOBILE_NAV_STYLE_CHANGE_EVENT = 'servesync-mobile-nav-style-change';
 
 export function getDefaultMobileNavStyle(): MobileNavStyle {
-  return getMobilePlatform() === 'android' ? 'docked' : 'floating';
+  return getMobilePlatform() === 'ios' && hasBottomSafeAreaInset() ? 'floating' : 'docked';
 }
 
 export function getStoredMobileNavStyle(): MobileNavStyle {

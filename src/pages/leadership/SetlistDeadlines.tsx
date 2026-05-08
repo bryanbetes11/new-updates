@@ -1,0 +1,534 @@
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { format, parseISO, differenceInDays, differenceInHours, isPast, isToday } from 'date-fns';
+import { Bell, CheckCircle2, Clock, AlertTriangle, RefreshCw, Loader2, ListMusic, Pencil, X, Check, CalendarDays } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
+import { Avatar } from '../../components/Avatar';
+
+interface DeadlineEvent {
+  id: string;
+  title: string;
+  event_date: string;
+  proposal_due_date: string;
+  song_leader: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    nickname: string;
+    avatar_url: string;
+  } | null;
+  setlist_status: string | null;
+  reminder_count: number;
+  last_reminder_at: string | null;
+}
+
+type StatusFilter = 'all' | 'overdue' | 'due_today' | 'upcoming' | 'submitted';
+
+function getDeadlineStatus(dueDate: string, setlistStatus: string | null): {
+  label: string;
+  color: string;
+  bgColor: string;
+  icon: React.ReactNode;
+} {
+  if (setlistStatus === 'approved' || setlistStatus === 'pending_review') {
+    return {
+      label: setlistStatus === 'approved' ? 'Approved' : 'Submitted',
+      color: 'text-emerald-700 dark:text-emerald-300',
+      bgColor: 'bg-emerald-50 dark:bg-emerald-900/20',
+      icon: <CheckCircle2 className="h-3.5 w-3.5" />,
+    };
+  }
+
+  const due = parseISO(dueDate);
+  if (isPast(due) && !isToday(due)) {
+    return {
+      label: 'Overdue',
+      color: 'text-red-700 dark:text-red-300',
+      bgColor: 'bg-red-50 dark:bg-red-900/20',
+      icon: <AlertTriangle className="h-3.5 w-3.5" />,
+    };
+  }
+  if (isToday(due)) {
+    return {
+      label: 'Due Today',
+      color: 'text-amber-700 dark:text-amber-300',
+      bgColor: 'bg-amber-50 dark:bg-amber-900/20',
+      icon: <Clock className="h-3.5 w-3.5" />,
+    };
+  }
+  return {
+    label: 'Upcoming',
+    color: 'text-blue-700 dark:text-blue-300',
+    bgColor: 'bg-blue-50 dark:bg-blue-900/20',
+    icon: <Clock className="h-3.5 w-3.5" />,
+  };
+}
+
+function getDaysLabel(dueDate: string, setlistStatus: string | null): { text: string; urgent: boolean } {
+  if (setlistStatus === 'approved' || setlistStatus === 'pending_review') return { text: '', urgent: false };
+  const due = parseISO(dueDate);
+  const now = new Date();
+  if (isToday(due)) {
+    const hours = differenceInHours(due, now);
+    if (hours <= 0) return { text: 'Due now', urgent: true };
+    return { text: `${hours}h left`, urgent: true };
+  }
+  const days = differenceInDays(due, now);
+  if (days < 0) return { text: `${Math.abs(days)}d overdue`, urgent: true };
+  if (days <= 3) return { text: `${days}d left`, urgent: true };
+  return { text: `${days}d left`, urgent: false };
+}
+
+function getDaysLabelString(dueDate: string, setlistStatus: string | null): string {
+  return getDaysLabel(dueDate, setlistStatus).text;
+}
+
+interface EditDueDatePopoverProps {
+  event: DeadlineEvent;
+  onSave: (eventId: string, newDate: string) => Promise<void>;
+  onClose: () => void;
+  saving: boolean;
+}
+
+function EditDueDatePopover({ event, onSave, onClose, saving }: EditDueDatePopoverProps) {
+  const due = parseISO(event.proposal_due_date);
+  const [dateValue, setDateValue] = useState(format(due, "yyyy-MM-dd'T'HH:mm"));
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        onClose();
+      }
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose]);
+
+  return (
+    <div
+      ref={ref}
+      className="absolute z-50 right-0 top-full mt-1.5 w-72 bg-white dark:bg-[#1c1c1e] rounded-xl shadow-xl ring-1 ring-black/10 dark:ring-white/10 p-4 space-y-3"
+    >
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-gray-900 dark:text-white flex items-center gap-1.5">
+          <CalendarDays className="h-3.5 w-3.5 text-gray-400" />
+          Override Due Date
+        </p>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">
+        This changes the deadline for <span className="font-semibold text-gray-700 dark:text-gray-300">{event.title}</span> only.
+      </p>
+      <div>
+        <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">New due date &amp; time</label>
+        <input
+          type="datetime-local"
+          value={dateValue}
+          onChange={e => setDateValue(e.target.value)}
+          className="w-full text-xs px-2.5 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/[0.04] text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+        />
+      </div>
+      <div className="flex gap-2 pt-0.5">
+        <button
+          onClick={onClose}
+          disabled={saving}
+          className="flex-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 dark:bg-white/[0.06] text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={() => onSave(event.id, dateValue)}
+          disabled={saving || !dateValue}
+          className="flex-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5"
+        >
+          {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+          {saving ? 'Saving...' : 'Save'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function SetlistDeadlines() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [events, setEvents] = useState<DeadlineEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<StatusFilter>('all');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [savingDueDateId, setSavingDueDateId] = useState<string | null>(null);
+
+  const fetchDeadlines = useCallback(async () => {
+    setLoading(true);
+    const now = new Date().toISOString();
+
+    const { data: eventsData, error } = await supabase
+      .from('events')
+      .select(`
+        id, title, event_date, proposal_due_date,
+        song_leader:profiles!events_song_leader_id_fkey(id, first_name, last_name, nickname, avatar_url),
+        setlists(status)
+      `)
+      .not('proposal_due_date', 'is', null)
+      .gte('event_date', now)
+      .order('proposal_due_date', { ascending: true });
+
+    if (error) {
+      toast('error', 'Failed to load setlist deadlines');
+      setLoading(false);
+      return;
+    }
+
+    const eventIds = (eventsData || []).map((e: any) => e.id);
+    let reminderCounts: Record<string, { count: number; last_sent: string | null }> = {};
+
+    if (eventIds.length > 0) {
+      const { data: reminders } = await supabase
+        .from('setlist_reminders')
+        .select('event_id, sent_at')
+        .in('event_id', eventIds);
+
+      if (reminders) {
+        for (const r of reminders) {
+          if (!reminderCounts[r.event_id]) {
+            reminderCounts[r.event_id] = { count: 0, last_sent: null };
+          }
+          reminderCounts[r.event_id].count += 1;
+          if (!reminderCounts[r.event_id].last_sent || r.sent_at > reminderCounts[r.event_id].last_sent!) {
+            reminderCounts[r.event_id].last_sent = r.sent_at;
+          }
+        }
+      }
+    }
+
+    const mapped: DeadlineEvent[] = (eventsData || []).map((e: any) => {
+      const statuses: string[] = (e.setlists || []).map((s: any) => s.status);
+      let setlistStatus: string | null = null;
+      if (statuses.includes('approved')) setlistStatus = 'approved';
+      else if (statuses.includes('pending_review')) setlistStatus = 'pending_review';
+      else if (statuses.length > 0) setlistStatus = statuses[0];
+
+      return {
+        id: e.id,
+        title: e.title,
+        event_date: e.event_date,
+        proposal_due_date: e.proposal_due_date,
+        song_leader: e.song_leader || null,
+        setlist_status: setlistStatus,
+        reminder_count: reminderCounts[e.id]?.count ?? 0,
+        last_reminder_at: reminderCounts[e.id]?.last_sent ?? null,
+      };
+    });
+
+    setEvents(mapped);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    fetchDeadlines();
+  }, [fetchDeadlines]);
+
+  const handleSendReminder = async (event: DeadlineEvent) => {
+    if (!event.song_leader) {
+      toast('error', 'No song leader assigned to this event');
+      return;
+    }
+    if (sendingId) return;
+
+    if (event.last_reminder_at) {
+      const minsAgo = (Date.now() - new Date(event.last_reminder_at).getTime()) / 60000;
+      if (minsAgo < 10) {
+        toast('error', 'A reminder was already sent recently. Please wait before sending another.');
+        return;
+      }
+    }
+
+    setSendingId(event.id);
+
+    const dueLabel = getDaysLabelString(event.proposal_due_date, event.setlist_status);
+    const eventDateLabel = format(parseISO(event.event_date), 'MMM d');
+    const body = dueLabel.includes('overdue')
+      ? `Your setlist for "${event.title}" (${eventDateLabel}) is ${dueLabel}. Open the event to submit it now.`
+      : `Your setlist for "${event.title}" (${eventDateLabel}) is due soon (${dueLabel}). Open the event to get started.`;
+
+    const { error: notifError } = await supabase.from('notifications').insert({
+      user_id: event.song_leader.id,
+      type: 'proposal_reminder',
+      title: 'Setlist Reminder',
+      body,
+      data: { event_id: event.id, url: `/events/${event.id}` },
+    });
+
+    if (notifError) {
+      toast('error', 'Failed to send notification');
+      setSendingId(null);
+      return;
+    }
+
+    const { error: trackError } = await supabase.from('setlist_reminders').insert({
+      event_id: event.id,
+      user_id: event.song_leader.id,
+      sent_by: user!.id,
+    });
+
+    if (trackError) {
+      toast('error', 'Reminder sent but failed to track count');
+    } else {
+      toast('success', `Reminder sent to ${event.song_leader.first_name}`);
+      setEvents(prev => prev.map(e =>
+        e.id === event.id
+          ? { ...e, reminder_count: e.reminder_count + 1, last_reminder_at: new Date().toISOString() }
+          : e
+      ));
+    }
+
+    setSendingId(null);
+  };
+
+  const handleSaveDueDate = async (eventId: string, newDateLocal: string) => {
+    if (!newDateLocal) return;
+    setSavingDueDateId(eventId);
+
+    const newIso = new Date(newDateLocal).toISOString();
+
+    const { error } = await supabase
+      .from('events')
+      .update({ proposal_due_date: newIso })
+      .eq('id', eventId);
+
+    if (error) {
+      toast('error', 'Failed to update due date');
+    } else {
+      toast('success', 'Due date updated');
+      setEvents(prev => prev.map(e =>
+        e.id === eventId ? { ...e, proposal_due_date: newIso } : e
+      ));
+      setEditingId(null);
+    }
+
+    setSavingDueDateId(null);
+  };
+
+  const isSubmitted = (e: DeadlineEvent) => e.setlist_status === 'approved' || e.setlist_status === 'pending_review';
+  const isOverdue = (e: DeadlineEvent) => !isSubmitted(e) && isPast(parseISO(e.proposal_due_date)) && !isToday(parseISO(e.proposal_due_date));
+  const isDueToday = (e: DeadlineEvent) => isToday(parseISO(e.proposal_due_date));
+  const isUpcoming = (e: DeadlineEvent) => !isSubmitted(e) && !isPast(parseISO(e.proposal_due_date)) && !isToday(parseISO(e.proposal_due_date));
+
+  const filteredEvents = events.filter(e => {
+    if (filter === 'all') return true;
+    if (filter === 'submitted') return isSubmitted(e);
+    if (filter === 'overdue') return isOverdue(e);
+    if (filter === 'due_today') return isDueToday(e);
+    if (filter === 'upcoming') return isUpcoming(e);
+    return true;
+  });
+
+  const countByStatus = {
+    overdue: events.filter(isOverdue).length,
+    due_today: events.filter(isDueToday).length,
+    upcoming: events.filter(isUpcoming).length,
+    submitted: events.filter(isSubmitted).length,
+  };
+
+  if (loading) {
+    return (
+      <div className="px-4 sm:px-5 lg:px-6 py-10 flex justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-4 sm:px-5 lg:px-6 py-5 space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-bold text-gray-900 dark:text-white">Setlist Deadlines</h2>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Monitor and send reminders for upcoming setlist proposals</p>
+        </div>
+        <button
+          onClick={fetchDeadlines}
+          className="p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          title="Refresh"
+        >
+          <RefreshCw className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        {[
+          { key: 'overdue', label: 'Overdue', count: countByStatus.overdue, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20' },
+          { key: 'due_today', label: 'Due Today', count: countByStatus.due_today, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-900/20' },
+          { key: 'upcoming', label: 'Upcoming', count: countByStatus.upcoming, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/20' },
+          { key: 'submitted', label: 'Submitted', count: countByStatus.submitted, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
+        ].map(stat => (
+          <button
+            key={stat.key}
+            onClick={() => setFilter(filter === stat.key as StatusFilter ? 'all' : stat.key as StatusFilter)}
+            className={`rounded-xl p-3 text-left transition-all ring-1 ${
+              filter === stat.key
+                ? `${stat.bg} ring-current/20 ${stat.color}`
+                : 'bg-white dark:bg-white/[0.04] ring-black/[0.06] dark:ring-white/[0.06] hover:ring-black/10 dark:hover:ring-white/10'
+            }`}
+          >
+            <p className={`text-2xl font-bold ${filter === stat.key ? stat.color : 'text-gray-900 dark:text-white'}`}>{stat.count}</p>
+            <p className={`text-xs font-medium mt-0.5 ${filter === stat.key ? stat.color : 'text-gray-500 dark:text-gray-400'}`}>{stat.label}</p>
+          </button>
+        ))}
+      </div>
+
+      {filteredEvents.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <div className="h-12 w-12 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-3">
+            <ListMusic className="h-6 w-6 text-gray-400" />
+          </div>
+          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">No deadlines found</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+            {filter === 'all' ? 'No upcoming events with setlist deadlines.' : 'No events match this filter.'}
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          {filteredEvents.map(event => {
+            const status = getDeadlineStatus(event.proposal_due_date, event.setlist_status);
+            const { text: daysText, urgent: daysUrgent } = getDaysLabel(event.proposal_due_date, event.setlist_status);
+            const isSending = sendingId === event.id;
+            const canSendReminder = !event.setlist_status || (event.setlist_status !== 'approved' && event.setlist_status !== 'pending_review');
+            const recentlySent = event.last_reminder_at
+              ? (Date.now() - new Date(event.last_reminder_at).getTime()) / 60000 < 10
+              : false;
+            const isEditOpen = editingId === event.id;
+            const isSavingThis = savingDueDateId === event.id;
+            const isOverdueEvent = isOverdue(event);
+            const isDueTodayEvent = isDueToday(event);
+
+            return (
+              <div
+                key={event.id}
+                className={`card p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 ${
+                  isOverdueEvent ? 'ring-1 ring-red-200 dark:ring-red-900/40' : ''
+                }`}
+              >
+                <div className="flex items-start gap-3 flex-1 min-w-0">
+                  <div className="shrink-0 mt-0.5">
+                    {event.song_leader ? (
+                      <Avatar
+                        src={event.song_leader.avatar_url}
+                        firstName={event.song_leader.first_name || '?'}
+                        lastName={event.song_leader.last_name}
+                        size="sm"
+                      />
+                    ) : (
+                      <div className="h-8 w-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                        <ListMusic className="h-3.5 w-3.5 text-gray-400" />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{event.title}</p>
+                      <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                        Event {format(parseISO(event.event_date), 'MMM d')}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                      {event.song_leader
+                        ? `${event.song_leader.nickname || event.song_leader.first_name} ${event.song_leader.last_name}`
+                        : <span className="text-amber-500">No song leader assigned</span>
+                      }
+                    </p>
+
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                      <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full ${status.bgColor} ${status.color}`}>
+                        {status.icon}
+                        {status.label}
+                      </span>
+
+                      {daysText && (
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                          daysUrgent
+                            ? isOverdueEvent
+                              ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                              : isDueTodayEvent
+                                ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+                                : 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300'
+                            : 'bg-gray-100 dark:bg-white/[0.06] text-gray-600 dark:text-gray-400'
+                        }`}>
+                          {daysText}
+                        </span>
+                      )}
+
+                      <span className={`inline-flex items-center gap-1 text-xs font-semibold ${
+                        isOverdueEvent
+                          ? 'text-red-600 dark:text-red-400'
+                          : isDueTodayEvent
+                            ? 'text-amber-600 dark:text-amber-400'
+                            : 'text-gray-700 dark:text-gray-300'
+                      }`}>
+                        <CalendarDays className="h-3 w-3 shrink-0" />
+                        {format(parseISO(event.proposal_due_date), 'MMM d, h:mm a')}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between sm:justify-end gap-2 sm:shrink-0 relative">
+                  {event.reminder_count > 0 && (
+                    <div className="flex items-center gap-1">
+                      <Bell className="h-3 w-3 text-gray-400" />
+                      <span className="text-xs text-gray-400 dark:text-gray-500">
+                        {event.reminder_count}
+                      </span>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => setEditingId(isEditOpen ? null : event.id)}
+                    className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors"
+                    title="Override due date"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+
+                  {canSendReminder && (
+                    <button
+                      onClick={() => handleSendReminder(event)}
+                      disabled={isSending || recentlySent || !event.song_leader}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                        recentlySent
+                          ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 cursor-not-allowed'
+                          : 'bg-brand-600 hover:bg-brand-700 text-white active:scale-95'
+                      } disabled:opacity-60`}
+                      title={recentlySent ? 'Recently sent — wait a moment' : 'Send reminder'}
+                    >
+                      {isSending ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Bell className="h-3.5 w-3.5" />
+                      )}
+                      {isSending ? 'Sending...' : recentlySent ? 'Sent' : 'Remind'}
+                    </button>
+                  )}
+
+                  {isEditOpen && (
+                    <EditDueDatePopover
+                      event={event}
+                      onSave={handleSaveDueDate}
+                      onClose={() => setEditingId(null)}
+                      saving={isSavingThis}
+                    />
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

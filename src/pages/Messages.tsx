@@ -283,7 +283,10 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
   };
 
   return (
-    <div className="shrink-0 border-t border-gray-100 dark:border-white/[0.06] bg-white dark:bg-[#111013] pb-[max(0px,calc(env(safe-area-inset-bottom)-10px))]">
+    <div
+      className="shrink-0 border-t border-gray-100 dark:border-white/[0.06] bg-white dark:bg-[#111013] pb-[max(0px,calc(env(safe-area-inset-bottom)-10px))]"
+      style={{ transform: 'translateY(calc(-1 * var(--messages-keyboard-inset, 0px)))' }}
+    >
       <AnimatePresence>
         {replyTo && replyPreview && (
           <motion.div
@@ -808,6 +811,7 @@ function ChatWindow({ conv, myUserId, onBack, onConvUpdate }: {
         ref={scrollRef}
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto px-4 py-4 space-y-0.5"
+        style={{ paddingBottom: 'calc(var(--messages-keyboard-inset, 0px) + 1rem)' }}
       >
         {loading && (
           <div className="flex justify-center pt-8">
@@ -1143,25 +1147,35 @@ function useIsDesktop() {
   return isDesktop;
 }
 
-function useMessagesViewportHeight(active: boolean) {
+function useMessagesKeyboardInset(active: boolean) {
   useEffect(() => {
     if (!active) return;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
 
-    const setHeight = () => {
-      const height = window.visualViewport?.height ?? window.innerHeight;
-      document.documentElement.style.setProperty('--messages-viewport-height', `${height}px`);
+    const setInset = () => {
+      const viewport = window.visualViewport;
+      const inset = viewport
+        ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
+        : 0;
+      document.documentElement.style.setProperty('--messages-keyboard-inset', `${Math.round(inset)}px`);
+      window.scrollTo(0, 0);
     };
 
-    setHeight();
-    window.visualViewport?.addEventListener('resize', setHeight);
-    window.visualViewport?.addEventListener('scroll', setHeight);
-    window.addEventListener('resize', setHeight);
+    setInset();
+    window.visualViewport?.addEventListener('resize', setInset);
+    window.visualViewport?.addEventListener('scroll', setInset);
+    window.addEventListener('resize', setInset);
 
     return () => {
-      window.visualViewport?.removeEventListener('resize', setHeight);
-      window.visualViewport?.removeEventListener('scroll', setHeight);
-      window.removeEventListener('resize', setHeight);
-      document.documentElement.style.removeProperty('--messages-viewport-height');
+      window.visualViewport?.removeEventListener('resize', setInset);
+      window.visualViewport?.removeEventListener('scroll', setInset);
+      window.removeEventListener('resize', setInset);
+      document.documentElement.style.removeProperty('--messages-keyboard-inset');
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
     };
   }, [active]);
 }
@@ -1178,7 +1192,7 @@ export function Messages() {
   const [mobileShowChat, setMobileShowChat] = useState(Boolean(paramConvId));
 
   const { conversations, loading: convsLoading, refresh, createDirectConversation } = useConversations();
-  useMessagesViewportHeight(!isDesktop && mobileShowChat);
+  useMessagesKeyboardInset(!isDesktop && mobileShowChat);
 
   const myUserId = user?.id ?? '';
 
@@ -1279,8 +1293,7 @@ export function Messages() {
 
       {/* ── Right: Chat window ── */}
       <motion.div
-        className={`flex flex-col ${isDesktop ? 'flex-1 min-w-0' : 'fixed inset-x-0 top-0 z-20'}`}
-        style={!isDesktop ? { height: 'var(--messages-viewport-height, 100dvh)' } : undefined}
+        className={`flex flex-col ${isDesktop ? 'flex-1 min-w-0' : 'fixed inset-0 z-20 h-[100dvh]'}`}
         animate={!isDesktop ? { x: mobileShowChat ? '0%' : '100%' } : undefined}
         transition={slideTransition}
       >

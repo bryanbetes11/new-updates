@@ -533,7 +533,7 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
         <div
           className={`fixed bottom-0 left-0 right-0 z-50 lg:hidden ${useDockedMobileNav ? 'pointer-events-auto' : 'pointer-events-none'}`}
           style={{
-            paddingBottom: useDockedMobileNav ? '0px' : 'max(0px, calc(env(safe-area-inset-bottom) - 4px))',
+            paddingBottom: useDockedMobileNav ? '0px' : 'max(0px, calc(env(safe-area-inset-bottom) - 6px))',
             paddingTop: useDockedMobileNav ? '0px' : '6px',
             background: useDockedMobileNav ? 'var(--sidebar-bg)' : undefined,
             WebkitBackdropFilter: useDockedMobileNav ? 'blur(28px) saturate(180%)' : undefined,
@@ -546,7 +546,7 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
             <nav
               className={`pointer-events-auto relative flex w-full ${useDockedMobileNav ? 'items-start overflow-visible px-2 pt-2' : 'items-center overflow-hidden p-1.5 rounded-full'}`}
               style={{
-                height: useDockedMobileNav ? 'calc(76px + env(safe-area-inset-bottom))' : undefined,
+                height: useDockedMobileNav ? 'calc(64px + env(safe-area-inset-bottom))' : undefined,
                 background: useDockedMobileNav ? 'var(--sidebar-bg)' : 'var(--nav-bg)',
                 WebkitBackdropFilter: useDockedMobileNav ? undefined : 'blur(28px) saturate(180%)',
                 backdropFilter: useDockedMobileNav ? undefined : 'blur(28px) saturate(180%)',
@@ -554,7 +554,7 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
                 boxShadow: useDockedMobileNav
                   ? 'none'
                   : '0 12px 36px -8px rgba(0,0,0,0.22), 0 2px 8px -2px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.06)',
-                paddingBottom: useDockedMobileNav ? 'calc(env(safe-area-inset-bottom) + 8px)' : undefined,
+                paddingBottom: useDockedMobileNav ? 'env(safe-area-inset-bottom)' : undefined,
               }}
             >
               {mounted && !useDockedMobileNav && (

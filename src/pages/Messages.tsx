@@ -1585,9 +1585,9 @@ function ChatWindow({
 
 // ─── Empty State ─────────────────────────────────────────────────────────────
 
-function EmptyState({ onNew }: { onNew: () => void }) {
+function EmptyState({ onNew, className = '' }: { onNew: () => void; className?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center h-full text-center px-8">
+    <div className={`flex flex-col items-center justify-center h-full text-center px-8 ${className}`}>
       <div className="h-16 w-16 rounded-3xl bg-emerald-50 dark:bg-emerald-500/[0.1] flex items-center justify-center mb-4">
         <MessageCircle className="h-8 w-8 text-emerald-500 dark:text-emerald-400" />
       </div>
@@ -1790,17 +1790,13 @@ export function Messages() {
               <span className="h-5 w-5 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
             </div>
           )}
-          {!convsLoading && filteredConvs.length === 0 && (
-            <div className="text-center py-10">
+          {!convsLoading && !search && filteredConvs.length === 0 && (
+            <EmptyState onNew={() => setNewMsgOpen(true)} className="min-h-[420px] pb-12" />
+          )}
+          {!convsLoading && search && filteredConvs.length === 0 && (
+            <div className="text-center py-12">
               <MessageCircle className="h-8 w-8 text-gray-300 dark:text-white/10 mx-auto mb-3" />
-              <p className="text-[13px] text-gray-400 dark:text-white/30">
-                {search ? 'No conversations match' : 'No conversations yet'}
-              </p>
-              {!search && (
-                <button onClick={() => setNewMsgOpen(true)} className="mt-3 text-[13px] text-emerald-600 dark:text-emerald-400 font-semibold hover:underline">
-                  Start one
-                </button>
-              )}
+              <p className="text-[13px] text-gray-400 dark:text-white/30">No conversations match</p>
             </div>
           )}
           {filteredConvs.map(c => (
@@ -1836,8 +1832,10 @@ export function Messages() {
           <div className="flex items-center justify-center h-full">
             <span className="h-6 w-6 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
           </div>
-        ) : (
+        ) : isDesktop ? (
           <EmptyState onNew={() => setNewMsgOpen(true)} />
+        ) : (
+          <div className="hidden" />
         )}
       </motion.div>
 

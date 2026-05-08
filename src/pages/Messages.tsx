@@ -772,13 +772,15 @@ function ChatWindow({ conv, myUserId, onBack, onConvUpdate }: {
 
   // Which message has seen avatars to display below it
   const seenByMessage = useMemo(() => {
-    const msgToSeers: Record<string, string[]> = {};
+    const msgToSeers: Record<string, { userId: string; readAt: string }[]> = {};
     for (const [memberId, msgId] of Object.entries(seenMap)) {
+      const readAt = memberReadTimes.find(m => m.user_id === memberId)?.last_read_at;
+      if (!readAt) continue;
       if (!msgToSeers[msgId]) msgToSeers[msgId] = [];
-      msgToSeers[msgId].push(memberId);
+      msgToSeers[msgId].push({ userId: memberId, readAt });
     }
     return msgToSeers;
-  }, [seenMap]);
+  }, [memberReadTimes, seenMap]);
 
   const pinnedMessages = messages.filter(m => m.is_pinned);
   const [showPinned, setShowPinned] = useState(false);
@@ -883,6 +885,10 @@ function ChatWindow({ conv, myUserId, onBack, onConvUpdate }: {
           const isMe = msg.sender_id === myUserId;
           const content = parseContent(msg.content);
           const seers = seenByMessage[msg.id] || [];
+          const latestSeenAt = seers.length > 0 ? seers.map(s => s.readAt).sort()[seers.length - 1] : '';
+          const seenLabel = seers.length > 0
+            ? `Seen ${formatMsgTime(latestSeenAt)}`
+            : '';
           const showAvatar = !isMe && (!isGrouped || i === 0);
           const isActionsOpen = activeMsg === msg.id;
           const isEmojiOpen = emojiMsgId === msg.id;
@@ -933,7 +939,7 @@ function ChatWindow({ conv, myUserId, onBack, onConvUpdate }: {
                   <div className="flex items-end gap-1.5">
                     {/* Hover actions (my side) */}
                     {isMe && (
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 mb-1">
+                      <div className="hidden sm:flex opacity-0 group-hover:opacity-100 transition-opacity items-center gap-0.5 mb-1">
                         <button
                           onClick={e => { e.stopPropagation(); setEmojiMsgId(isEmojiOpen ? null : msg.id); setActiveMsg(null); }}
                           className="h-7 w-7 flex items-center justify-center rounded-full text-gray-400 dark:text-white/25 hover:bg-gray-100 dark:hover:bg-white/[0.07] hover:text-gray-600 dark:hover:text-white/60 transition-colors"
@@ -957,7 +963,7 @@ function ChatWindow({ conv, myUserId, onBack, onConvUpdate }: {
                       } ${
                         isMe
                           ? 'bg-emerald-500 text-white rounded-br-md'
-                          : 'bg-white dark:bg-white/[0.07] text-gray-900 dark:text-white rounded-bl-md border border-gray-100 dark:border-white/[0.06]'
+                          : 'bg-gray-100 dark:bg-white/[0.07] text-gray-900 dark:text-white rounded-bl-md border border-gray-200/80 dark:border-white/[0.06]'
                       } ${msg.is_pinned ? 'ring-1 ring-amber-400/50' : ''}`}
                     >
                       {content.type === 'image' ? (
@@ -1005,7 +1011,7 @@ function ChatWindow({ conv, myUserId, onBack, onConvUpdate }: {
 
                     {/* Hover actions (other side) */}
                     {!isMe && (
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 mb-1">
+                      <div className="hidden sm:flex opacity-0 group-hover:opacity-100 transition-opacity items-center gap-0.5 mb-1">
                         <button
                           onClick={e => { e.stopPropagation(); setEmojiMsgId(isEmojiOpen ? null : msg.id); setActiveMsg(null); }}
                           className="h-7 w-7 flex items-center justify-center rounded-full text-gray-400 dark:text-white/25 hover:bg-gray-100 dark:hover:bg-white/[0.07] hover:text-gray-600 dark:hover:text-white/60 transition-colors"
@@ -1091,22 +1097,23 @@ function ChatWindow({ conv, myUserId, onBack, onConvUpdate }: {
               </div>
 
               {/* Seen receipts */}
-              {seers.length > 0 && (
-                <div className={`flex gap-1 mt-1 ${isMe ? 'flex-row-reverse mr-9' : 'flex-row ml-9'}`}>
-                  {seers.map(uid => {
-                    const member = conv.members.find(m => m.user_id === uid);
+              {isMe && seers.length > 0 && (
+                <div className={`flex items-center gap-1 mt-1 ${isMe ? 'justify-end mr-1' : 'ml-9'}`}>
+                  {isGroupChat && seers.slice(0, 3).map(seer => {
+                    const member = conv.members.find(m => m.user_id === seer.userId);
                     return (
-                      <div key={uid} title={`Seen by ${member?.profile?.nickname || member?.profile?.first_name || 'someone'}`}>
+                      <div key={seer.userId} className="-ml-0.5 first:ml-0" title={`Seen by ${member?.profile?.nickname || member?.profile?.first_name || 'someone'} at ${formatMsgTime(seer.readAt)}`}>
                         <Avatar
                           src={member?.profile?.avatar_url ?? undefined}
                           firstName={member?.profile?.first_name || '?'}
                           lastName={member?.profile?.last_name ?? undefined}
                           size="xs"
+                          className="scale-75 origin-center ring-1 ring-white dark:ring-[#111013]"
                         />
                       </div>
                     );
                   })}
-                  <span className="text-[10px] text-gray-400 dark:text-white/25 self-center">Seen</span>
+                  <span className="text-[10px] font-medium text-gray-400 dark:text-white/25 self-center">{seenLabel}</span>
                 </div>
               )}
             </div>

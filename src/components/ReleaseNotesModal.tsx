@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Bell, UserX, Circle, ArrowLeft, ArrowRight, Timer, PanelBottom } from 'lucide-react';
+import { Sparkles, Bell, UserX, Circle, ArrowLeft, ArrowRight, Timer, PanelBottom, Music2 } from 'lucide-react';
 import { Modal } from './Modal';
 
 interface ReleaseNotesModalProps {
@@ -9,6 +9,40 @@ interface ReleaseNotesModalProps {
 }
 
 const features = [
+  {
+    icon: Music2,
+    title: 'Welcome to ServeSync',
+    description: 'MCJC Worship is now ServeSync. Same ministry workspace, cleaner name, and more tools for serving together.',
+    highlight: (
+      <div
+        className="rounded-2xl p-5 overflow-hidden relative"
+        style={{
+          background: 'linear-gradient(135deg, rgba(16,185,129,0.12), rgba(14,165,233,0.06))',
+          border: '1px solid rgba(16,185,129,0.24)',
+        }}
+      >
+        <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+        <div className="flex items-center gap-3">
+          <div
+            className="h-11 w-11 rounded-[22%] flex items-center justify-center shrink-0"
+            style={{
+              background: 'linear-gradient(145deg, #1e2a1e 0%, #0d1a0d 100%)',
+              boxShadow: '0 8px 18px rgba(0,0,0,0.24)',
+            }}
+          >
+            <Music2 className="h-5 w-5 text-emerald-400" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300">Formerly MCJC Worship</p>
+            <p className="mt-1 text-[20px] font-black text-gray-900 dark:text-white leading-tight" style={{ letterSpacing: '-0.04em' }}>ServeSync</p>
+          </div>
+        </div>
+        <p className="mt-4 text-[12px] leading-relaxed text-gray-600 dark:text-white/60">
+          Welcome back. Your events, assignments, attendance, setlists, and updates are still here, now under the ServeSync name.
+        </p>
+      </div>
+    ),
+  },
   {
     icon: PanelBottom,
     title: 'Mobile Navigation Styles',

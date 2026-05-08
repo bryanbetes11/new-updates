@@ -542,9 +542,9 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
             boxShadow: useDockedMobileNav ? '0 -10px 26px -24px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.04)' : undefined,
           }}
         >
-          <div className={`flex ${useDockedMobileNav ? 'justify-stretch px-0' : 'justify-center px-4'}`}>
+          <div className={`flex ${useDockedMobileNav ? 'justify-stretch px-0' : 'justify-center px-8'}`}>
             <nav
-              className={`pointer-events-auto relative flex w-full ${useDockedMobileNav ? 'items-start overflow-visible px-2 pt-2' : 'items-center overflow-hidden p-1.5 rounded-full'}`}
+              className={`pointer-events-auto relative flex ${useDockedMobileNav ? 'w-full items-start overflow-visible px-2 pt-2' : 'w-full max-w-[480px] items-center overflow-hidden p-1.5 rounded-full'}`}
               style={{
                 height: useDockedMobileNav ? 'calc(64px + env(safe-area-inset-bottom))' : undefined,
                 background: useDockedMobileNav ? 'var(--sidebar-bg)' : 'var(--nav-bg)',

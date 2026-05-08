@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { motion } from 'framer-motion';
-import { UserX, Check, X, Shield, MessageSquare, RefreshCw, ClipboardCheck } from 'lucide-react';
+import { Check, X, Shield, MessageSquare, RefreshCw, ClipboardCheck } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';

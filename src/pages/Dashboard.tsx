@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format, isAfter, parseISO, startOfToday, differenceInDays } from 'date-fns';
 import { motion } from 'framer-motion';
-import { Calendar, CheckCircle, Clock, Music, ChevronRight, AlertCircle, Megaphone, Image as ImageIcon, UserX, Trash2, ArrowUpRight, LayoutDashboard, Users, ClipboardCheck, ListChecks, Shield } from 'lucide-react';
+import { Calendar, CheckCircle, Clock, Music, ChevronRight, Megaphone, Image as ImageIcon, UserX, Trash2, ArrowUpRight, LayoutDashboard, Users, ClipboardCheck, ListChecks, Shield } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { DashboardSkeleton } from '../components/LoadingSpinner';

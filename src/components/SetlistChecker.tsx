@@ -39,20 +39,6 @@ function toCheckerSong(s: SetlistCheckerSong): CheckerSong {
   };
 }
 
-function fromCheckerSong(s: CheckerSong): SetlistCheckerSong {
-  return {
-    id: s.id,
-    song_id: s.song_id,
-    title: s.title,
-    artist: s.artist,
-    song_key: s.song_key,
-    category: s.category,
-    duration: s.duration,
-    youtube_url: s.youtube_url,
-    position: s.position,
-  };
-}
-
 function ScoreBar({ score }: { score: number }) {
   const color = score >= 80 ? 'bg-green-500' : score >= 60 ? 'bg-amber-500' : 'bg-red-500';
   const textColor = score >= 80 ? 'text-green-700 dark:text-green-300' : score >= 60 ? 'text-amber-700 dark:text-amber-300' : 'text-red-700 dark:text-red-300';
@@ -83,7 +69,7 @@ function CategoryFitBadge({ fit }: { fit: 'good' | 'ok' | 'poor' }) {
 
 export function SetlistChecker({ setlistId, setlistStatus, initialSongs = [], serviceFormat = 'sunday_full', onDecision }: SetlistCheckerProps) {
   const { user, isLeader, isSetlistCoordinator, isMusicDirector, isAdmin, isProductionDirector, userRoles } = useAuth();
-  const toast = useToast();
+  const { toast } = useToast();
 
   const canDecide = isLeader || isSetlistCoordinator || isMusicDirector || isAdmin || isProductionDirector
     || userRoles.some(ur => ['Admin', 'Production Director', 'Music Director', 'Setlist Coordinator'].includes(ur.roles?.name || ''));

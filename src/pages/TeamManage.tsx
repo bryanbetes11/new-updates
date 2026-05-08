@@ -65,7 +65,7 @@ interface TeamManageProps {
 }
 
 export function TeamManage({ embedded }: TeamManageProps = {}) {
-  const { roles, isLeader, isOrgAdmin, canManageMembers, canManageDiscipline, user } = useAuth();
+  const { roles, isLeader, isOrgAdmin, canManageMembers, user } = useAuth();
   const { toast } = useToast();
   const [members, setMembers] = useState<MemberWithRoles[]>([]);
   const [loading, setLoading] = useState(true);

@@ -18,7 +18,7 @@ import {
   LeaveIcon, ShieldNavIcon, MessageIcon,
 } from './NavIcons';
 
-type NavIcon = React.ComponentType<{ active?: boolean; className?: string }>;
+type NavIcon = React.ComponentType<{ active?: boolean; className?: string; style?: React.CSSProperties }>;
 
 interface NavItem {
   path: string;
@@ -536,7 +536,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
               }}
             >
 
-              {mobileNavItems.map((item, idx) => {
+              {mobileNavItems.map((item) => {
                 const active = isActive(item);
                 const Icon = item.icon;
                 const badge = getBadgeCount(item);

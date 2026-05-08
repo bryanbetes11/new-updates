@@ -329,7 +329,7 @@ export interface UserAvailability {
   user_id: string;
   unavailable_date: string | null;
   reason: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'withdrawn';
   approved_by: string | null;
   reviewed_at: string | null;
   approval_notes: string | null;

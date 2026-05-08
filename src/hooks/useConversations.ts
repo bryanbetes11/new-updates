@@ -52,10 +52,6 @@ export function useConversations() {
     }
 
     const convIds = myMemberships.map(m => m.conversation_id);
-    const myReadMap: Record<string, string | null> = Object.fromEntries(
-      myMemberships.map(m => [m.conversation_id, m.last_read_at])
-    );
-
     const [convRes, membersRes] = await Promise.all([
       supabase
         .from('conversations')

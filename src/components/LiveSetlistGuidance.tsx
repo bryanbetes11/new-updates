@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   CheckCircle, AlertTriangle, XCircle, Sparkles, Lightbulb,
-  ChevronDown, ChevronUp, Target, Info, TrendingUp, BookOpen,
+  ChevronDown, Target, Info, TrendingUp, BookOpen,
   ArrowUpDown, RotateCcw, Flag, Heart, ChevronRight,
 } from 'lucide-react';
 import {
@@ -26,15 +26,6 @@ function HealthDot({ health }: { health: LiveGuidanceResult['health'] }) {
     poor: 'bg-red-500',
   };
   return <span className={`inline-block w-2 h-2 rounded-full ${map[health]} shrink-0`} />;
-}
-
-function ScoreChip({ label, score, color }: { label: string; score: number; color: string }) {
-  return (
-    <div className={`flex flex-col items-center px-2.5 py-1.5 rounded-lg ${color}`}>
-      <span className="text-lg font-bold tabular-nums leading-none">{score}</span>
-      <span className="text-[9px] font-medium uppercase tracking-wider mt-0.5 opacity-70">{label}</span>
-    </div>
-  );
 }
 
 function SectionChip({ label, present, required, count }: {
@@ -175,7 +166,6 @@ export function LiveSetlistGuidance({
   serviceFormat,
   language,
   onApplySuggestedOrder,
-  compact = false,
 }: LiveSetlistGuidanceProps) {
   const [showDetails, setShowDetails] = useState(false);
   const [showSuggestedOrder, setShowSuggestedOrder] = useState(false);

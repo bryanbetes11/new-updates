@@ -127,14 +127,6 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
     onSuccess?.();
   };
 
-  const handleDelete = async (id: string) => {
-    const { error } = await supabase.from('user_availability').delete().eq('id', id);
-    if (error) { toast('error', 'Failed to withdraw request'); return; }
-    toast('success', 'Leave request withdrawn');
-    if (editingItem?.id === id) resetForm();
-    setAvailability(prev => prev.filter(a => a.id !== id));
-  };
-
   const handleConfirmAction = async () => {
     if (!confirmAction) return;
     setActionLoading(true);

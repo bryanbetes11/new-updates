@@ -610,7 +610,7 @@ function getSectionRecommendation(category: string, format: ServiceFormat, langu
   return base;
 }
 
-function getMissingCategoryGuidance(cat: string, format: ServiceFormat, language: CheckerLanguage): string {
+function getMissingCategoryGuidance(cat: string, _format: ServiceFormat, language: CheckerLanguage): string {
   const isTgl = language === 'tagalog_english';
   const en: Record<string, string> = {
     Opening: `• No Opening song — the opening sets the tone and gathers the congregation's attention. Look for an upbeat, communal song that declares celebration or gathering.`,
@@ -633,7 +633,7 @@ function getTopSuggestion(
   missingRequired: string[],
   flowIssues: string[],
   allFlags: string[],
-  format: ServiceFormat,
+  _format: ServiceFormat,
   songs: CheckerSong[],
   language: CheckerLanguage,
 ): string | null {

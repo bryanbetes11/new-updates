@@ -48,7 +48,9 @@ function parseContent(content: string): MsgContent {
   try {
     const p = JSON.parse(content);
     if (p.type === 'image' && typeof p.url === 'string') return p;
-  } catch {}
+  } catch {
+    // Treat non-JSON content as a plain text message.
+  }
   return { type: 'text', text: content };
 }
 
@@ -272,7 +274,7 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
   };
 
   return (
-    <div className="shrink-0 border-t border-gray-100 dark:border-white/[0.06] bg-white dark:bg-[#111013]">
+    <div className="shrink-0 border-t border-gray-100 dark:border-white/[0.06] bg-white dark:bg-[#111013] pb-[env(safe-area-inset-bottom)]">
       <AnimatePresence>
         {replyTo && replyPreview && (
           <motion.div
@@ -443,7 +445,7 @@ function ConvInfoPanel({
   return (
     <div className="flex flex-col h-full bg-[#f5f5f7] dark:bg-[#0d0d0f]">
       {/* Header */}
-      <div className="shrink-0 flex items-center gap-3 px-4 py-3 bg-white dark:bg-[#111013] border-b border-gray-100 dark:border-white/[0.06]">
+      <div className="shrink-0 flex items-center gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+12px)] bg-white dark:bg-[#111013] border-b border-gray-100 dark:border-white/[0.06]">
         <button
           onClick={onClose}
           className="h-8 w-8 flex items-center justify-center rounded-full text-gray-500 dark:text-white/40 hover:bg-gray-100 dark:hover:bg-white/[0.07] transition-colors"
@@ -623,7 +625,7 @@ function ChatWindow({ conv, myUserId, onBack, onConvUpdate }: {
   const atBottomRef = useRef(true);
   const typingThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { user, profile } = useAuth();
+  const { profile } = useAuth();
   const {
     messages, loading, typingUsers, memberReadTimes,
     sendMessage, sendTyping, pinMessage, deleteMessage, toggleReaction,
@@ -726,7 +728,7 @@ function ChatWindow({ conv, myUserId, onBack, onConvUpdate }: {
   return (
     <div className="relative flex flex-col h-full min-h-0 bg-white dark:bg-[#111013]">
       {/* Header */}
-      <div className="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-gray-100 dark:border-white/[0.06] bg-white dark:bg-[#111013]">
+      <div className="shrink-0 flex items-center gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+12px)] border-b border-gray-100 dark:border-white/[0.06] bg-white dark:bg-[#111013]">
         <button
           onClick={onBack}
           className="lg:hidden shrink-0 h-8 w-8 flex items-center justify-center rounded-full text-gray-500 dark:text-white/40 hover:bg-gray-100 dark:hover:bg-white/[0.07] transition-colors"

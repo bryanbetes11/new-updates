@@ -159,11 +159,12 @@ export function OrganizationBilling() {
   }, [organization?.slug, selectedPlanCode]);
 
   const latestSubmission = history[0];
-  const orgStatus = organization.billing_status || organization.subscription_status;
+  const orgStatus = organization?.billing_status || organization?.subscription_status;
   const trialDaysLeft = daysLeft === null ? null : Math.max(daysLeft, 0);
   const showTrialFields = orgStatus === 'trialing' && trialDaysLeft !== null;
   const lockedFromRedirect = searchParams.get('locked') === '1';
   const billingIntro = (() => {
+    if (!organization) return '';
     if (organization.is_billing_exempt) {
       return 'MCJC is marked billing-exempt, so this church does not need payment submissions or plan renewals.';
     }

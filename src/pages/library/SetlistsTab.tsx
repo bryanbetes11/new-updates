@@ -148,7 +148,7 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
       supabase.from('event_assignments').select('event_id, profiles(first_name, last_name, nickname, gender, avatar_url), roles!inner(name)').eq('roles.name', 'Song Leader'),
     ]);
 
-    const approvedSetlists = (setlistRes.data || []) as SetlistWithEvent[];
+    const approvedSetlists = (setlistRes.data || []) as unknown as SetlistWithEvent[];
     setSetlists(approvedSetlists);
 
     const slMap: Record<string, string> = {};

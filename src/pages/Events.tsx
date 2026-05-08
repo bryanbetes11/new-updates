@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { format, parseISO, startOfDay, subWeeks, previousSunday, addDays, subDays, differenceInDays, eachDayOfInterval } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { motion } from 'framer-motion';
-import { Calendar, Plus, Search, ChevronRight, Filter, Users, Trash2, Cake, CalendarOff, LayoutGrid, List, AlertCircle, Clock, X, PartyPopper, Heart } from 'lucide-react';
+import { Calendar, Plus, Search, ChevronRight, Filter, Users, Trash2, CalendarOff, LayoutGrid, List, AlertCircle, Clock, X, PartyPopper, Heart } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -13,7 +13,6 @@ import { DatePicker } from '../components/DatePicker';
 import { TimePicker } from '../components/TimePicker';
 import { EventsSkeleton } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
-import { sortRolesLeadershipFirst } from '../components/RoleBadge';
 import { CalendarGrid } from '../components/CalendarGrid';
 import { formatTime12Hour } from '../lib/timeFormat';
 import type { Event } from '../types';
@@ -370,7 +369,7 @@ function EventList({ events, calendarEntries, songLeaderMap, setlistInfoMap, onE
       variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}
       className="space-y-2.5"
     >
-      {merged.map((item, idx) => (
+      {merged.map((item) => (
         <motion.div key={item.kind === 'event' ? item.event.id : `bday-${item.entry.name}-${item.entry.date}`} variants={itemAnim}>
           {item.kind === 'event' ? (
             <EventCard event={item.event} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={onEventClick} isPast={showPast} />

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { ClipboardCheck, AlertTriangle, Search, Filter, Download, RotateCcw, ChevronDown, ChevronUp, History, X, CheckCircle, Clock, XCircle, FileCheck } from 'lucide-react';
+import { AlertTriangle, Search, Filter, Download, RotateCcw, ChevronDown, ChevronUp, History, CheckCircle, Clock, XCircle, FileCheck } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';

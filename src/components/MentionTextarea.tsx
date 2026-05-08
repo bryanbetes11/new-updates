@@ -16,6 +16,7 @@ interface MentionTextareaProps {
   onChange: (value: string) => void;
   placeholder?: string;
   className?: string;
+  style?: React.CSSProperties;
   rows?: number;
   onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   textareaRef?: React.RefObject<HTMLTextAreaElement>;
@@ -26,6 +27,7 @@ export function MentionTextarea({
   onChange,
   placeholder,
   className = '',
+  style,
   rows = 1,
   onKeyDown,
   textareaRef: externalRef,
@@ -64,7 +66,6 @@ export function MentionTextarea({
       'fontWeight',
       'fontStretch',
       'fontSize',
-      'fontSizeAdjust',
       'lineHeight',
       'fontFamily',
       'textAlign',
@@ -86,7 +87,8 @@ export function MentionTextarea({
     mirror.style.wordBreak = 'break-word';
 
     properties.forEach(property => {
-      mirror.style[property] = style[property];
+      (mirror.style as unknown as Record<string, string>)[property] =
+        (style as unknown as Record<string, string>)[property] || '';
     });
 
     mirror.textContent = el.value.slice(0, position);
@@ -250,6 +252,7 @@ export function MentionTextarea({
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         className={className}
+        style={style}
         rows={rows}
       />
       {showDropdown && filtered.length > 0 && dropdownRect &&

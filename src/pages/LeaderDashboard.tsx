@@ -8,7 +8,6 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { useToast } from '../contexts/ToastContext';
 import { Avatar } from '../components/Avatar';
 import { PageLoader } from '../components/LoadingSpinner';
 import type { Setlist, UserAvailability, DisciplineRecord, Profile } from '../types';
@@ -59,9 +58,8 @@ interface LeaderDashboardProps {
 }
 
 export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
-  const { isLeader, profile } = useAuth();
+  const { isLeader } = useAuth();
   const navigate = useNavigate();
-  const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [recentOffenses, setRecentOffenses] = useState<RecentOffense[]>([]);
   const [disciplineAlerts, setDisciplineAlerts] = useState<DisciplineAlert[]>([]);
@@ -346,21 +344,24 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
               {upcomingUnavailable.length === 0 ? (
                 <p className="px-5 py-8 text-center text-[13px] text-gray-400 dark:text-white/30">No upcoming unavailability</p>
               ) : (
-                upcomingUnavailable.map(ua => (
+                upcomingUnavailable.map(ua => {
+                  const representativeDate = ua.unavailable_date || ua.start_date || ua.end_date || new Date().toISOString();
+                  return (
                   <div key={ua.id} className="flex items-center gap-3 px-5 py-3">
                     <div
                       className="relative flex flex-col items-center justify-center h-11 w-11 rounded-xl shrink-0"
                       style={{ background: 'linear-gradient(145deg,#fb923c,#ea580c)', boxShadow: '0 3px 10px rgba(249,115,22,0.3)' }}
                     >
-                      <span className="text-[8px] font-black uppercase tracking-widest leading-none text-white/65">{format(parseISO(ua.unavailable_date), 'MMM')}</span>
-                      <span className="text-[16px] font-black leading-none mt-0.5 text-white" style={{ letterSpacing: '-0.04em' }}>{format(parseISO(ua.unavailable_date), 'd')}</span>
+                      <span className="text-[8px] font-black uppercase tracking-widest leading-none text-white/65">{format(parseISO(representativeDate), 'MMM')}</span>
+                      <span className="text-[16px] font-black leading-none mt-0.5 text-white" style={{ letterSpacing: '-0.04em' }}>{format(parseISO(representativeDate), 'd')}</span>
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-[13px] font-bold text-gray-900 dark:text-white truncate" style={{ letterSpacing: '-0.01em' }}>{ua.profiles?.first_name} {ua.profiles?.last_name}</p>
                       <p className="text-[11px] text-gray-500 dark:text-white/40 truncate mt-0.5">{ua.reason || 'No reason given'}</p>
                     </div>
                   </div>
-                ))
+                  );
+                })
               )}
             </div>
           </DashCard>

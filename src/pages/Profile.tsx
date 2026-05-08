@@ -4,9 +4,9 @@ import { format, parseISO } from 'date-fns';
 import { motion } from 'framer-motion';
 import {
   Pencil, Save, LogOut, Bell, BellOff, X, Check, Crown,
-  Camera, Loader2, Shield, ChevronDown, ChevronUp, Clock,
+  Camera, Loader2, Shield, ChevronDown, Clock,
   MessageSquare, XCircle, CheckCircle, Eye, KeyRound,
-  Phone, Cake, Calendar
+  Phone, Cake, Calendar, AlertCircle
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -99,7 +99,7 @@ export function Profile() {
   }, [profile]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !profile) return;
     const checkPushStatus = async () => {
       if ('serviceWorker' in navigator && 'PushManager' in window) {
         try {
@@ -125,7 +125,7 @@ export function Profile() {
   useEffect(() => { fetchMyDiscipline(); }, [fetchMyDiscipline]);
 
   const fetchMyAccountability = useCallback(async () => {
-    if (!user) return;
+    if (!user || !profile) return;
     const currentYear = new Date().getFullYear();
     const currentQuarter = Math.ceil((new Date().getMonth() + 1) / 3);
     const { data } = await supabase.rpc('get_my_accountability_summary', {
@@ -138,7 +138,7 @@ export function Profile() {
   useEffect(() => { fetchMyAccountability(); }, [fetchMyAccountability]);
 
   const handleSave = async () => {
-    if (!user) return;
+    if (!user || !profile) return;
     const { official_join_date, ...profileForm } = form;
     const officialJoinDateChanged = official_join_date !== (profile.official_join_date || '');
 
@@ -165,7 +165,7 @@ export function Profile() {
 
   const urlBase64ToUint8Array = (base64String: string) => {
     const padding = '='.repeat((4 - base64String.length % 4) % 4);
-    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
     const rawData = window.atob(base64);
     const outputArray = new Uint8Array(rawData.length);
     for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
@@ -179,7 +179,7 @@ export function Profile() {
       try {
         if (!('serviceWorker' in navigator)) { toast('error', 'Service workers not supported'); setPushLoading(false); return; }
         if (!('PushManager' in window)) {
-          isIosDevice() && !isStandalonePwa() ? toast('error', 'On iOS, add to Home Screen first.') : toast('error', 'Push not supported in this browser');
+          toast('error', isIosDevice() && !isStandalonePwa() ? 'On iOS, add to Home Screen first.' : 'Push not supported in this browser');
           setPushLoading(false); return;
         }
         if (!('Notification' in window)) { toast('error', 'Notifications unavailable'); setPushLoading(false); return; }

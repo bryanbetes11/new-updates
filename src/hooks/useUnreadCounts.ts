@@ -20,20 +20,20 @@ export function useUnreadCounts() {
   const fetchCounts = useCallback(async () => {
     if (!user) return;
 
-    const queries: Promise<unknown>[] = [
-      supabase.from('announcements').select('id', { count: 'exact', head: true }),
-      supabase.from('announcement_views').select('announcement_id').eq('user_id', user.id),
-      supabase.from('event_assignments').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('status', 'pending'),
-      supabase.from('conversation_members').select('conversation_id, last_read_at').eq('user_id', user.id),
+    const queries: PromiseLike<unknown>[] = [
+      supabase.from('announcements').select('id', { count: 'exact', head: true }).then(res => res),
+      supabase.from('announcement_views').select('announcement_id').eq('user_id', user.id).then(res => res),
+      supabase.from('event_assignments').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('status', 'pending').then(res => res),
+      supabase.from('conversation_members').select('conversation_id, last_read_at').eq('user_id', user.id).then(res => res),
     ];
 
     if (canSeePendingLeave) {
       queries.push(
-        supabase.from('user_availability').select('id', { count: 'exact', head: true }).eq('status', 'pending')
+        supabase.from('user_availability').select('id', { count: 'exact', head: true }).eq('status', 'pending').then(res => res)
       );
     }
 
-    const results = await Promise.all(queries);
+    const results = await Promise.all(queries) as unknown[];
     const [announcementRes, viewsRes, pendingAssignRes, membershipsRes] = results as [
       { count: number | null },
       { data: { announcement_id: string }[] | null },

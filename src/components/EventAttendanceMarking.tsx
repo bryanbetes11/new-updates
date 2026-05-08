@@ -44,7 +44,6 @@ export function EventAttendanceMarking({ event }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [pendingChanges, setPendingChanges] = useState<Record<string, { status: AttendanceStatus; excused_reason?: string; notes?: string }>>({});
   const [excuseModal, setExcuseModal] = useState<{ userId: string; name: string } | null>(null);
   const [excuseReason, setExcuseReason] = useState('');
   const [savingAll, setSavingAll] = useState(false);

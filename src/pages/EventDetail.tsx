@@ -84,7 +84,6 @@ export function EventDetail() {
   const [allAttendance, setAllAttendance] = useState<EventAttendance[]>([]);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [showChecker, setShowChecker] = useState(false);
-  const [countdownText, setCountdownText] = useState<string>('');
   const [countdownParts, setCountdownParts] = useState<{ hours: number; minutes: number; seconds: number }>({ hours: 0, minutes: 0, seconds: 0 });
   const [serviceFormat, setServiceFormat] = useState<ServiceFormat | null>(null);
   const [setlistTab, setSetlistTab] = useState<'songs' | 'guidance' | 'notes'>('songs');
@@ -228,7 +227,6 @@ export function EventDetail() {
       const daysDiff = Math.floor((eventDay.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
       if (daysDiff !== 0) {
-        setCountdownText('');
         setCountdownParts({ hours: 0, minutes: 0, seconds: 0 });
         return;
       }
@@ -238,7 +236,6 @@ export function EventDetail() {
 
       const diffMs = windowOpenTime.getTime() - now.getTime();
       if (diffMs <= 0) {
-        setCountdownText('');
         setCountdownParts({ hours: 0, minutes: 0, seconds: 0 });
         return;
       }
@@ -248,7 +245,6 @@ export function EventDetail() {
       const diffSecs = Math.floor((diffMs % (1000 * 60)) / 1000);
 
       setCountdownParts({ hours: diffHours, minutes: diffMins, seconds: diffSecs });
-      setCountdownText(diffHours > 0 ? `${diffHours}h ${diffMins}m` : `${diffMins}m ${diffSecs}s`);
     };
 
     calculateCountdown();
@@ -1473,7 +1469,6 @@ export function EventDetail() {
                         const isSafe = !usage || usage.days >= 90;
                         const displayKey = ss.performed_key || ss.songs?.song_key || '';
                         const keyChanged = ss.performed_key && ss.songs?.song_key && ss.performed_key !== ss.songs.song_key;
-                        const hasActions = ss.youtube_url || canEditSetlist || (canManageSetlist && !['approved', 'pending_review'].includes(setlist.status)) || canEditSetlist;
                         return (
                           <div key={ss.id} className="px-4 py-2.5">
                             {/* Desktop: original single-row layout */}

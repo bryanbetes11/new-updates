@@ -1,6 +1,9 @@
+import type { CSSProperties } from 'react';
+
 interface IconProps {
   active?: boolean;
   className?: string;
+  style?: CSSProperties;
 }
 
 const size = 22;

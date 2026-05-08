@@ -237,6 +237,7 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
   const [uploading, setUploading] = useState(false);
   const [quickEmoji, setQuickEmoji] = useState(() => localStorage.getItem('msg-quick-action') || '👍');
   const [showQuickPicker, setShowQuickPicker] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -259,6 +260,23 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
   const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
+
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+
+    const setHeight = () => {
+      document.documentElement.style.setProperty('--messages-composer-height', `${Math.ceil(el.getBoundingClientRect().height)}px`);
+    };
+
+    setHeight();
+    const observer = new ResizeObserver(setHeight);
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      document.documentElement.style.removeProperty('--messages-composer-height');
+    };
+  }, []);
 
   const handleImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -284,8 +302,9 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
 
   return (
     <div
-      className="shrink-0 border-t border-gray-100 dark:border-white/[0.06] bg-white dark:bg-[#111013] pb-[max(0px,calc(env(safe-area-inset-bottom)-10px))]"
-      style={{ transform: 'translateY(calc(-1 * var(--messages-keyboard-inset, 0px)))' }}
+      ref={rootRef}
+      className="fixed inset-x-0 bottom-0 z-30 shrink-0 border-t border-gray-100 dark:border-white/[0.06] bg-white dark:bg-[#111013] pb-[max(0px,calc(env(safe-area-inset-bottom)-10px))] lg:relative lg:inset-auto lg:z-auto"
+      style={{ bottom: 'var(--messages-keyboard-inset, 0px)' }}
     >
       <AnimatePresence>
         {replyTo && replyPreview && (
@@ -317,6 +336,7 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
             ref={textRef}
             value={text}
             onChange={e => { setText(e.target.value); resizeComposer(); onTyping(); }}
+            onFocus={() => window.dispatchEvent(new Event('messages-composer-focus'))}
             onKeyDown={handleKey}
             placeholder="Message…"
             rows={1}
@@ -636,6 +656,7 @@ function ChatWindow({ conv, myUserId, onBack, onConvUpdate }: {
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const atBottomRef = useRef(true);
+  const forceStickToLatestRef = useRef(false);
   const typingThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { profile } = useAuth();
@@ -653,6 +674,7 @@ function ChatWindow({ conv, myUserId, onBack, onConvUpdate }: {
     const el = scrollRef.current;
     if (!el) return;
     atBottomRef.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 60;
+    if (!atBottomRef.current) forceStickToLatestRef.current = false;
   }, []);
 
   useEffect(() => {
@@ -663,15 +685,26 @@ function ChatWindow({ conv, myUserId, onBack, onConvUpdate }: {
 
   useEffect(() => {
     const keepLatestVisible = () => {
-      if (!atBottomRef.current) return;
-      requestAnimationFrame(() => {
+      if (!atBottomRef.current && !forceStickToLatestRef.current) return;
+      const scrollToLatest = () => {
+        if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         messagesEndRef.current?.scrollIntoView({ block: 'end' });
+      };
+      requestAnimationFrame(() => {
+        scrollToLatest();
+        setTimeout(scrollToLatest, 60);
       });
     };
+    const handleComposerFocus = () => {
+      forceStickToLatestRef.current = true;
+      keepLatestVisible();
+    };
 
+    window.addEventListener('messages-composer-focus', handleComposerFocus);
     window.addEventListener('messages-keyboard-inset-change', keepLatestVisible);
     window.visualViewport?.addEventListener('resize', keepLatestVisible);
     return () => {
+      window.removeEventListener('messages-composer-focus', handleComposerFocus);
       window.removeEventListener('messages-keyboard-inset-change', keepLatestVisible);
       window.visualViewport?.removeEventListener('resize', keepLatestVisible);
     };
@@ -827,7 +860,7 @@ function ChatWindow({ conv, myUserId, onBack, onConvUpdate }: {
         ref={scrollRef}
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto px-4 py-4 space-y-0.5"
-        style={{ paddingBottom: 'calc(var(--messages-keyboard-inset, 0px) + 1rem)' }}
+        style={{ paddingBottom: 'calc(var(--messages-composer-height, 64px) + var(--messages-keyboard-inset, 0px) + 0.75rem)' }}
       >
         {loading && (
           <div className="flex justify-center pt-8">

@@ -40,6 +40,70 @@ export function MentionTextarea({
   const [mentionStart, setMentionStart] = useState<number | null>(null);
   const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
 
+  const getCaretRect = useCallback((el: HTMLTextAreaElement, position: number) => {
+    const rect = el.getBoundingClientRect();
+    const style = window.getComputedStyle(el);
+    const mirror = document.createElement('div');
+    const marker = document.createElement('span');
+    const properties = [
+      'boxSizing',
+      'width',
+      'height',
+      'overflowX',
+      'overflowY',
+      'borderTopWidth',
+      'borderRightWidth',
+      'borderBottomWidth',
+      'borderLeftWidth',
+      'paddingTop',
+      'paddingRight',
+      'paddingBottom',
+      'paddingLeft',
+      'fontStyle',
+      'fontVariant',
+      'fontWeight',
+      'fontStretch',
+      'fontSize',
+      'fontSizeAdjust',
+      'lineHeight',
+      'fontFamily',
+      'textAlign',
+      'textTransform',
+      'textIndent',
+      'textDecoration',
+      'letterSpacing',
+      'wordSpacing',
+      'tabSize',
+      'MozTabSize',
+    ] as const;
+
+    mirror.style.position = 'fixed';
+    mirror.style.top = `${rect.top}px`;
+    mirror.style.left = `${rect.left}px`;
+    mirror.style.visibility = 'hidden';
+    mirror.style.whiteSpace = 'pre-wrap';
+    mirror.style.overflowWrap = 'break-word';
+    mirror.style.wordBreak = 'break-word';
+
+    properties.forEach(property => {
+      mirror.style[property] = style[property];
+    });
+
+    mirror.textContent = el.value.slice(0, position);
+    marker.textContent = el.value.slice(position, position + 1) || '\u200b';
+    mirror.appendChild(marker);
+    document.body.appendChild(mirror);
+
+    const markerRect = marker.getBoundingClientRect();
+    document.body.removeChild(mirror);
+
+    return {
+      top: markerRect.top - el.scrollTop,
+      left: markerRect.left - el.scrollLeft,
+      bottom: markerRect.bottom - el.scrollTop,
+    };
+  }, []);
+
   useEffect(() => {
     supabase
       .from('profiles')
@@ -58,27 +122,44 @@ export function MentionTextarea({
     const el = ref.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
+    const caret = getCaretRect(el, el.selectionStart ?? value.length);
     const DROPDOWN_HEIGHT = Math.min(filtered.length, 6) * 52 + 8;
-    const spaceAbove = rect.top;
-    const spaceBelow = window.innerHeight - rect.bottom;
+    const DROPDOWN_WIDTH = Math.min(Math.max(rect.width, 260), window.innerWidth - 16);
+    const spaceAbove = caret.top;
+    const spaceBelow = window.innerHeight - caret.bottom;
 
     let top: number;
     if (spaceAbove >= DROPDOWN_HEIGHT || spaceAbove > spaceBelow) {
-      top = rect.top - DROPDOWN_HEIGHT - 4;
+      top = caret.top - DROPDOWN_HEIGHT - 6;
     } else {
-      top = rect.bottom + 4;
+      top = caret.bottom + 6;
     }
+
+    const left = Math.min(
+      Math.max(caret.left, 8),
+      window.innerWidth - DROPDOWN_WIDTH - 8
+    );
 
     setDropdownRect({
       top,
-      left: rect.left,
-      width: Math.max(rect.width, 260),
+      left,
+      width: DROPDOWN_WIDTH,
     });
-  }, [ref, filtered.length]);
+  }, [ref, filtered.length, getCaretRect, value.length]);
 
   useEffect(() => {
     if (showDropdown) computeDropdownPosition();
   }, [showDropdown, query, computeDropdownPosition]);
+
+  useEffect(() => {
+    if (!showDropdown) return;
+    window.addEventListener('resize', computeDropdownPosition);
+    window.addEventListener('scroll', computeDropdownPosition, true);
+    return () => {
+      window.removeEventListener('resize', computeDropdownPosition);
+      window.removeEventListener('scroll', computeDropdownPosition, true);
+    };
+  }, [showDropdown, computeDropdownPosition]);
 
   const autoResize = (el: HTMLTextAreaElement) => {
     el.style.height = 'auto';
@@ -164,6 +245,8 @@ export function MentionTextarea({
         ref={ref}
         value={value}
         onChange={handleChange}
+        onClick={() => { if (showDropdown) computeDropdownPosition(); }}
+        onScroll={() => { if (showDropdown) computeDropdownPosition(); }}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         className={className}

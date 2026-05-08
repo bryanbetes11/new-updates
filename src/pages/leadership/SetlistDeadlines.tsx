@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { format, parseISO, differenceInDays, differenceInHours, isPast, isToday } from 'date-fns';
+import { motion } from 'framer-motion';
 import { Bell, CheckCircle2, Clock, AlertTriangle, RefreshCw, Loader2, ListMusic, Pencil, X, Check, CalendarDays } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -156,6 +158,7 @@ function EditDueDatePopover({ event, onSave, onClose, saving }: EditDueDatePopov
 export function SetlistDeadlines() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [events, setEvents] = useState<DeadlineEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [sendingId, setSendingId] = useState<string | null>(null);
@@ -344,50 +347,66 @@ export function SetlistDeadlines() {
   }
 
   return (
-    <div className="px-4 sm:px-5 lg:px-6 py-5 space-y-5">
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-base font-bold text-gray-900 dark:text-white">Setlist Deadlines</h2>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Monitor and send reminders for upcoming setlist proposals</p>
+        <div className="flex items-baseline gap-2.5 px-0.5">
+          <span className="text-[10px] font-mono font-semibold tabular-nums text-gray-400/70 dark:text-white/25 tracking-widest">01</span>
+          <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-white/45 flex items-center gap-1.5">
+            <ListMusic className="h-3 w-3" /> Setlist Deadlines
+          </span>
         </div>
         <button
           onClick={fetchDeadlines}
-          className="p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          className="inline-flex items-center justify-center h-8 w-8 rounded-full text-gray-500 dark:text-white/45 bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] hover:bg-white dark:hover:bg-white/[0.07] active:scale-[0.95] transition-colors"
           title="Refresh"
         >
-          <RefreshCw className="h-4 w-4" />
+          <RefreshCw className="h-3 w-3" />
         </button>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        className="grid grid-cols-2 sm:grid-cols-4 gap-2.5"
+      >
         {[
-          { key: 'overdue', label: 'Overdue', count: countByStatus.overdue, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20' },
-          { key: 'due_today', label: 'Due Today', count: countByStatus.due_today, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-900/20' },
-          { key: 'upcoming', label: 'Upcoming', count: countByStatus.upcoming, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/20' },
-          { key: 'submitted', label: 'Submitted', count: countByStatus.submitted, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
-        ].map(stat => (
-          <button
-            key={stat.key}
-            onClick={() => setFilter(filter === stat.key as StatusFilter ? 'all' : stat.key as StatusFilter)}
-            className={`rounded-xl p-3 text-left transition-all ring-1 ${
-              filter === stat.key
-                ? `${stat.bg} ring-current/20 ${stat.color}`
-                : 'bg-white dark:bg-white/[0.04] ring-black/[0.06] dark:ring-white/[0.06] hover:ring-black/10 dark:hover:ring-white/10'
-            }`}
-          >
-            <p className={`text-2xl font-bold ${filter === stat.key ? stat.color : 'text-gray-900 dark:text-white'}`}>{stat.count}</p>
-            <p className={`text-xs font-medium mt-0.5 ${filter === stat.key ? stat.color : 'text-gray-500 dark:text-gray-400'}`}>{stat.label}</p>
-          </button>
-        ))}
-      </div>
+          { key: 'overdue', label: 'Overdue', count: countByStatus.overdue, dot: '#ef4444', tone: 'bg-red-50 dark:bg-red-500/[0.10] text-red-600 dark:text-red-400' },
+          { key: 'due_today', label: 'Due Today', count: countByStatus.due_today, dot: '#f59e0b', tone: 'bg-amber-50 dark:bg-amber-500/[0.10] text-amber-600 dark:text-amber-400' },
+          { key: 'upcoming', label: 'Upcoming', count: countByStatus.upcoming, dot: '#0ea5e9', tone: 'bg-sky-50 dark:bg-sky-500/[0.10] text-sky-600 dark:text-sky-400' },
+          { key: 'submitted', label: 'Submitted', count: countByStatus.submitted, dot: '#22c55e', tone: 'bg-emerald-50 dark:bg-emerald-500/[0.10] text-emerald-600 dark:text-emerald-400' },
+        ].map(stat => {
+          const active = filter === stat.key;
+          return (
+            <button
+              key={stat.key}
+              onClick={() => setFilter(filter === stat.key as StatusFilter ? 'all' : stat.key as StatusFilter)}
+              className={`relative rounded-3xl p-4 text-left bg-white dark:bg-white/[0.025] border transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.98] overflow-hidden ${
+                active ? 'border-current/40' : 'border-gray-200/80 dark:border-white/[0.06]'
+              } ${active ? stat.tone : ''}`}
+              style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 4px 14px -8px rgba(15,23,42,0.08)' }}
+            >
+              <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.05] dark:via-white/[0.08] to-transparent" />
+              <div className="flex items-center gap-1.5 mb-2.5">
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: stat.dot, boxShadow: `0 0 6px ${stat.dot}` }} />
+                <span className={`text-[9px] font-bold uppercase tracking-[0.14em] leading-none ${active ? '' : 'text-gray-500 dark:text-white/45'}`}>{stat.label}</span>
+              </div>
+              <p className={`text-[26px] font-black leading-none tabular-nums ${active ? '' : 'text-gray-900 dark:text-white'}`} style={{ letterSpacing: '-0.04em' }}>{stat.count}</p>
+            </button>
+          );
+        })}
+      </motion.div>
 
       {filteredEvents.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 text-center">
-          <div className="h-12 w-12 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-3">
-            <ListMusic className="h-6 w-6 text-gray-400" />
+        <div className="rounded-3xl bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] p-12 text-center" style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -12px rgba(15,23,42,0.10)' }}>
+          <div
+            className="relative h-14 w-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
+            style={{ background: 'linear-gradient(145deg,#16a34a,#15803d)', boxShadow: '0 4px 14px rgba(22,163,74,0.3)' }}
+          >
+            <ListMusic className="h-6 w-6 text-white" />
           </div>
-          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">No deadlines found</p>
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+          <p className="text-base font-bold text-gray-900 dark:text-white" style={{ letterSpacing: '-0.02em' }}>No deadlines found</p>
+          <p className="text-sm text-gray-400 dark:text-white/40 mt-1">
             {filter === 'all' ? 'No upcoming events with setlist deadlines.' : 'No events match this filter.'}
           </p>
         </div>
@@ -409,9 +428,21 @@ export function SetlistDeadlines() {
             return (
               <div
                 key={event.id}
-                className={`card p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 ${
-                  isOverdueEvent ? 'ring-1 ring-red-200 dark:ring-red-900/40' : ''
+                onClick={() => navigate(`/events/${event.id}`)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/events/${event.id}`); } }}
+                className={`relative rounded-3xl overflow-hidden bg-white dark:bg-white/[0.025] border p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 cursor-pointer transition-all duration-200 hover:-translate-y-0.5 ${
+                  isOverdueEvent ? 'border-red-200 dark:border-red-500/25' : isDueTodayEvent ? 'border-amber-200 dark:border-amber-500/25' : 'border-gray-200/80 dark:border-white/[0.06]'
                 }`}
+                style={{
+                  boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -12px rgba(15,23,42,0.10)',
+                  backgroundImage: isOverdueEvent
+                    ? 'linear-gradient(135deg, rgba(239,68,68,0.10), rgba(239,68,68,0.025) 50%, transparent 80%)'
+                    : isDueTodayEvent
+                    ? 'linear-gradient(135deg, rgba(245,158,11,0.10), rgba(245,158,11,0.025) 50%, transparent 80%)'
+                    : undefined,
+                }}
               >
                 <div className="flex items-start gap-3 flex-1 min-w-0">
                   <div className="shrink-0 mt-0.5">
@@ -488,7 +519,7 @@ export function SetlistDeadlines() {
                   )}
 
                   <button
-                    onClick={() => setEditingId(isEditOpen ? null : event.id)}
+                    onClick={(e) => { e.stopPropagation(); setEditingId(isEditOpen ? null : event.id); }}
                     className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors"
                     title="Override due date"
                   >
@@ -497,7 +528,7 @@ export function SetlistDeadlines() {
 
                   {canSendReminder && (
                     <button
-                      onClick={() => handleSendReminder(event)}
+                      onClick={(e) => { e.stopPropagation(); handleSendReminder(event); }}
                       disabled={isSending || recentlySent || !event.song_leader}
                       className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                         recentlySent
@@ -516,12 +547,14 @@ export function SetlistDeadlines() {
                   )}
 
                   {isEditOpen && (
-                    <EditDueDatePopover
-                      event={event}
-                      onSave={handleSaveDueDate}
-                      onClose={() => setEditingId(null)}
-                      saving={isSavingThis}
-                    />
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <EditDueDatePopover
+                        event={event}
+                        onSave={handleSaveDueDate}
+                        onClose={() => setEditingId(null)}
+                        saving={isSavingThis}
+                      />
+                    </div>
                   )}
                 </div>
               </div>

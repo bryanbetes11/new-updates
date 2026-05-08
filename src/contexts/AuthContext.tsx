@@ -1,15 +1,19 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import type { Profile, Role, UserRole } from '../types';
+import type { Organization, Profile, Role, UserRole } from '../types';
 
 interface AuthContextValue {
   session: Session | null;
   user: User | null;
   profile: Profile | null;
+  organization: Organization | null;
   userRoles: UserRole[];
   roles: Role[];
   loading: boolean;
+  hasOrganization: boolean;
+  isOrgAdmin: boolean;
+  isPlatformOwner: boolean;
   isLeader: boolean;
   isAdmin: boolean;
   isProductionDirector: boolean;
@@ -32,6 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [organization, setOrganization] = useState<Organization | null>(null);
   const [userRoles, setUserRoles] = useState<UserRole[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,6 +48,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .eq('id', userId)
       .maybeSingle();
     setProfile(data);
+    return data;
+  };
+
+  const fetchOrganization = async (orgId: string | null | undefined) => {
+    if (!orgId) {
+      setOrganization(null);
+      return null;
+    }
+
+    const { data } = await supabase
+      .from('organizations')
+      .select('*')
+      .eq('id', orgId)
+      .maybeSingle();
+    setOrganization(data);
+    return data;
   };
 
   const fetchUserRoles = async (userId: string) => {
@@ -61,9 +82,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setRoles(data || []);
   };
 
+  const hydrateUserContext = async (userId: string) => {
+    const [profileData] = await Promise.all([
+      fetchProfile(userId),
+      fetchUserRoles(userId),
+      fetchRoles(),
+    ]);
+    await fetchOrganization(profileData?.org_id);
+  };
+
   const refreshProfile = async () => {
     if (user) {
-      await Promise.all([fetchProfile(user.id), fetchUserRoles(user.id)]);
+      const [profileData] = await Promise.all([fetchProfile(user.id), fetchUserRoles(user.id)]);
+      await fetchOrganization(profileData?.org_id);
     }
   };
 
@@ -72,30 +103,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(s);
       setUser(s?.user ?? null);
       if (s?.user) {
-        Promise.all([
-          fetchProfile(s.user.id),
-          fetchUserRoles(s.user.id),
-          fetchRoles(),
-        ]).finally(() => setLoading(false));
+        hydrateUserContext(s.user.id).finally(() => setLoading(false));
       } else {
-        fetchRoles().finally(() => setLoading(false));
+        fetchRoles().finally(() => {
+          setOrganization(null);
+          setLoading(false);
+        });
       }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+      setLoading(true);
       setSession(s);
       setUser(s?.user ?? null);
       if (s?.user) {
         (async () => {
-          await Promise.all([
-            fetchProfile(s.user.id),
-            fetchUserRoles(s.user.id),
-            fetchRoles(),
-          ]);
-        })();
+          await hydrateUserContext(s.user.id);
+        })().finally(() => setLoading(false));
       } else {
         setProfile(null);
+        setOrganization(null);
         setUserRoles([]);
+        fetchRoles().finally(() => setLoading(false));
       }
     });
 
@@ -103,6 +132,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const roleNames = userRoles.map(ur => ur.roles?.name || '');
+  const hasOrganization = Boolean(profile?.org_id && organization);
+  const isOrgAdmin = profile?.is_org_admin ?? false;
+  const isPlatformOwner = (profile?.email || '').toLowerCase() === 'bryanbetes11@gmail.com';
   const isLeader = roleNames.some(n => ['Admin', 'Admin Coordinator', 'Music Director', 'Stage Director', 'Production Director', 'Setlist Coordinator'].includes(n));
   const isAdmin = roleNames.includes('Admin');
   const isAdminCoordinator = roleNames.includes('Admin Coordinator');
@@ -149,13 +181,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     await supabase.auth.signOut();
     setProfile(null);
+    setOrganization(null);
     setUserRoles([]);
   };
 
   return (
     <AuthContext.Provider
       value={{
-        session, user, profile, userRoles, roles, loading,
+        session, user, profile, organization, userRoles, roles, loading,
+        hasOrganization, isOrgAdmin, isPlatformOwner,
         isLeader, isAdmin, isAdminCoordinator, isProductionDirector, isMusicDirector, isStageDirector, isSetlistCoordinator,
         canApproveLeave, canManageDiscipline, canManageMembers,
         signUp, signIn, signOut, refreshProfile,

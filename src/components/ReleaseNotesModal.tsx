@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Sparkles, Bell, UserX, Circle, ChevronLeft, ChevronRight, Timer } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Sparkles, Bell, UserX, Circle, ArrowLeft, ArrowRight, Timer } from 'lucide-react';
 import { Modal } from './Modal';
 
 interface ReleaseNotesModalProps {
@@ -10,128 +11,131 @@ interface ReleaseNotesModalProps {
 const features = [
   {
     icon: Timer,
-    iconColor: 'text-brand-600 dark:text-brand-400',
-    iconBg: 'bg-gradient-to-br from-brand-100 to-brand-200 dark:from-brand-900/40 dark:to-brand-800/40',
     title: 'Live Attendance Countdown',
-    description: 'See a beautiful animated countdown timer showing exactly when attendance opens. Watch hours, minutes, and seconds tick down in real-time!',
+    description: 'A beautiful animated countdown shows exactly when attendance opens. Watch hours, minutes, and seconds tick in real time.',
     highlight: (
-      <div className="space-y-3">
-        <div className="p-4 bg-gradient-to-r from-brand-50 to-emerald-50 dark:from-brand-950/50 dark:to-emerald-950/50 rounded-lg border-2 border-brand-300 dark:border-brand-700 shadow-sm">
-          <div className="flex items-center justify-center gap-2">
-            <div className="flex flex-col items-center">
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center shadow-md">
-                <span className="text-sm font-bold text-white">02</span>
+      <div
+        className="rounded-2xl p-5"
+        style={{
+          background: 'linear-gradient(135deg, rgba(16,185,129,0.10), rgba(16,185,129,0.02))',
+          border: '1px solid rgba(16,185,129,0.22)',
+        }}
+      >
+        <div className="flex items-center justify-center gap-3">
+          {[
+            { v: '02', label: 'Hours' },
+            { v: '45', label: 'Minutes' },
+            { v: '30', label: 'Seconds' },
+          ].map((cell, i, arr) => (
+            <div key={cell.label} className="flex items-center gap-3">
+              <div className="flex flex-col items-center">
+                <div
+                  className="w-12 h-12 rounded-xl flex items-center justify-center"
+                  style={{
+                    background: 'linear-gradient(145deg, #16a34a, #15803d)',
+                    boxShadow: '0 4px 12px rgba(22,163,74,0.3)',
+                  }}
+                >
+                  <span className="text-[16px] font-black text-white tabular-nums" style={{ letterSpacing: '-0.04em' }}>{cell.v}</span>
+                </div>
+                <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-white/50 mt-2">{cell.label}</span>
               </div>
-              <span className="text-[8px] text-gray-500 dark:text-gray-400 mt-1 uppercase">Hours</span>
+              {i < arr.length - 1 && (
+                <div className="flex flex-col gap-1 -mt-5">
+                  <div className="w-1 h-1 rounded-full bg-emerald-400" />
+                  <div className="w-1 h-1 rounded-full bg-emerald-400" />
+                </div>
+              )}
             </div>
-            <div className="flex flex-col gap-1 pb-4">
-              <div className="w-1 h-1 rounded-full bg-brand-400"></div>
-              <div className="w-1 h-1 rounded-full bg-brand-400"></div>
-            </div>
-            <div className="flex flex-col items-center">
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center shadow-md">
-                <span className="text-sm font-bold text-white">45</span>
-              </div>
-              <span className="text-[8px] text-gray-500 dark:text-gray-400 mt-1 uppercase">Minutes</span>
-            </div>
-            <div className="flex flex-col gap-1 pb-4">
-              <div className="w-1 h-1 rounded-full bg-brand-400"></div>
-              <div className="w-1 h-1 rounded-full bg-brand-400"></div>
-            </div>
-            <div className="flex flex-col items-center">
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center shadow-md">
-                <span className="text-sm font-bold text-white">30</span>
-              </div>
-              <span className="text-[8px] text-gray-500 dark:text-gray-400 mt-1 uppercase">Seconds</span>
-            </div>
-          </div>
+          ))}
         </div>
-        <div className="text-xs text-gray-500 dark:text-gray-400 px-2">
+        <p className="text-[11px] text-center text-gray-500 dark:text-white/45 mt-4 font-mono">
           Attendance opens 30 minutes before each event
-        </div>
+        </p>
       </div>
     ),
   },
   {
     icon: Bell,
-    iconColor: 'text-amber-600 dark:text-amber-400',
-    iconBg: 'bg-gradient-to-br from-amber-100 to-amber-200 dark:from-amber-900/40 dark:to-amber-800/40',
     title: 'Smart Due Date Reminders',
-    description: 'Get timely notifications for event proposals - on the due date, 3 days before, and when deadlines approach. Never miss a deadline!',
+    description: 'Timely notifications for event proposals — on the due date, three days before, and as the deadline approaches.',
     highlight: (
-      <div className="space-y-2">
-        <div className="p-3 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/50 dark:to-orange-950/50 rounded-lg border-2 border-amber-300 dark:border-amber-700 shadow-sm">
-          <div className="flex items-start gap-3">
-            <Bell className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5" />
-            <div>
-              <p className="text-xs font-semibold text-gray-900 dark:text-white">Proposal Deadline Approaching</p>
-              <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">Sunday Service proposal due in 3 days</p>
-            </div>
+      <div
+        className="rounded-2xl p-4"
+        style={{
+          background: 'linear-gradient(135deg, rgba(245,158,11,0.10), rgba(245,158,11,0.02))',
+          border: '1px solid rgba(245,158,11,0.22)',
+        }}
+      >
+        <div className="flex items-start gap-3">
+          <div className="h-9 w-9 rounded-xl flex items-center justify-center shrink-0 bg-amber-50 dark:bg-amber-500/[0.12] border border-amber-200 dark:border-amber-500/25">
+            <Bell className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-bold text-gray-900 dark:text-white" style={{ letterSpacing: '-0.015em' }}>Proposal Deadline Approaching</p>
+            <p className="text-[11px] text-gray-500 dark:text-white/50 mt-0.5">Sunday Service proposal due in 3 days</p>
           </div>
         </div>
-        <div className="text-xs text-gray-500 dark:text-gray-400 px-2">
-          Reminders sent on-time, 3 days before, and as deadlines approach
-        </div>
+        <p className="text-[11px] text-gray-400 dark:text-white/40 mt-3 font-mono pl-12">
+          On-time · 3 days before · As deadline approaches
+        </p>
       </div>
     ),
   },
   {
     icon: UserX,
-    iconColor: 'text-rose-600 dark:text-rose-400',
-    iconBg: 'bg-gradient-to-br from-rose-100 to-rose-200 dark:from-rose-900/40 dark:to-rose-800/40',
     title: 'Unavailable Members Tracking',
-    description: 'See who is unavailable in both list view and calendar view. Plus a new dashboard card shows all unavailable members at a glance.',
+    description: 'See who is unavailable in both list and calendar views, plus a dashboard tile showing all unavailable members at a glance.',
     highlight: (
-      <div className="space-y-2">
-        <div className="p-3 bg-gradient-to-r from-rose-50 to-pink-50 dark:from-rose-950/50 dark:to-pink-950/50 rounded-lg border-2 border-rose-300 dark:border-rose-700 shadow-sm">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <UserX className="h-4 w-4 text-rose-600 dark:text-rose-400" />
-              <span className="text-xs font-semibold text-gray-900 dark:text-white">Unavailable Members</span>
-            </div>
-            <div className="flex items-center gap-2 pl-6">
-              <div className="h-6 w-6 rounded-full bg-gray-200 dark:bg-gray-700"></div>
-              <div className="text-xs text-gray-700 dark:text-gray-300">John - March 10</div>
-            </div>
-          </div>
+      <div
+        className="rounded-2xl p-4"
+        style={{
+          background: 'linear-gradient(135deg, rgba(244,63,94,0.10), rgba(244,63,94,0.02))',
+          border: '1px solid rgba(244,63,94,0.22)',
+        }}
+      >
+        <div className="flex items-center gap-2 mb-3">
+          <UserX className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+          <span className="text-[12px] font-bold uppercase tracking-[0.16em] text-rose-700 dark:text-rose-300">Unavailable Members</span>
         </div>
-        <div className="text-xs text-gray-500 dark:text-gray-400 px-2">
-          Available on dashboard, list view, and calendar
+        <div className="flex items-center gap-3 pl-1">
+          <div className="h-8 w-8 rounded-full bg-gray-200 dark:bg-white/[0.08] border border-gray-300 dark:border-white/10" />
+          <div>
+            <p className="text-[13px] font-semibold text-gray-900 dark:text-white" style={{ letterSpacing: '-0.01em' }}>John Doe</p>
+            <p className="text-[11px] text-gray-500 dark:text-white/50 font-mono">March 10</p>
+          </div>
         </div>
       </div>
     ),
   },
   {
     icon: Circle,
-    iconColor: 'text-gray-600 dark:text-gray-400',
-    iconBg: 'bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-900/40 dark:to-gray-800/40',
-    title: 'Status Indicator Colors Explained',
-    description: 'Color-coded dots help you quickly understand assignment and availability status at a glance.',
+    title: 'Status Indicator Colors',
+    description: 'Color-coded dots help you understand assignment and setlist status at a glance.',
     highlight: (
-      <div className="p-3 bg-white dark:bg-gray-800/50 rounded-lg border-2 border-gray-200 dark:border-gray-700 shadow-sm">
-        <div className="space-y-2.5">
-          <div className="flex items-center gap-3">
-            <div className="h-3 w-3 rounded-full bg-emerald-500"></div>
+      <div
+        className="rounded-2xl p-4 space-y-3"
+        style={{
+          background: 'rgba(0,0,0,0.02)',
+          border: '1px solid rgba(0,0,0,0.06)',
+        }}
+      >
+        {[
+          { color: '#10b981', label: 'Approved', desc: 'Setlist is approved and ready' },
+          { color: '#f59e0b', label: 'Almost due', desc: 'Setlist is approaching the deadline' },
+          { color: '#f43f5e', label: 'Overdue', desc: 'Setlist is past its deadline' },
+        ].map(s => (
+          <div key={s.label} className="flex items-center gap-3">
+            <span
+              className="h-2.5 w-2.5 rounded-full shrink-0"
+              style={{ background: s.color, boxShadow: `0 0 8px ${s.color}80` }}
+            />
             <div className="flex-1">
-              <p className="text-xs font-semibold text-gray-900 dark:text-white">Green</p>
-              <p className="text-xs text-gray-600 dark:text-gray-400">Setlist has been approved and ready</p>
+              <p className="text-[13px] font-semibold text-gray-900 dark:text-white" style={{ letterSpacing: '-0.01em' }}>{s.label}</p>
+              <p className="text-[11px] text-gray-500 dark:text-white/45 leading-tight">{s.desc}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="h-3 w-3 rounded-full bg-amber-500"></div>
-            <div className="flex-1">
-              <p className="text-xs font-semibold text-gray-900 dark:text-white">Orange</p>
-              <p className="text-xs text-gray-600 dark:text-gray-400">Setlist is almost due</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="h-3 w-3 rounded-full bg-rose-500"></div>
-            <div className="flex-1">
-              <p className="text-xs font-semibold text-gray-900 dark:text-white">Red</p>
-              <p className="text-xs text-gray-600 dark:text-gray-400">Setlist is already overdue</p>
-            </div>
-          </div>
-        </div>
+        ))}
       </div>
     ),
   },
@@ -139,89 +143,132 @@ const features = [
 
 export function ReleaseNotesModal({ open, onClose }: ReleaseNotesModalProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [direction, setDirection] = useState(1);
 
   const handleNext = () => {
     if (currentIndex < features.length - 1) {
+      setDirection(1);
       setCurrentIndex(currentIndex + 1);
     }
   };
 
   const handlePrev = () => {
     if (currentIndex > 0) {
+      setDirection(-1);
       setCurrentIndex(currentIndex - 1);
     }
   };
 
   const currentFeature = features[currentIndex];
-  const Icon = currentFeature.icon;
+  const isLast = currentIndex === features.length - 1;
 
   return (
     <Modal open={open} onClose={onClose} title="" size="lg" hideHeader>
-      <div className="space-y-6">
-        <div className="flex items-center justify-center gap-3 px-2">
+      <div className="relative">
+        {/* Header — editorial like the dashboard hero */}
+        <div className="flex items-center gap-3 mb-7">
           <div className="relative shrink-0">
-            <div className="absolute inset-0 bg-gradient-to-r from-yellow-400 via-pink-500 to-purple-600 rounded-full blur-lg opacity-50 animate-pulse"></div>
-            <div className="relative h-10 w-10 rounded-full bg-gradient-to-br from-yellow-400 via-pink-500 to-purple-600 flex items-center justify-center">
-              <Sparkles className="h-5 w-5 text-white animate-pulse" />
+            <div
+              className="absolute inset-0 rounded-full"
+              style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.4), transparent 70%)', filter: 'blur(10px)', transform: 'scale(1.6)' }}
+            />
+            <div
+              className="relative h-9 w-9 rounded-full flex items-center justify-center"
+              style={{
+                background: 'linear-gradient(145deg, #16a34a, #15803d)',
+                boxShadow: '0 4px 12px rgba(22,163,74,0.35)',
+              }}
+            >
+              <Sparkles className="h-4 w-4 text-white" />
             </div>
           </div>
-          <div className="text-left">
-            <h2 className="text-lg font-bold text-gray-900 dark:text-white leading-tight">
-              What's New & Exciting!
-            </h2>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              Check out these awesome new features
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-mono font-medium uppercase tracking-[0.22em] text-emerald-600 dark:text-emerald-400/80 mb-0.5">
+              What's new
             </p>
+            <h2 className="text-[20px] sm:text-[22px] font-black text-gray-900 dark:text-white leading-tight" style={{ letterSpacing: '-0.03em' }}>
+              Latest improvements.
+            </h2>
           </div>
         </div>
 
-        <div className="relative">
-          <div
-            key={currentIndex}
-            className="animate-slide-up"
-          >
-            <div className="p-4 border-2 border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800/50">
-              <div className="text-center mb-3">
-                <h3 className="text-base font-bold text-gray-900 dark:text-white mb-2">
-                  {currentFeature.title}
-                </h3>
-                <p className="text-xs text-gray-600 dark:text-gray-400 max-w-sm mx-auto mb-3">
-                  {currentFeature.description}
-                </p>
+        {/* Feature panel */}
+        <div className="relative overflow-hidden">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={currentIndex}
+              initial={{ opacity: 0, x: direction * 24, filter: 'blur(4px)' }}
+              animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
+              exit={{ opacity: 0, x: -direction * 24, filter: 'blur(4px)' }}
+              transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+              className="relative rounded-3xl p-5 sm:p-6 bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06]"
+              style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 28px -16px rgba(15,23,42,0.12)' }}
+            >
+              <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.12] to-transparent" />
+
+              <div className="flex items-start justify-between gap-4 mb-4">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-white/35 mb-2">
+                    {String(currentIndex + 1).padStart(2, '0')} · Feature
+                  </p>
+                  <h3 className="text-[18px] sm:text-[20px] font-bold text-gray-900 dark:text-white leading-tight" style={{ letterSpacing: '-0.025em' }}>
+                    {currentFeature.title}
+                  </h3>
+                  <p className="text-[13px] text-gray-500 dark:text-white/55 mt-2 leading-relaxed">
+                    {currentFeature.description}
+                  </p>
+                </div>
+                <div className="h-10 w-10 rounded-2xl flex items-center justify-center shrink-0 bg-emerald-50 dark:bg-emerald-500/[0.1] border border-emerald-200 dark:border-emerald-500/25 text-emerald-600 dark:text-emerald-400">
+                  <currentFeature.icon className="h-[18px] w-[18px]" />
+                </div>
               </div>
 
-              {currentFeature.highlight}
-            </div>
-          </div>
+              <div className="mt-2">{currentFeature.highlight}</div>
+            </motion.div>
+          </AnimatePresence>
         </div>
 
-        <div className="relative z-10 flex items-center justify-between gap-3">
+        {/* Footer — dot pagination + nav */}
+        <div className="flex items-center justify-between gap-3 mt-6">
           <button
             onClick={handlePrev}
             disabled={currentIndex === 0}
-            className={`px-3 py-1.5 rounded-lg font-medium text-xs transition-all flex items-center gap-1 ${
-              currentIndex === 0
-                ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed'
-                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-            }`}
+            className="group inline-flex items-center gap-1.5 px-3.5 h-9 rounded-full text-[12px] font-semibold transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed bg-gray-100 dark:bg-white/[0.05] text-gray-700 dark:text-white/70 border border-gray-200 dark:border-white/[0.07] hover:bg-gray-200 dark:hover:bg-white/[0.08]"
           >
-            <ChevronLeft className="h-3 w-3" />
+            <ArrowLeft className="h-3 w-3 transition-transform group-hover:-translate-x-0.5" />
             Previous
           </button>
 
-          <div className="text-xs font-medium text-gray-500 dark:text-gray-400">
-            {currentIndex + 1} / {features.length}
+          {/* Dot indicators */}
+          <div className="flex items-center gap-1.5">
+            {features.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => { setDirection(i > currentIndex ? 1 : -1); setCurrentIndex(i); }}
+                aria-label={`Go to slide ${i + 1}`}
+                className="rounded-full transition-all duration-300"
+                style={{
+                  width: i === currentIndex ? 18 : 6,
+                  height: 6,
+                  background: i === currentIndex ? '#16a34a' : 'rgba(0,0,0,0.12)',
+                  boxShadow: i === currentIndex ? '0 0 8px rgba(22,163,74,0.4)' : 'none',
+                }}
+              />
+            ))}
           </div>
 
           <button
-            onClick={currentIndex === features.length - 1 ? onClose : handleNext}
-            className="px-3 py-1.5 rounded-lg font-medium text-xs bg-gradient-to-r from-pink-500 to-purple-600 text-white hover:from-pink-600 hover:to-purple-700 transition-all flex items-center gap-1 shadow-lg hover:shadow-xl transform hover:scale-105"
+            onClick={isLast ? onClose : handleNext}
+            className="group inline-flex items-center gap-1.5 px-4 h-9 rounded-full text-[12px] font-semibold text-white transition-all duration-200 active:scale-[0.97]"
+            style={{
+              background: 'linear-gradient(135deg, #16a34a, #15803d)',
+              boxShadow: '0 4px 14px rgba(22,163,74,0.35)',
+            }}
           >
-            {currentIndex === features.length - 1 ? 'Got it!' : 'Next'}
-            {currentIndex < features.length - 1 && <ChevronRight className="h-3 w-3" />}
+            {isLast ? 'Got it' : 'Next'}
+            {!isLast && <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />}
           </button>
         </div>
-
       </div>
     </Modal>
   );

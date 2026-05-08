@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Navigation } from './Navigation';
 import { useAuth } from '../contexts/AuthContext';
+import { BillingStatusBanner } from './BillingStatusBanner';
 
 function useIsDesktop() {
   const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 1024);
@@ -22,7 +23,8 @@ export function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const isDesktop = useIsDesktop();
 
-  const staticHideNav = ['/', '/login', '/register', '/onboarding'].includes(location.pathname);
+  const staticHideNav = ['/', '/login', '/register', '/onboarding', '/reset-password', '/create-church'].includes(location.pathname)
+    || /^\/invite\/[^/]+$/.test(location.pathname);
   const isAnnouncementDetail = /^\/announcements\/[^/]+$/.test(location.pathname);
   const hideNavMobile = staticHideNav || isAnnouncementDetail;
 
@@ -44,12 +46,17 @@ export function Layout() {
       <motion.main
         animate={{
           marginLeft: applyOffset ? sidebarWidth : 0,
-          width: applyOffset ? `calc(100vw - ${sidebarWidth}px)` : '100vw',
+          width: applyOffset ? `calc(100% - ${sidebarWidth}px)` : '100%',
         }}
         transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
         className="overflow-x-hidden"
       >
         <div className={staticHideNav ? '' : 'px-4 sm:px-6 lg:px-8 mobile-layout-padding'}>
+          {!staticHideNav && (
+            <div className="max-w-7xl mx-auto pt-4 sm:pt-5">
+              <BillingStatusBanner />
+            </div>
+          )}
           <div key={location.pathname} className="animate-page-enter">
             <Outlet />
           </div>

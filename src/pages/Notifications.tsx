@@ -24,9 +24,17 @@ const typeIcons: Record<string, typeof Bell> = {
   video: PlayCircle,
   event_reminder: CalendarClock,
   event_today_reminder: Clock,
+  assignment_confirmation_reminder: Clock,
+  attendance_open: ClipboardCheck,
   attendance_reminder: ClipboardCheck,
+  attendance_five_min_reminder: Clock,
+  attendance_grace_final_reminder: AlertTriangle,
+  attendance_missed_evening_reminder: ClipboardCheck,
+  attendance_missed_final_reminder: AlertTriangle,
   attendance_alert: AlertTriangle,
   proposal_reminder: CalendarClock,
+  proposal_overdue_alert: AlertTriangle,
+  leadership_member_action_reminder: AlertTriangle,
 };
 
 const typeColors: Record<string, string> = {
@@ -40,9 +48,17 @@ const typeColors: Record<string, string> = {
   video: 'bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400',
   event_reminder: 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400',
   event_today_reminder: 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',
+  assignment_confirmation_reminder: 'bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400',
+  attendance_open: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400',
   attendance_reminder: 'bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400',
+  attendance_five_min_reminder: 'bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400',
+  attendance_grace_final_reminder: 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400',
+  attendance_missed_evening_reminder: 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400',
+  attendance_missed_final_reminder: 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400',
   attendance_alert: 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400',
   proposal_reminder: 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400',
+  proposal_overdue_alert: 'bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400',
+  leadership_member_action_reminder: 'bg-fuchsia-50 dark:bg-fuchsia-900/30 text-fuchsia-600 dark:text-fuchsia-400',
 };
 
 export function Notifications() {

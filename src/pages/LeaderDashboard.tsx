@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format, parseISO, startOfToday } from 'date-fns';
+import { motion } from 'framer-motion';
 import {
   Shield, AlertTriangle, ClipboardCheck, UserX, ChevronRight,
-  Clock, XCircle, AlertCircle, Users, TrendingDown
+  AlertCircle, Users
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -33,10 +34,10 @@ function getQuarterFromDate(date: Date): number {
 }
 
 const offenseColors: Record<number, string> = {
-  1: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20',
-  2: 'text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20',
-  3: 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20',
-  4: 'text-red-800 dark:text-red-200 bg-red-100 dark:bg-red-900/40',
+  1: 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/[0.12] border border-amber-200 dark:border-amber-500/25',
+  2: 'text-orange-700 dark:text-orange-300 bg-orange-50 dark:bg-orange-500/[0.12] border border-orange-200 dark:border-orange-500/25',
+  3: 'text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-500/[0.12] border border-red-200 dark:border-red-500/25',
+  4: 'text-red-800 dark:text-red-200 bg-red-100 dark:bg-red-500/[0.18] border border-red-300 dark:border-red-500/40',
 };
 
 const offenseLabels: Record<number, string> = {
@@ -47,10 +48,10 @@ const offenseLabels: Record<number, string> = {
 };
 
 const statusConfig: Record<string, { label: string; color: string }> = {
-  open: { label: 'Open', color: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400' },
-  verbal_warning: { label: 'Warning', color: 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300' },
-  counselling: { label: 'Counselling', color: 'bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300' },
-  suspension: { label: 'Suspended', color: 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300' },
+  open:           { label: 'Open',        color: 'bg-gray-100 dark:bg-white/[0.06] text-gray-600 dark:text-white/55 border border-gray-200 dark:border-white/[0.08]' },
+  verbal_warning: { label: 'Warning',     color: 'bg-amber-50 dark:bg-amber-500/[0.12] text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/25' },
+  counselling:    { label: 'Counselling', color: 'bg-orange-50 dark:bg-orange-500/[0.12] text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-500/25' },
+  suspension:     { label: 'Suspended',   color: 'bg-red-50 dark:bg-red-500/[0.12] text-red-700 dark:text-red-300 border border-red-200 dark:border-red-500/25' },
 };
 
 interface LeaderDashboardProps {
@@ -137,11 +138,8 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
       value: recentOffenses.length,
       icon: AlertTriangle,
       urgent: recentOffenses.length > 0,
-      activeColor: 'from-red-500 to-red-600',
-      activeBg: 'bg-red-50 dark:bg-red-900/20',
-      activeText: 'text-red-600 dark:text-red-400',
-      neutralColor: 'text-green-600 dark:text-green-400',
-      neutralBg: 'bg-green-50 dark:bg-green-900/20',
+      tone: { bg: 'bg-red-50 dark:bg-red-500/[0.12]', text: 'text-red-600 dark:text-red-400', dot: '#ef4444' },
+      neutral: { bg: 'bg-emerald-50 dark:bg-emerald-500/[0.10]', text: 'text-emerald-600 dark:text-emerald-400', dot: '#22c55e' },
       onClick: () => navigate(embedded ? '/leadership/team?tab=attendance' : '/manage?tab=attendance'),
     },
     {
@@ -149,11 +147,8 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
       value: disciplineAlerts.length,
       icon: Shield,
       urgent: disciplineAlerts.length > 0,
-      activeColor: 'from-orange-500 to-orange-600',
-      activeBg: 'bg-orange-50 dark:bg-orange-900/20',
-      activeText: 'text-orange-600 dark:text-orange-400',
-      neutralColor: 'text-green-600 dark:text-green-400',
-      neutralBg: 'bg-green-50 dark:bg-green-900/20',
+      tone: { bg: 'bg-orange-50 dark:bg-orange-500/[0.12]', text: 'text-orange-600 dark:text-orange-400', dot: '#f97316' },
+      neutral: { bg: 'bg-emerald-50 dark:bg-emerald-500/[0.10]', text: 'text-emerald-600 dark:text-emerald-400', dot: '#22c55e' },
       onClick: () => navigate(embedded ? '/leadership/discipline' : '/discipline'),
     },
     {
@@ -161,11 +156,8 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
       value: pendingLeave,
       icon: UserX,
       urgent: pendingLeave > 0,
-      activeColor: 'from-amber-500 to-amber-600',
-      activeBg: 'bg-amber-50 dark:bg-amber-900/20',
-      activeText: 'text-amber-600 dark:text-amber-400',
-      neutralColor: 'text-gray-500 dark:text-gray-400',
-      neutralBg: 'bg-gray-100 dark:bg-gray-800',
+      tone: { bg: 'bg-amber-50 dark:bg-amber-500/[0.12]', text: 'text-amber-600 dark:text-amber-400', dot: '#f59e0b' },
+      neutral: { bg: 'bg-gray-100 dark:bg-white/[0.06]', text: 'text-gray-500 dark:text-white/45', dot: 'rgba(156,163,175,0.7)' },
       onClick: () => navigate(embedded ? '/leadership/leave' : '/requests'),
     },
     {
@@ -173,98 +165,158 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
       value: pendingSetlists.length,
       icon: ClipboardCheck,
       urgent: pendingSetlists.length > 0,
-      activeColor: 'from-blue-500 to-blue-600',
-      activeBg: 'bg-blue-50 dark:bg-blue-900/20',
-      activeText: 'text-blue-600 dark:text-blue-400',
-      neutralColor: 'text-gray-500 dark:text-gray-400',
-      neutralBg: 'bg-gray-100 dark:bg-gray-800',
+      tone: { bg: 'bg-sky-50 dark:bg-sky-500/[0.12]', text: 'text-sky-600 dark:text-sky-400', dot: '#0ea5e9' },
+      neutral: { bg: 'bg-gray-100 dark:bg-white/[0.06]', text: 'text-gray-500 dark:text-white/45', dot: 'rgba(156,163,175,0.7)' },
       onClick: () => navigate('/library'),
     },
   ];
 
-  function DashCard({ title, icon, iconColor, badge, linkLabel, onLink, children, delay }: {
-    title: string; icon: React.ElementType; iconColor: string; badge?: number; linkLabel?: string; onLink?: () => void; children: React.ReactNode; delay?: string;
-  }) {
-    const Icon = icon;
+  function SectionLabel({ index, children, action }: { index: string; children: React.ReactNode; action?: React.ReactNode }) {
     return (
-      <div className="rounded-2xl overflow-hidden bg-white dark:bg-[#1a1a1c] ring-1 ring-black/[0.05] dark:ring-white/[0.06] animate-slide-up" style={{ animationDelay: delay, animationFillMode: 'both', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-        <div className="flex items-center gap-2 px-5 py-3.5 border-b border-black/[0.04] dark:border-white/[0.05]">
-          <Icon className={`h-4 w-4 shrink-0 ${iconColor}`} />
-          <h2 className="text-sm font-bold text-gray-900 dark:text-white flex-1">{title}</h2>
-          {badge !== undefined && badge > 0 && <span className="text-[10px] font-black px-2 py-0.5 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">{badge}</span>}
-          {linkLabel && onLink && <button onClick={onLink} className="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700 transition-colors flex items-center gap-0.5">{linkLabel} <ChevronRight className="h-3 w-3" /></button>}
+      <div className="flex items-end justify-between mb-3 px-0.5">
+        <div className="flex items-baseline gap-2.5">
+          <span className="text-[10px] font-mono font-semibold tabular-nums text-gray-400/70 dark:text-white/25 tracking-widest">{index}</span>
+          <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-white/45">{children}</span>
         </div>
-        {children}
+        {action}
       </div>
     );
   }
 
+  function DashCard({ index, title, icon, iconColor, badge, linkLabel, onLink, children }: {
+    index: string; title: string; icon: React.ElementType; iconColor: string; badge?: number; linkLabel?: string; onLink?: () => void; children: React.ReactNode;
+  }) {
+    const Icon = icon;
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 12, filter: 'blur(4px)' }}
+        animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        className="relative rounded-3xl overflow-hidden bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06]"
+        style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -12px rgba(15,23,42,0.10)' }}
+      >
+        <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.12] to-transparent" />
+
+        <div className="relative px-5 py-4 border-b border-black/[0.04] dark:border-white/[0.05]">
+          <SectionLabel
+            index={index}
+            action={
+              linkLabel && onLink ? (
+                <button onClick={onLink} className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400/80 hover:text-emerald-500 dark:hover:text-emerald-300 flex items-center gap-1 transition-colors">
+                  {linkLabel} <ChevronRight className="h-3 w-3" />
+                </button>
+              ) : undefined
+            }
+          >
+            <span className="flex items-center gap-1.5">
+              <Icon className={`h-3 w-3 ${iconColor}`} />
+              {title}
+              {badge !== undefined && badge > 0 && (
+                <span className="ml-1 inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-md bg-red-50 dark:bg-red-500/[0.18] text-red-600 dark:text-red-400 text-[9px] font-black border border-red-200 dark:border-red-500/25">
+                  {badge}
+                </span>
+              )}
+            </span>
+          </SectionLabel>
+        </div>
+        {children}
+      </motion.div>
+    );
+  }
+
   const inner = (
-    <div className="px-4 sm:px-5 lg:px-6 py-5 sm:py-6 space-y-5">
+    <div className={embedded ? 'space-y-5' : 'px-4 sm:px-5 lg:px-6 py-5 sm:py-6 space-y-5'}>
 
         {!embedded && (
-          <div className="flex items-center gap-3 animate-fade-in">
-            <div className="h-11 w-11 rounded-2xl flex items-center justify-center shrink-0" style={{ background: 'linear-gradient(135deg,#059669,#047857)', boxShadow: '0 3px 12px rgba(5,150,105,0.3)' }}>
-              <Shield className="h-5 w-5 text-white" />
+          <motion.div
+            initial={{ opacity: 0, y: 14, filter: 'blur(6px)' }}
+            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+            className="flex items-center gap-3.5"
+          >
+            <div className="relative shrink-0">
+              <div
+                className="absolute inset-0 rounded-2xl"
+                style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.35), transparent 70%)', filter: 'blur(10px)', transform: 'scale(1.5)' }}
+              />
+              <div
+                className="relative h-11 w-11 rounded-2xl flex items-center justify-center"
+                style={{ background: 'linear-gradient(145deg, #16a34a, #15803d)', boxShadow: '0 4px 14px rgba(22,163,74,0.35)' }}
+              >
+                <Shield className="h-5 w-5 text-white" />
+              </div>
             </div>
             <div>
-              <h1 className="text-[1.375rem] font-black text-gray-900 dark:text-white leading-tight" style={{ letterSpacing: '-0.03em' }}>Overview</h1>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Ministry health, alerts & pending actions</p>
+              <p className="text-[10px] font-mono font-medium uppercase tracking-[0.22em] text-emerald-600 dark:text-emerald-400/80 mb-0.5">
+                Ministry health
+              </p>
+              <h1 className="text-[1.5rem] sm:text-[1.75rem] font-black text-gray-900 dark:text-white leading-tight" style={{ letterSpacing: '-0.03em' }}>
+                Overview.
+              </h1>
             </div>
-          </div>
+          </motion.div>
         )}
 
         {/* Metric widgets */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 animate-slide-up">
-          {widgets.map(w => (
-            <button key={w.label} onClick={w.onClick}
-              className="rounded-2xl p-4 text-left transition-all duration-200 hover:-translate-y-px active:scale-[0.98] bg-white dark:bg-[#1a1a1c] ring-1 ring-black/[0.05] dark:ring-white/[0.06] hover:ring-black/[0.08] dark:hover:ring-white/[0.09]"
-              style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}
-            >
-              <div className={`inline-flex items-center justify-center h-9 w-9 rounded-xl mb-3 ${w.urgent ? w.activeBg : w.neutralBg}`}>
-                <w.icon className={`h-4 w-4 ${w.urgent ? w.activeText : w.neutralColor}`} />
-              </div>
-              <p className={`text-2xl font-black leading-none ${w.urgent ? w.activeText : 'text-gray-800 dark:text-gray-200'}`} style={{ letterSpacing: '-0.04em' }}>{w.value}</p>
-              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1.5 font-medium">{w.label}</p>
-            </button>
-          ))}
-        </div>
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+          className="grid grid-cols-2 sm:grid-cols-4 gap-3"
+        >
+          {widgets.map(w => {
+            const t = w.urgent ? w.tone : w.neutral;
+            return (
+              <button
+                key={w.label}
+                onClick={w.onClick}
+                className="group relative rounded-3xl p-4 text-left bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] hover:border-gray-300 dark:hover:border-white/[0.1] hover:-translate-y-0.5 transition-all duration-200 active:scale-[0.98] overflow-hidden"
+                style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 4px 14px -8px rgba(15,23,42,0.08)' }}
+              >
+                <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.05] dark:via-white/[0.08] to-transparent" />
+                <div className={`inline-flex items-center justify-center h-9 w-9 rounded-2xl mb-3 ${t.bg}`}>
+                  <w.icon className={`h-4 w-4 ${t.text}`} />
+                </div>
+                <p className={`text-[26px] font-black leading-none tabular-nums ${w.urgent ? t.text : 'text-gray-900 dark:text-white'}`} style={{ letterSpacing: '-0.04em' }}>{w.value}</p>
+                <p className="text-[11px] text-gray-500 dark:text-white/45 mt-2 font-medium">{w.label}</p>
+              </button>
+            );
+          })}
+        </motion.div>
 
         {/* Main grid */}
         <div className="grid gap-4 lg:grid-cols-2">
-          <DashCard title="Attendance Alerts" icon={AlertTriangle} iconColor="text-amber-500"
+          <DashCard index="01" title="Attendance Alerts" icon={AlertTriangle} iconColor="text-amber-500"
             badge={recentOffenses.length}
             linkLabel="Full Report"
             onLink={() => navigate(embedded ? '/leadership/team?tab=attendance' : '/manage?tab=attendance')}
-            delay="50ms"
           >
             <div className="divide-y divide-black/[0.03] dark:divide-white/[0.04]">
               {recentOffenses.length === 0 ? (
-                <p className="px-5 py-6 text-center text-sm text-gray-400">All members in good standing</p>
+                <p className="px-5 py-8 text-center text-[13px] text-gray-400 dark:text-white/30">All members in good standing</p>
               ) : (
                 recentOffenses.map(m => (
                   <div key={m.user_id} className="flex items-center gap-3 px-5 py-3">
-                    <Avatar src={m.avatar_url} firstName={m.first_name} lastName={m.last_name} size="sm" />
+                    <Avatar src={m.avatar_url} firstName={m.first_name} lastName={m.last_name} size="sm" className="ring-1 ring-black/[0.06] dark:ring-white/[0.08]" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{m.first_name} {m.last_name}</p>
-                      <p className="text-[11px] text-gray-500 dark:text-gray-400">{m.late_count}L · {m.absent_count}A</p>
+                      <p className="text-[13px] font-bold text-gray-900 dark:text-white truncate" style={{ letterSpacing: '-0.01em' }}>{m.first_name} {m.last_name}</p>
+                      <p className="text-[11px] font-mono text-gray-400 dark:text-white/30 mt-0.5 tracking-wide">{m.late_count}L · {m.absent_count}A</p>
                     </div>
-                    <span className={`text-[11px] px-2 py-1 rounded-xl font-bold ${offenseColors[m.offense_level] || ''}`}>{offenseLabels[m.offense_level]}</span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-lg font-bold ${offenseColors[m.offense_level] || ''}`}>{offenseLabels[m.offense_level]}</span>
                   </div>
                 ))
               )}
             </div>
           </DashCard>
 
-          <DashCard title="Open Discipline" icon={Shield} iconColor="text-red-500"
+          <DashCard index="02" title="Open Discipline" icon={Shield} iconColor="text-red-500"
             badge={disciplineAlerts.length}
             linkLabel="View All"
             onLink={() => navigate(embedded ? '/leadership/discipline' : '/discipline')}
-            delay="80ms"
           >
             <div className="divide-y divide-black/[0.03] dark:divide-white/[0.04]">
               {disciplineAlerts.length === 0 ? (
-                <p className="px-5 py-6 text-center text-sm text-gray-400">No open discipline records</p>
+                <p className="px-5 py-8 text-center text-[13px] text-gray-400 dark:text-white/30">No open discipline records</p>
               ) : (
                 disciplineAlerts.map(d => {
                   const sCfg = statusConfig[d.status] || statusConfig.open;
@@ -272,12 +324,12 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
                     <button key={d.id} onClick={() => navigate(embedded ? '/leadership/discipline' : '/discipline')}
                       className="w-full flex items-center gap-3 px-5 py-3 hover:bg-gray-50/60 dark:hover:bg-white/[0.02] transition-colors text-left"
                     >
-                      {d.profile && <Avatar src={d.profile.avatar_url} firstName={d.profile.first_name} lastName={d.profile.last_name} size="sm" />}
+                      {d.profile && <Avatar src={d.profile.avatar_url} firstName={d.profile.first_name} lastName={d.profile.last_name} size="sm" className="ring-1 ring-black/[0.06] dark:ring-white/[0.08]" />}
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{d.title}</p>
-                        {d.profile && <p className="text-[11px] text-gray-500 dark:text-gray-400">{d.profile.first_name} {d.profile.last_name}</p>}
+                        <p className="text-[13px] font-bold text-gray-900 dark:text-white truncate" style={{ letterSpacing: '-0.01em' }}>{d.title}</p>
+                        {d.profile && <p className="text-[11px] text-gray-400 dark:text-white/30 mt-0.5">{d.profile.first_name} {d.profile.last_name}</p>}
                       </div>
-                      <span className={`text-[11px] px-2 py-0.5 rounded-lg font-semibold shrink-0 ${sCfg.color}`}>{sCfg.label}</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-lg font-bold shrink-0 ${sCfg.color}`}>{sCfg.label}</span>
                     </button>
                   );
                 })
@@ -285,25 +337,27 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
             </div>
           </DashCard>
 
-          <DashCard title="Upcoming Unavailable" icon={UserX} iconColor="text-orange-500"
+          <DashCard index="03" title="Upcoming Unavailable" icon={UserX} iconColor="text-orange-500"
             badge={upcomingUnavailable.length}
             linkLabel="View All"
             onLink={() => navigate('/unavailable-members')}
-            delay="110ms"
           >
             <div className="divide-y divide-black/[0.03] dark:divide-white/[0.04]">
               {upcomingUnavailable.length === 0 ? (
-                <p className="px-5 py-6 text-center text-sm text-gray-400">No upcoming unavailability</p>
+                <p className="px-5 py-8 text-center text-[13px] text-gray-400 dark:text-white/30">No upcoming unavailability</p>
               ) : (
                 upcomingUnavailable.map(ua => (
                   <div key={ua.id} className="flex items-center gap-3 px-5 py-3">
-                    <div className="flex flex-col items-center justify-center h-10 w-10 rounded-xl shrink-0" style={{ background: 'linear-gradient(135deg,#fed7aa,#fdba74)' }}>
-                      <span className="text-[9px] font-black uppercase text-orange-800 leading-none">{format(parseISO(ua.unavailable_date), 'MMM')}</span>
-                      <span className="text-base font-black text-orange-800 leading-none mt-0.5" style={{ letterSpacing: '-0.04em' }}>{format(parseISO(ua.unavailable_date), 'd')}</span>
+                    <div
+                      className="relative flex flex-col items-center justify-center h-11 w-11 rounded-xl shrink-0"
+                      style={{ background: 'linear-gradient(145deg,#fb923c,#ea580c)', boxShadow: '0 3px 10px rgba(249,115,22,0.3)' }}
+                    >
+                      <span className="text-[8px] font-black uppercase tracking-widest leading-none text-white/65">{format(parseISO(ua.unavailable_date), 'MMM')}</span>
+                      <span className="text-[16px] font-black leading-none mt-0.5 text-white" style={{ letterSpacing: '-0.04em' }}>{format(parseISO(ua.unavailable_date), 'd')}</span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{ua.profiles?.first_name} {ua.profiles?.last_name}</p>
-                      <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{ua.reason || 'No reason given'}</p>
+                      <p className="text-[13px] font-bold text-gray-900 dark:text-white truncate" style={{ letterSpacing: '-0.01em' }}>{ua.profiles?.first_name} {ua.profiles?.last_name}</p>
+                      <p className="text-[11px] text-gray-500 dark:text-white/40 truncate mt-0.5">{ua.reason || 'No reason given'}</p>
                     </div>
                   </div>
                 ))
@@ -311,20 +365,19 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
             </div>
           </DashCard>
 
-          <DashCard title="Special Status Members" icon={Users} iconColor="text-gray-400 dark:text-gray-500"
+          <DashCard index="04" title="Special Status Members" icon={Users} iconColor="text-gray-400 dark:text-white/35"
             linkLabel="Manage"
             onLink={() => navigate(embedded ? '/leadership/team' : '/manage')}
-            delay="140ms"
           >
             <div className="divide-y divide-black/[0.03] dark:divide-white/[0.04]">
               {suspendedMembers.length === 0 ? (
-                <p className="px-5 py-6 text-center text-sm text-gray-400">No members on suspension or restoration</p>
+                <p className="px-5 py-8 text-center text-[13px] text-gray-400 dark:text-white/30">No members on suspension or restoration</p>
               ) : (
                 suspendedMembers.map(m => (
                   <div key={m.id} className="flex items-center gap-3 px-5 py-3">
-                    <Avatar src={m.avatar_url} firstName={m.first_name} lastName={m.last_name} size="sm" />
-                    <p className="text-sm font-semibold text-gray-900 dark:text-white truncate flex-1">{m.first_name} {m.last_name}</p>
-                    <span className={`text-[11px] px-2 py-1 rounded-xl font-semibold capitalize ${m.ministry_status === 'suspended' ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300' : 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300'}`}>{m.ministry_status}</span>
+                    <Avatar src={m.avatar_url} firstName={m.first_name} lastName={m.last_name} size="sm" className="ring-1 ring-black/[0.06] dark:ring-white/[0.08]" />
+                    <p className="text-[13px] font-bold text-gray-900 dark:text-white truncate flex-1" style={{ letterSpacing: '-0.01em' }}>{m.first_name} {m.last_name}</p>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-lg font-bold capitalize ${m.ministry_status === 'suspended' ? 'bg-red-50 dark:bg-red-500/[0.12] text-red-700 dark:text-red-300 border border-red-200 dark:border-red-500/25' : 'bg-amber-50 dark:bg-amber-500/[0.12] text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/25'}`}>{m.ministry_status}</span>
                   </div>
                 ))
               )}
@@ -333,9 +386,8 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
         </div>
 
         {pendingSetlists.length > 0 && (
-          <DashCard title="Pending Setlist Approvals" icon={AlertCircle} iconColor="text-amber-500"
+          <DashCard index="05" title="Pending Setlist Approvals" icon={AlertCircle} iconColor="text-amber-500"
             badge={pendingSetlists.length}
-            delay="170ms"
           >
             <div className="divide-y divide-black/[0.03] dark:divide-white/[0.04]">
               {pendingSetlists.map(s => (
@@ -343,11 +395,11 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
                   className="flex items-center gap-3 px-5 py-3.5 w-full text-left hover:bg-gray-50/60 dark:hover:bg-white/[0.02] transition-colors"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-gray-900 dark:text-white">{s.events?.title}</p>
-                    <p className="text-[11px] text-gray-500 dark:text-gray-400">{s.events?.event_date && format(parseISO(s.events.event_date), 'MMM d, yyyy')}</p>
+                    <p className="text-[13px] font-bold text-gray-900 dark:text-white" style={{ letterSpacing: '-0.01em' }}>{s.events?.title}</p>
+                    <p className="text-[11px] font-mono text-gray-400 dark:text-white/30 mt-0.5 tracking-wide">{s.events?.event_date && format(parseISO(s.events.event_date), 'MMM d, yyyy')}</p>
                   </div>
-                  <span className="text-[11px] font-bold px-2 py-1 rounded-xl bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 shrink-0">Needs Review</span>
-                  <ChevronRight className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-amber-50 dark:bg-amber-500/[0.12] text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/25 shrink-0">Needs Review</span>
+                  <ChevronRight className="h-3.5 w-3.5 text-gray-400 dark:text-white/25 shrink-0" />
                 </button>
               ))}
             </div>
@@ -360,7 +412,9 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
 
   return (
     <div className="page-container page-bottom-pad">
-      {inner}
+      <div className="max-w-5xl mx-auto px-1 sm:px-2 pt-6 sm:pt-8">
+        {inner}
+      </div>
     </div>
   );
 }

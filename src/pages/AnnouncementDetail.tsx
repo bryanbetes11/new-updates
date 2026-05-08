@@ -1,10 +1,11 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
+import { motion } from 'framer-motion';
 import {
   ArrowLeft, Eye, MessageCircle, Send,
   AlertTriangle, AlertCircle, Image, Pencil, Trash2, MoreVertical, Lock,
-  CornerDownRight, X, ChevronLeft
+  CornerDownRight, X, ChevronLeft, Megaphone
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -29,22 +30,28 @@ type AnnouncementWithBlocks = Announcement & {
 
 const PRIORITY_CONFIG = {
   urgent: {
-    bar: 'bg-red-500',
-    badge: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',
+    badge: 'bg-red-50 dark:bg-red-500/[0.12] text-red-600 dark:text-red-400 border border-red-200 dark:border-red-500/25',
+    accent: 'rgba(239,68,68,0.13)',
+    accentBorder: 'rgba(239,68,68,0.22)',
+    eyebrow: 'text-red-600 dark:text-red-400',
     icon: AlertCircle,
     iconColor: 'text-red-500',
     label: 'Urgent',
   },
   high: {
-    bar: 'bg-amber-400',
-    badge: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300',
+    badge: 'bg-amber-50 dark:bg-amber-500/[0.12] text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-500/25',
+    accent: 'rgba(245,158,11,0.10)',
+    accentBorder: 'rgba(245,158,11,0.22)',
+    eyebrow: 'text-amber-600 dark:text-amber-400',
     icon: AlertTriangle,
     iconColor: 'text-amber-500',
     label: 'High',
   },
   normal: {
-    bar: '',
     badge: '',
+    accent: null as string | null,
+    accentBorder: null as string | null,
+    eyebrow: 'text-amber-600 dark:text-amber-400/80',
     icon: null,
     iconColor: '',
     label: 'Normal',
@@ -552,136 +559,186 @@ export function AnnouncementDetail() {
 
   return (
     <div className="page-container page-bottom-pad">
-      <div className="px-4 sm:px-5 lg:px-6 py-5 sm:py-6 space-y-4">
+      <div className="max-w-3xl mx-auto px-4 sm:px-5 lg:px-6 pt-6 sm:pt-8 space-y-5">
 
-        <button
+        {/* ── Back ─────────────────────────────────────── */}
+        <motion.button
+          initial={{ opacity: 0, x: -8 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
           onClick={() => navigate('/announcements')}
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors animate-fade-in"
+          className="inline-flex items-center gap-1.5 pl-2 pr-3.5 h-8 rounded-full text-[12px] font-semibold text-gray-600 dark:text-white/55 bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-md hover:bg-white dark:hover:bg-white/[0.07] active:scale-[0.97] transition-colors"
         >
-          <ArrowLeft className="h-4 w-4" />
-          <span>Announcements</span>
-        </button>
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Announcements
+        </motion.button>
 
-        <div className="rounded-2xl overflow-hidden bg-white dark:bg-[#1a1a1c] ring-1 ring-black/[0.05] dark:ring-white/[0.06] animate-slide-up" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+        {/* ── Hero Card ────────────────────────────────── */}
+        <motion.div
+          initial={{ opacity: 0, y: 14, filter: 'blur(6px)' }}
+          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          className="relative rounded-3xl overflow-hidden bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06]"
+          style={{
+            borderColor: pConfig.accentBorder ?? undefined,
+            backgroundImage: pConfig.accent
+              ? `linear-gradient(135deg, ${pConfig.accent}, transparent 60%)`
+              : undefined,
+            boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 28px -16px rgba(15,23,42,0.12)',
+          }}
+        >
+          <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.12] to-transparent" />
 
-          {announcement.priority !== 'normal' && (
-            <div className={`h-1.5 ${pConfig.bar}`} />
-          )}
-
-          <div className="px-5 sm:px-6 pt-5 pb-4 border-b border-black/[0.04] dark:border-white/[0.05]">
+          <div className="relative px-5 sm:px-7 pt-6 pb-5 border-b border-black/[0.04] dark:border-white/[0.05]">
             <div className="flex items-start gap-3">
               <div className="min-w-0 flex-1">
-                <div className="flex items-start gap-2 flex-wrap mb-2">
-                  {PriorityIcon && <PriorityIcon className={`h-5 w-5 shrink-0 mt-0.5 ${pConfig.iconColor}`} />}
-                  {announcement.is_leaders_only && <Lock className="h-4 w-4 text-brand-500 shrink-0 mt-0.5" />}
-                  <h1 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white leading-tight" style={{ letterSpacing: '-0.025em' }}>{announcement.title}</h1>
+                {/* Eyebrow */}
+                <div className="flex items-center gap-2 mb-2.5">
+                  <div className="relative shrink-0">
+                    <div
+                      className="absolute inset-0 rounded-xl"
+                      style={{ background: 'radial-gradient(circle, rgba(245,158,11,0.35), transparent 70%)', filter: 'blur(8px)', transform: 'scale(1.4)' }}
+                    />
+                    <div
+                      className="relative h-7 w-7 rounded-xl flex items-center justify-center"
+                      style={{ background: 'linear-gradient(145deg, #f59e0b, #d97706)', boxShadow: '0 3px 10px rgba(245,158,11,0.35)' }}
+                    >
+                      <Megaphone className="h-3.5 w-3.5 text-white" />
+                    </div>
+                  </div>
+                  <p className={`text-[10px] font-mono font-medium uppercase tracking-[0.22em] ${pConfig.eyebrow}`}>
+                    {announcement.priority === 'urgent' ? 'Urgent · Team Update' : announcement.priority === 'high' ? 'High Priority · Team Update' : 'Team Update'}
+                  </p>
+                </div>
+
+                {/* Title */}
+                <div className="flex items-start gap-2 flex-wrap">
+                  {PriorityIcon && <PriorityIcon className={`h-5 w-5 shrink-0 mt-1 ${pConfig.iconColor}`} />}
+                  {announcement.is_leaders_only && <Lock className="h-4 w-4 text-amber-500 shrink-0 mt-1.5" />}
+                  <h1 className="text-[1.6rem] sm:text-[1.9rem] font-black text-gray-900 dark:text-white leading-[1.1]" style={{ letterSpacing: '-0.03em' }}>
+                    {announcement.title}
+                  </h1>
                   {announcement.priority !== 'normal' && (
-                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg ${pConfig.badge}`}>{pConfig.label}</span>
-                  )}
-                  {hasPhotos && (
-                    <span className="inline-flex items-center gap-1 text-[11px] text-gray-400 font-medium">
-                      <Image className="h-3.5 w-3.5" /> Photos
-                    </span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg shrink-0 mt-1.5 ${pConfig.badge}`}>{pConfig.label}</span>
                   )}
                 </div>
 
-                <div className="flex items-center gap-3 flex-wrap">
-                  <div className="flex items-center gap-2">
+                {/* Author + meta row */}
+                <div className="flex items-center gap-2.5 flex-wrap mt-4 pt-4 border-t border-black/[0.04] dark:border-white/[0.05]">
+                  <div className="flex items-center gap-2.5">
                     <Avatar
                       src={announcement.profiles?.avatar_url}
                       firstName={announcement.profiles?.first_name || '?'}
                       lastName={announcement.profiles?.last_name}
                       size="sm"
+                      className="ring-1 ring-black/[0.06] dark:ring-white/[0.08]"
                     />
                     <div>
-                      <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 leading-none">{announcement.profiles?.first_name} {announcement.profiles?.last_name}</p>
-                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{format(parseISO(announcement.created_at), 'EEEE, MMMM d, yyyy')}</p>
+                      <p className="text-[13px] font-bold text-gray-900 dark:text-white leading-none tracking-tight">{announcement.profiles?.first_name} {announcement.profiles?.last_name}</p>
+                      <p className="text-[11px] font-mono text-gray-400 dark:text-white/30 mt-1 tracking-wide">{format(parseISO(announcement.created_at), 'EEE · MMM d, yyyy')}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2.5 ml-auto sm:ml-0">
+                  <div className="flex items-center gap-2 ml-auto flex-wrap justify-end">
                     <button
                       type="button"
                       onClick={() => setShowViewers(true)}
-                      className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-brand-600 dark:hover:text-brand-400 transition-colors"
+                      className="inline-flex items-center gap-1 px-2.5 h-7 rounded-full text-[11px] font-semibold text-gray-500 dark:text-white/45 bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
                     >
-                      <Eye className="h-3.5 w-3.5" />{viewCount}
+                      <Eye className="h-3 w-3" />{viewCount}
                     </button>
-                    <span className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
-                      <MessageCircle className="h-3.5 w-3.5" />{comments.length}
+                    <span className="inline-flex items-center gap-1 px-2.5 h-7 rounded-full text-[11px] font-semibold text-gray-500 dark:text-white/45 bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07]">
+                      <MessageCircle className="h-3 w-3" />{comments.length}
                     </span>
+                    {hasPhotos && (
+                      <span className="inline-flex items-center gap-1 px-2.5 h-7 rounded-full text-[11px] font-semibold text-gray-500 dark:text-white/45 bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07]">
+                        <Image className="h-3 w-3" /> Photos
+                      </span>
+                    )}
+                    {isCreator && (
+                      <div className="relative shrink-0" ref={menuRef}>
+                        <button
+                          type="button"
+                          onClick={() => setShowMenu(!showMenu)}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-full text-gray-400 dark:text-white/40 bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] hover:bg-white dark:hover:bg-white/[0.07] transition-colors"
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </button>
+                        {showMenu && (
+                          <div className="absolute right-0 mt-1 w-40 bg-white dark:bg-[#232325] rounded-2xl shadow-xl ring-1 ring-black/[0.07] dark:ring-white/[0.08] py-1 z-10">
+                            <button
+                              type="button"
+                              onClick={handleEdit}
+                              className="w-full px-3.5 py-2.5 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/[0.05] flex items-center gap-2.5 transition-colors"
+                            >
+                              <Pencil className="h-3.5 w-3.5 text-gray-400" /> Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setShowMenu(false); setShowDeleteConfirm(true); }}
+                              className="w-full px-3.5 py-2.5 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2.5 transition-colors"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" /> Delete
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
-
-              {isCreator && (
-                <div className="relative shrink-0" ref={menuRef}>
-                  <button
-                    type="button"
-                    onClick={() => setShowMenu(!showMenu)}
-                    className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-white/[0.07] transition-colors"
-                  >
-                    <MoreVertical className="h-5 w-5 text-gray-400" />
-                  </button>
-                  {showMenu && (
-                    <div className="absolute right-0 mt-1 w-40 bg-white dark:bg-[#232325] rounded-2xl shadow-xl ring-1 ring-black/[0.07] dark:ring-white/[0.08] py-1 z-10">
-                      <button
-                        type="button"
-                        onClick={handleEdit}
-                        className="w-full px-3.5 py-2.5 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/[0.05] flex items-center gap-2.5 transition-colors"
-                      >
-                        <Pencil className="h-3.5 w-3.5 text-gray-400" /> Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setShowMenu(false); setShowDeleteConfirm(true); }}
-                        className="w-full px-3.5 py-2.5 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2.5 transition-colors"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" /> Delete
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           </div>
 
-          <div className="px-5 sm:px-6 py-6">
+          {/* Body */}
+          <div className="relative px-5 sm:px-7 py-7">
             {blocks && blocks.length > 0 ? (
               <div className="space-y-5">
                 {blocks.map((block, i) =>
                   block.type === 'text' ? (
-                    <div key={i} className="text-[15px] leading-[1.7] text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                    <div key={i} className="text-[15px] sm:text-[16px] leading-[1.8] text-gray-700 dark:text-white/70 whitespace-pre-wrap" style={{ letterSpacing: '-0.005em' }}>
                       <FormattedText text={block.content} />
                     </div>
                   ) : (
-                    <div key={i} className="rounded-2xl overflow-hidden ring-1 ring-black/[0.06] dark:ring-white/[0.07]">
+                    <div key={i} className="rounded-2xl overflow-hidden border border-black/[0.06] dark:border-white/[0.07] bg-gray-50 dark:bg-white/[0.03]">
                       <img src={block.content} alt="" className="w-full object-contain" />
                     </div>
                   )
                 )}
               </div>
             ) : (
-              <div className="text-[15px] leading-[1.7] text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+              <div className="text-[15px] sm:text-[16px] leading-[1.8] text-gray-700 dark:text-white/70 whitespace-pre-wrap" style={{ letterSpacing: '-0.005em' }}>
                 <FormattedText text={announcement.content} />
               </div>
             )}
           </div>
-        </div>
+        </motion.div>
 
-        {/* Comments Card */}
-        <div className="rounded-2xl overflow-hidden bg-white dark:bg-[#1a1a1c] ring-1 ring-black/[0.05] dark:ring-white/[0.06] animate-slide-up" style={{ animationDelay: '80ms', animationFillMode: 'both', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+        {/* ── Comments Card ────────────────────────────── */}
+        <motion.div
+          initial={{ opacity: 0, y: 12, filter: 'blur(4px)' }}
+          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          transition={{ duration: 0.5, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+          className="relative rounded-3xl overflow-hidden bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06]"
+          style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -12px rgba(15,23,42,0.10)' }}
+        >
+          <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.12] to-transparent" />
 
-          <div className="flex items-center gap-2 px-5 py-4 border-b border-black/[0.04] dark:border-white/[0.05]">
-            <MessageCircle className="h-4 w-4 text-brand-600 dark:text-brand-400" />
-            <h2 className="text-base font-bold text-gray-900 dark:text-white">
-              Comments{comments.length > 0 && <span className="ml-1.5 text-sm font-semibold text-gray-400 dark:text-gray-500">({comments.length})</span>}
-            </h2>
+          <div className="relative flex items-center gap-2.5 px-5 py-4 border-b border-black/[0.04] dark:border-white/[0.05]">
+            <span className="text-[10px] font-mono font-semibold tabular-nums text-gray-400/70 dark:text-white/25 tracking-widest">02</span>
+            <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-white/45 flex items-center gap-1.5">
+              <MessageCircle className="h-3 w-3" /> Comments
+            </span>
+            {comments.length > 0 && (
+              <span className="ml-auto text-[11px] font-mono font-semibold tabular-nums text-gray-400 dark:text-white/30 tracking-wide">
+                {comments.length} total
+              </span>
+            )}
           </div>
 
           {rootComments.length === 0 ? (
-            <p className="px-5 py-10 text-center text-sm text-gray-400">No comments yet. Be the first to comment.</p>
+            <p className="relative px-5 py-12 text-center text-[13px] text-gray-400 dark:text-white/30">No comments yet. Be the first to comment.</p>
           ) : (
-            <div>
+            <div className="relative">
               {rootComments.map(c => (
                 <CommentItem
                   key={c.id}
@@ -702,15 +759,15 @@ export function AnnouncementDetail() {
             </div>
           )}
 
-          {/* Comment composer */}
-          <div className="px-5 py-4 border-t border-black/[0.04] dark:border-white/[0.05] bg-gray-50/40 dark:bg-white/[0.01]">
+          {/* Composer */}
+          <div className="relative px-5 py-4 border-t border-black/[0.04] dark:border-white/[0.05] bg-gray-50/50 dark:bg-white/[0.015]">
             {replyingTo && (
-              <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-xl bg-brand-50 dark:bg-brand-950/40 ring-1 ring-brand-200/50 dark:ring-brand-800/40">
-                <CornerDownRight className="h-3.5 w-3.5 text-brand-500 shrink-0" />
-                <p className="text-xs text-brand-700 dark:text-brand-300 flex-1 truncate">
+              <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-2xl bg-amber-50 dark:bg-amber-500/[0.08] border border-amber-200/70 dark:border-amber-500/25">
+                <CornerDownRight className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                <p className="text-[12px] text-amber-700 dark:text-amber-300 flex-1 truncate">
                   Replying to <span className="font-bold">{replyingTo.profiles?.first_name}</span>: {replyingTo.content.slice(0, 60)}{replyingTo.content.length > 60 ? '…' : ''}
                 </p>
-                <button type="button" onClick={() => { setReplyingTo(null); setNewComment(''); }} className="shrink-0 text-brand-400 hover:text-brand-600 transition-colors">
+                <button type="button" onClick={() => { setReplyingTo(null); setNewComment(''); }} className="shrink-0 text-amber-400 hover:text-amber-600 transition-colors">
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -718,7 +775,7 @@ export function AnnouncementDetail() {
             <div className="flex items-start gap-3">
               {user && (
                 <div className="shrink-0 mt-0.5">
-                  <Avatar src={userProfile?.avatar_url} firstName={userProfile?.first_name || user.email?.[0]?.toUpperCase() || '?'} lastName={userProfile?.last_name} size="sm" />
+                  <Avatar src={userProfile?.avatar_url} firstName={userProfile?.first_name || user.email?.[0]?.toUpperCase() || '?'} lastName={userProfile?.last_name} size="sm" className="ring-1 ring-black/[0.06] dark:ring-white/[0.08]" />
                 </div>
               )}
               <div className="flex-1">
@@ -741,13 +798,14 @@ export function AnnouncementDetail() {
               <button
                 onClick={handleComment}
                 disabled={!newComment.trim() || submitting}
-                className="btn-primary py-2.5 px-3 shrink-0 disabled:opacity-40 transition-opacity mt-0.5"
+                className="inline-flex items-center justify-center h-10 w-10 rounded-2xl shrink-0 text-white disabled:opacity-40 transition-all active:scale-[0.95] mt-0.5"
+                style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)', boxShadow: '0 3px 10px rgba(245,158,11,0.35)' }}
               >
                 <Send className="h-4 w-4" />
               </button>
             </div>
           </div>
-        </div>
+        </motion.div>
       </div>
 
       {/* Viewers Modal */}

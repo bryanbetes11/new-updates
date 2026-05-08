@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
+import { motion } from 'framer-motion';
 import {
   Pencil, Save, LogOut, Bell, BellOff, X, Check, Crown,
   Camera, Loader2, Shield, ChevronDown, ChevronUp, Clock,
-  MessageSquare, XCircle, CheckCircle, Eye
+  MessageSquare, XCircle, CheckCircle, Eye, KeyRound,
+  Phone, Cake, Calendar
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -12,45 +14,73 @@ import { useToast } from '../contexts/ToastContext';
 import { DatePicker } from '../components/DatePicker';
 import { PageLoader } from '../components/LoadingSpinner';
 import { RoleBadge, sortRolesLeadershipFirst } from '../components/RoleBadge';
+import { isIosDevice, isStandalonePwa } from '../lib/device';
+import { phoneHref } from '../lib/phone';
 import type { DisciplineRecord } from '../types';
 
+interface AccountabilitySummary {
+  user_id: string;
+  proposal_overdue_count: number;
+  proposal_submitted_late_count: number;
+  pending_assignment_count: number;
+  approved_leave_count: number;
+  pending_leave_count: number;
+  open_discipline_count: number;
+  events_assigned: number;
+  present_count: number;
+  late_count: number;
+  absent_count: number;
+  excused_count: number;
+  offense_level: number;
+}
+
 const disciplineStatusConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
-  open: { label: 'Open', color: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400', icon: Clock },
-  verbal_warning: { label: 'Verbal Warning', color: 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300', icon: MessageSquare },
-  counselling: { label: 'Counselling', color: 'bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300', icon: MessageSquare },
-  suspension: { label: 'Suspended', color: 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300', icon: XCircle },
-  resolved: { label: 'Resolved', color: 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300', icon: CheckCircle },
+  open:           { label: 'Open',           color: 'bg-gray-100 dark:bg-white/[0.06] text-gray-600 dark:text-white/55 border border-gray-200 dark:border-white/[0.08]', icon: Clock },
+  verbal_warning: { label: 'Verbal Warning', color: 'bg-amber-50 dark:bg-amber-500/[0.12] text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/25', icon: MessageSquare },
+  counselling:    { label: 'Counselling',    color: 'bg-orange-50 dark:bg-orange-500/[0.12] text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-500/25', icon: MessageSquare },
+  suspension:     { label: 'Suspended',      color: 'bg-red-50 dark:bg-red-500/[0.12] text-red-700 dark:text-red-300 border border-red-200 dark:border-red-500/25', icon: XCircle },
+  resolved:       { label: 'Resolved',       color: 'bg-emerald-50 dark:bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/25', icon: CheckCircle },
 };
 
-function SectionCard({ title, icon, children, action }: { title: string; icon?: React.ReactNode; children: React.ReactNode; action?: React.ReactNode }) {
+function SectionLabel({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
   return (
-    <div className="rounded-2xl overflow-hidden bg-white dark:bg-[#1a1a1c] ring-1 ring-black/[0.05] dark:ring-white/[0.06]" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-      <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-black/[0.04] dark:border-white/[0.05]">
-        {icon && <span className="text-gray-400 dark:text-gray-500 shrink-0">{icon}</span>}
-        <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200 flex-1">{title}</h3>
-        {action}
-      </div>
+    <div className="flex items-end justify-between mb-3 px-1">
+      <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-white/45">{children}</span>
+      {action}
+    </div>
+  );
+}
+
+function PremiumCard({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div
+      className={`relative rounded-3xl overflow-hidden bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] ${className}`}
+      style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -12px rgba(15,23,42,0.10)' }}
+    >
+      <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.12] to-transparent" />
       {children}
     </div>
   );
 }
 
 export function Profile() {
-  const { user, profile, userRoles, roles, signOut, refreshProfile, isLeader } = useAuth();
+  const { user, profile, userRoles, roles, signOut, refreshProfile, isLeader, organization } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [editing, setEditing] = useState(false);
   const [editingRoles, setEditingRoles] = useState(false);
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
-    first_name: '', second_name: '', middle_name: '', last_name: '', nickname: '', phone: '', gender: '', birthday: '',
+    first_name: '', second_name: '', middle_name: '', last_name: '', nickname: '', phone: '', gender: '', birthday: '', official_join_date: '',
   });
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [myDisciplineRecords, setMyDisciplineRecords] = useState<DisciplineRecord[]>([]);
   const [disciplineExpanded, setDisciplineExpanded] = useState<string | null>(null);
+  const [accountabilitySummary, setAccountabilitySummary] = useState<AccountabilitySummary | null>(null);
 
   useEffect(() => {
     if (profile) {
@@ -63,6 +93,7 @@ export function Profile() {
         phone: profile.phone,
         gender: profile.gender || '',
         birthday: profile.birthday || '',
+        official_join_date: profile.official_join_date || '',
       });
     }
   }, [profile]);
@@ -93,12 +124,38 @@ export function Profile() {
 
   useEffect(() => { fetchMyDiscipline(); }, [fetchMyDiscipline]);
 
+  const fetchMyAccountability = useCallback(async () => {
+    if (!user) return;
+    const currentYear = new Date().getFullYear();
+    const currentQuarter = Math.ceil((new Date().getMonth() + 1) / 3);
+    const { data } = await supabase.rpc('get_my_accountability_summary', {
+      p_year: currentYear,
+      p_quarter: currentQuarter,
+    });
+    setAccountabilitySummary((data?.[0] as AccountabilitySummary) || null);
+  }, [user]);
+
+  useEffect(() => { fetchMyAccountability(); }, [fetchMyAccountability]);
+
   const handleSave = async () => {
     if (!user) return;
+    const { official_join_date, ...profileForm } = form;
+    const officialJoinDateChanged = official_join_date !== (profile.official_join_date || '');
+
+    const updatePayload: Record<string, string | null> = {
+      ...profileForm,
+      birthday: profileForm.birthday || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (officialJoinDateChanged) {
+      updatePayload.official_join_date = official_join_date || null;
+    }
+
     setLoading(true);
-    const { error } = await supabase.from('profiles').update({ ...form, updated_at: new Date().toISOString() }).eq('id', user.id);
+    const { error } = await supabase.from('profiles').update(updatePayload).eq('id', user.id);
     setLoading(false);
-    if (error) { toast('error', 'Failed to save'); return; }
+    if (error) { toast('error', `Failed to save: ${error.message}`); return; }
     toast('success', 'Profile updated');
     setEditing(false);
     refreshProfile();
@@ -115,9 +172,6 @@ export function Profile() {
     return outputArray;
   };
 
-  const isIos = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || ('standalone' in window.navigator && (window.navigator as unknown as { standalone: boolean }).standalone);
-
   const togglePush = async () => {
     if (!user) return;
     setPushLoading(true);
@@ -125,7 +179,7 @@ export function Profile() {
       try {
         if (!('serviceWorker' in navigator)) { toast('error', 'Service workers not supported'); setPushLoading(false); return; }
         if (!('PushManager' in window)) {
-          isIos() && !isStandalone() ? toast('error', 'On iOS, add to Home Screen first.') : toast('error', 'Push not supported in this browser');
+          isIosDevice() && !isStandalonePwa() ? toast('error', 'On iOS, add to Home Screen first.') : toast('error', 'Push not supported in this browser');
           setPushLoading(false); return;
         }
         if (!('Notification' in window)) { toast('error', 'Notifications unavailable'); setPushLoading(false); return; }
@@ -192,236 +246,503 @@ export function Profile() {
   };
 
   const openDisciplineCount = myDisciplineRecords.filter(r => r.status !== 'resolved').length;
+  const fullName = `${profile.first_name} ${profile.last_name}`.trim();
+  const isLeaderProfile = sortedUserRoles.some(ur => ur.roles?.is_leadership);
+  const profilePhoneHref = phoneHref(profile.phone);
+  const billingLocked = searchParams.get('billing_locked') === '1';
+  const billingStatus = organization?.billing_status || organization?.subscription_status;
+  const currentQuarter = Math.ceil((new Date().getMonth() + 1) / 3);
+  const currentYear = new Date().getFullYear();
 
   return (
-    <div className="page-container page-bottom-pad">
-      <div className="px-4 sm:px-5 lg:px-6 pt-5 sm:pt-7 pb-6 space-y-4">
+    <div className="page-container page-bottom-pad relative">
+      {/* Ambient page glow — sits behind everything */}
+      <div
+        className="pointer-events-none absolute -top-32 left-1/2 -translate-x-1/2 w-[600px] h-[600px] opacity-50 dark:opacity-30"
+        style={{ background: 'radial-gradient(circle, rgba(34,197,94,0.18), transparent 70%)', filter: 'blur(60px)' }}
+      />
 
-        {/* ── Identity Hero ─────────────────────────── */}
-        <div className="rounded-2xl overflow-hidden bg-white dark:bg-[#1a1a1c] ring-1 ring-black/[0.05] dark:ring-white/[0.06] animate-fade-in" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-          <div className="h-20 w-full" style={{ background: 'linear-gradient(135deg, #1e40af 0%, #1d4ed8 50%, #2563eb 100%)' }} />
-          <div className="px-5 pb-5 pt-0 -mt-8">
-            <div className="flex items-end justify-between gap-3">
-              <div className="relative group shrink-0">
-                {profile.avatar_url ? (
-                  <img src={profile.avatar_url} alt={profile.first_name} className="h-20 w-20 rounded-2xl object-cover ring-4 ring-white dark:ring-[#1a1a1c]" />
-                ) : (
-                  <div className="h-20 w-20 rounded-2xl bg-brand-600 flex items-center justify-center text-white text-2xl font-black ring-4 ring-white dark:ring-[#1a1a1c]" style={{ letterSpacing: '-0.02em' }}>
-                    {profile.first_name[0]}{profile.last_name?.[0] || ''}
-                  </div>
-                )}
-                <label className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                  {avatarUploading ? <Loader2 className="h-5 w-5 text-white animate-spin" /> : <Camera className="h-5 w-5 text-white" />}
-                  <input type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" disabled={avatarUploading} />
-                </label>
-              </div>
-              <div className="flex items-center gap-2 mb-1 shrink-0">
-                <button onClick={() => setEditing(!editing)} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ring-1 ${editing ? 'bg-gray-100 dark:bg-gray-800 ring-gray-200 dark:ring-gray-700 text-gray-700 dark:text-gray-300' : 'bg-white dark:bg-[#232325] ring-black/[0.07] dark:ring-white/[0.08] text-gray-700 dark:text-gray-300 hover:ring-black/[0.1]'}`}>
-                  {editing ? <><X className="h-3.5 w-3.5" /> Cancel</> : <><Pencil className="h-3.5 w-3.5" /> Edit</>}
-                </button>
-                <button onClick={handleSignOut} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 ring-1 ring-red-200 dark:ring-red-800/50 hover:bg-red-100 dark:hover:bg-red-900/30 transition-all">
-                  <LogOut className="h-3.5 w-3.5" /> Sign Out
-                </button>
+      <div className="relative max-w-3xl mx-auto px-1 sm:px-2 pt-6 sm:pt-10 space-y-5 sm:space-y-6">
+        {billingLocked && billingStatus === 'suspended' && (
+          <div className="rounded-[26px] border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-900/10 px-4 py-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-300 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-bold text-red-800 dark:text-red-200">Church billing is currently suspended</p>
+                <p className="text-sm text-red-700/85 dark:text-red-200/80 mt-1">
+                  Access to most team areas is temporarily limited until your church admin resolves billing. You can still view your profile and sign out from here.
+                </p>
               </div>
             </div>
-            <div className="mt-3">
-              <h1 className="text-xl font-black text-gray-900 dark:text-white leading-tight" style={{ letterSpacing: '-0.025em' }}>
-                {profile.first_name} {profile.last_name}
-                {profile.nickname && <span className="text-gray-400 dark:text-gray-500 font-normal text-base"> "{profile.nickname}"</span>}
-              </h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{profile.email}</p>
-              <div className="flex flex-wrap gap-1.5 mt-2.5">
-                {sortedUserRoles.map(ur => ur.roles && <RoleBadge key={ur.id} role={ur.roles} />)}
-                {sortedUserRoles.length === 0 && <span className="text-xs text-gray-400">No roles assigned</span>}
+          </div>
+        )}
+
+        {/* ── Editorial Identity Hero ──────────────── */}
+        <motion.section
+          initial={{ opacity: 0, y: 18, filter: 'blur(8px)' }}
+          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+        >
+          {/* Desktop-only top action bar */}
+          <div className="hidden sm:flex items-center justify-end gap-1.5 mb-3">
+            <button
+              onClick={() => setEditing(!editing)}
+              className={`inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-semibold transition-all active:scale-[0.97] ${
+                editing
+                  ? 'bg-gray-100 dark:bg-white/[0.08] text-gray-600 dark:text-white/55 border border-black/[0.08] dark:border-white/[0.1]'
+                  : 'bg-white/70 dark:bg-white/[0.04] text-gray-600 dark:text-white/55 border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-md hover:bg-white dark:hover:bg-white/[0.07]'
+              }`}
+            >
+              {editing ? <><X className="h-3.5 w-3.5" /> Cancel</> : <><Pencil className="h-3.5 w-3.5" /> Edit</>}
+            </button>
+            <button
+              onClick={() => navigate('/change-password')}
+              className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-semibold text-gray-600 dark:text-white/55 bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-md hover:bg-white dark:hover:bg-white/[0.07] active:scale-[0.97] transition-colors"
+            >
+              <KeyRound className="h-3.5 w-3.5" /> Password
+            </button>
+            <button
+              onClick={handleSignOut}
+              className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/[0.1] border border-red-200 dark:border-red-500/25 hover:bg-red-100 dark:hover:bg-red-500/[0.18] active:scale-[0.97] transition-colors"
+            >
+              <LogOut className="h-3.5 w-3.5" /> Sign out
+            </button>
+          </div>
+
+          {/* Identity block — avatar beside text on all sizes */}
+          <div className="flex items-start gap-4 sm:gap-6">
+            {/* Avatar */}
+            <div className="relative shrink-0 group">
+              <div
+                className="absolute inset-0 rounded-3xl"
+                style={{ background: 'radial-gradient(circle, rgba(34,197,94,0.45), transparent 70%)', filter: 'blur(16px)', transform: 'scale(1.5)' }}
+              />
+              <div
+                className="absolute -inset-[3px] rounded-[1.4rem] opacity-70 dark:opacity-90"
+                style={{ background: 'conic-gradient(from 200deg, rgba(34,197,94,0.6), rgba(16,185,129,0.2), rgba(20,184,166,0.5), rgba(34,197,94,0.6))' }}
+              />
+              {profile.avatar_url ? (
+                <img
+                  src={profile.avatar_url}
+                  alt={profile.first_name}
+                  className="relative h-[72px] w-[72px] sm:h-[100px] sm:w-[100px] rounded-3xl object-cover ring-4 ring-white dark:ring-[#0d0d0f]"
+                />
+              ) : (
+                <div
+                  className="relative h-[72px] w-[72px] sm:h-[100px] sm:w-[100px] rounded-3xl flex items-center justify-center text-white text-2xl sm:text-[2.2rem] font-black ring-4 ring-white dark:ring-[#0d0d0f]"
+                  style={{ background: 'linear-gradient(145deg, #16a34a, #15803d)', letterSpacing: '-0.02em' }}
+                >
+                  {profile.first_name[0]}{profile.last_name?.[0] || ''}
+                </div>
+              )}
+              <label className="absolute inset-0 flex items-center justify-center rounded-3xl bg-black/55 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                {avatarUploading ? <Loader2 className="h-5 w-5 text-white animate-spin" /> : <Camera className="h-5 w-5 text-white" />}
+                <input type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" disabled={avatarUploading} />
+              </label>
+            </div>
+
+            {/* Name + meta */}
+            <div className="min-w-0 flex-1 pt-0.5">
+              {/* Status eyebrow — sits just above the name */}
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-500 dark:bg-emerald-400 opacity-70 animate-ping" />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500 dark:bg-emerald-400" />
+                </span>
+                <p className="text-[10px] font-mono font-medium uppercase tracking-[0.22em] text-gray-500 dark:text-white/45">
+                  {isLeaderProfile ? 'Leader · Active' : 'Active member'}
+                </p>
               </div>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Member since {format(parseISO(profile.created_at), 'MMMM yyyy')}</p>
+
+              <h1
+                className="text-[1.75rem] sm:text-[2.4rem] font-black leading-[0.98] tracking-tighter text-gray-900 dark:text-white break-words"
+                style={{ letterSpacing: '-0.045em' }}
+              >
+                <span className="dark:hidden">{fullName}</span>
+                <span
+                  className="hidden dark:inline"
+                  style={{
+                    background: 'linear-gradient(180deg, #ffffff 0%, rgba(255,255,255,0.6) 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text',
+                  }}
+                >
+                  {fullName}
+                </span>
+                {profile.nickname && (
+                  <span className="text-gray-300 dark:text-white/25 font-light italic ml-2 align-baseline whitespace-nowrap" style={{ letterSpacing: '-0.02em' }}>
+                    “{profile.nickname}”
+                  </span>
+                )}
+              </h1>
+              <p className="mt-1.5 text-[12px] sm:text-[13px] font-mono text-gray-500 dark:text-white/40 truncate tracking-wide">
+                {profile.email}
+              </p>
             </div>
           </div>
 
-          {editing && (
-            <div className="border-t border-black/[0.04] dark:border-white/[0.05] px-5 py-5 space-y-4 bg-gray-50/50 dark:bg-white/[0.01]">
-              <div>
-                <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Gender</label>
-                <div className="flex gap-2">
-                  {(['male', 'female'] as const).map(g => (
-                    <button key={g} type="button" onClick={() => setForm({ ...form, gender: g })}
-                      className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ring-1 ${form.gender === g ? 'bg-brand-600 ring-brand-600 text-white' : 'bg-white dark:bg-[#232325] ring-black/[0.07] dark:ring-white/[0.08] text-gray-600 dark:text-gray-400 hover:ring-brand-400'}`}>
-                      {g === 'male' ? 'Brother' : 'Sister'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">First Name</label><input type="text" value={form.first_name} onChange={e => setForm({ ...form, first_name: e.target.value })} className="input-field text-sm" /></div>
-                <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Second Name</label><input type="text" value={form.second_name} onChange={e => setForm({ ...form, second_name: e.target.value })} className="input-field text-sm" placeholder="Optional" /></div>
-                <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Middle Name</label><input type="text" value={form.middle_name} onChange={e => setForm({ ...form, middle_name: e.target.value })} className="input-field text-sm" placeholder="Optional" /></div>
-                <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Last Name</label><input type="text" value={form.last_name} onChange={e => setForm({ ...form, last_name: e.target.value })} className="input-field text-sm" /></div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Nickname</label><input type="text" value={form.nickname} onChange={e => setForm({ ...form, nickname: e.target.value })} className="input-field text-sm" /></div>
-                <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Phone</label><input type="tel" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className="input-field text-sm" /></div>
-              </div>
-              <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Birthday</label><DatePicker value={form.birthday} onChange={v => setForm({ ...form, birthday: v })} placeholder="Select birthday" /></div>
-              <div className="flex justify-end gap-2 pt-1">
-                <button onClick={() => setEditing(false)} className="btn-secondary text-sm">Cancel</button>
-                <button onClick={handleSave} disabled={loading} className="btn-primary text-sm">
-                  <Save className="h-4 w-4" /> {loading ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
-            </div>
-          )}
-
+          {/* Mono ID strip — 2-col grid on mobile, flex-wrap on desktop */}
           {!editing && (
-            <div className="border-t border-black/[0.04] dark:border-white/[0.05] px-5 py-4 grid grid-cols-2 sm:grid-cols-4 gap-4 bg-gray-50/40 dark:bg-white/[0.01]">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
+              className="mt-6 grid grid-cols-2 sm:flex sm:flex-wrap gap-2"
+            >
               {[
-                { label: 'Gender', value: profile.gender === 'male' ? 'Brother' : profile.gender === 'female' ? 'Sister' : '--' },
-                { label: 'Phone', value: profile.phone || '--' },
-                { label: 'Birthday', value: profile.birthday ? format(parseISO(profile.birthday), 'MMMM d') : '--' },
-                { label: 'Member Since', value: format(parseISO(profile.created_at), 'MMMM yyyy') },
-              ].map(item => (
-                <div key={item.label}>
-                  <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">{item.label}</p>
-                  <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 mt-0.5">{item.value}</p>
+                { icon: profile.gender === 'male' ? '♂' : profile.gender === 'female' ? '♀' : '·', label: 'GENDER', value: profile.gender === 'male' ? 'Male' : profile.gender === 'female' ? 'Female' : '—', mono: false },
+                { icon: <Phone className="h-3 w-3" />, label: 'PHONE', value: profile.phone || '—', mono: true, href: profilePhoneHref },
+                { icon: <Cake className="h-3 w-3" />, label: 'BIRTHDAY', value: profile.birthday ? format(parseISO(profile.birthday), 'MMM d, yyyy') : '—', mono: false },
+                { icon: <Calendar className="h-3 w-3" />, label: 'JOINED', value: format(parseISO(profile.official_join_date || profile.created_at), 'MMM d, yyyy'), mono: false },
+              ].map((item, i) => (
+                <div
+                  key={i}
+                  className="flex sm:inline-flex items-center gap-2 pl-3 pr-3.5 h-9 rounded-full bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-md min-w-0"
+                >
+                  <span className="flex items-center justify-center w-3 h-3 shrink-0 text-gray-400 dark:text-white/30 text-[12px] font-bold">
+                    {item.icon}
+                  </span>
+                  <span className="text-[9px] font-bold text-gray-400 dark:text-white/35 tracking-[0.14em] shrink-0">{item.label}</span>
+                  {item.href ? (
+                    <a
+                      href={item.href}
+                      className={`text-[12px] font-semibold text-emerald-700 dark:text-emerald-300 hover:underline truncate ${item.mono ? 'font-mono' : ''}`}
+                    >
+                      {item.value}
+                    </a>
+                  ) : (
+                    <span className={`text-[12px] font-semibold text-gray-800 dark:text-white/85 truncate ${item.mono ? 'font-mono' : ''}`}>{item.value}</span>
+                  )}
                 </div>
               ))}
-            </div>
+            </motion.div>
           )}
-        </div>
 
-        {/* ── My Roles ─────────────────────────────── */}
-        <SectionCard
-          title="My Roles"
-          icon={<Crown className="h-4 w-4" />}
-          action={
-            !editingRoles ? (
-              <button onClick={startEditingRoles} className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-600 dark:text-brand-400 hover:text-brand-700 transition-colors">
-                <Pencil className="h-3.5 w-3.5" /> Edit
-              </button>
-            ) : (
-              <div className="flex gap-2">
-                <button onClick={() => setEditingRoles(false)} className="text-xs font-bold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">Cancel</button>
-                <button onClick={saveRoles} disabled={loading} className="btn-primary text-xs py-1 px-2.5">
-                  <Save className="h-3 w-3" /> {loading ? 'Saving...' : 'Save'}
-                </button>
-              </div>
-            )
-          }
+          {/* Mobile-only action row — bottom of hero, fills width evenly */}
+          <div className="sm:hidden grid grid-cols-3 gap-1.5 mt-5">
+            <button
+              onClick={() => setEditing(!editing)}
+              className={`inline-flex items-center justify-center gap-1.5 h-9 rounded-full text-[12px] font-semibold transition-all active:scale-[0.97] ${
+                editing
+                  ? 'bg-gray-100 dark:bg-white/[0.08] text-gray-600 dark:text-white/55 border border-black/[0.08] dark:border-white/[0.1]'
+                  : 'bg-white/70 dark:bg-white/[0.04] text-gray-600 dark:text-white/55 border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-md hover:bg-white dark:hover:bg-white/[0.07]'
+              }`}
+            >
+              {editing ? <><X className="h-3.5 w-3.5" /> Cancel</> : <><Pencil className="h-3.5 w-3.5" /> Edit</>}
+            </button>
+            <button
+              onClick={() => navigate('/change-password')}
+              className="inline-flex items-center justify-center gap-1.5 h-9 rounded-full text-[12px] font-semibold text-gray-600 dark:text-white/55 bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-md hover:bg-white dark:hover:bg-white/[0.07] active:scale-[0.97] transition-colors"
+            >
+              <KeyRound className="h-3.5 w-3.5" /> Password
+            </button>
+            <button
+              onClick={handleSignOut}
+              className="inline-flex items-center justify-center gap-1.5 h-9 rounded-full text-[12px] font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/[0.1] border border-red-200 dark:border-red-500/25 hover:bg-red-100 dark:hover:bg-red-500/[0.18] active:scale-[0.97] transition-colors"
+            >
+              <LogOut className="h-3.5 w-3.5" /> Sign out
+            </button>
+          </div>
+
+          {/* Inline edit form */}
+          {editing && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+              className="mt-7"
+            >
+              <PremiumCard className="p-5 sm:p-6 space-y-4">
+                <div>
+                  <label className="block text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-white/35 mb-2">Gender</label>
+                  <div className="flex gap-2">
+                    {(['male', 'female'] as const).map(g => (
+                      <button
+                        key={g}
+                        type="button"
+                        onClick={() => setForm({ ...form, gender: g })}
+                        className={`flex-1 h-10 rounded-2xl text-[13px] font-bold transition-all border ${
+                          form.gender === g
+                            ? 'text-white border-transparent'
+                            : 'bg-white/70 dark:bg-white/[0.04] border-black/[0.07] dark:border-white/[0.08] text-gray-600 dark:text-white/55 hover:bg-white dark:hover:bg-white/[0.07]'
+                        }`}
+                        style={form.gender === g ? { background: 'linear-gradient(135deg, #16a34a, #15803d)', boxShadow: '0 3px 10px rgba(22,163,74,0.3)' } : undefined}
+                      >
+                        {g === 'male' ? 'Male' : 'Female'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className="block text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">First Name</label><input type="text" value={form.first_name} onChange={e => setForm({ ...form, first_name: e.target.value })} className="input-field text-sm" /></div>
+                  <div><label className="block text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Second Name</label><input type="text" value={form.second_name} onChange={e => setForm({ ...form, second_name: e.target.value })} className="input-field text-sm" placeholder="Optional" /></div>
+                  <div><label className="block text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Middle Name</label><input type="text" value={form.middle_name} onChange={e => setForm({ ...form, middle_name: e.target.value })} className="input-field text-sm" placeholder="Optional" /></div>
+                  <div><label className="block text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Last Name</label><input type="text" value={form.last_name} onChange={e => setForm({ ...form, last_name: e.target.value })} className="input-field text-sm" /></div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className="block text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Nickname</label><input type="text" value={form.nickname} onChange={e => setForm({ ...form, nickname: e.target.value })} className="input-field text-sm" /></div>
+                  <div><label className="block text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Phone</label><input type="tel" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className="input-field text-sm" /></div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div><label className="block text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Birthday</label><DatePicker value={form.birthday} onChange={v => setForm({ ...form, birthday: v })} placeholder="Select birthday" /></div>
+                  <div><label className="block text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Official Join Date</label><DatePicker value={form.official_join_date} onChange={v => setForm({ ...form, official_join_date: v })} placeholder="Select join date" /></div>
+                </div>
+                <div className="flex justify-end gap-2 pt-1">
+                  <button onClick={() => setEditing(false)} className="btn-secondary text-sm">Cancel</button>
+                  <button
+                    onClick={handleSave}
+                    disabled={loading}
+                    className="inline-flex items-center gap-2 px-5 h-10 rounded-full text-[13px] font-semibold text-white transition-all active:scale-[0.97]"
+                    style={{ background: 'linear-gradient(135deg, #16a34a, #15803d)', boxShadow: '0 4px 14px rgba(22,163,74,0.35)' }}
+                  >
+                    <Save className="h-4 w-4" /> {loading ? 'Saving…' : 'Save Changes'}
+                  </button>
+                </div>
+              </PremiumCard>
+            </motion.div>
+          )}
+        </motion.section>
+
+        {/* ── 02 · Roles ──────────────────────────── */}
+        <motion.section
+          initial={{ opacity: 0, y: 14, filter: 'blur(4px)' }}
+          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          transition={{ duration: 0.5, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
         >
-          <div className="p-5">
+          <SectionLabel
+            action={
+              !editingRoles ? (
+                <button onClick={startEditingRoles} className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400/80 hover:text-emerald-500 dark:hover:text-emerald-300 transition-colors">
+                  <Pencil className="h-3 w-3" /> Edit
+                </button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setEditingRoles(false)} className="text-[11px] font-semibold text-gray-400 dark:text-white/40 hover:text-gray-600 dark:hover:text-white/60 transition-colors">Cancel</button>
+                  <button
+                    onClick={saveRoles}
+                    disabled={loading}
+                    className="inline-flex items-center gap-1 px-2.5 h-7 rounded-full text-[11px] font-semibold text-white"
+                    style={{ background: 'linear-gradient(135deg, #16a34a, #15803d)', boxShadow: '0 3px 10px rgba(22,163,74,0.3)' }}
+                  >
+                    <Save className="h-3 w-3" /> {loading ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+              )
+            }
+          >
+            <span className="flex items-center gap-1.5"><Crown className="h-3 w-3" /> My Roles</span>
+          </SectionLabel>
+
+          <PremiumCard className="p-5 sm:p-6">
             {editingRoles ? (
               <div className="flex flex-wrap gap-2">
-                {sortRolesLeadershipFirst(roles).map(role => (
-                  <button key={role.id} type="button" onClick={() => toggleRoleSelection(role.id)}
-                    className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all ring-1 ${
-                      selectedRoleIds.includes(role.id)
-                        ? role.is_leadership
-                          ? 'bg-amber-50 dark:bg-amber-900/20 ring-amber-300 dark:ring-amber-700 text-amber-700 dark:text-amber-300'
-                          : 'bg-brand-50 dark:bg-brand-900/20 ring-brand-300 dark:ring-brand-700 text-brand-700 dark:text-brand-300'
-                        : 'bg-white dark:bg-[#232325] ring-black/[0.06] dark:ring-white/[0.07] text-gray-500 dark:text-gray-400 hover:ring-black/[0.1]'
-                    }`}
-                  >
-                    {selectedRoleIds.includes(role.id) && <Check className="h-3 w-3" />}
-                    {role.is_leadership && <Crown className="h-3 w-3" />}
-                    {role.name}
-                  </button>
-                ))}
+                {sortRolesLeadershipFirst(roles).map(role => {
+                  const selected = selectedRoleIds.includes(role.id);
+                  return (
+                    <button
+                      key={role.id}
+                      type="button"
+                      onClick={() => toggleRoleSelection(role.id)}
+                      className={`inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[12px] font-bold transition-all border ${
+                        selected
+                          ? role.is_leadership
+                            ? 'bg-amber-50 dark:bg-amber-500/[0.18] border-amber-300 dark:border-amber-500/35 text-amber-700 dark:text-amber-300'
+                            : 'bg-emerald-50 dark:bg-emerald-500/[0.18] border-emerald-300 dark:border-emerald-500/35 text-emerald-700 dark:text-emerald-300'
+                          : 'bg-white/70 dark:bg-white/[0.04] border-black/[0.06] dark:border-white/[0.07] text-gray-500 dark:text-white/45 hover:bg-white dark:hover:bg-white/[0.07]'
+                      }`}
+                    >
+                      {selected && <Check className="h-3 w-3" />}
+                      {role.is_leadership && <Crown className="h-3 w-3" />}
+                      {role.name}
+                    </button>
+                  );
+                })}
               </div>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {sortedUserRoles.length > 0
                   ? sortedUserRoles.map(ur => ur.roles && <RoleBadge key={ur.id} role={ur.roles} />)
-                  : <p className="text-sm text-gray-400">No roles assigned yet</p>}
+                  : <p className="text-[13px] text-gray-400 dark:text-white/30 italic">No roles assigned yet</p>}
               </div>
             )}
-          </div>
-        </SectionCard>
+          </PremiumCard>
+        </motion.section>
 
-        {/* ── My Discipline (non-leaders only) ─────── */}
-        {!isLeader && (
-          <SectionCard
-            title="My Discipline Record"
-            icon={<Shield className="h-4 w-4" />}
-            action={openDisciplineCount > 0 ? (
-              <span className="text-[10px] font-black px-2 py-0.5 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">
-                {openDisciplineCount} open
-              </span>
-            ) : undefined}
+        {/* ── 03 · My Ministry Status ─────────────── */}
+        {accountabilitySummary && (
+          <motion.section
+            initial={{ opacity: 0, y: 14, filter: 'blur(4px)' }}
+            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            transition={{ duration: 0.5, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
           >
-            {myDisciplineRecords.length === 0 ? (
-              <div className="px-5 py-8 text-center">
-                <CheckCircle className="h-8 w-8 text-green-400 mx-auto mb-2" />
-                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Clean record</p>
-                <p className="text-xs text-gray-400 mt-0.5">Keep up the great work!</p>
+            <SectionLabel
+              action={
+                <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400 dark:text-white/30">
+                  Q{currentQuarter} {currentYear}
+                </span>
+              }
+            >
+              <span className="flex items-center gap-1.5"><Shield className="h-3 w-3" /> My Ministry Status</span>
+            </SectionLabel>
+
+            <PremiumCard className="p-5 sm:p-6 space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  { label: 'Overdue Proposals', value: accountabilitySummary.proposal_overdue_count, color: accountabilitySummary.proposal_overdue_count > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white' },
+                  { label: 'Late Proposal Submits', value: accountabilitySummary.proposal_submitted_late_count, color: accountabilitySummary.proposal_submitted_late_count > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-white' },
+                  { label: 'Pending Assignments', value: accountabilitySummary.pending_assignment_count, color: accountabilitySummary.pending_assignment_count > 0 ? 'text-violet-600 dark:text-violet-400' : 'text-gray-900 dark:text-white' },
+                  { label: 'Offense Level', value: accountabilitySummary.offense_level, color: accountabilitySummary.offense_level > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400' },
+                  { label: 'Lates', value: accountabilitySummary.late_count, color: accountabilitySummary.late_count > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-white' },
+                  { label: 'Absences', value: accountabilitySummary.absent_count, color: accountabilitySummary.absent_count > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white' },
+                  { label: 'Excused', value: accountabilitySummary.excused_count, color: accountabilitySummary.excused_count > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-white' },
+                  { label: 'Approved Leaves', value: accountabilitySummary.approved_leave_count, color: accountabilitySummary.approved_leave_count > 0 ? 'text-sky-600 dark:text-sky-400' : 'text-gray-900 dark:text-white' },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-2xl border border-gray-200/80 dark:border-white/[0.06] bg-gray-50/80 dark:bg-white/[0.03] px-3 py-3">
+                    <p className={`text-xl font-black leading-none ${item.color}`} style={{ letterSpacing: '-0.04em' }}>{item.value}</p>
+                    <p className="mt-1 text-[11px] text-gray-500 dark:text-white/40">{item.label}</p>
+                  </div>
+                ))}
               </div>
-            ) : (
-              <>
-                <div className="flex items-start gap-2.5 px-5 py-3 bg-blue-50/60 dark:bg-blue-900/10 border-b border-blue-100 dark:border-blue-900/30">
-                  <Eye className="h-3.5 w-3.5 text-blue-500 mt-0.5 shrink-0" />
-                  <p className="text-xs text-blue-700 dark:text-blue-300">This is your personal record. Leadership will speak with you about any open items.</p>
-                </div>
-                <div className="divide-y divide-black/[0.03] dark:divide-white/[0.04]">
-                  {myDisciplineRecords.map(record => {
-                    const sCfg = disciplineStatusConfig[record.status] || disciplineStatusConfig.open;
-                    const isExp = disciplineExpanded === record.id;
-                    return (
-                      <div key={record.id}>
-                        <button onClick={() => setDisciplineExpanded(isExp ? null : record.id)} className="w-full flex items-center gap-3 px-5 py-3.5 text-left hover:bg-gray-50/60 dark:hover:bg-white/[0.02] transition-colors">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{record.title}</p>
-                            <p className="text-[11px] text-gray-400 mt-0.5">{format(parseISO(record.created_at), 'MMM d, yyyy')}</p>
-                          </div>
-                          <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-xl font-semibold shrink-0 ${sCfg.color}`}>
-                            <sCfg.icon className="h-3 w-3" />{sCfg.label}
-                          </span>
-                          {isExp ? <ChevronUp className="h-4 w-4 text-gray-400 shrink-0" /> : <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" />}
-                        </button>
-                        {isExp && (
-                          <div className="px-5 pb-4 pt-2 bg-gray-50/50 dark:bg-white/[0.01] border-t border-black/[0.03] dark:border-white/[0.04]">
-                            {record.notes && (
-                              <>
-                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Details</p>
-                                <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{record.notes}</p>
-                              </>
-                            )}
-                            {record.final_decision && (
-                              <div className="mt-3">
-                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Final Decision</p>
-                                <p className="text-sm text-gray-700 dark:text-gray-300">{record.final_decision}</p>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-          </SectionCard>
+              <div className="flex flex-wrap gap-2 text-[11px] text-gray-500 dark:text-white/40">
+                <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-white/[0.06] px-2.5 py-1 bg-white/70 dark:bg-white/[0.03]">
+                  {accountabilitySummary.events_assigned} assigned events
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-white/[0.06] px-2.5 py-1 bg-white/70 dark:bg-white/[0.03]">
+                  {accountabilitySummary.present_count} present marks
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-white/[0.06] px-2.5 py-1 bg-white/70 dark:bg-white/[0.03]">
+                  {accountabilitySummary.pending_leave_count} pending leave requests
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-white/[0.06] px-2.5 py-1 bg-white/70 dark:bg-white/[0.03]">
+                  {accountabilitySummary.open_discipline_count} open discipline items
+                </span>
+              </div>
+            </PremiumCard>
+          </motion.section>
         )}
 
-        {/* ── Push Notifications ───────────────────── */}
-        <div className="rounded-2xl overflow-hidden bg-white dark:bg-[#1a1a1c] ring-1 ring-black/[0.05] dark:ring-white/[0.06]" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-          <div className="flex items-center gap-4 px-5 py-4">
-            <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${pushEnabled ? 'bg-brand-50 dark:bg-brand-900/30' : 'bg-gray-100 dark:bg-gray-800'}`}>
-              {pushEnabled ? <Bell className="h-5 w-5 text-brand-600 dark:text-brand-400" /> : <BellOff className="h-5 w-5 text-gray-400" />}
+        {/* ── 04 · My Discipline (non-leaders only) ─ */}
+        {!isLeader && (
+          <motion.section
+            initial={{ opacity: 0, y: 14, filter: 'blur(4px)' }}
+            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            transition={{ duration: 0.5, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <SectionLabel
+              action={openDisciplineCount > 0 ? (
+                <span className="inline-flex items-center gap-1 px-2 h-5 rounded-md bg-red-50 dark:bg-red-500/[0.18] text-red-600 dark:text-red-400 text-[10px] font-black border border-red-200 dark:border-red-500/25">
+                  {openDisciplineCount} OPEN
+                </span>
+              ) : undefined}
+            >
+              <span className="flex items-center gap-1.5"><Shield className="h-3 w-3" /> My Conduct Record</span>
+            </SectionLabel>
+
+            <PremiumCard>
+              {myDisciplineRecords.length === 0 ? (
+                <div className="px-5 py-10 text-center">
+                  <div
+                    className="relative h-12 w-12 rounded-2xl flex items-center justify-center mx-auto mb-3"
+                    style={{ background: 'linear-gradient(145deg,#16a34a,#15803d)', boxShadow: '0 3px 12px rgba(22,163,74,0.3)' }}
+                  >
+                    <CheckCircle className="h-5 w-5 text-white" />
+                  </div>
+                  <p className="text-[14px] font-bold text-gray-900 dark:text-white" style={{ letterSpacing: '-0.02em' }}>Clean record</p>
+                  <p className="text-[12px] text-gray-400 dark:text-white/30 mt-1">Keep up the great work!</p>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-start gap-2.5 px-5 py-3 bg-sky-50/60 dark:bg-sky-500/[0.06] border-b border-sky-100 dark:border-sky-500/15">
+                    <Eye className="h-3.5 w-3.5 text-sky-500 mt-0.5 shrink-0" />
+                    <p className="text-[12px] text-sky-700 dark:text-sky-300 leading-relaxed">
+                      This is your personal record. Leadership will speak with you about any open items.
+                    </p>
+                  </div>
+                  <div className="divide-y divide-black/[0.04] dark:divide-white/[0.04]">
+                    {myDisciplineRecords.map(record => {
+                      const sCfg = disciplineStatusConfig[record.status] || disciplineStatusConfig.open;
+                      const isExp = disciplineExpanded === record.id;
+                      return (
+                        <div key={record.id}>
+                          <button onClick={() => setDisciplineExpanded(isExp ? null : record.id)} className="w-full flex items-center gap-3 px-5 py-3.5 text-left hover:bg-gray-50/60 dark:hover:bg-white/[0.02] transition-colors">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[14px] font-bold text-gray-900 dark:text-white truncate" style={{ letterSpacing: '-0.015em' }}>{record.title}</p>
+                              <p className="text-[11px] font-mono text-gray-400 dark:text-white/30 mt-0.5 tracking-wide">{format(parseISO(record.created_at), 'MMM d, yyyy')}</p>
+                            </div>
+                            <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md font-bold shrink-0 ${sCfg.color}`}>
+                              <sCfg.icon className="h-3 w-3" />{sCfg.label}
+                            </span>
+                            <div className={`flex items-center justify-center w-7 h-7 rounded-xl shrink-0 transition-all ${isExp ? 'bg-gray-100 dark:bg-white/[0.06] rotate-180' : ''}`}>
+                              <ChevronDown className="h-3.5 w-3.5 text-gray-400 dark:text-white/35" />
+                            </div>
+                          </button>
+                          {isExp && (
+                            <div className="px-5 pb-4 pt-2 border-t border-black/[0.04] dark:border-white/[0.04] bg-gray-50/40 dark:bg-white/[0.01]">
+                              {record.notes && (
+                                <>
+                                  <p className="text-[10px] font-mono font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-white/35 mb-1.5">Details</p>
+                                  <p className="text-[13px] text-gray-700 dark:text-white/65 whitespace-pre-wrap leading-relaxed">{record.notes}</p>
+                                </>
+                              )}
+                              {record.final_decision && (
+                                <div className="mt-3">
+                                  <p className="text-[10px] font-mono font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-white/35 mb-1.5">Final Decision</p>
+                                  <p className="text-[13px] text-gray-700 dark:text-white/65 leading-relaxed">{record.final_decision}</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </PremiumCard>
+          </motion.section>
+        )}
+
+        {/* ── Push Notifications ──────────────────── */}
+        <motion.section
+          initial={{ opacity: 0, y: 14, filter: 'blur(4px)' }}
+          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          transition={{ duration: 0.5, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <PremiumCard className="px-5 py-4 flex items-center gap-4">
+            <div
+              className={`relative flex items-center justify-center h-10 w-10 rounded-2xl shrink-0 ${pushEnabled ? '' : 'bg-gray-100 dark:bg-white/[0.06]'}`}
+              style={pushEnabled ? { background: 'linear-gradient(145deg, #16a34a, #15803d)', boxShadow: '0 3px 10px rgba(22,163,74,0.3)' } : undefined}
+            >
+              {pushEnabled
+                ? <Bell className="h-5 w-5 text-white" />
+                : <BellOff className="h-5 w-5 text-gray-400 dark:text-white/30" />}
+              {pushEnabled && <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#0d0d0f]" style={{ boxShadow: '0 0 8px rgba(34,197,94,0.6)' }} />}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-gray-900 dark:text-white">Push Notifications</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              <p className="text-[14px] font-bold text-gray-900 dark:text-white" style={{ letterSpacing: '-0.015em' }}>Push Notifications</p>
+              <p className="text-[12px] text-gray-500 dark:text-white/45 mt-0.5">
                 {pushEnabled
                   ? 'Enabled — you will receive push notifications'
-                  : !('PushManager' in window) && isIos() && !isStandalone()
+                  : !('PushManager' in window) && isIosDevice() && !isStandalonePwa()
                     ? 'Add to Home Screen to enable'
                     : 'Tap Enable to receive notifications'}
               </p>
             </div>
-            <button onClick={togglePush} disabled={pushLoading}
-              className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ring-1 ${pushEnabled ? 'bg-gray-100 dark:bg-gray-800 ring-gray-200 dark:ring-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200' : 'bg-brand-600 ring-brand-600 text-white hover:bg-brand-700'}`}>
-              {pushLoading ? 'Processing...' : pushEnabled ? 'Disable' : 'Enable'}
+            <button
+              onClick={togglePush}
+              disabled={pushLoading}
+              className={`shrink-0 inline-flex items-center justify-center px-4 h-9 rounded-full text-[12px] font-semibold transition-all active:scale-[0.97] ${
+                pushEnabled
+                  ? 'bg-white/70 dark:bg-white/[0.04] text-gray-600 dark:text-white/55 border border-black/[0.06] dark:border-white/[0.07] hover:bg-white dark:hover:bg-white/[0.07]'
+                  : 'text-white'
+              }`}
+              style={!pushEnabled ? { background: 'linear-gradient(135deg, #16a34a, #15803d)', boxShadow: '0 4px 14px rgba(22,163,74,0.35)' } : undefined}
+            >
+              {pushLoading ? 'Processing…' : pushEnabled ? 'Disable' : 'Enable'}
             </button>
-          </div>
-        </div>
+          </PremiumCard>
+        </motion.section>
 
       </div>
     </div>

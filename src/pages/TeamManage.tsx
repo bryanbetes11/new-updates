@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { format, parseISO } from 'date-fns';
+import { motion } from 'framer-motion';
 import { Users, Shield, Search, ChevronDown, ChevronUp, Plus, X, Check, BarChart3, Crown, CreditCard as Edit3, Save, Camera, Loader2, ClipboardCheck, AlertTriangle, FileText, KeyRound } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -11,6 +12,7 @@ import { DatePicker } from '../components/DatePicker';
 import { RoleBadge, sortRolesLeadershipFirst } from '../components/RoleBadge';
 import { Avatar } from '../components/Avatar';
 import { AttendanceMonitoring } from '../components/AttendanceMonitoring';
+import { phoneHref } from '../lib/phone';
 import type { Profile, UserRole } from '../types';
 
 interface MemberWithRoles extends Profile {
@@ -25,6 +27,22 @@ interface MemberAttendanceStats {
   events_assigned: number;
   present_count: number;
   excused_count: number;
+}
+
+interface MemberAccountabilitySummary {
+  user_id: string;
+  proposal_overdue_count: number;
+  proposal_submitted_late_count: number;
+  pending_assignment_count: number;
+  approved_leave_count: number;
+  pending_leave_count: number;
+  open_discipline_count: number;
+  events_assigned: number;
+  present_count: number;
+  late_count: number;
+  absent_count: number;
+  excused_count: number;
+  offense_level: number;
 }
 
 const ministryStatusConfig: Record<string, { label: string; textColor: string; bgColor: string }> = {
@@ -47,7 +65,7 @@ interface TeamManageProps {
 }
 
 export function TeamManage({ embedded }: TeamManageProps = {}) {
-  const { roles, isLeader, canManageMembers, canManageDiscipline, user } = useAuth();
+  const { roles, isLeader, isOrgAdmin, canManageMembers, canManageDiscipline, user } = useAuth();
   const { toast } = useToast();
   const [members, setMembers] = useState<MemberWithRoles[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,7 +76,7 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
   const [stats, setStats] = useState({ total: 0, leaders: 0, events: 0 });
   const [editingMember, setEditingMember] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
-    first_name: '', second_name: '', middle_name: '', last_name: '', nickname: '', phone: '', gender: '', birthday: '', ministry_status: 'active', leadership_notes: '',
+    first_name: '', second_name: '', middle_name: '', last_name: '', nickname: '', phone: '', gender: '', birthday: '', official_join_date: '', ministry_status: 'active', leadership_notes: '',
   });
   const [saving, setSaving] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
@@ -67,8 +85,13 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
     return params.get('tab') === 'attendance' ? 'attendance' : 'members';
   });
   const [attendanceStats, setAttendanceStats] = useState<Record<string, MemberAttendanceStats>>({});
+  const [accountabilityStats, setAccountabilityStats] = useState<Record<string, MemberAccountabilitySummary>>({});
   const [resetConfirmMember, setResetConfirmMember] = useState<MemberWithRoles | null>(null);
   const [sendingReset, setSendingReset] = useState(false);
+  const [removeConfirmMember, setRemoveConfirmMember] = useState<MemberWithRoles | null>(null);
+  const [removingMember, setRemovingMember] = useState(false);
+
+  const canManageChurchMembers = canManageMembers || isOrgAdmin;
 
   const currentYear = new Date().getFullYear();
   const currentQuarter = Math.ceil((new Date().getMonth() + 1) / 3);
@@ -106,6 +129,17 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
       setAttendanceStats(statsMap);
     }
 
+    const { data: accountabilityData } = await supabase.rpc('get_team_member_accountability_summaries', {
+      p_year: currentYear,
+      p_quarter: currentQuarter,
+    });
+
+    if (accountabilityData) {
+      const accountabilityMap: Record<string, MemberAccountabilitySummary> = {};
+      (accountabilityData as MemberAccountabilitySummary[]).forEach(s => { accountabilityMap[s.user_id] = s; });
+      setAccountabilityStats(accountabilityMap);
+    }
+
     setLoading(false);
   }, [roles, currentYear, currentQuarter]);
 
@@ -137,6 +171,7 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
       phone: member.phone,
       gender: member.gender || '',
       birthday: member.birthday || '',
+      official_join_date: member.official_join_date || '',
       ministry_status: member.ministry_status || 'active',
       leadership_notes: member.leadership_notes || '',
     });
@@ -144,13 +179,27 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
   };
 
   const saveMemberEdit = async (memberId: string) => {
+    const member = members.find(m => m.id === memberId);
+    const { official_join_date, ...memberForm } = editForm;
+    const officialJoinDateChanged = official_join_date !== (member?.official_join_date || '');
+
+    const updatePayload: Record<string, string | null> = {
+      ...memberForm,
+      birthday: memberForm.birthday || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (officialJoinDateChanged) {
+      updatePayload.official_join_date = official_join_date || null;
+    }
+
     setSaving(true);
     const { error } = await supabase
       .from('profiles')
-      .update({ ...editForm, updated_at: new Date().toISOString() })
+      .update(updatePayload)
       .eq('id', memberId);
     setSaving(false);
-    if (error) { toast('error', 'Failed to save'); return; }
+    if (error) { toast('error', `Failed to save: ${error.message}`); return; }
     toast('success', 'Member updated');
     setEditingMember(null);
     fetchMembers();
@@ -178,7 +227,7 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
     if (!resetConfirmMember?.email) return;
     setSendingReset(true);
     const { error } = await supabase.auth.resetPasswordForEmail(resetConfirmMember.email, {
-      redirectTo: `${window.location.origin}/login`,
+      redirectTo: `${window.location.origin}/reset-password`,
     });
     setSendingReset(false);
     setResetConfirmMember(null);
@@ -189,6 +238,24 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
     }
   };
 
+  const removeMemberFromChurch = async () => {
+    if (!removeConfirmMember) return;
+    setRemovingMember(true);
+    const { error } = await supabase.rpc('remove_member_from_current_org', {
+      p_member_id: removeConfirmMember.id,
+    });
+    setRemovingMember(false);
+
+    if (error) {
+      toast('error', error.message || 'Failed to remove member');
+      return;
+    }
+
+    toast('success', `${removeConfirmMember.first_name || 'Member'} removed from the church`);
+    setRemoveConfirmMember(null);
+    fetchMembers();
+  };
+
   const filtered = members.filter(m => {
     if (!search) return true;
     const name = `${m.first_name} ${m.last_name} ${m.nickname} ${m.email}`.toLowerCase();
@@ -197,30 +264,62 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
 
   if (loading) return <PageLoader />;
 
-  if (!isLeader) {
+  if (!isLeader && !isOrgAdmin) {
     return (
       <div className={embedded ? 'flex items-center justify-center min-h-[40vh]' : 'page-container page-bottom-pad flex items-center justify-center min-h-[60vh]'}>
         <div className="text-center">
-          <div className="h-14 w-14 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center mx-auto mb-4">
-            <Shield className="h-7 w-7 text-gray-300 dark:text-gray-600" />
+          <div
+            className="relative h-14 w-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
+            style={{ background: 'linear-gradient(145deg, #94a3b8, #64748b)', boxShadow: '0 4px 14px rgba(100,116,139,0.25)' }}
+          >
+            <Shield className="h-6 w-6 text-white" />
           </div>
-          <h2 className="text-lg font-bold text-gray-900 dark:text-white">Access Restricted</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Only leaders can access team management.</p>
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white" style={{ letterSpacing: '-0.02em' }}>Access Restricted</h2>
+          <p className="text-sm text-gray-500 dark:text-white/45 mt-1">Only leaders can access team management.</p>
         </div>
       </div>
     );
   }
 
   const content = (
-    <div className="px-4 sm:px-5 lg:px-6 py-5 sm:py-6 space-y-5">
+    <div className={embedded ? 'space-y-5' : 'space-y-5 sm:space-y-6'}>
       {!embedded && (
-        <div className="animate-fade-in">
-          <h1 className="page-header">Team Management</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage team members and their roles</p>
-        </div>
+        <motion.div
+          initial={{ opacity: 0, y: 14, filter: 'blur(6px)' }}
+          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          className="flex items-center gap-3.5"
+        >
+          <div className="relative shrink-0">
+            <div
+              className="absolute inset-0 rounded-2xl"
+              style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.35), transparent 70%)', filter: 'blur(10px)', transform: 'scale(1.5)' }}
+            />
+            <div
+              className="relative h-11 w-11 rounded-2xl flex items-center justify-center"
+              style={{ background: 'linear-gradient(145deg, #16a34a, #15803d)', boxShadow: '0 4px 14px rgba(22,163,74,0.35)' }}
+            >
+              <Users className="h-5 w-5 text-white" />
+            </div>
+          </div>
+          <div>
+            <p className="text-[10px] font-mono font-medium uppercase tracking-[0.22em] text-emerald-600 dark:text-emerald-400/80 mb-0.5">
+              Roles & roster
+            </p>
+            <h1 className="text-[1.5rem] sm:text-[1.75rem] font-black text-gray-900 dark:text-white leading-tight" style={{ letterSpacing: '-0.03em' }}>
+              Team.
+            </h1>
+          </div>
+        </motion.div>
       )}
 
-      <div className="flex gap-1 p-1 rounded-2xl animate-slide-up" style={{ background: 'rgba(0,0,0,0.04)', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.06)' }}>
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        className="flex gap-1 p-1 rounded-2xl"
+        style={{ background: 'rgba(0,0,0,0.04)', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.06)' }}
+      >
         {(['members', 'attendance'] as const).map(tab => {
           const isActive = activeTab === tab;
           const Icon = tab === 'members' ? Users : ClipboardCheck;
@@ -229,70 +328,89 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl transition-all duration-200 ${
                 isActive
-                  ? 'bg-white dark:bg-[#232325] text-gray-900 dark:text-white shadow-sm ring-1 ring-black/[0.05] dark:ring-white/[0.08]'
-                  : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
+                  ? 'bg-white dark:bg-white/[0.06] shadow-sm ring-1 ring-black/[0.06] dark:ring-white/[0.09]'
+                  : 'hover:bg-white/50 dark:hover:bg-white/[0.04]'
               }`}
             >
-              <Icon className={`h-4 w-4 ${isActive ? 'text-brand-600 dark:text-brand-400' : ''}`} />
-              {label}
+              <Icon className={`h-3.5 w-3.5 transition-colors ${isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-500'}`} />
+              <span className={`text-[12px] font-bold transition-colors leading-none ${isActive ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-500'}`}>
+                {label}
+              </span>
               {tab === 'members' && (
-                <span className={`text-[11px] font-black px-1.5 py-0.5 rounded-lg transition-colors ${
-                  isActive ? 'bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300' : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
-                }`}>
-                  {filtered.length}
-                </span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold ${
+                  isActive
+                    ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
+                    : 'bg-black/[0.06] dark:bg-white/[0.08] text-gray-500 dark:text-white/35'
+                }`}>{filtered.length}</span>
               )}
             </button>
           );
         })}
-      </div>
+      </motion.div>
 
       {activeTab === 'attendance' ? (
         <AttendanceMonitoring />
       ) : (
         <>
-          <div className="grid grid-cols-3 gap-3 animate-slide-up" style={{ animationDelay: '50ms', animationFillMode: 'both' }}>
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+            className="grid grid-cols-3 gap-3"
+          >
             {[
-              { label: 'Members', value: stats.total, icon: Users, iconColor: 'text-brand-600 dark:text-brand-400', iconBg: 'bg-brand-50 dark:bg-brand-900/30' },
-              { label: 'Leaders', value: stats.leaders, icon: Shield, iconColor: 'text-teal-600 dark:text-teal-400', iconBg: 'bg-teal-50 dark:bg-teal-900/30' },
-              { label: 'Events', value: stats.events, icon: BarChart3, iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-50 dark:bg-amber-900/30' },
+              { label: 'Members', value: stats.total, icon: Users, dot: '#22c55e', dotDark: '#22c55e', tone: 'bg-emerald-50 dark:bg-emerald-500/[0.10] text-emerald-600 dark:text-emerald-400' },
+              { label: 'Leaders', value: stats.leaders, icon: Shield, dot: '#0d9488', dotDark: '#2dd4bf', tone: 'bg-teal-50 dark:bg-teal-500/[0.10] text-teal-600 dark:text-teal-400' },
+              { label: 'Events', value: stats.events, icon: BarChart3, dot: '#f59e0b', dotDark: '#fbbf24', tone: 'bg-amber-50 dark:bg-amber-500/[0.10] text-amber-600 dark:text-amber-400' },
             ].map(s => (
-              <div key={s.label} className="rounded-2xl bg-white dark:bg-[#1a1a1c] ring-1 ring-black/[0.05] dark:ring-white/[0.06] p-4" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-                <div className={`inline-flex items-center justify-center h-8 w-8 rounded-xl mb-2.5 ${s.iconBg}`}>
-                  <s.icon className={`h-4 w-4 ${s.iconColor}`} />
+              <div key={s.label} className="relative rounded-3xl p-4 bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 4px 14px -8px rgba(15,23,42,0.08)' }}>
+                <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.05] dark:via-white/[0.08] to-transparent" />
+                <div className={`inline-flex items-center justify-center h-9 w-9 rounded-2xl mb-3 ${s.tone}`}>
+                  <s.icon className="h-4 w-4" />
                 </div>
-                <p className="text-2xl font-black text-gray-900 dark:text-white leading-none">{s.value}</p>
-                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 font-medium">{s.label}</p>
+                <p className="text-[26px] font-black text-gray-900 dark:text-white leading-none tabular-nums" style={{ letterSpacing: '-0.04em' }}>{s.value}</p>
+                <p className="text-[11px] text-gray-500 dark:text-white/45 mt-2 font-medium">{s.label}</p>
               </div>
             ))}
-          </div>
+          </motion.div>
 
-          <div className="relative animate-slide-up" style={{ animationDelay: '100ms', animationFillMode: 'both' }}>
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.05, ease: [0.16, 1, 0.3, 1] }}
+            className="relative"
+          >
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
             <input
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search members by name or email..."
-              className="input-field pl-10"
+              placeholder="Search members by name or email…"
+              className="w-full h-10 pl-10 pr-9 rounded-2xl text-[13px] bg-white dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.08] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/30 outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 dark:focus:border-emerald-500/50 transition-all"
             />
-          </div>
+            {search && (
+              <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </motion.div>
 
-          <div className="space-y-2 animate-slide-up" style={{ animationDelay: '150ms', animationFillMode: 'both' }}>
+          <div className="space-y-2.5">
             {filtered.length === 0 && (
-              <div className="rounded-2xl bg-white dark:bg-[#1a1a1c] ring-1 ring-black/[0.05] dark:ring-white/[0.06] p-12 text-center" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-                <div className="h-14 w-14 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center mx-auto mb-4">
-                  <Users className="h-7 w-7 text-gray-300 dark:text-gray-600" />
+              <div className="rounded-3xl bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] p-12 text-center" style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -12px rgba(15,23,42,0.10)' }}>
+                <div className="relative h-14 w-14 rounded-2xl bg-gray-100 dark:bg-white/[0.06] flex items-center justify-center mx-auto mb-4">
+                  <Users className="h-6 w-6 text-gray-400 dark:text-white/30" />
                 </div>
-                <p className="text-sm font-semibold text-gray-500 dark:text-gray-400">No members match your search</p>
+                <p className="text-sm font-bold text-gray-900 dark:text-white" style={{ letterSpacing: '-0.02em' }}>No members match your search</p>
               </div>
             )}
             {filtered.map((member, idx) => {
               const memberRoles = sortRolesLeadershipFirst(member.user_roles || []);
               const isExpanded = expanded === member.id;
               const mStats = attendanceStats[member.id];
+              const accountability = accountabilityStats[member.id];
               const hasStats = mStats && mStats.events_assigned > 0;
               const attendanceRate = hasStats ? Math.round(((mStats.present_count + mStats.late_count) / mStats.events_assigned) * 100) : null;
               const offLevel = mStats?.offense_level ?? 0;
@@ -303,12 +421,13 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
               return (
                 <div
                   key={member.id}
-                  className="rounded-2xl overflow-hidden bg-white dark:bg-[#1a1a1c] ring-1 ring-black/[0.05] dark:ring-white/[0.06] transition-all duration-200"
-                  style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.04)', animationDelay: `${idx * 20}ms`, animationFillMode: 'both' }}
+                  className="relative rounded-3xl overflow-hidden bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] transition-all duration-200"
+                  style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -12px rgba(15,23,42,0.10)', animationDelay: `${idx * 20}ms`, animationFillMode: 'both' }}
                 >
+                  <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.12] to-transparent" />
                   <button
                     onClick={() => setExpanded(isExpanded ? null : member.id)}
-                    className="w-full flex items-center gap-3.5 px-4 py-3.5 text-left hover:bg-gray-50/60 dark:hover:bg-white/[0.02] transition-colors"
+                    className="relative w-full flex items-center gap-3.5 px-5 py-4 text-left hover:bg-gray-50/60 dark:hover:bg-white/[0.02] transition-colors"
                   >
                     <Avatar
                       src={member.avatar_url}
@@ -364,7 +483,7 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
 
                   {isExpanded && (
                     <div className="border-t border-black/[0.04] dark:border-white/[0.05] px-4 py-4">
-                      {canManageMembers && editingMember === member.id ? (
+                      {canManageChurchMembers && editingMember === member.id ? (
                         <div className="space-y-4">
                           <div className="flex items-center gap-4 mb-2">
                             <div className="relative group">
@@ -400,7 +519,7 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                                       : 'bg-white dark:bg-gray-800 ring-gray-200 dark:ring-gray-700 text-gray-500 dark:text-gray-400 hover:ring-gray-300'
                                   }`}
                                 >
-                                  {g === 'male' ? 'Brother' : 'Sister'}
+                                  {g === 'male' ? 'Male' : 'Female'}
                                 </button>
                               ))}
                             </div>
@@ -433,9 +552,15 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                             </div>
                           </div>
 
-                          <div>
-                            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5 uppercase tracking-wide">Birthday</label>
-                            <DatePicker value={editForm.birthday} onChange={v => setEditForm({ ...editForm, birthday: v })} placeholder="Select birthday" />
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5 uppercase tracking-wide">Birthday</label>
+                              <DatePicker value={editForm.birthday} onChange={v => setEditForm({ ...editForm, birthday: v })} placeholder="Select birthday" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5 uppercase tracking-wide">Official Join Date</label>
+                              <DatePicker value={editForm.official_join_date} onChange={v => setEditForm({ ...editForm, official_join_date: v })} placeholder="Select join date" />
+                            </div>
                           </div>
 
                           <div>
@@ -473,20 +598,30 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                         <>
                           <div className="space-y-3 mb-4">
                             <div className="flex items-start justify-between gap-2">
-                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-1">
+                              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 flex-1">
                                 {[
                                   { label: 'Email', value: member.email || '--' },
-                                  { label: 'Phone', value: member.phone || '--' },
-                                  { label: 'Birthday', value: member.birthday ? format(parseISO(member.birthday), 'MMM d') : '--' },
+                                  { label: 'Phone', value: member.phone || '--', href: phoneHref(member.phone) },
+                                  { label: 'Birthday', value: member.birthday ? format(parseISO(member.birthday), 'MMM d, yyyy') : '--' },
+                                  { label: 'Joined', value: format(parseISO(member.official_join_date || member.created_at), 'MMM d, yyyy') },
                                   { label: 'Status', value: statusCfg.label, color: statusCfg.textColor },
                                 ].map(item => (
                                   <div key={item.label}>
                                     <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-0.5">{item.label}</p>
-                                    <p className={`text-xs font-semibold ${item.color || 'text-gray-800 dark:text-gray-200'} truncate`}>{item.value}</p>
+                                    {item.href ? (
+                                      <a
+                                        href={item.href}
+                                        className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 hover:underline truncate block"
+                                      >
+                                        {item.value}
+                                      </a>
+                                    ) : (
+                                      <p className={`text-xs font-semibold ${item.color || 'text-gray-800 dark:text-gray-200'} truncate`}>{item.value}</p>
+                                    )}
                                   </div>
                                 ))}
                               </div>
-                              {canManageMembers && (
+                              {canManageChurchMembers && (
                                 <div className="flex items-center gap-1.5 shrink-0">
                                   <button onClick={() => startEditing(member)} className="btn-ghost text-xs">
                                     <Edit3 className="h-3.5 w-3.5" /> Edit
@@ -499,6 +634,14 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                                   >
                                     <KeyRound className="h-3.5 w-3.5" /> Reset
                                   </button>
+                                  {member.id !== user?.id && (
+                                    <button
+                                      onClick={() => setRemoveConfirmMember(member)}
+                                      className="btn-ghost text-xs text-red-600 dark:text-red-400"
+                                    >
+                                      <X className="h-3.5 w-3.5" /> Remove
+                                    </button>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -529,6 +672,36 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                               </div>
                             )}
 
+                            {accountability && (
+                              <div className="rounded-xl bg-gray-50 dark:bg-white/[0.03] ring-1 ring-black/[0.04] dark:ring-white/[0.05] p-3">
+                                <div className="flex items-center justify-between gap-3 mb-2.5">
+                                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-wide">Member Accountability</p>
+                                  {accountability.open_discipline_count > 0 && (
+                                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-300">
+                                      {accountability.open_discipline_count} open
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                                  {[
+                                    { label: 'Overdue Proposals', value: accountability.proposal_overdue_count, color: accountability.proposal_overdue_count > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-300' },
+                                    { label: 'Late Proposal Submits', value: accountability.proposal_submitted_late_count, color: accountability.proposal_submitted_late_count > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-700 dark:text-gray-300' },
+                                    { label: 'Pending Assignments', value: accountability.pending_assignment_count, color: accountability.pending_assignment_count > 0 ? 'text-violet-600 dark:text-violet-400' : 'text-gray-700 dark:text-gray-300' },
+                                    { label: 'Approved Leaves', value: accountability.approved_leave_count, color: accountability.approved_leave_count > 0 ? 'text-sky-600 dark:text-sky-400' : 'text-gray-700 dark:text-gray-300' },
+                                    { label: 'Pending Leaves', value: accountability.pending_leave_count, color: accountability.pending_leave_count > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-700 dark:text-gray-300' },
+                                    { label: 'Excused', value: accountability.excused_count, color: accountability.excused_count > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300' },
+                                    { label: 'Late / Absent', value: `${accountability.late_count} / ${accountability.absent_count}`, color: accountability.late_count + accountability.absent_count > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-300' },
+                                    { label: 'Offense Level', value: accountability.offense_level, color: accountability.offense_level > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400' },
+                                  ].map(item => (
+                                    <div key={item.label} className="rounded-lg bg-white/80 dark:bg-white/[0.03] ring-1 ring-black/[0.04] dark:ring-white/[0.05] px-3 py-2.5">
+                                      <p className={`text-sm font-black ${item.color}`}>{item.value}</p>
+                                      <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{item.label}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
                             {member.leadership_notes && (
                               <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 ring-1 ring-amber-200/60 dark:ring-amber-800/40">
                                 <p className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-wide mb-1 flex items-center gap-1">
@@ -542,7 +715,7 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                           <div>
                             <div className="flex items-center justify-between mb-2">
                               <p className="text-[10px] font-black text-gray-400 uppercase tracking-wide">Roles</p>
-                              {canManageMembers && (
+                              {canManageChurchMembers && (
                                 <button
                                   onClick={() => { setShowRoleModal(member.id); setSelectedRole(''); }}
                                   className="btn-ghost text-xs py-1"
@@ -563,7 +736,7 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                                 >
                                   {ur.roles.is_leadership && <Crown className="h-3 w-3" />}
                                   {ur.roles.name}
-                                  {member.id !== user?.id && canManageMembers && (
+                                  {member.id !== user?.id && canManageChurchMembers && (
                                     <button onClick={() => removeRole(ur.id)} className="hover:text-red-500 transition-colors ml-0.5">
                                       <X className="h-3 w-3" />
                                     </button>
@@ -629,6 +802,30 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
               </div>
             </div>
           </Modal>
+
+          <Modal open={!!removeConfirmMember} onClose={() => !removingMember && setRemoveConfirmMember(null)} title="Remove Team Member" size="sm">
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Remove this member from your church team. Their login account will stay intact, but they will lose access to this church and all church roles.
+              </p>
+              <div className="rounded-xl bg-gray-50 dark:bg-white/[0.04] ring-1 ring-black/[0.05] dark:ring-white/[0.06] px-4 py-3">
+                <p className="text-sm font-bold text-gray-900 dark:text-white">
+                  {removeConfirmMember?.first_name} {removeConfirmMember?.last_name}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{removeConfirmMember?.email}</p>
+              </div>
+              <p className="text-xs text-red-500 dark:text-red-300">
+                This does not delete the account permanently. It only detaches the member from your church.
+              </p>
+              <div className="flex justify-end gap-3">
+                <button onClick={() => setRemoveConfirmMember(null)} disabled={removingMember} className="btn-secondary">Cancel</button>
+                <button onClick={removeMemberFromChurch} disabled={removingMember} className="btn-primary bg-red-600 hover:bg-red-500">
+                  {removingMember ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+                  {removingMember ? 'Removing...' : 'Remove Member'}
+                </button>
+              </div>
+            </div>
+          </Modal>
         </>
       )}
     </div>
@@ -638,7 +835,9 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
 
   return (
     <div className="page-container page-bottom-pad">
-      {content}
+      <div className="max-w-5xl mx-auto px-1 sm:px-2 pt-6 sm:pt-8">
+        {content}
+      </div>
     </div>
   );
 }

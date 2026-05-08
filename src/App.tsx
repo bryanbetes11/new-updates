@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
@@ -6,6 +7,9 @@ import { Layout } from './components/Layout';
 import { Landing } from './pages/Landing';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
+import { InviteAccept } from './pages/InviteAccept';
+import { CreateChurch } from './pages/CreateChurch';
+import { PlatformPortal } from './pages/PlatformPortal';
 import { Onboarding } from './pages/Onboarding';
 import { Dashboard } from './pages/Dashboard';
 import { Events } from './pages/Events';
@@ -24,20 +28,41 @@ import { UnavailableMembers } from './pages/UnavailableMembers';
 import { Discipline } from './pages/Discipline';
 import { LeaderDashboard } from './pages/LeaderDashboard';
 import { LeadershipWorkspace } from './pages/leadership/LeadershipWorkspace';
+import { ChangePassword } from './pages/ChangePassword';
+import { ResetPassword } from './pages/ResetPassword';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { isPasswordRecoveryUrl, recoveryRedirectPath } from './lib/authRedirect';
+
+function PasswordRecoveryRedirect() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (location.pathname === '/reset-password') return;
+    if (!isPasswordRecoveryUrl(location.search, location.hash)) return;
+    navigate(recoveryRedirectPath(location.search, location.hash), { replace: true });
+  }, [location.hash, location.pathname, location.search, navigate]);
+
+  return null;
+}
 
 export default function App() {
   return (
     <BrowserRouter>
+      <PasswordRecoveryRedirect />
       <ThemeProvider>
         <AuthProvider>
           <ToastProvider>
             <Routes>
+              <Route path="/platform" element={<PlatformPortal />} />
               <Route element={<Layout />}>
                 <Route path="/" element={<Navigate to="/login" replace />} />
-                <Route path="/landing" element={<Landing />} />
+                <Route path="/landing" element={<Navigate to="/login" replace />} />
                 <Route path="/login" element={<Login />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/register" element={<Register />} />
+                <Route path="/invite/:token" element={<InviteAccept />} />
+                <Route path="/create-church" element={<CreateChurch />} />
                 <Route element={<ProtectedRoute />}>
                   <Route path="/onboarding" element={<Onboarding />} />
                   <Route path="/dashboard" element={<Dashboard />} />
@@ -49,6 +74,7 @@ export default function App() {
                   <Route path="/my-assignments" element={<MyAssignments />} />
                   <Route path="/unavailable-members" element={<UnavailableMembers />} />
                   <Route path="/profile" element={<Profile />} />
+                  <Route path="/change-password" element={<ChangePassword />} />
                   <Route path="/request-leave" element={<RequestLeave />} />
                   <Route path="/notifications" element={<Notifications />} />
                   <Route path="/more" element={<More />} />

@@ -8,6 +8,12 @@ import { NotificationBell } from './NotificationBell';
 import { ThemeToggle } from './ThemeToggle';
 import { Avatar } from './Avatar';
 import {
+  MOBILE_NAV_STYLE_CHANGE_EVENT,
+  fetchMobileNavStylePreference,
+  getStoredMobileNavStyle,
+  type MobileNavStyle,
+} from '../lib/mobileNavPreference';
+import {
   HomeIcon, CalendarIcon, NewsIcon, MediaIcon, MoreIcon,
   LeaveIcon, ShieldNavIcon,
 } from './NavIcons';
@@ -95,18 +101,19 @@ interface NavigationProps {
 export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpen, onMobileOpenChange }: NavigationProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isLeader, canApproveLeave, canManageDiscipline, profile, signOut } = useAuth();
+  const { isLeader, isOrgAdmin, canApproveLeave, canManageDiscipline, profile, signOut } = useAuth();
   const unread = useUnreadCounts();
 
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 });
   const [mounted, setMounted] = useState(false);
+  const [mobileNavStyle, setMobileNavStyle] = useState<MobileNavStyle>(getStoredMobileNavStyle);
 
   const isActive = useCallback((item: NavItem) => {
     if (item.path === '/more') {
       return ['/more', '/profile', '/notifications'].some(p => location.pathname.startsWith(p));
     }
-    if (item.path === '/leadership/overview') {
+    if (item.path === '/leadership/overview' || item.path === '/leadership/church') {
       return location.pathname.startsWith('/leadership');
     }
     if (item.exact) return location.pathname === item.path;
@@ -131,6 +138,27 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
     return () => clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    const handleStyleChange = () => setMobileNavStyle(getStoredMobileNavStyle());
+    window.addEventListener(MOBILE_NAV_STYLE_CHANGE_EVENT, handleStyleChange as EventListener);
+    window.addEventListener('storage', handleStyleChange);
+    return () => {
+      window.removeEventListener(MOBILE_NAV_STYLE_CHANGE_EVENT, handleStyleChange as EventListener);
+      window.removeEventListener('storage', handleStyleChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!profile?.id) return;
+
+    let cancelled = false;
+    fetchMobileNavStylePreference(profile.id).then((style) => {
+      if (!cancelled && style) setMobileNavStyle(style);
+    });
+
+    return () => { cancelled = true; };
+  }, [profile?.id]);
+
   useEffect(() => { if (mounted) updateIndicator(); }, [location.pathname, mounted, updateIndicator]);
   useEffect(() => {
     window.addEventListener('resize', updateIndicator);
@@ -147,13 +175,14 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
 
   const sidebarManagementItems: NavItem[] = [
     { path: '/request-leave', label: 'Request Leave', icon: LeaveIcon },
-    ...(isLeader || canApproveLeave || canManageDiscipline
-      ? [{ path: '/leadership/overview', label: 'Leadership', icon: ShieldNavIcon, badgeKey: 'pendingLeave' as const, badgeColor: 'amber' as const }]
+    ...(isLeader || isOrgAdmin || canApproveLeave || canManageDiscipline
+      ? [{ path: isOrgAdmin && !isLeader ? '/leadership/church' : '/leadership/overview', label: isOrgAdmin && !isLeader ? 'Church' : 'Leadership', icon: ShieldNavIcon, badgeKey: 'pendingLeave' as const, badgeColor: 'amber' as const }]
       : []),
   ];
 
   const displayName = profile?.nickname || profile?.first_name || '';
   const fullName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim();
+  const useDockedMobileNav = mobileNavStyle === 'docked';
 
   const sidebarWidth = collapsed ? 72 : 256;
 
@@ -202,25 +231,35 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
       <button
         key={item.path}
         onClick={() => handleNav(item.path)}
-        className={`relative group flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-[13px] font-medium transition-all duration-150 ${
+        className={`relative group flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] transition-all duration-200 ${
           active
-            ? 'text-brand-600 dark:text-brand-400'
-            : 'text-gray-600 dark:text-gray-400 hover:bg-black/[0.04] dark:hover:bg-white/[0.05] hover:text-gray-900 dark:hover:text-gray-100 hover:-translate-y-0.5'
+            ? 'text-gray-900 dark:text-white font-semibold'
+            : 'text-gray-500 dark:text-gray-400 font-medium hover:bg-black/[0.035] dark:hover:bg-white/[0.04] hover:text-gray-900 dark:hover:text-gray-100'
         }`}
       >
         {active && (
           <motion.div
             layoutId="activeNavBg"
-            className="absolute inset-0 rounded-xl bg-brand-600/10 dark:bg-brand-400/10"
+            className="absolute inset-0 rounded-xl border border-emerald-500/20 dark:border-emerald-400/20"
+            style={{
+              background: 'linear-gradient(180deg, rgba(16,185,129,0.10) 0%, rgba(16,185,129,0.04) 100%)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.4), 0 1px 2px rgba(16,185,129,0.06)',
+            }}
             transition={{ type: 'spring', stiffness: 400, damping: 35 }}
+          />
+        )}
+        {active && (
+          <span
+            className="absolute left-1.5 top-1/2 -translate-y-1/2 h-4 w-[2px] rounded-full bg-emerald-500 dark:bg-emerald-400"
+            style={{ boxShadow: '0 0 6px rgba(16,185,129,0.6)' }}
           />
         )}
         <Icon
           active={active}
-          className="relative shrink-0 h-[17px] w-[17px]"
+          className={`relative shrink-0 h-[17px] w-[17px] transition-colors ${active ? 'text-emerald-600 dark:text-emerald-400' : ''}`}
           style={{ width: '17px', height: '17px', strokeWidth: 2 }}
         />
-        <span className="relative flex-1 text-left truncate">{item.label}</span>
+        <span className="relative flex-1 text-left truncate" style={{ letterSpacing: '-0.01em' }}>{item.label}</span>
         {badge > 0 && <SidebarBadge count={badge} color={item.badgeColor} />}
       </button>
     );
@@ -248,7 +287,7 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
           >
             <Music2 className="text-emerald-400" style={{ width: '14px', height: '14px' }} />
           </div>
-          <span className="text-[13px] font-bold text-gray-900 dark:text-white tracking-tight">MCJC Worship</span>
+          <span className="text-[13px] font-bold text-gray-900 dark:text-white tracking-tight">ServeSync</span>
         </div>
 
         <div className="flex items-center gap-1">
@@ -289,7 +328,7 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
             }}
           >
             {/* Mobile sidebar header */}
-            <div className="h-14 flex items-center gap-2.5 px-4 shrink-0" style={{ borderBottom: '1px solid var(--sidebar-border)' }}>
+            <div className="h-14 flex items-center gap-2.5 px-4 shrink-0">
               <div
                 className="h-8 w-8 rounded-[22%] flex items-center justify-center shrink-0"
                 style={{ background: 'linear-gradient(145deg, #1e2a1e 0%, #0d1a0d 100%)', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }}
@@ -297,28 +336,26 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
                 <Music2 className="text-emerald-400" style={{ width: '16px', height: '16px' }} />
               </div>
               <div>
-                <p className="text-[13px] font-semibold text-gray-900 dark:text-white leading-tight">MCJC Worship</p>
+                <p className="text-[13px] font-semibold text-gray-900 dark:text-white leading-tight">ServeSync</p>
                 <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight">Team Management</p>
               </div>
             </div>
 
             {/* Mobile nav items */}
-            <div className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
-              <p className="section-label px-2 pb-1.5 pt-0.5">Main</p>
+            <div className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
+              <p className="px-3 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 dark:text-gray-500">Main</p>
               {sidebarMainItems.map(item => renderNavItem(item, false))}
 
               {sidebarManagementItems.length > 0 && (
                 <>
-                  <div className="pt-4 pb-1.5">
-                    <p className="section-label px-2">Management</p>
-                  </div>
+                  <p className="px-3 pt-5 pb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 dark:text-gray-500">Management</p>
                   {sidebarManagementItems.map(item => renderNavItem(item, false))}
                 </>
               )}
             </div>
 
             {/* Mobile footer */}
-            <div className="shrink-0 px-2 pt-2 pb-2 space-y-1.5" style={{ borderTop: '1px solid var(--sidebar-border)' }}>
+            <div className="shrink-0 px-2 pt-2 pb-2 space-y-1.5">
               <button
                 onClick={() => handleNav('/profile')}
                 className="flex items-center gap-2.5 w-full px-3 py-2 rounded-xl hover:bg-black/[0.04] dark:hover:bg-white/[0.05] transition-colors"
@@ -362,7 +399,6 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
           {/* Brand header */}
           <div
             className={`h-[58px] flex shrink-0 ${collapsed ? 'flex-col items-center justify-center gap-1.5 py-3 px-2' : 'flex-row items-center gap-2.5 px-3.5'}`}
-            style={{ borderBottom: '1px solid var(--sidebar-border)' }}
           >
             <div
               className="shrink-0 rounded-[22%] flex items-center justify-center"
@@ -383,7 +419,7 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
                 transition={{ duration: 0.15, delay: 0.05 }}
                 className="flex-1 min-w-0"
               >
-                <p className="text-[13px] font-semibold text-gray-900 dark:text-white leading-tight truncate">MCJC Worship</p>
+                <p className="text-[13px] font-semibold text-gray-900 dark:text-white leading-tight truncate">ServeSync</p>
                 <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight mt-px truncate">Team Management</p>
               </motion.div>
             )}
@@ -408,8 +444,10 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
           </div>
 
           {/* Main nav */}
-          <div className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5 scrollbar-thin">
-            {!collapsed && <p className="section-label px-2 pb-1.5 pt-0.5">Main</p>}
+          <div className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5 scrollbar-thin">
+            {!collapsed && (
+              <p className="px-3 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 dark:text-gray-500">Main</p>
+            )}
             {collapsed && <div className="pt-1" />}
 
             {sidebarMainItems.map(item => renderNavItem(item, collapsed))}
@@ -417,9 +455,7 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
             {sidebarManagementItems.length > 0 && (
               <>
                 {!collapsed && (
-                  <div className="pt-4 pb-1.5">
-                    <p className="section-label px-2">Management</p>
-                  </div>
+                  <p className="px-3 pt-5 pb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 dark:text-gray-500">Management</p>
                 )}
                 {collapsed && <div className="h-3" />}
                 {sidebarManagementItems.map(item => renderNavItem(item, collapsed))}
@@ -428,7 +464,7 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
           </div>
 
           {/* Footer / user profile */}
-          <div className="shrink-0 px-2 pt-2 pb-2 space-y-1.5" style={{ borderTop: '1px solid var(--sidebar-border)' }}>
+          <div className="shrink-0 px-2 pt-2 pb-2 space-y-1.5">
             {!collapsed ? (
               <>
                 <div className="flex items-center gap-1 px-1 pb-0.5">
@@ -495,40 +531,40 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
       {/* ── Mobile bottom nav ── */}
       {!hideMobile && (
         <div
-          className="fixed bottom-0 left-0 right-0 z-50 lg:hidden"
-          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 4px)', paddingTop: '6px' }}
+          className={`fixed bottom-0 left-0 right-0 z-50 lg:hidden ${useDockedMobileNav ? 'pointer-events-auto' : 'pointer-events-none'}`}
+          style={{
+            paddingBottom: useDockedMobileNav ? '0px' : 'calc(env(safe-area-inset-bottom) + 12px)',
+            paddingTop: useDockedMobileNav ? '0px' : '6px',
+            background: useDockedMobileNav ? 'var(--sidebar-bg)' : undefined,
+            WebkitBackdropFilter: useDockedMobileNav ? 'blur(28px) saturate(180%)' : undefined,
+            backdropFilter: useDockedMobileNav ? 'blur(28px) saturate(180%)' : undefined,
+            borderTop: useDockedMobileNav ? '1px solid var(--sidebar-border)' : undefined,
+            boxShadow: useDockedMobileNav ? '0 -10px 26px -24px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.04)' : undefined,
+          }}
         >
-          <div
-            className="absolute inset-x-0 bottom-0 pointer-events-none"
-            style={{
-              height: 'calc(100% + 48px)',
-              top: '-48px',
-              WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 40%)',
-              maskImage: 'linear-gradient(to bottom, transparent 0%, black 40%)',
-              WebkitBackdropFilter: 'blur(16px)',
-              backdropFilter: 'blur(16px)',
-            }}
-          />
-          <div className="flex justify-center px-4 sm:px-6">
+          <div className={`flex ${useDockedMobileNav ? 'justify-stretch px-0' : 'justify-center px-4'}`}>
             <nav
-              className="relative flex items-center w-full max-w-md p-1 rounded-full overflow-hidden"
+              className={`pointer-events-auto relative flex items-center w-full overflow-hidden ${useDockedMobileNav ? 'h-[68px] px-2' : 'p-1.5 rounded-full'}`}
               style={{
-                background: 'var(--nav-bg)',
-                WebkitBackdropFilter: 'blur(12px)',
-                backdropFilter: 'blur(12px)',
-                border: '1px solid var(--nav-border)',
-                boxShadow: '0 8px 32px -4px rgba(0,0,0,0.18), 0 2px 8px -2px rgba(0,0,0,0.12)',
+                background: useDockedMobileNav ? 'var(--sidebar-bg)' : 'var(--nav-bg)',
+                WebkitBackdropFilter: useDockedMobileNav ? undefined : 'blur(28px) saturate(180%)',
+                backdropFilter: useDockedMobileNav ? undefined : 'blur(28px) saturate(180%)',
+                border: useDockedMobileNav ? undefined : '1px solid var(--nav-border)',
+                boxShadow: useDockedMobileNav
+                  ? 'none'
+                  : '0 12px 36px -8px rgba(0,0,0,0.22), 0 2px 8px -2px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.06)',
+                paddingBottom: useDockedMobileNav ? 'env(safe-area-inset-bottom)' : undefined,
               }}
             >
-              {mounted && (
+              {mounted && !useDockedMobileNav && (
                 <div
-                  className="absolute top-1 bottom-1 rounded-full pointer-events-none"
+                  className="absolute top-1.5 bottom-1.5 rounded-full pointer-events-none"
                   style={{
                     left: indicatorStyle.left,
                     width: indicatorStyle.width,
                     background: 'var(--nav-indicator)',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.07)',
-                    transition: 'left 320ms cubic-bezier(0.22,1,0.36,1), width 320ms cubic-bezier(0.22,1,0.36,1)',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.02)',
+                    transition: 'left 360ms cubic-bezier(0.22,1,0.36,1), width 360ms cubic-bezier(0.22,1,0.36,1)',
                   }}
                 />
               )}
@@ -542,9 +578,15 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
                     key={item.path}
                     ref={el => { itemRefs.current[idx] = el; }}
                     onClick={() => navigate(item.path)}
-                    className="relative flex flex-1 items-center justify-center h-12 min-w-[44px]"
+                    className={`relative flex flex-1 items-center justify-center min-w-[44px] ${useDockedMobileNav ? 'h-[52px]' : 'h-12'}`}
                     style={{ WebkitTapHighlightColor: 'transparent' }}
                   >
+                    {useDockedMobileNav && active && (
+                      <span
+                        className="absolute left-1/2 top-0 h-[3px] w-8 -translate-x-1/2 rounded-b-full bg-brand-600 dark:bg-brand-400"
+                        style={{ boxShadow: '0 0 10px rgba(16,185,129,0.28)' }}
+                      />
+                    )}
                     <div className="relative">
                       <Icon
                         active={active}

@@ -1,9 +1,10 @@
 import { useEffect, useState, useRef } from 'react';
 import { format, parseISO, differenceInDays } from 'date-fns';
+import { motion } from 'framer-motion';
 import {
   Music, Upload, CheckCircle, AlertTriangle, Calendar, Search,
-  ChevronDown, ChevronUp, Trash2, Square, CheckSquare, X,
-  ListMusic, Clock, Music2, ArrowUpDown,
+  ChevronDown, Trash2, Square, CheckSquare, X,
+  ListMusic, Clock, Music2, ArrowUpDown, BarChart2,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -48,37 +49,62 @@ const normalizeSongTitle = (title: string): string => {
 
 type SortKey = 'date_desc' | 'date_asc' | 'songs_desc';
 
-function StatPill({ label, value, color = 'default', onClick, active }: { label: string; value: number | string; color?: 'default' | 'green' | 'red' | 'amber'; onClick?: () => void; active?: boolean }) {
-  const colors = {
-    default: 'bg-white dark:bg-[#1c1b1e] text-gray-900 dark:text-white',
-    green: 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400',
-    red: 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400',
-    amber: 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400',
-  };
-  const activeRing = {
-    default: 'ring-2 ring-gray-400 dark:ring-gray-400',
-    green: 'ring-2 ring-green-500 dark:ring-green-400',
-    red: 'ring-2 ring-red-500 dark:ring-red-400',
-    amber: 'ring-2 ring-amber-500 dark:ring-amber-400',
-  };
+const containerVariants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.04 } },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 10, filter: 'blur(4px)' },
+  show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] } },
+};
+
+/* ── Stat Card (matches Dashboard's vertical premium pill) ──────── */
+function StatCard({ label, value, color = 'default', onClick, active }: { label: string; value: number | string; color?: 'default' | 'green' | 'red' | 'amber'; onClick?: () => void; active?: boolean }) {
+  const tone = {
+    default: { val: 'text-gray-900 dark:text-white', dot: 'rgba(107,114,128,0.7)', dotDark: 'rgba(255,255,255,0.45)', ring: 'ring-black/[0.06] dark:ring-white/[0.08]', activeRing: 'ring-gray-400 dark:ring-gray-300' },
+    green:   { val: 'text-emerald-700 dark:text-emerald-300', dot: '#22c55e', dotDark: '#22c55e', ring: 'ring-emerald-200/80 dark:ring-emerald-500/20', activeRing: 'ring-emerald-500 dark:ring-emerald-400' },
+    red:     { val: 'text-red-700 dark:text-red-300', dot: '#ef4444', dotDark: '#f87171', ring: 'ring-red-200/80 dark:ring-red-500/20', activeRing: 'ring-red-500 dark:ring-red-400' },
+    amber:   { val: 'text-amber-700 dark:text-amber-300', dot: '#f59e0b', dotDark: '#fbbf24', ring: 'ring-amber-200/80 dark:ring-amber-500/20', activeRing: 'ring-amber-500 dark:ring-amber-400' },
+  }[color];
+
   const Tag = onClick ? 'button' : 'div';
   return (
     <Tag
       {...(onClick ? { type: 'button', onClick } : {})}
-      className={`flex flex-col items-center gap-0.5 px-3 py-3 rounded-2xl ${active ? activeRing[color] : 'ring-1 ring-black/[0.06] dark:ring-white/[0.07]'} ${colors[color]} ${onClick ? 'cursor-pointer hover:opacity-80 active:scale-[0.97] transition-all' : ''}`}
-      style={{ boxShadow: active ? undefined : '0 1px 3px rgba(0,0,0,0.04)' }}
+      className={`group relative flex flex-col items-start gap-1 px-3.5 py-3 rounded-2xl bg-white dark:bg-white/[0.025] ring-1 transition-all ${
+        active ? `ring-2 ${tone.activeRing}` : `${tone.ring} hover:bg-white dark:hover:bg-white/[0.04]`
+      } ${onClick ? 'cursor-pointer active:scale-[0.97]' : ''}`}
+      style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 4px 14px -10px rgba(15,23,42,0.10)' }}
     >
-      <span className="text-[22px] font-black leading-none tabular-nums" style={{ letterSpacing: '-0.04em' }}>{value}</span>
-      <span className="text-[9px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-[0.07em] leading-none text-center">{label}</span>
+      <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.05] dark:via-white/[0.08] to-transparent" />
+      <div className="flex items-center gap-1.5">
+        <span className="h-1.5 w-1.5 rounded-full dark:hidden" style={{ background: tone.dot, boxShadow: `0 0 6px ${tone.dot}` }} />
+        <span className="h-1.5 w-1.5 rounded-full hidden dark:block" style={{ background: tone.dotDark, boxShadow: `0 0 6px ${tone.dotDark}` }} />
+        <span className="text-[9px] font-bold text-gray-500 dark:text-white/45 uppercase tracking-[0.14em] leading-none">{label}</span>
+      </div>
+      <span className={`text-[26px] font-black leading-none tabular-nums ${tone.val}`} style={{ letterSpacing: '-0.04em' }}>{value}</span>
     </Tag>
   );
 }
 
 function getDaysBg(days: number | null) {
-  if (days === null) return 'bg-gray-100 dark:bg-white/[0.05] text-gray-400';
-  if (days >= RULE_DAYS) return 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400';
-  if (days >= 60) return 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400';
-  return 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400';
+  if (days === null) return 'bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-white/45';
+  if (days >= RULE_DAYS) return 'bg-emerald-50 dark:bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/25';
+  if (days >= 60) return 'bg-amber-50 dark:bg-amber-500/[0.12] text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/25';
+  return 'bg-red-50 dark:bg-red-500/[0.12] text-red-700 dark:text-red-300 border border-red-200 dark:border-red-500/25';
+}
+
+function SectionLabel({ index, children, action }: { index: string; children: React.ReactNode; action?: React.ReactNode }) {
+  return (
+    <div className="flex items-end justify-between mb-3 px-0.5">
+      <div className="flex items-baseline gap-2.5">
+        <span className="text-[10px] font-mono font-semibold tabular-nums text-gray-400/70 dark:text-white/25 tracking-widest">{index}</span>
+        <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-white/45">{children}</span>
+      </div>
+      {action}
+    </div>
+  );
 }
 
 export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setlists' | 'songs' }) {
@@ -445,20 +471,19 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
 
   if (loading) {
     return (
-      <div className="space-y-3 pt-1">
+      <div className="space-y-4 pt-1">
         <div className="grid grid-cols-4 gap-2">
-          {[1, 2, 3, 4].map(i => <div key={i} className="skeleton h-[72px] rounded-2xl" />)}
+          {[1, 2, 3, 4].map(i => <div key={i} className="skeleton h-[78px] rounded-2xl" />)}
         </div>
         {[1, 2, 3].map(i => (
-          <div key={i} className="card p-4 animate-pulse space-y-3">
+          <div key={i} className="rounded-3xl border border-gray-200/80 dark:border-white/[0.06] bg-white dark:bg-white/[0.025] p-4 animate-pulse space-y-3">
             <div className="flex items-center gap-3">
-              <div className="h-4 w-4 rounded bg-gray-200 dark:bg-gray-700 shrink-0" />
-              <div className="h-11 w-11 rounded-xl bg-gray-200 dark:bg-gray-700 shrink-0" />
+              <div className="h-11 w-11 rounded-xl bg-gray-200 dark:bg-white/[0.05] shrink-0" />
               <div className="flex-1 space-y-2">
-                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-lg w-2/5" />
-                <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded-lg w-1/3" />
+                <div className="h-4 bg-gray-200 dark:bg-white/[0.05] rounded-lg w-2/5" />
+                <div className="h-3 bg-gray-200 dark:bg-white/[0.05] rounded-lg w-1/3" />
               </div>
-              <div className="h-6 w-16 bg-gray-200 dark:bg-gray-700 rounded-full" />
+              <div className="h-6 w-16 bg-gray-200 dark:bg-white/[0.05] rounded-full" />
             </div>
           </div>
         ))}
@@ -466,30 +491,41 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
     );
   }
 
+  /* ────────────────────────── Setlists View ────────────────────────── */
   if (view === 'setlists') {
     return (
-      <div className="space-y-4 pb-2">
+      <div className="space-y-5 pb-2">
 
-        {/* Import button */}
-        <div className="flex items-center justify-between">
-          <p className="section-label">Approved Setlists</p>
-          <button
-            onClick={() => fileRef.current?.click()}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-200 bg-white dark:bg-[#1c1b1e] ring-1 ring-black/[0.07] dark:ring-white/[0.08] hover:bg-gray-50 dark:hover:bg-[#252527] transition-all active:scale-[0.97] shadow-sm"
-          >
-            <Upload className="h-3.5 w-3.5" />
-            Import Excel
-          </button>
-          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={e => handleFileUpload(e.target.files)} />
-        </div>
+        {/* ── Header row: section label + import ── */}
+        <SectionLabel
+          index="01"
+          action={
+            <button
+              onClick={() => fileRef.current?.click()}
+              className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-semibold text-white transition-all active:scale-[0.97]"
+              style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', boxShadow: '0 3px 10px rgba(22,163,74,0.3)' }}
+            >
+              <Upload className="h-3.5 w-3.5" />
+              Import Excel
+            </button>
+          }
+        >
+          <span className="flex items-center gap-1.5"><ListMusic className="h-3 w-3" /> Approved Setlists</span>
+        </SectionLabel>
+        <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={e => handleFileUpload(e.target.files)} />
 
-        {/* Stats strip */}
-        <div className="grid grid-cols-4 gap-2">
-          <StatPill label="Total" value={setlists.length} />
-          <StatPill label="Songs" value={setlists.reduce((acc, s) => acc + (s.setlist_songs?.length ?? 0), 0)} />
-          <StatPill label="Song Ready" value={safeCount} color="green" />
-          <StatPill label="Not Ready" value={notReadyCount} color={notReadyCount > 0 ? 'red' : 'default'} />
-        </div>
+        {/* ── Stats strip ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+          className="grid grid-cols-2 sm:grid-cols-4 gap-2"
+        >
+          <StatCard label="Total" value={setlists.length} />
+          <StatCard label="Songs" value={setlists.reduce((acc, s) => acc + (s.setlist_songs?.length ?? 0), 0)} />
+          <StatCard label="Song Ready" value={safeCount} color="green" />
+          <StatCard label="Not Ready" value={notReadyCount} color={notReadyCount > 0 ? 'red' : 'default'} />
+        </motion.div>
 
         {setlists.length === 0 ? (
           <EmptyState
@@ -500,28 +536,29 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
           />
         ) : (
           <>
-            {/* Toolbar */}
-            <div className="flex items-center gap-2">
+            {/* ── Toolbar ── */}
+            <div className="flex items-center gap-2 flex-wrap">
               {selectMode ? (
                 <>
                   <button
                     onClick={toggleAllSetlists}
-                    className="flex items-center gap-2 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors py-1"
+                    className="flex items-center gap-2 text-[12px] font-semibold text-gray-500 dark:text-white/45 hover:text-gray-800 dark:hover:text-white/80 transition-colors py-1"
                   >
                     {selectedSetlists.size === sortedSetlists.length && sortedSetlists.length > 0 ? (
-                      <CheckSquare className="h-4 w-4 text-brand-600 dark:text-brand-400" />
+                      <CheckSquare className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                     ) : (
-                      <Square className="h-4 w-4 text-gray-300 dark:text-gray-600" />
+                      <Square className="h-4 w-4 text-gray-300 dark:text-white/20" />
                     )}
                     <span>{selectedSetlists.size > 0 ? `${selectedSetlists.size} selected` : 'Select all'}</span>
                   </button>
                   <div className="flex-1" />
                   {selectedSetlists.size > 0 ? (
                     <div className="flex items-center gap-2 animate-fade-in">
-                      <button onClick={() => setSelectedSetlists(new Set())} className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">Clear</button>
+                      <button onClick={() => setSelectedSetlists(new Set())} className="text-[11px] font-semibold text-gray-400 dark:text-white/35 hover:text-gray-600 dark:hover:text-white/55 transition-colors">Clear</button>
                       <button
                         onClick={() => setShowDeleteConfirm('setlists')}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors active:scale-[0.97]"
+                        className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-semibold text-white bg-red-600 hover:bg-red-700 transition-colors active:scale-[0.97]"
+                        style={{ boxShadow: '0 3px 10px rgba(220,38,38,0.3)' }}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                         Delete ({selectedSetlists.size})
@@ -530,7 +567,7 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
                   ) : (
                     <button
                       onClick={() => { setSelectMode(false); setSelectedSetlists(new Set()); }}
-                      className="text-xs font-semibold text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                      className="text-[11px] font-semibold text-gray-400 dark:text-white/35 hover:text-gray-600 dark:hover:text-white/55 transition-colors"
                     >
                       Cancel
                     </button>
@@ -539,33 +576,36 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
               ) : (
                 <>
                   <div className="flex-1" />
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setSelectMode(true)}
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-xl bg-white dark:bg-[#1c1b1e] ring-1 ring-black/[0.06] dark:ring-white/[0.07] transition-colors active:scale-[0.97]"
+                  <button
+                    onClick={() => setSelectMode(true)}
+                    className="inline-flex items-center gap-1.5 px-3 h-8 text-[11px] font-semibold text-gray-600 dark:text-white/55 rounded-full bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-md hover:bg-white dark:hover:bg-white/[0.07] transition-colors active:scale-[0.97]"
+                  >
+                    <CheckSquare className="h-3.5 w-3.5" />
+                    Select
+                  </button>
+                  <div className="inline-flex items-center gap-1.5 pl-3 pr-2 h-8 rounded-full bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-md">
+                    <ArrowUpDown className="h-3 w-3 text-gray-400 dark:text-white/35" />
+                    <select
+                      value={sortKey}
+                      onChange={e => setSortKey(e.target.value as SortKey)}
+                      className="text-[11px] font-semibold text-gray-600 dark:text-white/60 bg-transparent border-none outline-none cursor-pointer pr-1"
                     >
-                      <CheckSquare className="h-3.5 w-3.5" />
-                      Select
-                    </button>
-                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white dark:bg-[#1c1b1e] ring-1 ring-black/[0.06] dark:ring-white/[0.07]">
-                      <ArrowUpDown className="h-3 w-3 text-gray-400" />
-                      <select
-                        value={sortKey}
-                        onChange={e => setSortKey(e.target.value as SortKey)}
-                        className="text-xs font-semibold text-gray-600 dark:text-gray-300 bg-transparent border-none outline-none cursor-pointer"
-                      >
-                        <option value="date_desc">Newest first</option>
-                        <option value="date_asc">Oldest first</option>
-                        <option value="songs_desc">Most songs</option>
-                      </select>
-                    </div>
+                      <option value="date_desc">Newest first</option>
+                      <option value="date_asc">Oldest first</option>
+                      <option value="songs_desc">Most songs</option>
+                    </select>
                   </div>
                 </>
               )}
             </div>
 
-            {/* Setlist rows */}
-            <div className="space-y-2">
+            {/* ── Setlist rows ── */}
+            <motion.div
+              variants={containerVariants}
+              initial="hidden"
+              animate="show"
+              className="space-y-2.5"
+            >
               {sortedSetlists.map(sl => {
                 const isExpanded = expandedSetlist === sl.id;
                 const eventDate = sl.events?.event_date;
@@ -577,72 +617,94 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
                 const leaderAvatar = songLeaderAvatarMap[sl.event_id];
 
                 return (
-                  <div
+                  <motion.div
                     key={sl.id}
-                    className={`rounded-2xl overflow-hidden transition-all duration-200 ${
+                    variants={itemVariants}
+                    className={`group relative rounded-3xl overflow-hidden transition-all duration-300 border ${
                       isSelected
-                        ? 'ring-2 ring-brand-500 dark:ring-brand-400 bg-brand-50/40 dark:bg-brand-900/10'
-                        : 'bg-white dark:bg-[#1a1a1c] ring-1 ring-black/[0.05] dark:ring-white/[0.06] hover:ring-black/[0.08] dark:hover:ring-white/[0.09]'
+                        ? 'border-emerald-400/60 dark:border-emerald-500/40 bg-emerald-50/40 dark:bg-emerald-500/[0.05]'
+                        : 'border-gray-200/80 dark:border-white/[0.06] bg-white dark:bg-white/[0.025] hover:border-gray-300 dark:hover:border-white/[0.1] hover:-translate-y-0.5'
                     }`}
-                    style={{ boxShadow: isSelected ? undefined : '0 1px 3px rgba(0,0,0,0.04)' }}
+                    style={{ boxShadow: isSelected ? '0 0 0 1px rgba(16,185,129,0.2)' : '0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -12px rgba(15,23,42,0.10)' }}
                   >
+                    <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.12] to-transparent" />
+
                     <div className="flex items-center">
                       {selectMode && (
                         <button
                           onClick={e => { e.stopPropagation(); toggleSetlist(sl.id); }}
-                          className="pl-4 pr-2 py-4 shrink-0 flex items-center"
+                          className="pl-4 pr-1 py-4 shrink-0 flex items-center"
                           aria-label="Select setlist"
                         >
                           {isSelected ? (
-                            <CheckSquare className="h-4 w-4 text-brand-600 dark:text-brand-400" />
+                            <CheckSquare className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                           ) : (
-                            <Square className="h-4 w-4 text-gray-300 dark:text-gray-600 hover:text-gray-400 dark:hover:text-gray-500 transition-colors" />
+                            <Square className="h-4 w-4 text-gray-300 dark:text-white/20 hover:text-gray-400 dark:hover:text-white/35 transition-colors" />
                           )}
                         </button>
                       )}
                       <button
                         onClick={() => setExpandedSetlist(isExpanded ? null : sl.id)}
-                        className="flex-1 flex items-center gap-3 pl-4 pr-4 py-3 text-left"
+                        className="flex-1 flex items-center gap-3.5 pl-4 pr-4 py-3.5 text-left"
                       >
-                        {leaderAvatar ? (
-                          <Avatar
-                            src={leaderAvatar.avatarUrl}
-                            firstName={leaderAvatar.firstName}
-                            lastName={leaderAvatar.lastName}
-                            size="md"
-                            className="shrink-0"
-                          />
-                        ) : (
-                          <div className="flex items-center justify-center h-11 w-11 rounded-xl bg-brand-600 shrink-0" style={{ boxShadow: '0 2px 6px rgba(22,163,74,0.25)' }}>
-                            <ListMusic className="h-5 w-5 text-white" />
+                        {/* Date chip — gradient like Events */}
+                        {eventDate ? (
+                          <div
+                            className="relative flex flex-col items-center justify-center h-[52px] w-11 rounded-xl shrink-0"
+                            style={{ background: 'linear-gradient(145deg,#16a34a,#15803d)', boxShadow: '0 3px 10px rgba(22,163,74,0.3)' }}
+                          >
+                            <span className="text-[9px] font-black uppercase tracking-widest leading-none text-white/65">
+                              {format(parseISO(eventDate), 'MMM')}
+                            </span>
+                            <span className="text-[22px] font-black leading-none mt-0.5 text-white" style={{ letterSpacing: '-0.04em' }}>
+                              {format(parseISO(eventDate), 'd')}
+                            </span>
+                            <span className="text-[8px] font-bold leading-none mt-0.5 text-white/50">
+                              {format(parseISO(eventDate), 'EEE')}
+                            </span>
                           </div>
+                        ) : (
+                          <div className="h-[52px] w-11 rounded-xl shrink-0 bg-gray-100 dark:bg-white/[0.05]" />
                         )}
+
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-gray-900 dark:text-white truncate leading-tight" style={{ letterSpacing: '-0.01em' }}>
-                            {displayName}
-                          </p>
-                          <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-0.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-[14px] font-bold text-gray-900 dark:text-white truncate leading-tight" style={{ letterSpacing: '-0.015em' }}>
+                              {displayName}
+                            </p>
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/25">
+                              <CheckCircle className="h-2.5 w-2.5" /> Approved
+                            </span>
+                          </div>
+                          <div className="flex items-center flex-wrap gap-x-2.5 gap-y-0.5 mt-1">
                             {eventDate && (
-                              <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                              <span className="text-[11px] text-gray-500 dark:text-white/40 flex items-center gap-1 font-mono">
                                 <Calendar className="h-3 w-3" />
                                 {format(parseISO(eventDate), 'MMM d, yyyy')}
                               </span>
                             )}
-                            <span className="text-xs text-gray-400 dark:text-gray-500">{songCount} song{songCount !== 1 ? 's' : ''}</span>
+                            <span className="text-[11px] text-gray-400 dark:text-white/30 font-mono">{songCount} song{songCount !== 1 ? 's' : ''}</span>
                             {daysSinceEvent !== null && (
-                              <span className="text-xs text-gray-400 dark:text-gray-500 hidden sm:inline">{daysSinceEvent}d ago</span>
+                              <span className="text-[11px] text-gray-400 dark:text-white/25 font-mono hidden sm:inline">{daysSinceEvent}d ago</span>
                             )}
                             {eventType && eventType !== 'imported' && (
-                              <span className="hidden sm:inline text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-gray-400 capitalize">{eventType.replace(/_/g, ' ')}</span>
+                              <span className="hidden sm:inline text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-white/45 capitalize">{eventType.replace(/_/g, ' ')}</span>
                             )}
                           </div>
                         </div>
+
                         <div className="flex items-center gap-2 shrink-0">
-                          <span className="badge-green text-[10px]">Approved</span>
-                          <div className={`flex items-center justify-center w-6 h-6 rounded-lg transition-colors ${isExpanded ? 'bg-gray-100 dark:bg-white/[0.07]' : ''}`}>
-                            {isExpanded
-                              ? <ChevronUp className="h-3.5 w-3.5 text-gray-400" />
-                              : <ChevronDown className="h-3.5 w-3.5 text-gray-400" />}
+                          {leaderAvatar && (
+                            <Avatar
+                              src={leaderAvatar.avatarUrl}
+                              firstName={leaderAvatar.firstName}
+                              lastName={leaderAvatar.lastName}
+                              size="xs"
+                              className="ring-1 ring-black/[0.06] dark:ring-white/[0.08]"
+                            />
+                          )}
+                          <div className={`flex items-center justify-center w-7 h-7 rounded-xl transition-all ${isExpanded ? 'bg-gray-100 dark:bg-white/[0.06] rotate-180' : ''}`}>
+                            <ChevronDown className="h-3.5 w-3.5 text-gray-400 dark:text-white/35" />
                           </div>
                         </div>
                       </button>
@@ -651,9 +713,9 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
                     {isExpanded && sl.setlist_songs && (
                       <div className="border-t border-black/[0.04] dark:border-white/[0.05]">
                         <div className="px-4 pt-3 pb-1 flex items-center gap-2">
-                          <Music2 className="h-3.5 w-3.5 text-brand-500 dark:text-brand-400" />
-                          <span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.1em]">Songs in order</span>
-                          <span className="ml-auto text-[10px] font-semibold text-gray-400">{songCount} total</span>
+                          <Music2 className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
+                          <span className="text-[10px] font-black text-gray-500 dark:text-white/45 uppercase tracking-[0.14em]">Songs in order</span>
+                          <span className="ml-auto text-[10px] font-mono font-semibold text-gray-400 dark:text-white/30">{songCount} total</span>
                         </div>
                         <div className="divide-y divide-black/[0.03] dark:divide-white/[0.04] pb-2">
                           {sl.setlist_songs
@@ -664,28 +726,28 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
                               const keyChanged = ss.performed_key && ss.songs?.song_key && ss.performed_key !== ss.songs.song_key;
                               return (
                                 <div key={ss.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-black/[0.015] dark:hover:bg-white/[0.02] transition-colors">
-                                  <span className="flex items-center justify-center h-6 w-6 rounded-lg bg-gray-100 dark:bg-white/[0.05] text-[10px] font-black text-gray-400 dark:text-gray-500 shrink-0">{i + 1}</span>
+                                  <span className="flex items-center justify-center h-6 w-6 rounded-lg bg-gray-100 dark:bg-white/[0.05] text-[10px] font-black text-gray-400 dark:text-white/35 shrink-0 tabular-nums">{i + 1}</span>
                                   <div className="min-w-0 flex-1">
                                     <div className="flex items-center gap-1.5 flex-wrap">
-                                      <p className="text-sm font-semibold text-gray-900 dark:text-white leading-snug">{ss.songs?.title}</p>
+                                      <p className="text-[13px] font-semibold text-gray-900 dark:text-white leading-snug">{ss.songs?.title}</p>
                                       {displayKey && (
-                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${keyChanged ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' : 'bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-gray-400'}`}>
+                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${keyChanged ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' : 'bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-white/45'}`}>
                                           {displayKey}
                                         </span>
                                       )}
                                     </div>
                                     {ss.songs?.artist && (
-                                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                                      <p className="text-[11px] text-gray-400 dark:text-white/30 mt-0.5">
                                         {ss.songs.artist}
-                                        {keyChanged && <span className="ml-1 text-gray-300 dark:text-gray-600">(orig: {ss.songs.song_key})</span>}
+                                        {keyChanged && <span className="ml-1 text-gray-300 dark:text-white/20">(orig: {ss.songs.song_key})</span>}
                                       </p>
                                     )}
                                   </div>
                                   {songUsage && (
-                                    <div className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg ${getDaysBg(songUsage.days_since)}`}>
+                                    <div className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg ${getDaysBg(songUsage.days_since)}`}>
                                       {songUsage.is_safe
-                                        ? <CheckCircle className="h-3.5 w-3.5 shrink-0" />
-                                        : <AlertTriangle className="h-3.5 w-3.5 shrink-0" />}
+                                        ? <CheckCircle className="h-3 w-3 shrink-0" />
+                                        : <AlertTriangle className="h-3 w-3 shrink-0" />}
                                       <span>{songUsage.days_since !== null ? `${songUsage.days_since}d` : 'New'}</span>
                                     </div>
                                   )}
@@ -695,10 +757,10 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
                         </div>
                       </div>
                     )}
-                  </div>
+                  </motion.div>
                 );
               })}
-            </div>
+            </motion.div>
           </>
         )}
 
@@ -733,7 +795,7 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
                     <span className="text-gray-500 tabular-nums">{importProgress.songsDone}/{importProgress.totalSongs}</span>
                   </div>
                   <div className="h-2 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-brand-600 rounded-full transition-all duration-300 ease-out" style={{ width: `${importProgress.totalSongs ? (importProgress.songsDone / importProgress.totalSongs) * 100 : 0}%` }} />
+                    <div className="h-full bg-emerald-600 rounded-full transition-all duration-300 ease-out" style={{ width: `${importProgress.totalSongs ? (importProgress.songsDone / importProgress.totalSongs) * 100 : 0}%` }} />
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -769,7 +831,7 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
                         <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                           <td className="px-3 py-2 text-gray-600 dark:text-gray-400 whitespace-nowrap">{row.event_date}</td>
                           <td className="px-3 py-2 text-gray-900 dark:text-white">{row.event_name}</td>
-                          {importData.some(r => r.song_leader) && <td className="px-3 py-2 text-brand-600 dark:text-brand-400 font-medium">{row.song_leader}</td>}
+                          {importData.some(r => r.song_leader) && <td className="px-3 py-2 text-emerald-600 dark:text-emerald-400 font-medium">{row.song_leader}</td>}
                           {importData.some(r => r.song_category) && <td className="px-3 py-2 text-gray-500 dark:text-gray-400 capitalize">{row.song_category}</td>}
                           <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">{row.song_title}</td>
                           <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.song_key}</td>
@@ -791,103 +853,121 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
     );
   }
 
-  /* ── Song Tracker View ──────────────────────────────────────────── */
+  /* ────────────────────────── Song Tracker View ────────────────────────── */
   return (
-    <div className="space-y-4 pb-2">
+    <div className="space-y-5 pb-2">
 
-      <div className="flex items-center justify-between">
-        <p className="section-label">Song Rotation Tracker</p>
-        <span className="text-xs text-gray-400 dark:text-gray-500">90-day rule</span>
-      </div>
+      {/* ── Header row ── */}
+      <SectionLabel
+        index="01"
+        action={
+          <span className="text-[10px] font-mono font-medium text-gray-400 dark:text-white/30 tracking-wide">
+            90-day rule
+          </span>
+        }
+      >
+        <span className="flex items-center gap-1.5"><BarChart2 className="h-3 w-3" /> Song Rotation Tracker</span>
+      </SectionLabel>
 
-      {/* Stats strip */}
-      <div className="grid grid-cols-4 gap-2">
-        <StatPill
+      {/* ── Stats strip ── */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        className="grid grid-cols-2 sm:grid-cols-4 gap-2"
+      >
+        <StatCard
           label="Total"
           value={songUsages.length}
           active={activeFilter === 'all'}
-          onClick={() => setActiveFilter(activeFilter === 'all' ? 'all' : 'all')}
+          onClick={() => setActiveFilter('all')}
         />
-        <StatPill
+        <StatCard
           label="Never Used"
           value={neverUsed}
           active={activeFilter === 'never_used'}
           onClick={() => setActiveFilter(prev => prev === 'never_used' ? 'all' : 'never_used')}
         />
-        <StatPill
+        <StatCard
           label="Safe"
           value={safeCount}
           color="green"
           active={activeFilter === 'safe'}
           onClick={() => setActiveFilter(prev => prev === 'safe' ? 'all' : 'safe')}
         />
-        <StatPill
+        <StatCard
           label="Not Ready"
           value={notReadyCount}
           color={notReadyCount > 0 ? 'red' : 'default'}
           active={activeFilter === 'not_ready'}
           onClick={() => setActiveFilter(prev => prev === 'not_ready' ? 'all' : 'not_ready')}
         />
-      </div>
+      </motion.div>
 
-      {/* Active filter chip */}
+      {/* ── Active filter chip ── */}
       {activeFilter !== 'all' && (
         <div className="flex items-center gap-2 animate-fade-in">
-          <span className="text-xs text-gray-500 dark:text-gray-400">Showing:</span>
+          <span className="text-[11px] font-mono text-gray-500 dark:text-white/40 tracking-wide">Showing:</span>
           <button
             type="button"
             onClick={() => setActiveFilter('all')}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-colors ${
-              activeFilter === 'safe' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
-              : activeFilter === 'not_ready' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
-              : 'bg-gray-100 dark:bg-white/[0.08] text-gray-600 dark:text-gray-300'
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors ${
+              activeFilter === 'safe' ? 'bg-emerald-100 dark:bg-emerald-500/[0.18] text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/25'
+              : activeFilter === 'not_ready' ? 'bg-red-100 dark:bg-red-500/[0.18] text-red-700 dark:text-red-300 border border-red-200 dark:border-red-500/25'
+              : 'bg-gray-100 dark:bg-white/[0.08] text-gray-600 dark:text-white/55 border border-black/[0.06] dark:border-white/[0.07]'
             }`}
           >
             {activeFilter === 'safe' ? 'Safe songs' : activeFilter === 'not_ready' ? 'Not ready' : 'Never used'}
             <X className="h-3 w-3" />
           </button>
-          <span className="text-xs text-gray-400 dark:text-gray-500">{filteredSongs.length} result{filteredSongs.length !== 1 ? 's' : ''}</span>
+          <span className="text-[11px] font-mono text-gray-400 dark:text-white/30">{filteredSongs.length} result{filteredSongs.length !== 1 ? 's' : ''}</span>
         </div>
       )}
 
-      {/* Search bar */}
-      <div className="relative">
+      {/* ── Search bar ── */}
+      <motion.div
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.05, ease: [0.16, 1, 0.3, 1] }}
+        className="relative"
+      >
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
         <input
           type="text"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="Search songs by title or artist..."
-          className="input-field pl-10 text-sm"
+          placeholder="Search songs by title or artist…"
+          className="w-full h-10 pl-10 pr-9 rounded-2xl text-[13px] bg-white dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.08] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/30 outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 dark:focus:border-emerald-500/50 transition-all"
         />
         {search && (
           <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
             <X className="h-4 w-4" />
           </button>
         )}
-      </div>
+      </motion.div>
 
-      {/* Bulk action bar */}
+      {/* ── Bulk action bar ── */}
       {filteredSongs.length > 0 && (
         <div className="flex items-center gap-2">
           {selectModeSongs ? (
             <>
               <button
                 onClick={toggleAllSongs}
-                className="flex items-center gap-2 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+                className="flex items-center gap-2 text-[12px] font-semibold text-gray-500 dark:text-white/45 hover:text-gray-800 dark:hover:text-white/80 transition-colors"
               >
                 {selectedSongs.size === filteredSongs.length && filteredSongs.length > 0
-                  ? <CheckSquare className="h-4 w-4 text-brand-600 dark:text-brand-400" />
-                  : <Square className="h-4 w-4 text-gray-300 dark:text-gray-600" />}
+                  ? <CheckSquare className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  : <Square className="h-4 w-4 text-gray-300 dark:text-white/20" />}
                 <span>{selectedSongs.size > 0 ? `${selectedSongs.size} selected` : 'Select all'}</span>
               </button>
               <div className="flex-1" />
               {selectedSongs.size > 0 ? (
                 <div className="flex items-center gap-2 animate-fade-in">
-                  <button onClick={() => setSelectedSongs(new Set())} className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">Clear</button>
+                  <button onClick={() => setSelectedSongs(new Set())} className="text-[11px] font-semibold text-gray-400 dark:text-white/35 hover:text-gray-600 dark:hover:text-white/55 transition-colors">Clear</button>
                   <button
                     onClick={() => setShowDeleteConfirm('songs')}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors active:scale-[0.97]"
+                    className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-semibold text-white bg-red-600 hover:bg-red-700 transition-colors active:scale-[0.97]"
+                    style={{ boxShadow: '0 3px 10px rgba(220,38,38,0.3)' }}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                     Delete ({selectedSongs.size})
@@ -896,7 +976,7 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
               ) : (
                 <button
                   onClick={() => { setSelectModeSongs(false); setSelectedSongs(new Set()); }}
-                  className="text-xs font-semibold text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                  className="text-[11px] font-semibold text-gray-400 dark:text-white/35 hover:text-gray-600 dark:hover:text-white/55 transition-colors"
                 >
                   Cancel
                 </button>
@@ -907,7 +987,7 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
               <div className="flex-1" />
               <button
                 onClick={() => setSelectModeSongs(true)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-xl bg-white dark:bg-[#1c1b1e] ring-1 ring-black/[0.06] dark:ring-white/[0.07] transition-colors active:scale-[0.97]"
+                className="inline-flex items-center gap-1.5 px-3 h-8 text-[11px] font-semibold text-gray-600 dark:text-white/55 rounded-full bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-md hover:bg-white dark:hover:bg-white/[0.07] transition-colors active:scale-[0.97]"
               >
                 <CheckSquare className="h-3.5 w-3.5" />
                 Select
@@ -917,56 +997,65 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
         </div>
       )}
 
-      {/* Song table */}
-      <div className="rounded-2xl overflow-hidden bg-white dark:bg-[#1a1a1c] ring-1 ring-black/[0.05] dark:ring-white/[0.06]" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
-        <div className={`grid gap-3 sm:gap-4 px-4 py-2.5 border-b border-black/[0.04] dark:border-white/[0.05] bg-gray-50/80 dark:bg-white/[0.02] ${selectModeSongs ? 'grid-cols-[auto,1fr,auto,auto]' : 'grid-cols-[1fr,auto,auto]'}`}>
+      {/* ── Song table — premium card ── */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
+        className="relative rounded-3xl overflow-hidden bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06]"
+        style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 28px -16px rgba(15,23,42,0.12)' }}
+      >
+        <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.12] to-transparent" />
+
+        <div className={`relative grid gap-3 sm:gap-4 px-4 py-3 border-b border-black/[0.04] dark:border-white/[0.05] bg-gray-50/50 dark:bg-white/[0.015] ${selectModeSongs ? 'grid-cols-[auto,1fr,auto,auto]' : 'grid-cols-[1fr,auto,auto]'}`}>
           {selectModeSongs && <span className="w-4" />}
-          <span className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.1em]">Song</span>
-          <span className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.1em] text-center hidden sm:block">Last Used</span>
-          <span className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.1em] text-right">Status</span>
+          <span className="text-[10px] font-black text-gray-400 dark:text-white/35 uppercase tracking-[0.14em]">Song</span>
+          <span className="text-[10px] font-black text-gray-400 dark:text-white/35 uppercase tracking-[0.14em] text-center hidden sm:block">Last Used</span>
+          <span className="text-[10px] font-black text-gray-400 dark:text-white/35 uppercase tracking-[0.14em] text-right">Status</span>
         </div>
+
         {filteredSongs.length === 0 ? (
-          <p className="px-5 py-10 text-center text-sm text-gray-400">No songs found</p>
+          <p className="px-5 py-12 text-center text-sm text-gray-400 dark:text-white/30">No songs found</p>
         ) : (
-          <div className="divide-y divide-black/[0.03] dark:divide-white/[0.04]">
+          <div className="divide-y divide-black/[0.04] dark:divide-white/[0.04]">
             {filteredSongs.map(song => (
               <div
                 key={song.id}
                 className={`grid gap-3 sm:gap-4 px-4 py-3 items-center transition-colors ${selectModeSongs ? 'grid-cols-[auto,1fr,auto,auto]' : 'grid-cols-[1fr,auto,auto]'} ${
                   selectedSongs.has(song.id)
-                    ? 'bg-brand-50/50 dark:bg-brand-900/10'
-                    : 'hover:bg-gray-50/60 dark:hover:bg-white/[0.015]'
+                    ? 'bg-emerald-50/60 dark:bg-emerald-500/[0.06]'
+                    : 'hover:bg-gray-50/60 dark:hover:bg-white/[0.018]'
                 }`}
               >
                 {selectModeSongs && (
                   <button onClick={() => toggleSong(song.id)} className="shrink-0 flex items-center">
                     {selectedSongs.has(song.id)
-                      ? <CheckSquare className="h-4 w-4 text-brand-600 dark:text-brand-400" />
-                      : <Square className="h-4 w-4 text-gray-300 dark:text-gray-600 hover:text-gray-400 dark:hover:text-gray-500 transition-colors" />}
+                      ? <CheckSquare className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                      : <Square className="h-4 w-4 text-gray-300 dark:text-white/20 hover:text-gray-400 dark:hover:text-white/35 transition-colors" />}
                   </button>
                 )}
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{song.title}</p>
+                    <p className="text-[13px] font-semibold text-gray-900 dark:text-white truncate" style={{ letterSpacing: '-0.01em' }}>{song.title}</p>
                     {song.song_key && (
-                      <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-gray-400">{song.song_key}</span>
+                      <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-white/45">{song.song_key}</span>
                     )}
                   </div>
-                  {song.artist && <p className="text-xs text-gray-400 dark:text-gray-500 truncate mt-0.5">{song.artist}</p>}
-                  <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 sm:hidden">
+                  {song.artist && <p className="text-[11px] text-gray-400 dark:text-white/30 truncate mt-0.5">{song.artist}</p>}
+                  <p className="text-[10px] font-mono text-gray-400 dark:text-white/25 mt-0.5 sm:hidden tracking-wide">
                     {song.last_used_date ? format(parseISO(song.last_used_date), 'MMM d, yyyy') : 'Never used'}
                   </p>
                 </div>
-                <div className="text-xs text-gray-400 dark:text-gray-500 text-center whitespace-nowrap hidden sm:flex items-center gap-1">
+                <div className="text-[11px] font-mono text-gray-400 dark:text-white/30 text-center whitespace-nowrap hidden sm:flex items-center gap-1 tracking-wide">
                   {song.last_used_date ? (
                     <><Clock className="h-3 w-3" />{format(parseISO(song.last_used_date), 'MMM d, yyyy')}</>
                   ) : (
-                    <span className="text-gray-300 dark:text-gray-600">Never</span>
+                    <span className="text-gray-300 dark:text-white/20">Never</span>
                   )}
                 </div>
                 <div className="flex items-center justify-end">
                   {song.days_since === null ? (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg bg-gray-100 dark:bg-white/[0.06] text-gray-400 dark:text-gray-500">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-white/45 border border-gray-200 dark:border-white/[0.06]">
                       <CheckCircle className="h-3 w-3" /> New
                     </span>
                   ) : (
@@ -980,13 +1069,13 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
             ))}
           </div>
         )}
-      </div>
+      </motion.div>
 
-      {/* Legend */}
-      <div className="flex items-center gap-4 px-1 text-[11px] text-gray-400 dark:text-gray-500">
-        <span className="flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-full bg-green-500" />Safe (90+ days)</span>
-        <span className="flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-full bg-amber-500" />Caution (60–90d)</span>
-        <span className="flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-full bg-red-500" />Not ready (&lt;60d)</span>
+      {/* ── Legend ── */}
+      <div className="flex items-center gap-4 px-1 text-[11px] font-mono text-gray-400 dark:text-white/30 flex-wrap tracking-wide">
+        <span className="flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-full bg-emerald-500" style={{ boxShadow: '0 0 6px rgba(34,197,94,0.5)' }} />Safe (90+ days)</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-full bg-amber-500" style={{ boxShadow: '0 0 6px rgba(245,158,11,0.5)' }} />Caution (60–90d)</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-full bg-red-500" style={{ boxShadow: '0 0 6px rgba(239,68,68,0.5)' }} />Not ready (&lt;60d)</span>
       </div>
 
       {/* Delete modal */}

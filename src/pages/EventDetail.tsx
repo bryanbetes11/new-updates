@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { format, parseISO, differenceInDays, subWeeks, previousSunday, addDays } from 'date-fns';
+import { format, parseISO, differenceInDays, startOfDay, subWeeks, previousSunday, addDays, subDays } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
-import { ArrowLeft, Calendar, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronUp, LayoutPanelLeft, ListMusic, Search, GripVertical, ArrowUp, ArrowDown } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { ArrowLeft, Calendar, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronUp, ChevronRight, LayoutPanelLeft, ListMusic, Search, GripVertical, ArrowUp, ArrowDown } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -28,6 +29,16 @@ interface EventAttendance {
   profiles?: { first_name: string; last_name: string; avatar_url: string | null };
 }
 
+const MANILA_TIMEZONE = 'Asia/Manila';
+
+function getManilaTodayKey(date = new Date()) {
+  return formatInTimeZone(date, MANILA_TIMEZONE, 'yyyy-MM-dd');
+}
+
+function getManilaEventDateTime(eventDate: string, timeValue: string) {
+  return new Date(`${eventDate}T${timeValue}+08:00`);
+}
+
 export function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -41,6 +52,9 @@ export function EventDetail() {
   const [memberRoles, setMemberRoles] = useState<{ user_id: string; role_id: string }[]>([]);
   const [setlist, setSetlist] = useState<Setlist | null>(null);
   const [setlistSongs, setSetlistSongs] = useState<SetlistSong[]>([]);
+  const [linkedSetlist, setLinkedSetlist] = useState<Setlist | null>(null);
+  const [linkedSetlistSongs, setLinkedSetlistSongs] = useState<SetlistSong[]>([]);
+  const [linkedServiceEvent, setLinkedServiceEvent] = useState<Event | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAssign, setShowAssign] = useState(false);
@@ -83,47 +97,74 @@ export function EventDetail() {
 
   const fetchAll = useCallback(async () => {
     if (!id) return;
-    const [eventRes, assignRes, membersRes, memberRolesRes, setlistRes, songsRes, allSetlistsRes, sundayServicesRes] = await Promise.all([
-      supabase.from('events').select('*').eq('id', id).maybeSingle(),
-      supabase.from('event_assignments').select('*, profiles(first_name, last_name, avatar_url), roles(name)').eq('event_id', id),
-      supabase.from('profiles').select('id, first_name, last_name'),
-      supabase.from('user_roles').select('user_id, role_id'),
-      supabase.from('setlists').select('*, setlist_songs(*, songs(*))').eq('event_id', id).maybeSingle(),
-      supabase.from('songs').select('*').order('title'),
-      supabase.from('setlists').select('id, status, event_id, events(event_date), setlist_songs(song_id)').eq('status', 'approved'),
-      supabase.from('events').select('*').eq('event_type', 'Sunday Service').gte('event_date', new Date().toISOString().split('T')[0]).order('event_date'),
-    ]);
-    setEvent(eventRes.data);
-    setAssignments(assignRes.data || []);
-    setMembers(membersRes.data || []);
-    setMemberRoles(memberRolesRes.data || []);
-    if (setlistRes.data) {
-      setSetlist(setlistRes.data);
-      setSetlistSongs(setlistRes.data.setlist_songs || []);
-    }
-    setSongs(songsRes.data || []);
-    setSundayServices(sundayServicesRes.data || []);
+    try {
+      const [eventRes, assignRes, membersRes, memberRolesRes, setlistRes, songsRes, allSetlistsRes, sundayServicesRes] = await Promise.all([
+        supabase.from('events').select('*').eq('id', id).maybeSingle(),
+        supabase.from('event_assignments').select('*, profiles(first_name, last_name, avatar_url), roles(name)').eq('event_id', id),
+        supabase.from('profiles').select('id, first_name, last_name'),
+        supabase.from('user_roles').select('user_id, role_id'),
+        supabase.from('setlists').select('*, setlist_songs(*, songs(*))').eq('event_id', id).maybeSingle(),
+        supabase.from('songs').select('*').order('title'),
+        supabase.from('setlists').select('id, status, event_id, events(event_date), setlist_songs(song_id)').eq('status', 'approved'),
+        supabase.from('events').select('*').eq('event_type', 'Sunday Service').gte('event_date', new Date().toISOString().split('T')[0]).order('event_date'),
+      ]);
+      setEvent(eventRes.data);
+      setAssignments(assignRes.data || []);
+      setMembers(membersRes.data || []);
+      setMemberRoles(memberRolesRes.data || []);
+      if (setlistRes.data) {
+        setSetlist(setlistRes.data);
+        setSetlistSongs(setlistRes.data.setlist_songs || []);
+      } else {
+        setSetlist(null);
+        setSetlistSongs([]);
+      }
+      setLinkedSetlist(null);
+      setLinkedSetlistSongs([]);
+      setLinkedServiceEvent(null);
 
-    const usage: Record<string, { lastDate: string; days: number }> = {};
-    (allSetlistsRes.data || []).forEach((sl: any) => {
-      if (sl.event_id === id) return;
-      const eventDate = sl.events?.event_date;
-      if (!eventDate) return;
-      (sl.setlist_songs || []).forEach((ss: any) => {
-        if (!usage[ss.song_id] || eventDate > usage[ss.song_id].lastDate) {
-          usage[ss.song_id] = { lastDate: eventDate, days: differenceInDays(new Date(), parseISO(eventDate)) };
+      if (eventRes.data?.event_type === 'Rehearsals' && eventRes.data.linked_event_id) {
+        const [linkedEventRes, linkedSetlistRes] = await Promise.all([
+          supabase.from('events').select('*').eq('id', eventRes.data.linked_event_id).maybeSingle(),
+          supabase.from('setlists').select('*').eq('event_id', eventRes.data.linked_event_id).maybeSingle(),
+        ]);
+        setLinkedServiceEvent(linkedEventRes.data || null);
+        if (linkedSetlistRes.data) {
+          setLinkedSetlist(linkedSetlistRes.data);
+          const { data: linkedSongsData } = await supabase
+            .from('setlist_songs')
+            .select('*, songs(*)')
+            .eq('setlist_id', linkedSetlistRes.data.id)
+            .order('position');
+          setLinkedSetlistSongs((linkedSongsData || []) as SetlistSong[]);
         }
+      }
+      setSongs(songsRes.data || []);
+      setSundayServices(sundayServicesRes.data || []);
+
+      const usage: Record<string, { lastDate: string; days: number }> = {};
+      (allSetlistsRes.data || []).forEach((sl: any) => {
+        if (sl.event_id === id) return;
+        const eventDate = sl.events?.event_date;
+        if (!eventDate) return;
+        (sl.setlist_songs || []).forEach((ss: any) => {
+          if (!usage[ss.song_id] || eventDate > usage[ss.song_id].lastDate) {
+            usage[ss.song_id] = { lastDate: eventDate, days: differenceInDays(new Date(), parseISO(eventDate)) };
+          }
+        });
       });
-    });
-    setSongUsage(usage);
+      setSongUsage(usage);
 
-    if (setlistRes.data?.service_format) {
-      setServiceFormat(setlistRes.data.service_format as ServiceFormat);
-    } else if (eventRes.data?.event_type) {
-      setServiceFormat(inferServiceFormat(eventRes.data.event_type));
+      if (setlistRes.data?.service_format) {
+        setServiceFormat(setlistRes.data.service_format as ServiceFormat);
+      } else if (eventRes.data?.event_type) {
+        setServiceFormat(inferServiceFormat(eventRes.data.event_type));
+      }
+    } catch (error) {
+      console.error('Failed to load event detail', error);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }, [id]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
@@ -146,12 +187,9 @@ export function EventDetail() {
     if (!event) return { canMark: false, reason: 'No event', windowOpen: false, isClosed: false };
 
     const now = new Date();
-    const phNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
     const eventDate = parseISO(event.event_date);
-    const today = new Date(phNow.getFullYear(), phNow.getMonth(), phNow.getDate());
+    const today = parseISO(getManilaTodayKey(now));
     const eventDay = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
 
     const daysDiff = Math.floor((eventDay.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
@@ -164,13 +202,11 @@ export function EventDetail() {
     }
 
     if (event.start_time && daysDiff === 0) {
-      const [hours, minutes] = event.start_time.split(':').map(Number);
-      const eventStartTime = new Date(phNow);
-      eventStartTime.setHours(hours, minutes, 0, 0);
+      const eventStartTime = getManilaEventDateTime(event.event_date, event.start_time);
       const windowOpenTime = new Date(eventStartTime.getTime() - 30 * 60 * 1000);
 
-      if (phNow < windowOpenTime) {
-        const diffMs = windowOpenTime.getTime() - phNow.getTime();
+      if (now < windowOpenTime) {
+        const diffMs = windowOpenTime.getTime() - now.getTime();
         const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
         const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
         const countdown = diffHours > 0 ? `${diffHours}h ${diffMins}m` : `${diffMins}m`;
@@ -186,9 +222,8 @@ export function EventDetail() {
 
     const calculateCountdown = () => {
       const now = new Date();
-      const phNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
       const eventDate = parseISO(event.event_date);
-      const today = new Date(phNow.getFullYear(), phNow.getMonth(), phNow.getDate());
+      const today = parseISO(getManilaTodayKey(now));
       const eventDay = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
       const daysDiff = Math.floor((eventDay.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
@@ -198,12 +233,10 @@ export function EventDetail() {
         return;
       }
 
-      const [hours, minutes] = event.start_time!.split(':').map(Number);
-      const eventStartTime = new Date(phNow);
-      eventStartTime.setHours(hours, minutes, 0, 0);
+      const eventStartTime = getManilaEventDateTime(event.event_date, event.start_time!);
       const windowOpenTime = new Date(eventStartTime.getTime() - 30 * 60 * 1000);
 
-      const diffMs = windowOpenTime.getTime() - phNow.getTime();
+      const diffMs = windowOpenTime.getTime() - now.getTime();
       if (diffMs <= 0) {
         setCountdownText('');
         setCountdownParts({ hours: 0, minutes: 0, seconds: 0 });
@@ -231,20 +264,17 @@ export function EventDetail() {
 
     if (markAs === 'present') {
       const now = new Date();
-      const phNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
       const eventDate = parseISO(event.event_date);
-      const today = new Date(phNow.getFullYear(), phNow.getMonth(), phNow.getDate());
+      const today = parseISO(getManilaTodayKey(now));
       const eventDay = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
       const daysDiff = Math.floor((eventDay.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
       if (daysDiff < 0) {
         status = 'late';
       } else if (event.start_time) {
-        const [hours, minutes] = event.start_time.split(':').map(Number);
-        const eventStartTime = new Date(phNow);
-        eventStartTime.setHours(hours, minutes, 0, 0);
+        const eventStartTime = getManilaEventDateTime(event.event_date, event.start_time);
         const graceTime = new Date(eventStartTime.getTime() + 5 * 60 * 1000);
-        if (phNow > graceTime) {
+        if (now > graceTime) {
           status = 'late';
         }
       }
@@ -548,6 +578,9 @@ export function EventDetail() {
         sunday = addDays(sunday, -7);
       }
       return `${format(sunday, 'yyyy-MM-dd')}T15:59:00Z`;
+    } else if (eventType === 'Youth Recharge') {
+      const dueDate = subDays(date, 7);
+      return `${format(dueDate, 'yyyy-MM-dd')}T15:59:00Z`;
     }
     return null;
   };
@@ -564,6 +597,8 @@ export function EventDetail() {
         return { start: '21:00', end: '22:00' };
       case 'Equipping':
         return { start: '19:30', end: '21:00' };
+      case 'Youth Recharge':
+        return { start: '16:00', end: '18:00' };
       default:
         return { start: '', end: '' };
     }
@@ -647,6 +682,12 @@ export function EventDetail() {
 
   const myAssignment = assignments.find(a => a.user_id === user?.id);
   const confirmedCount = assignments.filter(a => a.status === 'confirmed').length;
+  const songLeaderAssignment = assignments.find(a => a.roles?.name === 'Song Leader');
+  const songLeaderName = songLeaderAssignment?.profiles
+    ? `${songLeaderAssignment.profiles.first_name} ${songLeaderAssignment.profiles.last_name}`.trim()
+    : members.find(m => m.id === event.song_leader_id)
+      ? `${members.find(m => m.id === event.song_leader_id)!.first_name} ${members.find(m => m.id === event.song_leader_id)!.last_name}`.trim()
+      : '';
   const isSongLeader = assignments.some(a => a.user_id === user?.id && a.roles?.name === 'Song Leader');
   const userIsSongLeaderRole = userRoles.some(ur => ur.roles?.name === 'Song Leader');
   const canManageSetlist = isLeader || isSongLeader || userIsSongLeaderRole;
@@ -681,83 +722,271 @@ export function EventDetail() {
     rejected: 'Rejected — not approved',
   };
 
+  // Visual urgency state for hero card (mirrors Events list logic)
+  const heroIsPast = parseISO(event.event_date) < startOfDay(new Date());
+  const heroProposalDue = event.proposal_due_date ? parseISO(event.proposal_due_date) : null;
+  const heroDaysUntilDue = heroProposalDue ? differenceInDays(heroProposalDue, new Date()) : null;
+  const heroHasApprovedSetlist = setlist?.status === 'approved';
+  const heroIsOverdue = heroDaysUntilDue !== null && heroDaysUntilDue < 0 && !heroHasApprovedSetlist && !heroIsPast;
+  const heroIsDueSoon = heroDaysUntilDue !== null && heroDaysUntilDue >= 0 && heroDaysUntilDue <= 3 && !heroHasApprovedSetlist && !heroIsPast;
+  const showLinkedSetlistReference = !setlist && event.event_type === 'Rehearsals' && !!event.linked_event_id && !!linkedSetlist;
+  const linkedSetlistStatus = linkedSetlist?.status || 'draft';
+  let linkedServiceDateLabel = '';
+  if (linkedServiceEvent?.event_date) {
+    try {
+      linkedServiceDateLabel = format(parseISO(linkedServiceEvent.event_date), 'MMM d, yyyy');
+    } catch {
+      linkedServiceDateLabel = '';
+    }
+  }
+  const linkedReferenceSongs = linkedSetlistSongs
+    .filter((song): song is SetlistSong => !!song && typeof song === 'object')
+    .slice()
+    .sort((a, b) => (a.position || 0) - (b.position || 0));
+
+  const heroChipGradient = heroIsPast
+    ? null
+    : heroIsOverdue
+    ? 'linear-gradient(145deg,#ef4444,#b91c1c)'
+    : heroIsDueSoon
+    ? 'linear-gradient(145deg,#f59e0b,#b45309)'
+    : 'linear-gradient(145deg,#16a34a,#15803d)';
+
+  const heroChipShadow = heroIsPast
+    ? undefined
+    : heroIsOverdue
+    ? '0 4px 14px rgba(220,38,38,0.45)'
+    : heroIsDueSoon
+    ? 'rgba(245,158,11,0.45)'
+    : '0 3px 10px rgba(22,163,74,0.3)';
+
+  const heroCardTint = heroIsPast
+    ? undefined
+    : heroIsOverdue
+    ? 'linear-gradient(135deg, rgba(239,68,68,0.13), rgba(239,68,68,0.04) 45%, transparent 75%)'
+    : heroIsDueSoon
+    ? 'linear-gradient(135deg, rgba(245,158,11,0.13), rgba(245,158,11,0.04) 45%, transparent 75%)'
+    : 'linear-gradient(135deg, rgba(34,197,94,0.09), rgba(34,197,94,0.025) 45%, transparent 75%)';
+
+  const heroEyebrow = heroIsPast
+    ? 'text-gray-400 dark:text-white/30'
+    : heroIsOverdue
+    ? 'text-red-600 dark:text-red-400'
+    : heroIsDueSoon
+    ? 'text-amber-600 dark:text-amber-400'
+    : 'text-emerald-600 dark:text-emerald-400/80';
+
   return (
     <div className="page-container page-bottom-pad">
-      <div className="px-4 sm:px-5 lg:px-6 py-5 sm:py-6 space-y-5">
-        <button onClick={() => navigate('/events')} className="inline-flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors animate-fade-in">
-          <ArrowLeft className="h-4 w-4" /> Back
-        </button>
+      <div className="max-w-3xl mx-auto px-4 sm:px-5 lg:px-6 pt-6 sm:pt-8 space-y-5">
 
-        <div className="card animate-fade-in" style={{ animationDelay: '50ms' }}>
-          <div className="px-4 py-3.5 border-b border-gray-100 dark:border-gray-800">
-            <div className="flex items-start justify-between gap-3">
+        {/* ── Back ─────────────────────────────────────── */}
+        <motion.button
+          initial={{ opacity: 0, x: -8 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          onClick={() => navigate('/events')}
+          className="inline-flex items-center gap-1.5 pl-2 pr-3.5 h-8 rounded-full text-[12px] font-semibold text-gray-600 dark:text-white/55 bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-md hover:bg-white dark:hover:bg-white/[0.07] active:scale-[0.97] transition-colors"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Events
+        </motion.button>
+
+        {/* ── Hero Card ────────────────────────────────── */}
+        <motion.div
+          initial={{ opacity: 0, y: 14, filter: 'blur(6px)' }}
+          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          className="relative rounded-3xl overflow-hidden bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06]"
+          style={{
+            backgroundImage: heroCardTint,
+            boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 28px -16px rgba(15,23,42,0.12)',
+            opacity: heroIsPast ? 0.85 : 1,
+          }}
+        >
+          <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.12] to-transparent" />
+
+          <div className="relative px-5 sm:px-7 pt-6 pb-5">
+            <div className="flex items-start gap-4">
+              {/* Date chip — gradient encodes urgency */}
+              <div
+                className={`relative flex flex-col items-center justify-center h-[68px] w-14 rounded-2xl shrink-0 ${heroIsPast ? 'bg-gray-100 dark:bg-white/[0.05]' : ''}`}
+                style={heroIsPast ? {} : { background: heroChipGradient!, boxShadow: heroChipShadow }}
+              >
+                <span className={`text-[10px] font-black uppercase tracking-widest leading-none ${heroIsPast ? 'text-gray-400 dark:text-white/25' : 'text-white/65'}`}>
+                  {format(parseISO(event.event_date), 'MMM')}
+                </span>
+                <span className={`text-[28px] font-black leading-none mt-1 ${heroIsPast ? 'text-gray-500 dark:text-white/35' : 'text-white'}`} style={{ letterSpacing: '-0.05em' }}>
+                  {format(parseISO(event.event_date), 'd')}
+                </span>
+                <span className={`text-[9px] font-bold leading-none mt-0.5 ${heroIsPast ? 'text-gray-400 dark:text-white/20' : 'text-white/55'}`}>
+                  {format(parseISO(event.event_date), 'EEE')}
+                </span>
+                {heroHasApprovedSetlist && !heroIsPast && (
+                  <div className="absolute -top-1 -right-1 h-3.5 w-3.5 rounded-full ring-2 ring-white dark:ring-[#0d0d0f]" style={{ background: '#22c55e', boxShadow: '0 0 8px rgba(34,197,94,0.6)' }} />
+                )}
+              </div>
+
               <div className="flex-1 min-w-0">
-                <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-1.5">{event.title}</h1>
-                <span className="inline-block badge-blue text-xs mb-2">{event.event_type}</span>
+                {/* Eyebrow */}
+                <p className={`text-[10px] font-mono font-medium uppercase tracking-[0.22em] mb-1 ${heroEyebrow}`}>
+                  {heroIsPast ? 'Past event' : heroIsOverdue ? 'Setlist overdue' : heroIsDueSoon ? `Due in ${heroDaysUntilDue}d` : heroHasApprovedSetlist ? 'Setlist approved' : 'Schedule'}
+                </p>
 
-                <div className="space-y-1 text-xs text-gray-500 dark:text-gray-400">
-                  <div className="flex items-center gap-1.5">
-                    <Calendar className="h-3.5 w-3.5 shrink-0" />
-                    <span className="font-semibold text-gray-900 dark:text-white">{format(parseISO(event.event_date), 'EEEE')}</span>
-                    <span>,</span>
-                    <span>{format(parseISO(event.event_date), 'MMMM d, yyyy')}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="h-3.5 w-3.5 shrink-0" />
-                    <span>{formatTime12Hour(event.start_time || '')}{event.end_time && ` - ${formatTime12Hour(event.end_time)}`}</span>
-                  </div>
-                  {event.proposal_due_date && (
-                    <div className="text-[11px] pt-0.5">
-                      <span className="font-semibold">Due:</span> {formatInTimeZone(parseISO(event.proposal_due_date), 'Asia/Manila', "MMMM d, yyyy \'at\' h:mm a")}
-                    </div>
-                  )}
+                {/* Title */}
+                <h1 className="text-[1.5rem] sm:text-[1.75rem] font-black text-gray-900 dark:text-white leading-[1.1]" style={{ letterSpacing: '-0.03em' }}>
+                  {event.title}
+                </h1>
+
+                {/* Type badge */}
+                <div className="mt-2">
+                  <span className="badge-blue text-[10px]">{event.event_type}</span>
                 </div>
-                {event.description && <p className="mt-2 text-xs text-gray-600 dark:text-gray-400 line-clamp-2">{event.description}</p>}
-              </div>
-              <div className="flex flex-col items-center justify-center bg-brand-600 dark:bg-brand-700 text-white rounded-lg p-2.5 min-w-[60px] shrink-0">
-                <div className="text-[10px] uppercase font-medium">{format(parseISO(event.event_date), 'MMM')}</div>
-                <div className="text-2xl font-bold leading-none">{format(parseISO(event.event_date), 'd')}</div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 mt-3">
-              {isLeader && (
-                <button onClick={() => setShowAssign(true)} className="btn-primary text-xs py-2.5 px-3 flex-1">
-                  <Plus className="h-3.5 w-3.5" /> Assign Member
-                </button>
+            {/* Meta row */}
+            <div className="mt-5 pt-5 border-t border-black/[0.05] dark:border-white/[0.05] grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {[
+                {
+                  icon: Calendar,
+                  label: 'Date',
+                  value: format(parseISO(event.event_date), 'EEEE'),
+                  detail: format(parseISO(event.event_date), 'MMM d, yyyy'),
+                },
+                {
+                  icon: Clock,
+                  label: 'Time',
+                  value: formatTime12Hour(event.start_time || '') || 'Time not set',
+                  detail: event.end_time ? `Ends ${formatTime12Hour(event.end_time)}` : 'End time not set',
+                },
+                {
+                  icon: Music,
+                  label: 'Song Leader',
+                  value: songLeaderName || 'Not assigned',
+                  detail: songLeaderAssignment?.status
+                    ? songLeaderAssignment.status === 'confirmed' ? 'Confirmed assignment' : `${songLeaderAssignment.status} assignment`
+                    : 'No song leader assignment',
+                },
+                {
+                  icon: Users,
+                  label: 'Team',
+                  value: `${confirmedCount}/${assignments.length} confirmed`,
+                  detail: assignments.length === 1 ? '1 assigned member' : `${assignments.length} assigned members`,
+                },
+              ].map(item => {
+                const Icon = item.icon;
+                return (
+                  <div key={item.label} className="flex items-center gap-3 rounded-2xl bg-white/65 dark:bg-white/[0.035] border border-black/[0.06] dark:border-white/[0.07] px-3.5 py-3.5 min-w-0">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-white/45">
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400 dark:text-white/30">{item.label}</span>
+                      <span className="block text-[14px] sm:text-[15px] font-black text-gray-900 dark:text-white truncate leading-tight mt-0.5">{item.value}</span>
+                      <span className="block text-[11px] text-gray-500 dark:text-white/45 truncate mt-0.5">{item.detail}</span>
+                    </span>
+                  </div>
+                );
+              })}
+              {event.proposal_due_date && (
+                <div className="flex items-center gap-2 sm:col-span-2">
+                  <AlertCircle className={`h-3.5 w-3.5 shrink-0 ${heroIsOverdue ? 'text-red-500' : heroIsDueSoon ? 'text-amber-500' : 'text-gray-400 dark:text-white/30'}`} />
+                  <span className={`text-[11px] font-mono ${heroIsOverdue ? 'text-red-600 dark:text-red-400' : heroIsDueSoon ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500 dark:text-white/45'}`}>
+                    <span className="font-bold uppercase tracking-wide">Due:</span> {formatInTimeZone(parseISO(event.proposal_due_date), 'Asia/Manila', "MMM d, yyyy 'at' h:mm a")}
+                  </span>
+                </div>
               )}
-              {canEditEvent && (
-                <button onClick={openEditEvent} className="btn-secondary text-xs py-2.5 px-3" title="Edit">
-                  <Edit className="h-3.5 w-3.5" />
-                </button>
-              )}
-              {isLeader && (
-                <button onClick={() => setShowDeleteEvent(true)} className="btn-danger text-xs py-2.5 px-3" title="Delete">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+              {event.description && (
+                <p className="sm:col-span-2 text-[12px] text-gray-600 dark:text-white/55 leading-relaxed">{event.description}</p>
               )}
             </div>
+
+            {/* Action buttons */}
+            {(isLeader || canEditEvent) && (
+              <div className="mt-5 pt-5 border-t border-black/[0.05] dark:border-white/[0.05] flex items-center gap-2">
+                {isLeader && (
+                  <button
+                    onClick={() => setShowAssign(true)}
+                    className="inline-flex items-center justify-center gap-1.5 px-4 h-9 rounded-full text-[12px] font-semibold text-white flex-1 transition-all active:scale-[0.97]"
+                    style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', boxShadow: '0 4px 14px rgba(22,163,74,0.35)' }}
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Assign Member
+                  </button>
+                )}
+                {canEditEvent && (
+                  <button
+                    onClick={openEditEvent}
+                    className="inline-flex items-center justify-center h-9 w-9 rounded-full text-gray-600 dark:text-white/55 bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-md hover:bg-white dark:hover:bg-white/[0.07] active:scale-[0.95] transition-colors"
+                    title="Edit"
+                  >
+                    <Edit className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                {isLeader && (
+                  <button
+                    onClick={() => setShowDeleteEvent(true)}
+                    className="inline-flex items-center justify-center h-9 w-9 rounded-full text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/[0.1] border border-red-200 dark:border-red-500/25 hover:bg-red-100 dark:hover:bg-red-500/[0.18] active:scale-[0.95] transition-colors"
+                    title="Delete"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
           </div>
+        </motion.div>
 
-        </div>
-
+        {/* ── Pending Assignment Banner ────────────────── */}
         {myAssignment && myAssignment.status === 'pending' && (
-          <div className="card bg-amber-50 dark:bg-amber-900/20 ring-amber-200 dark:ring-amber-800 animate-fade-in" style={{ animationDelay: '75ms' }}>
-            <div className="px-4 py-3.5">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">You have a pending assignment</p>
-                <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">Role: {myAssignment.roles?.name}</p>
+          <motion.div
+            initial={{ opacity: 0, y: 10, filter: 'blur(4px)' }}
+            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            transition={{ duration: 0.4, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
+            className="relative rounded-3xl overflow-hidden border border-amber-200 dark:border-amber-500/25 bg-white dark:bg-[#120b05]"
+            style={{
+              backgroundImage: 'linear-gradient(135deg, rgba(245,158,11,0.14), rgba(245,158,11,0.04) 50%, transparent 80%)',
+              boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -12px rgba(245,158,11,0.20)',
+            }}
+          >
+            <div className="absolute inset-0 dark:bg-white/[0.025]" />
+            <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-amber-300/40 dark:via-amber-400/30 to-transparent" />
+
+            <div className="relative px-5 py-4 flex items-start gap-3.5">
+              <div
+                className="relative flex items-center justify-center h-10 w-10 rounded-2xl shrink-0"
+                style={{ background: 'linear-gradient(145deg, #f59e0b, #d97706)', boxShadow: '0 3px 10px rgba(245,158,11,0.4)' }}
+              >
+                <AlertCircle className="h-5 w-5 text-white" />
               </div>
-              <div className="flex items-center gap-2 mt-3">
-                <button onClick={() => handleConfirm(myAssignment.id)} className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 transition-colors">
-                  <Check className="h-3.5 w-3.5" /> Confirm
-                </button>
-                <button onClick={() => setShowDecline(myAssignment.id)} className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 transition-colors">
-                  <X className="h-3.5 w-3.5" /> Decline
-                </button>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-mono font-medium uppercase tracking-[0.22em] text-amber-600 dark:text-amber-400 mb-0.5">
+                  Action required
+                </p>
+                <p className="text-[15px] font-bold text-gray-900 dark:text-white leading-tight" style={{ letterSpacing: '-0.02em' }}>
+                  You have a pending assignment
+                </p>
+                <p className="text-[12px] text-gray-600 dark:text-white/55 mt-0.5">
+                  Role: <span className="font-semibold text-gray-800 dark:text-white/80">{myAssignment.roles?.name}</span>
+                </p>
+                <div className="flex items-center gap-2 mt-3">
+                  <button
+                    onClick={() => handleConfirm(myAssignment.id)}
+                    className="inline-flex items-center gap-1.5 px-3.5 h-8 rounded-full text-[12px] font-semibold text-white transition-all active:scale-[0.97]"
+                    style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', boxShadow: '0 3px 10px rgba(22,163,74,0.3)' }}
+                  >
+                    <Check className="h-3.5 w-3.5" /> Confirm
+                  </button>
+                  <button
+                    onClick={() => setShowDecline(myAssignment.id)}
+                    className="inline-flex items-center gap-1.5 px-3.5 h-8 rounded-full text-[12px] font-semibold text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-500/[0.12] border border-red-200 dark:border-red-500/25 hover:bg-red-100 dark:hover:bg-red-500/[0.18] active:scale-[0.97] transition-colors"
+                  >
+                    <X className="h-3.5 w-3.5" /> Decline
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          </motion.div>
         )}
 
         {(() => {
@@ -1005,6 +1234,71 @@ export function EventDetail() {
         )}
 
         {!setlist ? (
+          showLinkedSetlistReference ? (
+            <div className="card overflow-hidden animate-slide-up" style={{ animationDelay: '125ms' }}>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800 bg-amber-50/60 dark:bg-amber-500/[0.06]">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Music className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <h2 className="text-base font-semibold text-gray-900 dark:text-white">Sunday Service Setlist</h2>
+                    <span className={statusColors[linkedSetlistStatus] || 'badge-blue'}>{statusLabels[linkedSetlistStatus] || linkedSetlistStatus}</span>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">
+                    Reference only from {linkedServiceEvent?.title || 'linked Sunday Service'}
+                    {linkedServiceDateLabel ? ` · ${linkedServiceDateLabel}` : ''}
+                  </p>
+                </div>
+                <button
+                  onClick={() => navigate(`/events/${event.linked_event_id}`)}
+                  className="btn-secondary text-xs shrink-0"
+                >
+                  Open Main Event <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              {linkedReferenceSongs.length === 0 ? (
+                <p className="px-5 py-6 text-center text-sm text-gray-400">The linked setlist has no songs yet</p>
+              ) : (
+                <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                  {linkedReferenceSongs.map((ss, i) => {
+                    const song = Array.isArray(ss.songs) ? ss.songs[0] : ss.songs;
+                    const displayKey = ss.performed_key || song?.song_key || '';
+                    const keyChanged = ss.performed_key && song?.song_key && ss.performed_key !== song.song_key;
+                    return (
+                      <div key={ss.id} className="px-4 py-3">
+                        <div className="flex items-start gap-3">
+                          <span className="flex items-center justify-center h-7 w-7 rounded-lg bg-gray-100 dark:bg-gray-800 text-xs font-medium text-gray-500 dark:text-gray-400 shrink-0">{i + 1}</span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-sm font-medium text-gray-900 dark:text-white">{song?.title || 'Untitled song'}</p>
+                              {displayKey && (
+                                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${keyChanged ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'}`}>
+                                  {displayKey}
+                                </span>
+                              )}
+                              {ss.song_category && <span className="badge-blue text-[10px]">{ss.song_category}</span>}
+                            </div>
+                            {song?.artist && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{song.artist}</p>}
+                          </div>
+                          {ss.youtube_url && (
+                            <a href={ss.youtube_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 transition-colors shrink-0">
+                              <Music className="h-3 w-3" /> Video
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40">
+                <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                  This rehearsal is linked to the Sunday service setlist for reference. No separate rehearsal setlist is created in the library.
+                </p>
+              </div>
+            </div>
+          ) : (
           <div className="card animate-slide-up" style={{ animationDelay: '125ms' }}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800">
               <h2 className="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2">
@@ -1034,6 +1328,7 @@ export function EventDetail() {
               )}
             </div>
           </div>
+          )
         ) : (
           <div className="animate-slide-up" style={{ animationDelay: '125ms' }}>
             <div className="card overflow-hidden">
@@ -1778,12 +2073,13 @@ export function EventDetail() {
                     { value: 'Online Devotion', label: 'Online Devotion' },
                     { value: 'Equipping', label: 'Equipping' },
                     { value: 'Revamp Session', label: 'Revamp Session' },
+                    { value: 'Youth Recharge', label: 'Youth Recharge' },
                   ]}
                   placeholder="Select event type"
                 />
               </div>
 
-              {['Sunday Service', 'LGTF (Midweek)', 'Prayer Meeting'].includes(editForm.event_type) && (
+              {['Sunday Service', 'LGTF (Midweek)', 'Prayer Meeting', 'Youth Recharge'].includes(editForm.event_type) && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Song Leader</label>
                   <Select
@@ -1838,7 +2134,7 @@ export function EventDetail() {
                 </div>
               )}
 
-              {editForm.event_date && ['Sunday Service', 'LGTF (Midweek)', 'Prayer Meeting'].includes(editForm.event_type) && (
+              {editForm.event_date && ['Sunday Service', 'LGTF (Midweek)', 'Prayer Meeting', 'Youth Recharge'].includes(editForm.event_type) && (
                 <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
                   <p className="text-xs text-blue-700 dark:text-blue-300">
                     <strong>Proposal Due Date:</strong> {formatInTimeZone(parseISO(calculateProposalDueDate(editForm.event_date, editForm.event_type) || ''), 'Asia/Manila', "MMMM d, yyyy \'at\' h:mm a")}

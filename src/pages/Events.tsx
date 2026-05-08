@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { format, parseISO, startOfDay, subWeeks, previousSunday, addDays, differenceInDays, eachDayOfInterval } from 'date-fns';
+import { format, parseISO, startOfDay, subWeeks, previousSunday, addDays, subDays, differenceInDays, eachDayOfInterval } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
-import { Calendar, Plus, Search, ChevronRight, Filter, Users, Trash2, Cake, CalendarOff, LayoutGrid, List, AlertCircle, Clock, X } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Calendar, Plus, Search, ChevronRight, Filter, Users, Trash2, Cake, CalendarOff, LayoutGrid, List, AlertCircle, Clock, X, PartyPopper, Heart } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -23,21 +24,42 @@ interface AssignmentRow { user_id: string; role_id: string; }
 interface CalendarEntry { type: 'birthday' | 'leave'; date: string; name: string; status?: string; }
 interface SetlistInfo { status: string; created_at: string; submitted_at: string | null; }
 
-const EVENT_TYPE_COLORS: Record<string, string> = {
-  'Sunday Service': 'bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300',
-  'Prayer Meeting': 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300',
-  'LGTF (Midweek)': 'bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300',
-  'Rehearsals': 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300',
-  'Online Devotion': 'bg-pink-100 dark:bg-pink-900/30 text-pink-700 dark:text-pink-300',
-  'Equipping': 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300',
-  'Revamp Session': 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300',
-  'Youth Recharge': 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300',
+const EVENT_TYPE_COLORS: Record<string, { lightBg: string; lightText: string; darkBg: string; darkText: string }> = {
+  'Sunday Service':   { lightBg: 'rgba(37,99,235,0.10)',  lightText: '#1d4ed8', darkBg: 'rgba(37,99,235,0.18)',  darkText: '#93c5fd' },
+  'Prayer Meeting':   { lightBg: 'rgba(124,58,237,0.10)', lightText: '#7c3aed', darkBg: 'rgba(124,58,237,0.18)', darkText: '#c4b5fd' },
+  'LGTF (Midweek)':  { lightBg: 'rgba(20,184,166,0.10)', lightText: '#0f766e', darkBg: 'rgba(20,184,166,0.18)', darkText: '#5eead4' },
+  'Rehearsals':       { lightBg: 'rgba(217,119,6,0.10)',  lightText: '#b45309', darkBg: 'rgba(217,119,6,0.18)',  darkText: '#fcd34d' },
+  'Online Devotion':  { lightBg: 'rgba(219,39,119,0.10)', lightText: '#be185d', darkBg: 'rgba(219,39,119,0.18)', darkText: '#f9a8d4' },
+  'Equipping':        { lightBg: 'rgba(22,163,74,0.10)',  lightText: '#15803d', darkBg: 'rgba(22,163,74,0.18)',  darkText: '#86efac' },
+  'Revamp Session':   { lightBg: 'rgba(234,88,12,0.10)',  lightText: '#c2410c', darkBg: 'rgba(234,88,12,0.18)',  darkText: '#fdba74' },
+  'Youth Recharge':   { lightBg: 'rgba(225,29,72,0.10)',  lightText: '#be123c', darkBg: 'rgba(225,29,72,0.18)',  darkText: '#fda4af' },
 };
+
+const fadeUp = (delay = 0) => ({
+  initial: { opacity: 0, y: 14 },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.42, delay, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] },
+});
+
+function EventTypeBadge({ type }: { type: string }) {
+  const colors = EVENT_TYPE_COLORS[type];
+  if (!colors) return (
+    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-white/[0.08] text-gray-500 dark:text-white/40">
+      {type}
+    </span>
+  );
+  return (
+    <>
+      <span className="dark:hidden text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: colors.lightBg, color: colors.lightText }}>{type}</span>
+      <span className="hidden dark:inline text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: colors.darkBg, color: colors.darkText }}>{type}</span>
+    </>
+  );
+}
 
 function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEventClick, isPast }: {
   event: Event; calendarEntries: CalendarEntry[]; songLeaderMap?: Record<string, string>; setlistInfoMap?: Record<string, SetlistInfo>; onEventClick: (id: string) => void; isPast?: boolean;
 }) {
-  const dayEntries = calendarEntries.filter(e => e.date === event.event_date);
+  const dayEntries = calendarEntries.filter(e => e.date === event.event_date && e.type === 'leave');
   const songLeader = songLeaderMap?.[event.id];
   const setlistInfo = setlistInfoMap?.[event.id];
   const hasApprovedSetlist = setlistInfo?.status === 'approved';
@@ -51,102 +73,313 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
   const wasSubmittedOnTime = hasApprovedSetlist && proposalDueDate && setlistSubmittedAt && setlistSubmittedAt <= proposalDueDate;
   const daysOverdueWhenSubmitted = wasSubmittedLate && proposalDueDate && setlistSubmittedAt
     ? Math.ceil((setlistSubmittedAt.getTime() - proposalDueDate.getTime()) / (1000 * 60 * 60 * 24)) : 0;
-  const eventTypeBadge = EVENT_TYPE_COLORS[event.event_type] ?? 'bg-gray-100 dark:bg-white/[0.07] text-gray-600 dark:text-gray-400';
+
+  // Visual urgency states (only when proposal is missing)
+  const showOverdueStyle = isOverdue && !hasApprovedSetlist && !isPast;
+  const showDueSoonStyle = isDueSoon && !hasApprovedSetlist && !isPast;
+
+  // Date chip gradient encodes urgency directly
+  const chipGradient = isPast
+    ? null
+    : showOverdueStyle
+    ? 'linear-gradient(145deg,#ef4444,#b91c1c)'
+    : showDueSoonStyle
+    ? 'linear-gradient(145deg,#f59e0b,#b45309)'
+    : 'linear-gradient(145deg,#16a34a,#15803d)';
+
+  const chipShadow = isPast
+    ? undefined
+    : showOverdueStyle
+    ? '0 4px 14px rgba(220,38,38,0.45)'
+    : showDueSoonStyle
+    ? '0 4px 14px rgba(245,158,11,0.45)'
+    : '0 3px 10px rgba(22,163,74,0.3)';
+
+  // Card tint — subtle full-card wash matching urgency / status
+  const cardTint = isPast
+    ? undefined
+    : showOverdueStyle
+    ? 'linear-gradient(135deg, rgba(239,68,68,0.13), rgba(239,68,68,0.04) 45%, transparent 75%)'
+    : showDueSoonStyle
+    ? 'linear-gradient(135deg, rgba(245,158,11,0.13), rgba(245,158,11,0.04) 45%, transparent 75%)'
+    : 'linear-gradient(135deg, rgba(34,197,94,0.09), rgba(34,197,94,0.025) 45%, transparent 75%)';
 
   return (
     <button
       onClick={() => onEventClick(event.id)}
-      className={`group w-full flex items-center gap-3.5 p-4 text-left rounded-2xl ring-1 transition-all duration-200 hover:-translate-y-px active:scale-[0.99] ${
-        isPast
-          ? 'bg-gray-50/60 dark:bg-white/[0.02] ring-black/[0.04] dark:ring-white/[0.04] opacity-70 hover:opacity-90'
-          : 'bg-white dark:bg-[#1a1a1c] ring-black/[0.05] dark:ring-white/[0.06] hover:ring-black/[0.08] dark:hover:ring-white/[0.09]'
-      }`}
-      style={{ boxShadow: isPast ? 'none' : '0 1px 3px rgba(0,0,0,0.04)' }}
+      className="card-hover group relative w-full flex items-center gap-3.5 px-4 py-3.5 text-left overflow-hidden"
+      style={{ borderRadius: '1.5rem', opacity: isPast ? 0.6 : 1, backgroundImage: cardTint }}
     >
-      {/* Date chip */}
-      <div className={`relative flex flex-col items-center justify-center h-14 w-12 rounded-xl shrink-0 ${
-        isPast
-          ? 'bg-gray-100 dark:bg-white/[0.05] text-gray-400 dark:text-gray-500'
-          : 'bg-brand-600 text-white'
-      }`}
-        style={isPast ? {} : { boxShadow: '0 2px 6px rgba(0,0,0,0.12)' }}
+      <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.05] dark:via-white/[0.09] to-transparent" />
+
+      {/* Date chip — gradient encodes urgency */}
+      <div
+        className={`relative flex flex-col items-center justify-center h-[52px] w-11 rounded-xl shrink-0 ${isPast ? 'bg-gray-100 dark:bg-white/[0.05]' : ''}`}
+        style={isPast ? {} : { background: chipGradient!, boxShadow: chipShadow }}
       >
-        <span className="text-[10px] font-black uppercase tracking-wider leading-none">{format(parseISO(event.event_date), 'MMM')}</span>
-        <span className="text-[22px] font-black leading-none mt-0.5" style={{ letterSpacing: '-0.04em' }}>{format(parseISO(event.event_date), 'd')}</span>
-        <span className="text-[9px] font-semibold leading-none mt-0.5 opacity-70">{format(parseISO(event.event_date), 'EEE')}</span>
-        {(hasApprovedSetlist || (!hasApprovedSetlist && (isDueSoon || isOverdue))) && (
-          <div className={`absolute -top-1 -right-1 h-3 w-3 rounded-full ring-2 ring-white dark:ring-gray-900 ${
-            hasApprovedSetlist ? 'bg-green-500' :
-            isOverdue ? 'bg-red-500' : 'bg-amber-500'
-          }`} />
+        <span className={`text-[9px] font-black uppercase tracking-widest leading-none ${isPast ? 'text-gray-400 dark:text-white/25' : 'text-white/65'}`}>
+          {format(parseISO(event.event_date), 'MMM')}
+        </span>
+        <span className={`text-[22px] font-black leading-none mt-0.5 ${isPast ? 'text-gray-500 dark:text-white/35' : 'text-white'}`} style={{ letterSpacing: '-0.04em' }}>
+          {format(parseISO(event.event_date), 'd')}
+        </span>
+        <span className={`text-[8px] font-bold leading-none mt-0.5 ${isPast ? 'text-gray-400 dark:text-white/20' : 'text-white/50'}`}>
+          {format(parseISO(event.event_date), 'EEE')}
+        </span>
+        {hasApprovedSetlist && !isPast && (
+          <div className="absolute -top-1 -right-1 h-3 w-3 rounded-full ring-2 ring-white dark:ring-[#1c1b1e]" style={{ background: '#22c55e' }} />
         )}
       </div>
 
       {/* Body */}
       <div className="min-w-0 flex-1">
-        <div className="flex items-start gap-2 flex-wrap">
-          <p className={`text-sm font-bold leading-snug ${isPast ? 'text-gray-500 dark:text-gray-400' : 'text-gray-900 dark:text-white'}`} style={{ letterSpacing: '-0.01em' }}>
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="text-[14px] font-bold leading-snug text-gray-900 dark:text-white" style={{ letterSpacing: '-0.015em' }}>
             {songLeader || event.title}
           </p>
-          <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg ${eventTypeBadge}`}>
-            {event.event_type}
-          </span>
+          <EventTypeBadge type={event.event_type} />
+          {showOverdueStyle && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-lg bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400">
+              <AlertCircle className="h-3 w-3" /> Overdue
+            </span>
+          )}
+          {showDueSoonStyle && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-lg bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400">
+              <AlertCircle className="h-3 w-3" /> Due in {daysUntilDue}d
+            </span>
+          )}
         </div>
-        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-          <Clock className="h-3 w-3 text-gray-400 shrink-0" />
-          <span className="text-xs text-gray-500 dark:text-gray-400">
+
+        <div className="flex items-center gap-1.5 mt-1">
+          <Clock className="h-3 w-3 shrink-0 text-gray-400 dark:text-white/25" />
+          <span className="text-[12px] text-gray-500 dark:text-white/40">
             {formatTime12Hour(event.start_time || '')}{event.end_time && ` – ${formatTime12Hour(event.end_time)}`}
           </span>
         </div>
+
         {event.proposal_due_date && !isPast && (
-          <p className={`text-[11px] mt-1 flex items-center gap-1 ${
-            wasSubmittedOnTime ? 'text-green-600 dark:text-green-400' :
-            wasSubmittedLate ? 'text-green-600 dark:text-green-400' :
-            isOverdue && !hasApprovedSetlist ? 'text-red-600 dark:text-red-400' :
+          <p className={`text-[11px] mt-1 flex items-center gap-1 font-medium ${
+            wasSubmittedOnTime || wasSubmittedLate ? 'text-emerald-600 dark:text-emerald-400' :
+            isOverdue && !hasApprovedSetlist ? 'text-red-500 dark:text-red-400' :
             isDueSoon && !hasApprovedSetlist ? 'text-amber-600 dark:text-amber-400' :
-            'text-gray-400 dark:text-gray-500'
+            'text-gray-400 dark:text-white/25'
           }`}>
-            {((isDueSoon || isOverdue) && !hasApprovedSetlist) && <AlertCircle className="h-3 w-3" />}
-            <span className="font-semibold">Due:</span> {formatInTimeZone(parseISO(event.proposal_due_date), 'Asia/Manila', "MMM d \'at\' h:mm a")}
-            {isOverdue && !hasApprovedSetlist && ' (Overdue)'}
-            {isDueSoon && !hasApprovedSetlist && ` (${daysUntilDue}d)`}
-            {wasSubmittedOnTime && ' (On-time)'}
+            <span className="font-semibold">Due:</span> {formatInTimeZone(parseISO(event.proposal_due_date), 'Asia/Manila', "MMM d 'at' h:mm a")}
+            {wasSubmittedOnTime && ' ✓ On-time'}
             {wasSubmittedLate && ` (${daysOverdueWhenSubmitted}d late)`}
           </p>
         )}
+
         {dayEntries.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mt-1.5">
             {dayEntries.map((entry, i) => (
-              <span key={i} className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md ${
-                entry.type === 'birthday' ? 'bg-pink-50 dark:bg-pink-900/20 text-pink-600 dark:text-pink-400' : 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400'
-              }`}>
-                {entry.type === 'birthday' ? <Cake className="h-3 w-3" /> : <CalendarOff className="h-3 w-3" />}
-                {entry.name} {entry.type === 'birthday' ? 'bday' : 'out'}
+              <span key={i} className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-orange-50 dark:bg-orange-500/[0.15] text-orange-600 dark:text-orange-300">
+                <CalendarOff className="h-3 w-3" />
+                {entry.name} out
               </span>
             ))}
           </div>
         )}
       </div>
-      <ChevronRight className={`h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5 ${isPast ? 'text-gray-300 dark:text-gray-700' : 'text-gray-300 dark:text-gray-600'}`} />
+
+      <ChevronRight className="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5 text-gray-300 dark:text-white/20" />
     </button>
   );
 }
+
+function BirthdayCard({ name, date }: { name: string; date: string }) {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [wishing, setWishing] = useState(false);
+  const [wished, setWished] = useState(false);
+  const [announcementId, setAnnouncementId] = useState<string | null>(null);
+
+  const firstName = name.split(' ')[0];
+  const isToday = date === format(new Date(), 'yyyy-MM-dd');
+
+  // On mount, check if a birthday announcement already exists today
+  // and whether this user has already wished
+  useEffect(() => {
+    if (!isToday || !user) return;
+    (async () => {
+      const todayStart = `${date}T00:00:00`;
+      const todayEnd = `${date}T23:59:59`;
+      const { data } = await supabase
+        .from('announcements')
+        .select('id, announcement_reactions(user_id, emoji)')
+        .like('title', `🎂 Happy Birthday, ${name}%`)
+        .gte('created_at', todayStart)
+        .lte('created_at', todayEnd)
+        .maybeSingle();
+      if (data) {
+        setAnnouncementId(data.id);
+        const alreadyWished = (data.announcement_reactions as any[])?.some(
+          r => r.user_id === user.id
+        );
+        if (alreadyWished) setWished(true);
+      }
+    })();
+  }, [isToday, user, name, date]);
+
+  const handleWish = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!user || wishing || wished) return;
+    setWishing(true);
+
+    if (!announcementId) {
+      // First person to wish — create the shared birthday announcement
+      const { data: newAnn, error } = await supabase
+        .from('announcements')
+        .insert({
+          title: `🎂 Happy Birthday, ${name}!`,
+          content: `🎉 Today is ${firstName}'s birthday! Wishing them all of God's blessings on their special day! 🙏`,
+          priority: 'normal',
+          created_by: user.id,
+        })
+        .select('id')
+        .maybeSingle();
+      if (error || !newAnn) { toast('error', 'Could not send birthday wish'); setWishing(false); return; }
+      setAnnouncementId(newAnn.id);
+    } else {
+      // Announcement already exists — just add a 🎉 reaction
+      await supabase.from('announcement_reactions').insert({
+        announcement_id: announcementId,
+        user_id: user.id,
+        emoji: '🎉',
+      });
+    }
+
+    setWishing(false);
+    toast('success', `Birthday wish sent to ${firstName}! 🎉`);
+    setWished(true);
+  };
+
+  return (
+    <div
+      className="relative flex items-center gap-4 px-4 py-4 overflow-hidden"
+      style={{
+        borderRadius: '1.5rem',
+        background: 'linear-gradient(135deg, rgba(236,72,153,0.08) 0%, rgba(168,85,247,0.05) 60%, transparent 100%)',
+        border: '1px solid rgba(236,72,153,0.2)',
+        boxShadow: '0 1px 3px rgba(236,72,153,0.08), 0 4px 16px -8px rgba(236,72,153,0.12)',
+      }}
+    >
+      {/* Subtle shimmer highlight */}
+      <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-pink-300/30 to-transparent" />
+
+      {/* Birthday icon chip */}
+      <div
+        className="relative flex flex-col items-center justify-center h-[52px] w-11 rounded-xl shrink-0"
+        style={{ background: 'linear-gradient(145deg, #ec4899, #a855f7)', boxShadow: '0 3px 12px rgba(236,72,153,0.35)' }}
+      >
+        <span className="text-xl leading-none">🎂</span>
+        <span className="text-[8px] font-black uppercase tracking-widest text-white/70 mt-0.5">
+          {format(parseISO(date), 'MMM')}
+        </span>
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="text-[14px] font-bold leading-snug text-gray-900 dark:text-white" style={{ letterSpacing: '-0.015em' }}>
+            {name}
+          </p>
+          {isToday ? (
+            <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-lg bg-pink-100 dark:bg-pink-500/20 text-pink-600 dark:text-pink-300">
+              <PartyPopper className="h-3 w-3" /> Today!
+            </span>
+          ) : (
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-pink-50 dark:bg-pink-500/[0.12] text-pink-500 dark:text-pink-300">
+              Birthday
+            </span>
+          )}
+        </div>
+        <p className="text-[12px] text-gray-500 dark:text-white/40 mt-0.5 font-mono">
+          {format(parseISO(date), 'EEEE, MMMM d')}
+        </p>
+      </div>
+
+      {/* Greet button — only active on the birthday itself */}
+      {isToday ? (
+        <button
+          onClick={handleWish}
+          disabled={wishing || wished}
+          className="shrink-0 inline-flex items-center gap-1.5 px-3.5 h-8 rounded-full text-[12px] font-semibold transition-all active:scale-95 disabled:opacity-60"
+          style={wished
+            ? { background: 'rgba(22,163,74,0.12)', color: '#16a34a', border: '1px solid rgba(22,163,74,0.25)' }
+            : { background: 'linear-gradient(135deg, #ec4899, #a855f7)', color: '#fff', boxShadow: '0 3px 10px rgba(236,72,153,0.3)' }
+          }
+        >
+          {wished ? (
+            <><Heart className="h-3.5 w-3.5 fill-emerald-500 text-emerald-500" /> Wished!</>
+          ) : wishing ? (
+            '...'
+          ) : (
+            <><PartyPopper className="h-3.5 w-3.5" /> Greet</>
+          )}
+        </button>
+      ) : (
+        <div
+          className="shrink-0 inline-flex items-center gap-1.5 px-3.5 h-8 rounded-full text-[12px] font-semibold cursor-not-allowed select-none"
+          style={{ background: 'rgba(236,72,153,0.08)', color: 'rgba(236,72,153,0.4)', border: '1px solid rgba(236,72,153,0.15)' }}
+          title={`Greetings open on ${format(parseISO(date), 'MMMM d')}`}
+        >
+          <PartyPopper className="h-3.5 w-3.5" />
+          {format(parseISO(date), 'MMM d')}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const itemAnim = { hidden: { opacity: 0, y: 10, filter: 'blur(4px)' }, show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] as [number,number,number,number] } } };
 
 function EventList({ events, calendarEntries, songLeaderMap, setlistInfoMap, onEventClick, showPast }: {
   events: Event[]; calendarEntries: CalendarEntry[]; songLeaderMap?: Record<string, string>; setlistInfoMap?: Record<string, SetlistInfo>; onEventClick: (id: string) => void; showPast?: boolean;
 }) {
   const today = startOfDay(new Date());
+
   const displayEvents = showPast
     ? events.filter(e => parseISO(e.event_date) < today).sort((a, b) => b.event_date.localeCompare(a.event_date))
     : events.filter(e => parseISO(e.event_date) >= today).sort((a, b) => a.event_date.localeCompare(b.event_date));
 
-  if (displayEvents.length === 0) return null;
+  // Upcoming birthday entries (deduplicated, not shown in past view)
+  const birthdayEntries = showPast ? [] : Array.from(
+    new Map(
+      calendarEntries
+        .filter(e => e.type === 'birthday' && parseISO(e.date) >= today)
+        .map(e => [`${e.name}-${e.date}`, e])
+    ).values()
+  );
+
+  type ListItem =
+    | { kind: 'event'; sortDate: string; event: Event }
+    | { kind: 'birthday'; sortDate: string; entry: CalendarEntry };
+
+  const merged: ListItem[] = [
+    ...displayEvents.map(e => ({ kind: 'event' as const, sortDate: e.event_date, event: e })),
+    ...birthdayEntries.map(e => ({ kind: 'birthday' as const, sortDate: e.date, entry: e })),
+  ].sort((a, b) => a.sortDate.localeCompare(b.sortDate));
+
+  if (merged.length === 0) return null;
+
   return (
-    <div className="space-y-2">
-      {displayEvents.map(event => (
-        <EventCard key={event.id} event={event} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={onEventClick} isPast={showPast} />
+    <motion.div
+      initial="hidden"
+      animate="show"
+      variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}
+      className="space-y-2.5"
+    >
+      {merged.map((item, idx) => (
+        <motion.div key={item.kind === 'event' ? item.event.id : `bday-${item.entry.name}-${item.entry.date}`} variants={itemAnim}>
+          {item.kind === 'event' ? (
+            <EventCard event={item.event} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={onEventClick} isPast={showPast} />
+          ) : (
+            <BirthdayCard name={item.entry.name} date={item.entry.date} />
+          )}
+        </motion.div>
       ))}
-    </div>
+    </motion.div>
   );
 }
 
@@ -257,6 +490,7 @@ export function Events() {
       if (sunday.getTime() === date.getTime()) sunday = addDays(sunday, -7);
       return `${format(sunday, 'yyyy-MM-dd')}T15:59:00Z`;
     }
+    if (eventType === 'Youth Recharge') return `${format(subDays(date, 7), 'yyyy-MM-dd')}T15:59:00Z`;
     return null;
   };
 
@@ -358,32 +592,48 @@ export function Events() {
 
   return (
     <div className="page-container page-bottom-pad">
-      <div className="px-4 sm:px-5 lg:px-6 pt-5 sm:pt-7 pb-0 space-y-4">
+      <div className="max-w-5xl mx-auto px-4 sm:px-5 lg:px-6 pt-6 sm:pt-8 pb-0 space-y-4">
 
-        {/* ── Page Header ─────────────────────────────── */}
-        <div className="flex items-start justify-between gap-3 animate-fade-in">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center h-11 w-11 rounded-2xl shrink-0" style={{ background: 'linear-gradient(135deg,#2563eb,#1d4ed8)', boxShadow: '0 3px 12px rgba(37,99,235,0.3)' }}>
-              <Calendar className="h-5 w-5 text-white" />
+        {/* ── Page Header ── */}
+        <motion.div {...fadeUp(0)} className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3.5">
+            <div className="relative shrink-0">
+              <div
+                className="absolute inset-0 rounded-2xl"
+                style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.35), transparent 70%)', filter: 'blur(10px)', transform: 'scale(1.5)' }}
+              />
+              <div
+                className="relative h-11 w-11 rounded-2xl flex items-center justify-center"
+                style={{ background: 'linear-gradient(145deg, #16a34a, #15803d)', boxShadow: '0 4px 14px rgba(22,163,74,0.35)' }}
+              >
+                <Calendar className="h-5 w-5 text-white" />
+              </div>
             </div>
             <div>
-              <h1 className="text-[1.375rem] font-black text-gray-900 dark:text-white leading-tight" style={{ letterSpacing: '-0.03em' }}>Events</h1>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                {upcomingEvents.length} upcoming · {pastEvents.length} past
+              <p className="text-[10px] font-mono font-medium uppercase tracking-[0.22em] text-emerald-600 dark:text-emerald-400/80 mb-0.5">
+                Schedule
               </p>
+              <h1 className="text-[1.5rem] sm:text-[1.75rem] font-black text-gray-900 dark:text-white leading-tight" style={{ letterSpacing: '-0.03em' }}>
+                Events.
+              </h1>
             </div>
           </div>
           {isLeader && (
-            <button onClick={() => setShowCreate(true)} className="btn-primary shrink-0 text-sm">
-              <Plus className="h-4 w-4" /> New Event
+            <button
+              onClick={() => setShowCreate(true)}
+              className="inline-flex shrink-0 items-center gap-1.5 px-4 h-9 rounded-full text-[12px] font-semibold text-white transition-all active:scale-[0.97]"
+              style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', boxShadow: '0 4px 14px rgba(22,163,74,0.35)' }}
+            >
+              <Plus className="h-3.5 w-3.5" /> New Event
             </button>
           )}
-        </div>
+        </motion.div>
 
-        {/* ── Tab Switcher ─────────────────────────────── */}
-        <div
-          className="flex gap-1 p-1 rounded-2xl animate-slide-up"
-          style={{ animationDelay: '40ms', animationFillMode: 'both', background: 'rgba(0,0,0,0.04)', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.06)' }}
+        {/* ── Tab Switcher ── */}
+        <motion.div
+          {...fadeUp(0.05)}
+          className="flex gap-1 p-1 rounded-2xl"
+          style={{ background: 'rgba(0,0,0,0.04)', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.06)' }}
         >
           {(['upcoming', 'past'] as const).map(tab => {
             const active = activeTab === tab;
@@ -392,43 +642,66 @@ export function Events() {
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-bold transition-all duration-200 ${
                   active
-                    ? 'bg-white dark:bg-[#232325] shadow-sm ring-1 ring-black/[0.06] dark:ring-white/[0.09] text-gray-900 dark:text-white'
-                    : 'text-gray-400 dark:text-gray-500 hover:bg-white/50 dark:hover:bg-white/[0.04]'
+                    ? 'bg-white dark:bg-white/[0.06] shadow-sm ring-1 ring-black/[0.06] dark:ring-white/[0.09] text-gray-900 dark:text-white'
+                    : 'text-gray-400 dark:text-white/35 hover:bg-white/50 dark:hover:bg-white/[0.04]'
                 }`}
               >
                 {tab === 'upcoming' ? 'Upcoming' : 'Past Events'}
                 {count > 0 && (
-                  <span className={`text-xs px-1.5 py-0.5 rounded-lg font-bold ${
-                    active ? (tab === 'upcoming' ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400') : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-500'
+                  <span className={`text-[11px] px-1.5 py-0.5 rounded-md font-bold ${
+                    active && tab === 'upcoming'
+                      ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
+                      : 'bg-black/[0.06] dark:bg-white/[0.08] text-gray-500 dark:text-white/35'
                   }`}>{count}</span>
                 )}
               </button>
             );
           })}
-        </div>
+        </motion.div>
 
-        {/* ── Search + Filter (desktop only) ─────────── */}
-        <div className="hidden sm:flex items-center gap-2 animate-slide-up" style={{ animationDelay: '60ms', animationFillMode: 'both' }}>
+        {/* ── Search + Filter ── */}
+        <motion.div {...fadeUp(0.08)} className="hidden sm:flex items-center gap-2">
           <div className="relative flex-1">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-            <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search events..." className="input-field pl-10 text-sm" />
-            {search && <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"><X className="h-4 w-4" /></button>}
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400 dark:text-white/25" />
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search events…"
+              className="w-full h-10 pl-10 pr-10 rounded-2xl text-[13px] bg-white dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.08] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/30 outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 dark:focus:border-emerald-500/50 transition-all"
+            />
+            {search && (
+              <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-white/30 hover:text-gray-600 transition-colors">
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
-          <Select value={typeFilter} onChange={setTypeFilter} options={[{ value: '', label: 'All Types' }, ...eventTypes.map(t => ({ value: t, label: t }))]} placeholder="All Types" className="sm:w-48" icon={<Filter className="h-4 w-4" />} />
-          <div className="hidden lg:flex gap-1 p-1 rounded-xl" style={{ background: 'rgba(0,0,0,0.04)' }}>
+          <Select
+            value={typeFilter}
+            onChange={setTypeFilter}
+            options={[{ value: '', label: 'All Types' }, ...eventTypes.map(t => ({ value: t, label: t }))]}
+            placeholder="All Types"
+            className="sm:w-48"
+            icon={<Filter className="h-4 w-4" />}
+          />
+          <div className="hidden lg:flex gap-1 p-1 rounded-xl bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07]">
             {(['grid', 'list'] as const).map(mode => (
-              <button key={mode} onClick={() => setViewMode(mode)} className={`p-2 rounded-lg transition-all ${viewMode === mode ? 'bg-white dark:bg-[#232325] shadow-sm text-gray-900 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}>
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                className={`p-2 rounded-lg transition-all ${viewMode === mode ? 'bg-white dark:bg-white/[0.1] text-gray-900 dark:text-white shadow-sm' : 'text-gray-400 dark:text-white/30'}`}
+              >
                 {mode === 'grid' ? <LayoutGrid className="h-4 w-4" /> : <List className="h-4 w-4" />}
               </button>
             ))}
           </div>
-        </div>
+        </motion.div>
       </div>
 
-      {/* ── Content ─────────────────────────────────── */}
-      <div className="px-4 sm:px-5 lg:px-6 pt-4">
+      {/* ── Content ── */}
+      <div className="max-w-5xl mx-auto px-4 sm:px-5 lg:px-6 pt-4">
         {filtered.length === 0 ? (
           <EmptyState
             icon={<Calendar className="h-8 w-8" />}
@@ -438,21 +711,21 @@ export function Events() {
           />
         ) : (
           <>
-            <div className="hidden lg:block animate-slide-up" style={{ animationDelay: '100ms' }}>
+            <motion.div {...fadeUp(0.1)} className="hidden lg:block">
               {viewMode === 'grid' ? (
                 <CalendarGrid events={filtered} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={id => navigate(`/events/${id}`)} onCreateEvent={isLeader ? () => setShowCreate(true) : undefined} onEventDateChange={isLeader ? handleEventDateChange : undefined} />
               ) : (
                 <EventList events={filtered} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={id => navigate(`/events/${id}`)} showPast={activeTab === 'past'} />
               )}
-            </div>
-            <div className="lg:hidden animate-slide-up" style={{ animationDelay: '100ms' }}>
+            </motion.div>
+            <motion.div {...fadeUp(0.1)} className="lg:hidden">
               <EventList events={filtered} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={id => navigate(`/events/${id}`)} showPast={activeTab === 'past'} />
-            </div>
+            </motion.div>
           </>
         )}
       </div>
 
-      {/* ── Create Modal ──────────────────────────────── */}
+      {/* ── Create Modal ── */}
       <Modal open={showCreate} onClose={() => { setShowCreate(false); setAssignmentRows([]); setCustomName(''); }} title="Create Event" size="lg">
         <form onSubmit={handleCreate} className="space-y-4">
           <div>
@@ -474,7 +747,7 @@ export function Events() {
             </div>
           )}
 
-          {['Sunday Service', 'LGTF (Midweek)', 'Prayer Meeting'].includes(form.event_type) && (
+          {['Sunday Service', 'LGTF (Midweek)', 'Prayer Meeting', 'Youth Recharge'].includes(form.event_type) && (
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Song Leader</label>
               <Select value={form.song_leader_id} onChange={v => setForm({ ...form, song_leader_id: v })} options={getSongLeaders().map(m => ({ value: m.id, label: `${m.first_name} ${m.last_name}` }))} placeholder="Select song leader" />
@@ -524,10 +797,10 @@ export function Events() {
             </div>
           )}
 
-          {form.event_date && ['Sunday Service', 'LGTF (Midweek)', 'Prayer Meeting'].includes(form.event_type) && (
-            <div className="p-3 rounded-xl bg-sky-50 dark:bg-sky-900/20 ring-1 ring-sky-200 dark:ring-sky-800">
-              <p className="text-xs text-sky-700 dark:text-sky-300">
-                <span className="font-bold">Proposal Due:</span> {formatInTimeZone(parseISO(calculateProposalDueDate(form.event_date, form.event_type) || ''), 'Asia/Manila', "MMMM d, yyyy \'at\' h:mm a")}
+          {form.event_date && ['Sunday Service', 'LGTF (Midweek)', 'Prayer Meeting', 'Youth Recharge'].includes(form.event_type) && (
+            <div className="p-3 rounded-xl" style={{ background: 'rgba(14,165,233,0.1)', border: '1px solid rgba(14,165,233,0.2)' }}>
+              <p className="text-xs" style={{ color: '#7dd3fc' }}>
+                <span className="font-bold">Proposal Due:</span> {formatInTimeZone(parseISO(calculateProposalDueDate(form.event_date, form.event_type) || ''), 'Asia/Manila', "MMMM d, yyyy 'at' h:mm a")}
               </p>
             </div>
           )}

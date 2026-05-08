@@ -176,23 +176,6 @@ export function RequestsIcon({ active, className }: IconProps) {
   );
 }
 
-export function MessageIcon({ active, className }: IconProps) {
-  if (active) {
-    return (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className}>
-        <path d="M20 2H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h3l3 3 3-3h7a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2Z" />
-        <path d="M8 9.5h8M8 13.5h5" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
-      </svg>
-    );
-  }
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-      <path d="M8 9.5h8M8 13.5h5" />
-    </svg>
-  );
-}
-
 export function ShieldNavIcon({ active, className }: IconProps) {
   if (active) {
     return (

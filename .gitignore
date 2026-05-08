@@ -21,3 +21,6 @@ dist-ssr
 *.sln
 *.sw?
 .env
+screenshots/
+supabase/.temp/
+.claude/

@@ -1,5 +1,7 @@
 export interface Profile {
   id: string;
+  org_id: string | null;
+  is_org_admin: boolean;
   first_name: string;
   second_name: string;
   middle_name: string;
@@ -9,12 +11,159 @@ export interface Profile {
   phone: string;
   gender: string;
   birthday: string | null;
+  official_join_date: string | null;
   avatar_url: string;
   is_onboarded: boolean;
   ministry_status: 'active' | 'restoration' | 'suspended' | 'inactive';
   leadership_notes: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  logo_url: string | null;
+  created_by: string | null;
+  trial_started_at: string | null;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  subscription_status: 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete' | null;
+  billing_status: 'trialing' | 'submitted' | 'active' | 'past_due' | 'suspended' | 'exempt' | null;
+  billing_plan: string | null;
+  billing_interval: 'monthly' | 'quarterly' | 'annual' | 'custom' | null;
+  payment_method: 'manual_gcash' | 'manual_bank_transfer' | 'manual_flexible' | null;
+  trial_ends_at: string | null;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  billing_grace_ends_at: string | null;
+  is_billing_exempt: boolean;
+  seats_purchased: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrganizationInvitation {
+  id: string;
+  org_id: string;
+  email: string;
+  role_ids: string[];
+  is_admin: boolean;
+  invited_by: string | null;
+  token: string;
+  expires_at: string;
+  accepted_at: string | null;
+  created_at: string;
+}
+
+export interface PlatformOverviewMetrics {
+  total_churches: number;
+  total_members: number;
+  total_org_admins: number;
+  active_subscriptions: number;
+  trialing_subscriptions: number;
+  past_due_subscriptions: number;
+  canceled_subscriptions: number;
+  pending_invites: number;
+  unattached_registrations: number;
+}
+
+export interface PlatformOrganizationSummary {
+  id: string;
+  name: string;
+  slug: string;
+  subscription_status: 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete' | null;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  trial_ends_at: string | null;
+  current_period_end: string | null;
+  seats_purchased: number;
+  created_at: string;
+  member_count: number;
+  org_admin_count: number;
+  event_count: number;
+  announcement_count: number;
+  pending_invite_count: number;
+}
+
+export interface PlatformOrganizationDetail {
+  id: string;
+  name: string;
+  slug: string;
+  logo_url: string | null;
+  subscription_status: 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete' | null;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  trial_ends_at: string | null;
+  current_period_end: string | null;
+  seats_purchased: number;
+  created_at: string;
+}
+
+export interface PlatformOrganizationMember {
+  profile_id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  nickname: string | null;
+  is_org_admin: boolean;
+  is_onboarded: boolean;
+  ministry_status: string;
+  created_at: string;
+}
+
+export interface OrganizationPaymentSubmission {
+  id: string;
+  org_id: string;
+  submitted_by: string;
+  plan_code: string;
+  amount: number;
+  billing_reference: string;
+  payer_name: string | null;
+  payment_channel: 'gcash' | 'bank_transfer';
+  reference_number: string;
+  receipt_url: string | null;
+  note: string | null;
+  status: 'submitted' | 'verified' | 'rejected';
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  rejection_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PlatformPaymentSubmission {
+  id: string;
+  org_id: string;
+  church_name: string;
+  church_slug: string;
+  submitted_by: string;
+  submitted_by_email: string | null;
+  plan_code: string;
+  amount: number;
+  billing_reference: string;
+  payer_name: string | null;
+  payment_channel: 'gcash' | 'bank_transfer';
+  reference_number: string;
+  receipt_url: string | null;
+  note: string | null;
+  status: 'submitted' | 'verified' | 'rejected';
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  rejection_reason: string | null;
+  created_at: string;
+}
+
+export interface PlatformRecentRegistration {
+  profile_id: string;
+  email: string;
+  first_name: string;
+  created_at: string;
+  org_id: string | null;
+  org_name: string | null;
+  is_org_admin: boolean;
+  is_onboarded: boolean;
 }
 
 export interface Role {
@@ -26,6 +175,7 @@ export interface Role {
 
 export interface UserRole {
   id: string;
+  org_id?: string | null;
   user_id: string;
   role_id: string;
   roles?: Role;
@@ -41,6 +191,9 @@ export interface Event {
   description: string;
   created_by: string;
   confirmation_deadline: string | null;
+  proposal_due_date?: string | null;
+  linked_event_id?: string | null;
+  song_leader_id?: string | null;
   created_at: string;
   profiles?: Profile;
 }
@@ -233,67 +386,6 @@ export interface UserPreference {
   skill_level: number;
   preference_level: number;
   roles?: Role;
-}
-
-export interface EventMessage {
-  id: string;
-  event_id: string;
-  user_id: string;
-  content: string;
-  file_url?: string;
-  file_type?: string;
-  created_at: string;
-  profiles?: Profile;
-}
-
-export interface Conversation {
-  id: string;
-  type: 'personal' | 'group' | 'event';
-  name: string;
-  event_id: string | null;
-  created_by: string;
-  created_at: string;
-  updated_at: string;
-  events?: Event;
-  conversation_members?: ConversationMember[];
-  latest_message?: Message;
-}
-
-export interface ConversationMember {
-  id: string;
-  conversation_id: string;
-  user_id: string;
-  joined_at: string;
-  last_read_at: string;
-  profiles?: Profile;
-}
-
-export interface Message {
-  id: string;
-  conversation_id: string;
-  sender_id: string;
-  content: string;
-  file_url?: string;
-  file_type?: string;
-  created_at: string;
-  deleted_at?: string;
-  deleted_by?: string;
-  is_pinned?: boolean;
-  pinned_by?: string;
-  pinned_at?: string;
-  reply_to?: string;
-  profiles?: Profile;
-  reply_message?: Message;
-  reactions?: MessageReaction[];
-}
-
-export interface MessageReaction {
-  id: string;
-  message_id: string;
-  user_id: string;
-  emoji: string;
-  created_at: string;
-  profiles?: Profile;
 }
 
 export interface AnnouncementReaction {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { format, parseISO } from 'date-fns';
-import { UserX, Check, X, Shield, MessageSquare, RefreshCw } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { UserX, Check, X, Shield, MessageSquare, RefreshCw, ClipboardCheck } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -101,12 +102,17 @@ export function Requests({ embedded }: RequestsProps = {}) {
 
   if (!canApproveLeave) {
     return (
-      <div className={embedded ? 'p-6' : 'page-container page-bottom-pad'}>
-        <div className={embedded ? '' : 'px-4 sm:px-5 lg:px-6 py-5 sm:py-6'}>
-          <div className="card p-12 text-center">
-            <Shield className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Access Restricted</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Only authorized leaders can manage leave requests.</p>
+      <div className={embedded ? '' : 'page-container page-bottom-pad'}>
+        <div className={embedded ? '' : 'max-w-5xl mx-auto px-1 sm:px-2 pt-6 sm:pt-8'}>
+          <div className="rounded-3xl border border-gray-200/80 dark:border-white/[0.06] bg-white dark:bg-white/[0.025] p-12 text-center" style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -12px rgba(15,23,42,0.10)' }}>
+            <div
+              className="relative h-14 w-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
+              style={{ background: 'linear-gradient(145deg, #94a3b8, #64748b)', boxShadow: '0 4px 14px rgba(100,116,139,0.25)' }}
+            >
+              <Shield className="h-6 w-6 text-white" />
+            </div>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white" style={{ letterSpacing: '-0.02em' }}>Access Restricted</h2>
+            <p className="text-sm text-gray-500 dark:text-white/45 mt-1">Only authorized leaders can manage leave requests.</p>
           </div>
         </div>
       </div>
@@ -115,58 +121,116 @@ export function Requests({ embedded }: RequestsProps = {}) {
 
   const content = (
     <>
-    <div className="px-4 sm:px-5 lg:px-6 py-5 sm:py-6 space-y-5">
+    <div className={embedded ? 'space-y-5' : 'space-y-5 sm:space-y-6'}>
         {!embedded && (
-          <div className="flex items-center justify-between animate-fade-in">
-            <div>
-              <h1 className="page-header">Leave Requests</h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                Review and respond to member unavailability requests
-              </p>
+          <motion.div
+            initial={{ opacity: 0, y: 14, filter: 'blur(6px)' }}
+            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+            className="flex items-start justify-between gap-3"
+          >
+            <div className="flex items-center gap-3.5">
+              <div className="relative shrink-0">
+                <div
+                  className="absolute inset-0 rounded-2xl"
+                  style={{ background: 'radial-gradient(circle, rgba(245,158,11,0.35), transparent 70%)', filter: 'blur(10px)', transform: 'scale(1.5)' }}
+                />
+                <div
+                  className="relative h-11 w-11 rounded-2xl flex items-center justify-center"
+                  style={{ background: 'linear-gradient(145deg, #f59e0b, #d97706)', boxShadow: '0 4px 14px rgba(245,158,11,0.35)' }}
+                >
+                  <ClipboardCheck className="h-5 w-5 text-white" />
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] font-mono font-medium uppercase tracking-[0.22em] text-amber-600 dark:text-amber-400/80 mb-0.5">
+                  Pending review
+                </p>
+                <h1 className="text-[1.5rem] sm:text-[1.75rem] font-black text-gray-900 dark:text-white leading-tight" style={{ letterSpacing: '-0.03em' }}>
+                  Leave Requests.
+                </h1>
+              </div>
             </div>
-            <button onClick={fetchRequests} className="btn-ghost text-xs">
+            <button
+              onClick={fetchRequests}
+              className="inline-flex items-center justify-center h-9 w-9 rounded-full text-gray-600 dark:text-white/55 bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] hover:bg-white dark:hover:bg-white/[0.07] active:scale-[0.95] transition-colors shrink-0"
+              title="Refresh"
+            >
               <RefreshCw className="h-3.5 w-3.5" />
             </button>
-          </div>
+          </motion.div>
         )}
         {embedded && (
-          <div className="flex items-center justify-between animate-fade-in">
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Review and respond to member unavailability requests
-            </p>
-            <button onClick={fetchRequests} className="btn-ghost text-xs">
-              <RefreshCw className="h-3.5 w-3.5" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-baseline gap-2.5 px-0.5">
+              <span className="text-[10px] font-mono font-semibold tabular-nums text-gray-400/70 dark:text-white/25 tracking-widest">01</span>
+              <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-white/45 flex items-center gap-1.5">
+                <ClipboardCheck className="h-3 w-3" /> Pending Requests
+              </span>
+              {requests.length > 0 && (
+                <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-md bg-amber-50 dark:bg-amber-500/[0.18] text-amber-700 dark:text-amber-400 text-[10px] font-black border border-amber-200 dark:border-amber-500/25">
+                  {requests.length}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={fetchRequests}
+              className="inline-flex items-center justify-center h-8 w-8 rounded-full text-gray-500 dark:text-white/45 bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] hover:bg-white dark:hover:bg-white/[0.07] active:scale-[0.95] transition-colors"
+              title="Refresh"
+            >
+              <RefreshCw className="h-3 w-3" />
             </button>
           </div>
         )}
 
-        <div className="space-y-3 animate-slide-up">
-          {requests.length === 0 ? (
-            <div className="rounded-2xl bg-white dark:bg-[#1a1a1c] ring-1 ring-black/[0.05] dark:ring-white/[0.06] p-12 text-center" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-              <div className="h-14 w-14 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center mx-auto mb-4">
-                <UserX className="h-7 w-7 text-gray-300 dark:text-gray-600" />
-              </div>
-              <h2 className="text-base font-bold text-gray-900 dark:text-white">All Caught Up</h2>
-              <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">No pending leave requests.</p>
+        {requests.length === 0 ? (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+            className="rounded-3xl bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] p-12 text-center"
+            style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -12px rgba(15,23,42,0.10)' }}
+          >
+            <div
+              className="relative h-14 w-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
+              style={{ background: 'linear-gradient(145deg,#16a34a,#15803d)', boxShadow: '0 4px 14px rgba(22,163,74,0.3)' }}
+            >
+              <Check className="h-6 w-6 text-white" />
             </div>
-          ) : (
-            requests.map((request) => (
-              <div key={request.id} className="rounded-2xl overflow-hidden bg-white dark:bg-[#1a1a1c] ring-1 ring-black/[0.05] dark:ring-white/[0.06] transition-all duration-200" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-                <div className="flex items-start gap-3.5 px-4 py-4">
-                  <Avatar src={request.profiles.avatar_url} firstName={request.profiles.first_name} lastName={request.profiles.last_name} size="md" className="shrink-0 mt-0.5" />
+            <h2 className="text-base font-bold text-gray-900 dark:text-white" style={{ letterSpacing: '-0.02em' }}>All Caught Up</h2>
+            <p className="text-sm text-gray-400 dark:text-white/40 mt-1">No pending leave requests.</p>
+          </motion.div>
+        ) : (
+          <motion.div
+            initial="hidden"
+            animate="show"
+            variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}
+            className="space-y-2.5"
+          >
+            {requests.map((request) => (
+              <motion.div
+                key={request.id}
+                variants={{ hidden: { opacity: 0, y: 10, filter: 'blur(4px)' }, show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] } } }}
+                className="relative rounded-3xl overflow-hidden bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] transition-all duration-200"
+                style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -12px rgba(15,23,42,0.10)' }}
+              >
+                <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.12] to-transparent" />
+
+                <div className="relative flex items-start gap-3.5 px-5 py-4">
+                  <Avatar src={request.profiles.avatar_url} firstName={request.profiles.first_name} lastName={request.profiles.last_name} size="md" className="shrink-0 mt-0.5 ring-1 ring-black/[0.06] dark:ring-white/[0.08]" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start gap-2 flex-wrap">
-                      <p className="text-sm font-bold text-gray-900 dark:text-white">
+                      <p className="text-[14px] font-bold text-gray-900 dark:text-white" style={{ letterSpacing: '-0.015em' }}>
                         {request.profiles.first_name} {request.profiles.last_name}
                       </p>
                       {request.is_recurring && request.recurrence_type && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-lg bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/25">
                           Recurring: {request.recurrence_type}
                         </span>
                       )}
                     </div>
-                    <p className="text-sm text-gray-700 dark:text-gray-300 mt-0.5 font-medium">
-                      Unavailable {(() => {
+                    <p className="text-[13px] text-gray-700 dark:text-white/65 mt-1 font-medium">
+                      Unavailable <span className="font-bold text-gray-900 dark:text-white">{(() => {
                         if (request.leave_type === 'range' && request.start_date && request.end_date) {
                           const s = parseISO(request.start_date);
                           const e = parseISO(request.end_date);
@@ -178,38 +242,40 @@ export function Requests({ embedded }: RequestsProps = {}) {
                         return request.unavailable_date
                           ? format(parseISO(request.unavailable_date), 'EEEE, MMM d, yyyy')
                           : '—';
-                      })()}
+                      })()}</span>
                     </p>
                     {request.reason && (
-                      <div className="mt-2 px-3 py-2 rounded-xl bg-gray-50 dark:bg-white/[0.03] ring-1 ring-black/[0.04] dark:ring-white/[0.05]">
-                        <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
-                          <span className="font-bold text-gray-700 dark:text-gray-300">Reason: </span>{request.reason}
+                      <div className="mt-2.5 px-3 py-2.5 rounded-2xl bg-gray-50 dark:bg-white/[0.03] border border-black/[0.05] dark:border-white/[0.06]">
+                        <p className="text-[12px] text-gray-600 dark:text-white/55 leading-relaxed">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-white/30 block mb-1">Reason</span>
+                          {request.reason}
                         </p>
                       </div>
                     )}
-                    <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1.5">
+                    <p className="text-[11px] font-mono text-gray-400 dark:text-white/30 mt-2 tracking-wide">
                       Submitted {format(parseISO(request.created_at), "MMM d 'at' h:mm a")}
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 px-4 pb-4">
+                <div className="relative flex items-center gap-2 px-5 pb-4">
                   <button
                     onClick={() => openApprovalModal(request, false)}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 ring-1 ring-red-200 dark:ring-red-800/50 transition-all active:scale-[0.98]"
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-full text-[12px] font-semibold text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-500/[0.12] border border-red-200 dark:border-red-500/25 hover:bg-red-100 dark:hover:bg-red-500/[0.18] active:scale-[0.97] transition-colors"
                   >
-                    <X className="h-4 w-4" /> Deny
+                    <X className="h-3.5 w-3.5" /> Deny
                   </button>
                   <button
                     onClick={() => openApprovalModal(request, true)}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/30 ring-1 ring-green-200 dark:ring-green-800/50 transition-all active:scale-[0.98]"
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-full text-[12px] font-semibold text-white transition-all active:scale-[0.97]"
+                    style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', boxShadow: '0 3px 10px rgba(22,163,74,0.3)' }}
                   >
-                    <Check className="h-4 w-4" /> Approve
+                    <Check className="h-3.5 w-3.5" /> Approve
                   </button>
                 </div>
-              </div>
-            ))
-          )}
-        </div>
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
       </div>
 
       <Modal
@@ -268,7 +334,9 @@ export function Requests({ embedded }: RequestsProps = {}) {
 
   return (
     <div className="page-container page-bottom-pad">
-      {content}
+      <div className="max-w-5xl mx-auto px-1 sm:px-2 pt-6 sm:pt-8">
+        {content}
+      </div>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 self.addEventListener('push', function(event) {
   console.log('[SW] Push event received', event);
 
-  let data = { title: 'Worship Portal', body: 'You have a new notification' };
+  let data = { title: 'ServeSync', body: 'You have a new notification' };
 
   try {
     if (event.data) {
@@ -23,7 +23,7 @@ self.addEventListener('push', function(event) {
     vibrate: [100, 50, 100],
     data: data.data || {},
     actions: data.actions || [],
-    tag: data.tag || 'message-notification',
+    tag: data.tag || data.data?.notification_id || `${data.title || 'ServeSync'}-${Date.now()}`,
     renotify: true,
     requireInteraction: false,
   };
@@ -31,7 +31,7 @@ self.addEventListener('push', function(event) {
   console.log('[SW] Showing notification:', data.title, options);
 
   event.waitUntil(
-    self.registration.showNotification(data.title || 'Worship Portal', options)
+    self.registration.showNotification(data.title || 'ServeSync', options)
       .then(() => console.log('[SW] Notification shown successfully'))
       .catch(err => console.error('[SW] Failed to show notification:', err))
   );

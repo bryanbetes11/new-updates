@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { format, parseISO } from 'date-fns';
+import { motion } from 'framer-motion';
 import {
-  Shield, AlertTriangle, Plus, ChevronDown, ChevronUp, Search,
+  Shield, Plus, ChevronDown, Search,
   Filter, CheckCircle, Clock, XCircle, FileCheck, MessageSquare,
-  Lock, Eye
+  Eye, X, Lock
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -19,25 +20,25 @@ interface DisciplineRecordWithProfile extends DisciplineRecord {
   created_by_profile?: Profile;
 }
 
-const statusConfig: Record<string, { label: string; textColor: string; bgColor: string; ringColor: string; icon: React.ElementType }> = {
-  open: { label: 'Open', textColor: 'text-gray-600 dark:text-gray-400', bgColor: 'bg-gray-50 dark:bg-gray-800', ringColor: 'ring-gray-200 dark:ring-gray-700', icon: Clock },
-  verbal_warning: { label: 'Verbal Warning', textColor: 'text-amber-700 dark:text-amber-300', bgColor: 'bg-amber-50 dark:bg-amber-900/20', ringColor: 'ring-amber-200 dark:ring-amber-800/50', icon: MessageSquare },
-  counselling: { label: 'Counselling', textColor: 'text-orange-700 dark:text-orange-300', bgColor: 'bg-orange-50 dark:bg-orange-900/20', ringColor: 'ring-orange-200 dark:ring-orange-800/50', icon: MessageSquare },
-  suspension: { label: 'Suspended', textColor: 'text-red-700 dark:text-red-300', bgColor: 'bg-red-50 dark:bg-red-900/20', ringColor: 'ring-red-200 dark:ring-red-800/50', icon: XCircle },
-  resolved: { label: 'Resolved', textColor: 'text-emerald-700 dark:text-emerald-300', bgColor: 'bg-emerald-50 dark:bg-emerald-900/20', ringColor: 'ring-emerald-200 dark:ring-emerald-800/50', icon: CheckCircle },
+const statusConfig: Record<string, { label: string; cls: string; icon: React.ElementType }> = {
+  open:           { label: 'Open',           cls: 'bg-gray-100 dark:bg-white/[0.06] text-gray-600 dark:text-white/55 border border-gray-200 dark:border-white/[0.08]', icon: Clock },
+  verbal_warning: { label: 'Verbal Warning', cls: 'bg-amber-50 dark:bg-amber-500/[0.12] text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/25', icon: MessageSquare },
+  counselling:    { label: 'Counselling',    cls: 'bg-orange-50 dark:bg-orange-500/[0.12] text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-500/25', icon: MessageSquare },
+  suspension:     { label: 'Suspended',      cls: 'bg-red-50 dark:bg-red-500/[0.12] text-red-700 dark:text-red-300 border border-red-200 dark:border-red-500/25', icon: XCircle },
+  resolved:       { label: 'Resolved',       cls: 'bg-emerald-50 dark:bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/25', icon: CheckCircle },
 };
 
-const sourceConfig: Record<string, { label: string; textColor: string; bgColor: string }> = {
-  attendance: { label: 'Attendance', textColor: 'text-blue-700 dark:text-blue-300', bgColor: 'bg-blue-50 dark:bg-blue-900/20' },
-  setlist: { label: 'Setlist', textColor: 'text-teal-700 dark:text-teal-300', bgColor: 'bg-teal-50 dark:bg-teal-900/20' },
-  manual: { label: 'Manual', textColor: 'text-gray-600 dark:text-gray-400', bgColor: 'bg-gray-100 dark:bg-gray-800' },
+const sourceConfig: Record<string, { label: string; cls: string }> = {
+  attendance: { label: 'Attendance', cls: 'bg-sky-50 dark:bg-sky-500/[0.12] text-sky-700 dark:text-sky-300' },
+  setlist:    { label: 'Setlist',    cls: 'bg-teal-50 dark:bg-teal-500/[0.12] text-teal-700 dark:text-teal-300' },
+  manual:     { label: 'Manual',     cls: 'bg-gray-100 dark:bg-white/[0.06] text-gray-600 dark:text-white/55' },
 };
 
-const offenseLabels: Record<number, { label: string; color: string; bg: string }> = {
-  1: { label: '1st Offense', color: 'text-amber-700 dark:text-amber-300', bg: 'bg-amber-50 dark:bg-amber-900/20' },
-  2: { label: '2nd Offense', color: 'text-orange-700 dark:text-orange-300', bg: 'bg-orange-50 dark:bg-orange-900/20' },
-  3: { label: '3rd Offense', color: 'text-red-700 dark:text-red-300', bg: 'bg-red-50 dark:bg-red-900/20' },
-  4: { label: '4th Offense', color: 'text-red-800 dark:text-red-200', bg: 'bg-red-100 dark:bg-red-900/30' },
+const offenseLabels: Record<number, { label: string; cls: string }> = {
+  1: { label: '1st Offense', cls: 'bg-amber-50 dark:bg-amber-500/[0.12] text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/25' },
+  2: { label: '2nd Offense', cls: 'bg-orange-50 dark:bg-orange-500/[0.12] text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-500/25' },
+  3: { label: '3rd Offense', cls: 'bg-red-50 dark:bg-red-500/[0.12] text-red-700 dark:text-red-300 border border-red-200 dark:border-red-500/25' },
+  4: { label: '4th Offense', cls: 'bg-red-100 dark:bg-red-500/[0.18] text-red-800 dark:text-red-200 border border-red-300 dark:border-red-500/40' },
 };
 
 interface DisciplineProps {
@@ -195,57 +196,110 @@ export function Discipline({ embedded }: DisciplineProps = {}) {
 
   const content = (
     <>
-      <div className="px-4 sm:px-5 lg:px-6 py-5 sm:py-6 space-y-5">
+      <div className={embedded ? 'space-y-5' : 'space-y-5 sm:space-y-6'}>
         {!embedded && (
-          <div className="flex items-center justify-between animate-fade-in">
-            <div>
-              <h1 className="page-header">{isOwnView ? 'My Discipline Record' : 'Discipline Records'}</h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                {isOwnView
-                  ? 'Your personal discipline record and history'
-                  : 'Track and manage member conduct with pastoral care'}
-              </p>
+          <motion.div
+            initial={{ opacity: 0, y: 14, filter: 'blur(6px)' }}
+            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+            className="flex items-start justify-between gap-3"
+          >
+            <div className="flex items-center gap-3.5">
+              <div className="relative shrink-0">
+                <div
+                  className="absolute inset-0 rounded-2xl"
+                  style={{ background: 'radial-gradient(circle, rgba(239,68,68,0.32), transparent 70%)', filter: 'blur(10px)', transform: 'scale(1.5)' }}
+                />
+                <div
+                  className="relative h-11 w-11 rounded-2xl flex items-center justify-center"
+                  style={{ background: 'linear-gradient(145deg, #ef4444, #b91c1c)', boxShadow: '0 4px 14px rgba(239,68,68,0.32)' }}
+                >
+                  <Shield className="h-5 w-5 text-white" />
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] font-mono font-medium uppercase tracking-[0.22em] text-red-600 dark:text-red-400/80 mb-0.5">
+                  Pastoral care
+                </p>
+                <h1 className="text-[1.5rem] sm:text-[1.75rem] font-black text-gray-900 dark:text-white leading-tight" style={{ letterSpacing: '-0.03em' }}>
+                  {isOwnView ? 'My Record.' : 'Conduct.'}
+                </h1>
+              </div>
             </div>
             {canManageDiscipline && (
-              <button onClick={openCreate} className="btn-primary shrink-0">
-                <Plus className="h-4 w-4" /> New Record
+              <button
+                onClick={openCreate}
+                className="inline-flex items-center gap-1.5 px-4 h-9 rounded-full text-[12px] font-semibold text-white shrink-0 transition-all active:scale-[0.97]"
+                style={{ background: 'linear-gradient(135deg, #ef4444, #b91c1c)', boxShadow: '0 4px 14px rgba(239,68,68,0.35)' }}
+              >
+                <Plus className="h-3.5 w-3.5" /> New Record
               </button>
             )}
-          </div>
+          </motion.div>
         )}
         {embedded && (
-          <div className="flex items-center justify-between animate-fade-in">
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Track and manage member conduct with pastoral care
-            </p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-baseline gap-2.5 px-0.5">
+              <span className="text-[10px] font-mono font-semibold tabular-nums text-gray-400/70 dark:text-white/25 tracking-widest">01</span>
+              <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-white/45 flex items-center gap-1.5">
+                <Shield className="h-3 w-3" /> Discipline Records
+              </span>
+            </div>
             {canManageDiscipline && (
-              <button onClick={openCreate} className="btn-primary shrink-0">
-                <Plus className="h-4 w-4" /> New Record
+              <button
+                onClick={openCreate}
+                className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-semibold text-white shrink-0 transition-all active:scale-[0.97]"
+                style={{ background: 'linear-gradient(135deg, #ef4444, #b91c1c)', boxShadow: '0 3px 10px rgba(239,68,68,0.3)' }}
+              >
+                <Plus className="h-3.5 w-3.5" /> New Record
               </button>
             )}
           </div>
         )}
 
         {isOwnView && (
-          <div className="rounded-2xl bg-blue-50 dark:bg-blue-900/20 ring-1 ring-blue-200 dark:ring-blue-800/50 p-4 flex items-start gap-3 animate-fade-in">
-            <Eye className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
-            <p className="text-sm text-blue-700 dark:text-blue-300 leading-relaxed">
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+            className="relative rounded-3xl overflow-hidden border border-sky-200 dark:border-sky-500/25 p-4 flex items-start gap-3"
+            style={{
+              backgroundImage: 'linear-gradient(135deg, rgba(14,165,233,0.10), rgba(14,165,233,0.025) 50%, transparent 80%)',
+              backgroundColor: 'white',
+              boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -12px rgba(14,165,233,0.18)',
+            }}
+          >
+            <div className="absolute inset-0 dark:bg-white/[0.025]" />
+            <div className="relative flex items-center justify-center h-9 w-9 rounded-2xl shrink-0" style={{ background: 'linear-gradient(145deg, #0ea5e9, #0369a1)', boxShadow: '0 3px 10px rgba(14,165,233,0.3)' }}>
+              <Eye className="h-4 w-4 text-white" />
+            </div>
+            <p className="relative text-[13px] text-gray-700 dark:text-white/70 leading-relaxed">
               This is your personal record. Leadership will speak with you regarding any open items.
             </p>
-          </div>
+          </motion.div>
         )}
 
-        <div className="flex flex-col sm:flex-row gap-3 animate-slide-up">
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.05, ease: [0.16, 1, 0.3, 1] }}
+          className="flex flex-col sm:flex-row gap-2"
+        >
           {isLeader && (
             <div className="relative flex-1">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               <input
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Search by member or title..."
-                className="input-field pl-10"
+                placeholder="Search by member or title…"
+                className="w-full h-10 pl-10 pr-9 rounded-2xl text-[13px] bg-white dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.08] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/30 outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-400 dark:focus:border-red-500/50 transition-all"
               />
+              {search && (
+                <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </div>
           )}
           <Select
@@ -263,22 +317,36 @@ export function Discipline({ embedded }: DisciplineProps = {}) {
             className="sm:w-44"
             icon={<Filter className="h-4 w-4" />}
           />
-        </div>
+        </motion.div>
 
         {filtered.length === 0 ? (
-          <div className="rounded-2xl bg-white dark:bg-[#1a1a1c] ring-1 ring-black/[0.05] dark:ring-white/[0.06] p-12 text-center animate-slide-up" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-            <div className="h-14 w-14 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center mx-auto mb-4">
-              <FileCheck className="h-7 w-7 text-gray-300 dark:text-gray-600" />
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+            className="rounded-3xl bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] p-12 text-center"
+            style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -12px rgba(15,23,42,0.10)' }}
+          >
+            <div
+              className="relative h-14 w-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
+              style={{ background: 'linear-gradient(145deg,#16a34a,#15803d)', boxShadow: '0 4px 14px rgba(22,163,74,0.3)' }}
+            >
+              <FileCheck className="h-6 w-6 text-white" />
             </div>
-            <h2 className="text-base font-bold text-gray-900 dark:text-white">
+            <h2 className="text-base font-bold text-gray-900 dark:text-white" style={{ letterSpacing: '-0.02em' }}>
               {isOwnView ? 'Clean Record' : 'No Records Found'}
             </h2>
-            <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
+            <p className="text-sm text-gray-400 dark:text-white/40 mt-1">
               {isOwnView ? 'You have no discipline records. Keep it up!' : 'No records match your filters.'}
             </p>
-          </div>
+          </motion.div>
         ) : (
-          <div className="space-y-2.5 animate-slide-up">
+          <motion.div
+            initial="hidden"
+            animate="show"
+            variants={{ hidden: {}, show: { transition: { staggerChildren: 0.04 } } }}
+            className="space-y-2.5"
+          >
             {filtered.map((record) => {
               const sCfg = statusConfig[record.status] ?? statusConfig.open;
               const srcCfg = sourceConfig[record.source] ?? sourceConfig.manual;
@@ -289,62 +357,55 @@ export function Discipline({ embedded }: DisciplineProps = {}) {
               const isResolved = record.status === 'resolved';
 
               return (
-                <div
+                <motion.div
                   key={record.id}
-                  className={`rounded-2xl overflow-hidden bg-white dark:bg-[#1a1a1c] ring-1 transition-all duration-200 ${
-                    isResolved
-                      ? 'ring-black/[0.04] dark:ring-white/[0.04] opacity-75'
-                      : `ring-black/[0.05] dark:ring-white/[0.06]`
-                  }`}
-                  style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}
+                  variants={{ hidden: { opacity: 0, y: 10, filter: 'blur(4px)' }, show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] } } }}
+                  className="relative rounded-3xl overflow-hidden bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] transition-all duration-200"
+                  style={{
+                    boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -12px rgba(15,23,42,0.10)',
+                    opacity: isResolved ? 0.7 : 1,
+                  }}
                 >
-                  {!isResolved && record.status !== 'open' && (
-                    <div className={`h-0.5 w-full ${
-                      record.status === 'suspension' ? 'bg-red-400' :
-                      record.status === 'counselling' ? 'bg-orange-400' :
-                      'bg-amber-400'
-                    }`} />
-                  )}
+                  <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.12] to-transparent" />
 
                   <button
                     onClick={() => setExpanded(isExp ? null : record.id)}
-                    className="w-full flex items-start gap-3.5 px-4 py-4 text-left hover:bg-gray-50/60 dark:hover:bg-white/[0.02] transition-colors"
+                    className="relative w-full flex items-start gap-3.5 px-5 py-4 text-left hover:bg-gray-50/60 dark:hover:bg-white/[0.02] transition-colors"
                   >
                     {isLeader && member && (
-                      <Avatar src={member.avatar_url} firstName={member.first_name} lastName={member.last_name} size="sm" className="shrink-0 mt-0.5" />
+                      <Avatar src={member.avatar_url} firstName={member.first_name} lastName={member.last_name} size="sm" className="shrink-0 mt-0.5 ring-1 ring-black/[0.06] dark:ring-white/[0.08]" />
                     )}
                     <div className="flex-1 min-w-0">
                       {isLeader && member && (
-                        <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-0.5">
+                        <p className="text-[11px] font-mono font-semibold text-gray-400 dark:text-white/30 mb-0.5 tracking-wide">
                           {member.first_name} {member.last_name}
                           {member.nickname && ` (${member.nickname})`}
                         </p>
                       )}
-                      <p className="text-sm font-bold text-gray-900 dark:text-white leading-snug">{record.title}</p>
+                      <p className="text-[14px] font-bold text-gray-900 dark:text-white leading-snug" style={{ letterSpacing: '-0.015em' }}>{record.title}</p>
                       <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                        <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg ${srcCfg.bgColor} ${srcCfg.textColor}`}>
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md ${srcCfg.cls}`}>
                           {srcCfg.label}
                         </span>
                         {offCfg && (
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg ${offCfg.bg} ${offCfg.color}`}>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${offCfg.cls}`}>
                             {offCfg.label}
                           </span>
                         )}
                         {record.quarter_year && (
-                          <span className="text-[10px] font-medium text-gray-400">Q{record.quarter_number} {record.quarter_year}</span>
+                          <span className="text-[10px] font-mono text-gray-400 dark:text-white/30 tracking-wide">Q{record.quarter_number} {record.quarter_year}</span>
                         )}
-                        <span className="text-[10px] text-gray-400">{format(parseISO(record.created_at), 'MMM d, yyyy')}</span>
+                        <span className="text-[10px] font-mono text-gray-400 dark:text-white/30 tracking-wide">{format(parseISO(record.created_at), 'MMM d, yyyy')}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0 mt-0.5">
-                      <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-xl ring-1 ${sCfg.bgColor} ${sCfg.textColor} ${sCfg.ringColor}`}>
+                      <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md ${sCfg.cls}`}>
                         <StatusIcon className="h-3 w-3" />
                         {sCfg.label}
                       </span>
-                      {isExp
-                        ? <ChevronUp className="h-4 w-4 text-gray-400" />
-                        : <ChevronDown className="h-4 w-4 text-gray-400" />
-                      }
+                      <div className={`flex items-center justify-center w-7 h-7 rounded-xl transition-all ${isExp ? 'bg-gray-100 dark:bg-white/[0.06] rotate-180' : ''}`}>
+                        <ChevronDown className="h-3.5 w-3.5 text-gray-400 dark:text-white/35" />
+                      </div>
                     </div>
                   </button>
 
@@ -390,10 +451,10 @@ export function Discipline({ embedded }: DisciplineProps = {}) {
                       )}
                     </div>
                   )}
-                </div>
+                </motion.div>
               );
             })}
-          </div>
+          </motion.div>
         )}
       </div>
 
@@ -547,7 +608,9 @@ export function Discipline({ embedded }: DisciplineProps = {}) {
 
   return (
     <div className="page-container page-bottom-pad">
-      {content}
+      <div className="max-w-5xl mx-auto px-1 sm:px-2 pt-6 sm:pt-8">
+        {content}
+      </div>
     </div>
   );
 }

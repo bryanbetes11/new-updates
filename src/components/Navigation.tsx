@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LogOut, ChevronLeft, ChevronRight, Music2 } from 'lucide-react';
@@ -15,7 +15,7 @@ import {
 } from '../lib/mobileNavPreference';
 import {
   HomeIcon, CalendarIcon, NewsIcon, MediaIcon, MoreIcon,
-  LeaveIcon, ShieldNavIcon,
+  LeaveIcon, ShieldNavIcon, MessageIcon,
 } from './NavIcons';
 
 type NavIcon = React.ComponentType<{ active?: boolean; className?: string }>;
@@ -24,7 +24,7 @@ interface NavItem {
   path: string;
   label: string;
   icon: NavIcon;
-  badgeKey?: 'announcements' | 'events' | 'notifications' | 'pendingLeave';
+  badgeKey?: 'announcements' | 'events' | 'notifications' | 'pendingLeave' | 'messages';
   badgeColor?: 'red' | 'blue' | 'amber';
   exact?: boolean;
 }
@@ -33,7 +33,7 @@ const mobileNavItems: NavItem[] = [
   { path: '/dashboard', label: 'Home', icon: HomeIcon, exact: true },
   { path: '/events', label: 'Events', icon: CalendarIcon, badgeKey: 'events', badgeColor: 'red' },
   { path: '/announcements', label: 'News', icon: NewsIcon, badgeKey: 'announcements', badgeColor: 'blue' },
-  { path: '/library', label: 'Library', icon: MediaIcon },
+  { path: '/messages', label: 'Messages', icon: MessageIcon, badgeKey: 'messages', badgeColor: 'red' },
   { path: '/more', label: 'More', icon: MoreIcon, badgeKey: 'pendingLeave', badgeColor: 'amber' },
 ];
 
@@ -42,6 +42,7 @@ const sidebarMainItems: NavItem[] = [
   { path: '/events', label: 'Events', icon: CalendarIcon, badgeKey: 'events', badgeColor: 'red' },
   { path: '/announcements', label: 'News', icon: NewsIcon, badgeKey: 'announcements', badgeColor: 'blue' },
   { path: '/library', label: 'Library', icon: MediaIcon },
+  { path: '/messages', label: 'Messages', icon: MessageIcon, badgeKey: 'messages', badgeColor: 'red' },
 ];
 
 function MobileBadge({ count, color }: { count: number; color?: 'red' | 'blue' | 'amber' }) {
@@ -92,21 +93,19 @@ function Tooltip({ label, children }: { label: string; children: React.ReactNode
 
 interface NavigationProps {
   hideMobile?: boolean;
+  hideMobileAll?: boolean;
   collapsed: boolean;
   onCollapsedChange: (v: boolean) => void;
   mobileOpen: boolean;
   onMobileOpenChange: (v: boolean) => void;
 }
 
-export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpen, onMobileOpenChange }: NavigationProps) {
+export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedChange, mobileOpen, onMobileOpenChange }: NavigationProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { isLeader, isOrgAdmin, canApproveLeave, canManageDiscipline, profile, signOut } = useAuth();
   const unread = useUnreadCounts();
 
-  const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 });
-  const [mounted, setMounted] = useState(false);
   const [mobileNavStyle, setMobileNavStyle] = useState<MobileNavStyle>(getStoredMobileNavStyle);
 
   const isActive = useCallback((item: NavItem) => {
@@ -120,23 +119,6 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
     return location.pathname.startsWith(item.path);
   }, [location.pathname]);
 
-  const activeIndex = mobileNavItems.findIndex(item => isActive(item));
-
-  const updateIndicator = useCallback(() => {
-    const idx = activeIndex >= 0 ? activeIndex : 0;
-    const el = itemRefs.current[idx];
-    if (!el) return;
-    const parent = el.parentElement;
-    if (!parent) return;
-    const parentRect = parent.getBoundingClientRect();
-    const elRect = el.getBoundingClientRect();
-    setIndicatorStyle({ left: elRect.left - parentRect.left, width: elRect.width });
-  }, [activeIndex]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => { setMounted(true); updateIndicator(); }, 50);
-    return () => clearTimeout(timer);
-  }, [updateIndicator]);
 
   useEffect(() => {
     const handleStyleChange = () => setMobileNavStyle(getStoredMobileNavStyle());
@@ -159,17 +141,13 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
     return () => { cancelled = true; };
   }, [profile?.id]);
 
-  useEffect(() => { if (mounted) updateIndicator(); }, [location.pathname, mounted, updateIndicator]);
-  useEffect(() => {
-    window.addEventListener('resize', updateIndicator);
-    return () => window.removeEventListener('resize', updateIndicator);
-  }, [updateIndicator]);
 
   const getBadgeCount = (item: NavItem) => {
     if (!item.badgeKey) return 0;
     if (item.badgeKey === 'announcements') return unread.announcements || 0;
     if (item.badgeKey === 'events') return unread.events || 0;
     if (item.badgeKey === 'pendingLeave') return unread.pendingLeave || 0;
+    if (item.badgeKey === 'messages') return unread.messages || 0;
     return 0;
   };
 
@@ -269,7 +247,7 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
     <>
       {/* ── Mobile top bar ── */}
       <div
-        className="fixed top-0 left-0 right-0 z-30 flex items-end justify-between px-4 lg:hidden"
+        className={`fixed top-0 left-0 right-0 z-30 flex items-end justify-between px-4 lg:hidden ${hideMobileAll ? 'hidden' : ''}`}
         style={{
           background: 'var(--sidebar-bg)',
           WebkitBackdropFilter: 'blur(20px)',
@@ -529,7 +507,7 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
       </motion.aside>
 
       {/* ── Mobile bottom nav ── */}
-      {!hideMobile && (
+      {!hideMobile && !hideMobileAll && (
         <div
           className={`fixed bottom-0 left-0 right-0 z-50 lg:hidden ${useDockedMobileNav ? 'pointer-events-auto' : 'pointer-events-none'}`}
           style={{
@@ -557,18 +535,6 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
                 paddingBottom: useDockedMobileNav ? 'env(safe-area-inset-bottom)' : undefined,
               }}
             >
-              {mounted && !useDockedMobileNav && (
-                <div
-                  className="absolute top-1.5 bottom-1.5 rounded-full pointer-events-none"
-                  style={{
-                    left: indicatorStyle.left,
-                    width: indicatorStyle.width,
-                    background: 'var(--nav-indicator)',
-                    boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.02)',
-                    transition: 'left 360ms cubic-bezier(0.22,1,0.36,1), width 360ms cubic-bezier(0.22,1,0.36,1)',
-                  }}
-                />
-              )}
 
               {mobileNavItems.map((item, idx) => {
                 const active = isActive(item);
@@ -577,11 +543,21 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
                 return (
                   <button
                     key={item.path}
-                    ref={el => { itemRefs.current[idx] = el; }}
                     onClick={() => navigate(item.path)}
                     className={`relative flex flex-1 items-center justify-center min-w-[44px] ${useDockedMobileNav ? 'h-[56px]' : 'h-12'}`}
                     style={{ WebkitTapHighlightColor: 'transparent' }}
                   >
+                    {active && !useDockedMobileNav && (
+                      <motion.div
+                        layoutId="mobileNavIndicator"
+                        className="absolute inset-0 rounded-full pointer-events-none"
+                        style={{
+                          background: 'var(--nav-indicator)',
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.02)',
+                        }}
+                        transition={{ type: 'spring', stiffness: 500, damping: 42 }}
+                      />
+                    )}
                     {useDockedMobileNav && active && (
                       <span
                         className="absolute left-1/2 top-1 h-[3px] w-8 -translate-x-1/2 rounded-full bg-brand-600 dark:bg-brand-400"

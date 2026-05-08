@@ -23,6 +23,7 @@ import { Requests } from './pages/Requests';
 import { RequestLeave } from './pages/RequestLeave';
 import { Notifications } from './pages/Notifications';
 import { More } from './pages/More';
+import { Messages } from './pages/Messages';
 import { MyAssignments } from './pages/MyAssignments';
 import { UnavailableMembers } from './pages/UnavailableMembers';
 import { Discipline } from './pages/Discipline';
@@ -77,6 +78,7 @@ export default function App() {
                   <Route path="/change-password" element={<ChangePassword />} />
                   <Route path="/request-leave" element={<RequestLeave />} />
                   <Route path="/notifications" element={<Notifications />} />
+                  <Route path="/messages/:conversationId?" element={<Messages />} />
                   <Route path="/more" element={<More />} />
                   <Route path="/leadership" element={<Navigate to="/leadership/overview" replace />} />
                   <Route path="/leadership/:tab" element={<LeadershipWorkspace />} />

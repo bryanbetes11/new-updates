@@ -7,26 +7,45 @@ interface ThemeContextValue {
   toggle: () => void;
 }
 
+const STORAGE_KEY = 'theme';
+const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+function getInitialTheme(): Theme {
+  const stored = localStorage.getItem(STORAGE_KEY);
+  if (stored === 'dark' || stored === 'light') return stored;
+  return mediaQuery.matches ? 'dark' : 'light';
+}
+
 const ThemeContext = createContext<ThemeContextValue>({ theme: 'light', toggle: () => {} });
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    const stored = localStorage.getItem('theme');
-    if (stored === 'dark' || stored === 'light') return stored;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  });
+  const [theme, setTheme] = useState<Theme>(getInitialTheme);
 
+  // Apply dark class to <html> whenever theme changes
   useEffect(() => {
     const root = document.documentElement;
-    if (theme === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-    localStorage.setItem('theme', theme);
+    root.classList.toggle('dark', theme === 'dark');
   }, [theme]);
 
-  const toggle = () => setTheme(t => (t === 'dark' ? 'light' : 'dark'));
+  // Follow system preference changes — but only when the user hasn't set an override
+  useEffect(() => {
+    const handler = (e: MediaQueryListEvent) => {
+      if (!localStorage.getItem(STORAGE_KEY)) {
+        setTheme(e.matches ? 'dark' : 'light');
+      }
+    };
+    mediaQuery.addEventListener('change', handler);
+    return () => mediaQuery.removeEventListener('change', handler);
+  }, []);
+
+  // Only write to localStorage (and lock in a preference) when the user explicitly toggles
+  const toggle = () => {
+    setTheme(prev => {
+      const next = prev === 'dark' ? 'light' : 'dark';
+      localStorage.setItem(STORAGE_KEY, next);
+      return next;
+    });
+  };
 
   return (
     <ThemeContext.Provider value={{ theme, toggle }}>

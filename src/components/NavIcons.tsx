@@ -45,11 +45,11 @@ export function NewsIcon({ active, className }: IconProps) {
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" className={className}>
         <rect x="3" y="3" width="18" height="18" rx="2" fill="currentColor" />
-        <rect x="6" y="6.5" width="5" height="4.5" rx="0.75" fill="white" />
-        <line x1="14" y1="7.5" x2="18" y2="7.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
-        <line x1="14" y1="10.5" x2="18" y2="10.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
-        <line x1="6" y1="14.5" x2="18" y2="14.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
-        <line x1="6" y1="17.5" x2="14" y2="17.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
+        <rect x="6" y="6.5" width="5" height="4.5" rx="0.75" className="fill-white dark:fill-[#111013]" />
+        <line x1="14" y1="7.5" x2="18" y2="7.5" strokeWidth="1.5" strokeLinecap="round" className="stroke-white dark:stroke-[#111013]" />
+        <line x1="14" y1="10.5" x2="18" y2="10.5" strokeWidth="1.5" strokeLinecap="round" className="stroke-white dark:stroke-[#111013]" />
+        <line x1="6" y1="14.5" x2="18" y2="14.5" strokeWidth="1.5" strokeLinecap="round" className="stroke-white dark:stroke-[#111013]" />
+        <line x1="6" y1="17.5" x2="14" y2="17.5" strokeWidth="1.5" strokeLinecap="round" className="stroke-white dark:stroke-[#111013]" />
       </svg>
     );
   }
@@ -66,7 +66,7 @@ export function MediaIcon({ active, className }: IconProps) {
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" className={className}>
         <rect x="2" y="4" width="20" height="16" rx="2" fill="currentColor" />
-        <path d="M10 8.5v7l5.5-3.5L10 8.5Z" fill="white" />
+        <path d="M10 8.5v7l5.5-3.5L10 8.5Z" className="fill-white dark:fill-[#111013]" />
       </svg>
     );
   }
@@ -189,6 +189,21 @@ export function ShieldNavIcon({ active, className }: IconProps) {
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M12 2L3 7v5c0 5.25 3.75 10.15 9 11.35C17.25 22.15 21 17.25 21 12V7L12 2Z" />
       <path d="M9 12l2 2 4-4" />
+    </svg>
+  );
+}
+
+export function MessageIcon({ active, className }: IconProps) {
+  if (active) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className}>
+        <path d="M20 2H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h3l3 3 3-3h7a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2Z" />
+      </svg>
+    );
+  }
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M20 2H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h3l3 3 3-3h7a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2Z" />
     </svg>
   );
 }

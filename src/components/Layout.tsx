@@ -26,6 +26,8 @@ export function Layout() {
   const staticHideNav = ['/', '/login', '/register', '/onboarding', '/reset-password', '/create-church'].includes(location.pathname)
     || /^\/invite\/[^/]+$/.test(location.pathname);
   const isAnnouncementDetail = /^\/announcements\/[^/]+$/.test(location.pathname);
+  const isMessagesPage = location.pathname.startsWith('/messages');
+  const isMessagesConversation = /^\/messages\/[^/]+$/.test(location.pathname);
   const hideNavMobile = staticHideNav || isAnnouncementDetail;
 
   const sidebarWidth = collapsed ? 72 : 256;
@@ -36,6 +38,7 @@ export function Layout() {
       {user && !staticHideNav && (
         <Navigation
           hideMobile={hideNavMobile}
+          hideMobileAll={isMessagesConversation}
           collapsed={collapsed}
           onCollapsedChange={setCollapsed}
           mobileOpen={mobileOpen}
@@ -49,18 +52,24 @@ export function Layout() {
           width: applyOffset ? `calc(100% - ${sidebarWidth}px)` : '100%',
         }}
         transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-        className="overflow-x-hidden"
+        className={`overflow-x-hidden ${isMessagesPage ? 'flex flex-col h-screen' : ''}`}
       >
-        <div className={staticHideNav ? '' : 'px-4 sm:px-6 lg:px-8 mobile-layout-padding'}>
-          {!staticHideNav && (
-            <div className="max-w-7xl mx-auto pt-4 sm:pt-5">
-              <BillingStatusBanner />
-            </div>
-          )}
-          <div key={location.pathname} className="animate-page-enter">
+        {isMessagesPage ? (
+          <div className="flex flex-col flex-1 min-h-0 h-full">
             <Outlet />
           </div>
-        </div>
+        ) : (
+          <div className={staticHideNav ? '' : 'px-4 sm:px-6 lg:px-8 mobile-layout-padding'}>
+            {!staticHideNav && (
+              <div className="max-w-7xl mx-auto pt-4 sm:pt-5">
+                <BillingStatusBanner />
+              </div>
+            )}
+            <div key={location.pathname} className="animate-page-enter">
+              <Outlet />
+            </div>
+          </div>
+        )}
       </motion.main>
     </div>
   );

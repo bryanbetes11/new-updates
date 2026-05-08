@@ -1,10 +1,20 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, Cake, Upload, X, Music, Shield } from 'lucide-react';
+import { ArrowRight, Cake, Upload, X, Shield } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
 import { DatePicker } from '../components/DatePicker';
+import { ThemeToggle } from '../components/ThemeToggle';
+
+const inputClass = `w-full h-12 px-4 rounded-xl text-[14px]
+  bg-gray-50 dark:bg-white/[0.05]
+  border border-gray-200 dark:border-white/[0.08]
+  text-gray-900 dark:text-white
+  placeholder-gray-400 dark:placeholder-white/20
+  focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/50
+  transition-all duration-200`;
 
 export function Onboarding() {
   const { user, profile, refreshProfile } = useAuth();
@@ -35,7 +45,9 @@ export function Onboarding() {
     reader.readAsDataURL(file);
   };
 
-  const removeAvatar = () => {
+  const removeAvatar = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     setAvatarFile(null);
     setAvatarPreview(null);
   };
@@ -91,197 +103,228 @@ export function Onboarding() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-[#0a0a0a] flex flex-col">
-      <div className="flex-1 flex items-center justify-center px-4 py-10">
-        <div className="w-full max-w-sm animate-fade-in">
-          <div className="mb-7">
-            <div className="flex justify-center mb-6">
-              <div className="relative">
-                <img
-                  src="/servesync-logo-3d.svg"
-                  alt="ServeSync"
-                  className="h-12 w-12 rounded-[22%] shadow-lg shadow-black/10 dark:shadow-black/30"
-                />
-                <div className="absolute -bottom-1 -right-1 flex items-center justify-center h-5 w-5 rounded-full bg-emerald-500 ring-2 ring-gray-50 dark:ring-[#0a0a0a]">
-                  <Music className="h-2.5 w-2.5 text-white" />
-                </div>
-              </div>
-            </div>
+    <div className="min-h-screen bg-[#f5f5f7] dark:bg-[#0d0d0f] transition-colors duration-300">
 
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">
-                Onboarding
-              </span>
-            </div>
-            <h1 className="text-[22px] font-bold text-gray-900 dark:text-white tracking-tight">Tell us about yourself</h1>
-            <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">Set up your profile details. Church admins handle access and ministry role assignment.</p>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-[13px] font-semibold text-gray-600 dark:text-gray-400 mb-2">Profile Picture <span className="font-normal text-gray-400">(optional)</span></label>
-              <div className="flex items-center gap-3">
-                {avatarPreview ? (
-                  <div className="relative shrink-0">
-                    <img
-                      src={avatarPreview}
-                      alt="Avatar preview"
-                      className="h-16 w-16 rounded-full object-cover ring-2 ring-emerald-200 dark:ring-emerald-800"
-                    />
-                    <button
-                      type="button"
-                      onClick={removeAvatar}
-                      className="absolute -top-1 -right-1 p-0.5 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="h-16 w-16 rounded-full bg-gray-100 dark:bg-[#232325] flex items-center justify-center ring-2 ring-gray-200 dark:ring-gray-700 shrink-0">
-                    <Upload className="h-6 w-6 text-gray-300 dark:text-gray-600" />
-                  </div>
-                )}
-                <label className="flex-1 cursor-pointer">
-                  <input type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />
-                  <div className="btn-secondary text-center text-sm py-2">
-                    {avatarPreview ? 'Change Photo' : 'Upload Photo'}
-                  </div>
-                </label>
-              </div>
-              <p className="text-xs text-gray-400 mt-1">Max 5MB. JPG, PNG, or GIF.</p>
-            </div>
-
-            <div>
-              <label className="block text-[13px] font-semibold text-gray-600 dark:text-gray-400 mb-1.5">I am a...</label>
-              <div className="flex gap-2">
-                {(['male', 'female'] as const).map(g => (
-                  <button
-                    key={g}
-                    type="button"
-                    onClick={() => setForm({ ...form, gender: g })}
-                    className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ring-1 ${
-                      form.gender === g
-                        ? 'bg-emerald-50 dark:bg-emerald-900/20 ring-emerald-300 dark:ring-emerald-700 text-emerald-700 dark:text-emerald-300'
-                        : 'bg-white dark:bg-[#232325] ring-gray-200 dark:ring-gray-700 text-gray-600 dark:text-gray-400 hover:ring-gray-300'
-                    }`}
-                  >
-                    {g === 'male' ? 'Male' : 'Female'}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[13px] font-semibold text-gray-600 dark:text-gray-400 mb-1.5">First Name</label>
-                <input
-                  type="text"
-                  value={form.first_name}
-                  onChange={e => setForm({ ...form, first_name: e.target.value })}
-                  className="input-field"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-[13px] font-semibold text-gray-600 dark:text-gray-400 mb-1.5">Last Name</label>
-                <input
-                  type="text"
-                  value={form.last_name}
-                  onChange={e => setForm({ ...form, last_name: e.target.value })}
-                  className="input-field"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[13px] font-semibold text-gray-600 dark:text-gray-400 mb-1.5">Second Name <span className="font-normal text-gray-400 text-[11px]">opt.</span></label>
-                <input
-                  type="text"
-                  value={form.second_name}
-                  onChange={e => setForm({ ...form, second_name: e.target.value })}
-                  className="input-field"
-                  placeholder="Optional"
-                />
-              </div>
-              <div>
-                <label className="block text-[13px] font-semibold text-gray-600 dark:text-gray-400 mb-1.5">Middle Name <span className="font-normal text-gray-400 text-[11px]">opt.</span></label>
-                <input
-                  type="text"
-                  value={form.middle_name}
-                  onChange={e => setForm({ ...form, middle_name: e.target.value })}
-                  className="input-field"
-                  placeholder="Optional"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-[13px] font-semibold text-gray-600 dark:text-gray-400 mb-1.5">Nickname <span className="font-normal text-gray-400">(optional)</span></label>
-              <input
-                type="text"
-                value={form.nickname}
-                onChange={e => setForm({ ...form, nickname: e.target.value })}
-                className="input-field"
-                placeholder="What should we call you?"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[13px] font-semibold text-gray-600 dark:text-gray-400 mb-1.5">Phone <span className="font-normal text-gray-400">(optional)</span></label>
-              <input
-                type="tel"
-                value={form.phone}
-                onChange={e => setForm({ ...form, phone: e.target.value })}
-                className="input-field"
-                placeholder="Your phone number"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[13px] font-semibold text-gray-600 dark:text-gray-400 mb-1.5">
-                <span className="flex items-center gap-1.5"><Cake className="h-3.5 w-3.5" /> Birthday <span className="font-normal text-gray-400">(optional)</span></span>
-              </label>
-              <DatePicker value={form.birthday} onChange={v => setForm({ ...form, birthday: v })} placeholder="Select your birthday" />
-            </div>
-
-            <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-900/10 p-4">
-              <div className="flex items-start gap-3">
-                <Shield className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">Roles are assigned by church admins</p>
-                  <p className="text-sm text-emerald-700/80 dark:text-emerald-300/80 mt-1">
-                    Your church team controls ministry roles and tenant access centrally.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 mt-7">
-            <button
-              onClick={handleFinish}
-              disabled={loading || !form.first_name}
-              className="btn-primary flex-1 py-3 text-[15px]"
-            >
-              {loading ? (
-                <span className="flex items-center gap-2 justify-center">
-                  <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Setting up...
-                </span>
-              ) : (
-                <span className="flex items-center gap-2 justify-center">
-                  Get Started <ChevronRight className="h-4 w-4" />
-                </span>
-              )}
-            </button>
-          </div>
+      {/* Theme toggle — fixed top-right */}
+      <div className="fixed top-4 right-4 z-30">
+        <div className="bg-white/90 dark:bg-white/[0.07] backdrop-blur-md rounded-xl border border-gray-200/70 dark:border-white/[0.09] shadow-sm transition-colors duration-300">
+          <ThemeToggle />
         </div>
       </div>
 
-      <p className="text-center py-5 text-xs text-gray-300 dark:text-gray-600">
-        ServeSync — Built for ministry teams
-      </p>
+      <div className="flex justify-center min-h-screen px-6 py-16">
+        <div className="w-full max-w-[420px]">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <div className="relative bg-white dark:bg-white/[0.025] rounded-3xl border border-gray-200/80 dark:border-white/[0.06] p-8 shadow-[0_2px_8px_rgba(0,0,0,0.05),0_16px_48px_rgba(0,0,0,0.06)] dark:shadow-none transition-colors duration-300">
+              {/* Top-edge highlight */}
+              <div className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.07] dark:via-white/[0.12] to-transparent" />
+
+              {/* Header */}
+              <div className="flex items-center gap-3 mb-8">
+                <img
+                  src="/servesync-logo-new.png"
+                  alt="ServeSync"
+                  className="h-10 w-10 rounded-[22%] shadow-sm shadow-black/10 dark:shadow-black/30 shrink-0"
+                />
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-600 dark:text-emerald-500/70 mb-0.5 transition-colors duration-300">
+                    Profile Setup
+                  </p>
+                  <h1 className="text-[20px] font-bold text-gray-900 dark:text-white tracking-[-0.02em] leading-tight transition-colors duration-300">
+                    Tell us about yourself
+                  </h1>
+                </div>
+              </div>
+
+              <div className="space-y-5">
+
+                {/* Avatar upload */}
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-3 transition-colors duration-300">
+                    Profile Photo <span className="normal-case font-normal text-gray-300 dark:text-white/20">(optional)</span>
+                  </label>
+                  <label className="flex items-center gap-4 cursor-pointer group">
+                    <input type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />
+                    <div className="relative shrink-0">
+                      {avatarPreview ? (
+                        <>
+                          <img
+                            src={avatarPreview}
+                            alt="Avatar preview"
+                            className="h-16 w-16 rounded-full object-cover ring-2 ring-emerald-400/40"
+                          />
+                          <button
+                            type="button"
+                            onClick={removeAvatar}
+                            className="absolute -top-1 -right-1 h-5 w-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center transition-colors"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </>
+                      ) : (
+                        <div className="h-16 w-16 rounded-full bg-gray-100 dark:bg-white/[0.06] border-2 border-dashed border-gray-300 dark:border-white/[0.12] flex items-center justify-center group-hover:border-emerald-400/60 dark:group-hover:border-emerald-500/40 transition-colors duration-200">
+                          <Upload className="h-5 w-5 text-gray-400 dark:text-white/20 group-hover:text-emerald-500 dark:group-hover:text-emerald-400 transition-colors duration-200" />
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-[13px] font-medium text-gray-700 dark:text-white/60 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors duration-200">
+                        {avatarPreview ? 'Change photo' : 'Upload a photo'}
+                      </p>
+                      <p className="text-[12px] text-gray-400 dark:text-white/25 mt-0.5 transition-colors duration-300">
+                        JPG, PNG or GIF · Max 5MB
+                      </p>
+                    </div>
+                  </label>
+                </div>
+
+                {/* Gender */}
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
+                    I am a…
+                  </label>
+                  <div className="flex gap-2">
+                    {(['male', 'female'] as const).map(g => (
+                      <button
+                        key={g}
+                        type="button"
+                        onClick={() => setForm({ ...form, gender: g })}
+                        className={`flex-1 h-11 rounded-xl text-[14px] font-medium transition-all duration-200 ${
+                          form.gender === g
+                            ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/25'
+                            : 'bg-gray-50 dark:bg-white/[0.05] border border-gray-200 dark:border-white/[0.08] text-gray-600 dark:text-white/40 hover:border-emerald-400/50 dark:hover:border-emerald-500/30 hover:text-emerald-600 dark:hover:text-emerald-400'
+                        }`}
+                      >
+                        {g === 'male' ? 'Male' : 'Female'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* First + Last name */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
+                      First Name
+                    </label>
+                    <input
+                      type="text"
+                      value={form.first_name}
+                      onChange={e => setForm({ ...form, first_name: e.target.value })}
+                      className={inputClass}
+                      placeholder="First"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
+                      Last Name
+                    </label>
+                    <input
+                      type="text"
+                      value={form.last_name}
+                      onChange={e => setForm({ ...form, last_name: e.target.value })}
+                      className={inputClass}
+                      placeholder="Last"
+                    />
+                  </div>
+                </div>
+
+                {/* Second + Middle name */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
+                      Second Name <span className="normal-case font-normal text-gray-300 dark:text-white/20">opt.</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={form.second_name}
+                      onChange={e => setForm({ ...form, second_name: e.target.value })}
+                      className={inputClass}
+                      placeholder="Optional"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
+                      Middle Name <span className="normal-case font-normal text-gray-300 dark:text-white/20">opt.</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={form.middle_name}
+                      onChange={e => setForm({ ...form, middle_name: e.target.value })}
+                      className={inputClass}
+                      placeholder="Optional"
+                    />
+                  </div>
+                </div>
+
+                {/* Nickname */}
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
+                    Nickname <span className="normal-case font-normal text-gray-300 dark:text-white/20">(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={form.nickname}
+                    onChange={e => setForm({ ...form, nickname: e.target.value })}
+                    className={inputClass}
+                    placeholder="What should we call you?"
+                  />
+                </div>
+
+                {/* Phone */}
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
+                    Phone <span className="normal-case font-normal text-gray-300 dark:text-white/20">(optional)</span>
+                  </label>
+                  <input
+                    type="tel"
+                    value={form.phone}
+                    onChange={e => setForm({ ...form, phone: e.target.value })}
+                    className={inputClass}
+                    placeholder="Your phone number"
+                  />
+                </div>
+
+                {/* Birthday */}
+                <div>
+                  <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
+                    <Cake className="h-3.5 w-3.5" />
+                    Birthday <span className="normal-case font-normal text-gray-300 dark:text-white/20">(optional)</span>
+                  </label>
+                  <DatePicker value={form.birthday} onChange={v => setForm({ ...form, birthday: v })} placeholder="Select your birthday" />
+                </div>
+
+                {/* Info note */}
+                <div className="flex items-start gap-3 p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-500/[0.07] border border-emerald-100 dark:border-emerald-500/[0.12] transition-colors duration-300">
+                  <Shield className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                  <p className="text-[13px] text-emerald-700 dark:text-emerald-300/80 leading-relaxed transition-colors duration-300">
+                    Ministry roles and church access are assigned by your church admin after you join.
+                  </p>
+                </div>
+
+                {/* Submit */}
+                <div className="pt-1">
+                  <button
+                    onClick={handleFinish}
+                    disabled={loading || !form.first_name}
+                    className="w-full h-12 rounded-xl text-[14px] font-semibold flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed bg-emerald-500 hover:bg-emerald-600 dark:hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20"
+                  >
+                    {loading
+                      ? <><span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Setting up…</>
+                      : <>Get Started <ArrowRight className="h-4 w-4" /></>}
+                  </button>
+                </div>
+
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </div>
     </div>
   );
 }

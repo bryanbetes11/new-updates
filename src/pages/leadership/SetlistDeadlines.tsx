@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { format, parseISO, differenceInDays, differenceInHours, isPast, isToday } from 'date-fns';
+import { format, parseISO, differenceInDays, differenceInHours, isPast, isToday, startOfDay } from 'date-fns';
 import { motion } from 'framer-motion';
 import { Bell, CheckCircle2, Clock, AlertTriangle, RefreshCw, Loader2, ListMusic, Pencil, X, Check, CalendarDays } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -23,6 +23,15 @@ interface DeadlineEvent {
   setlist_status: string | null;
   reminder_count: number;
   last_reminder_at: string | null;
+}
+
+interface DeadlineEventRow {
+  id: string;
+  title: string;
+  event_date: string;
+  proposal_due_date: string;
+  song_leader: DeadlineEvent['song_leader'] | DeadlineEvent['song_leader'][];
+  setlists: Array<{ status: string | null }> | null;
 }
 
 type StatusFilter = 'all' | 'overdue' | 'due_today' | 'upcoming' | 'submitted';
@@ -168,7 +177,7 @@ export function SetlistDeadlines() {
 
   const fetchDeadlines = useCallback(async () => {
     setLoading(true);
-    const now = new Date().toISOString();
+    const today = format(new Date(), 'yyyy-MM-dd');
 
     const { data: eventsData, error } = await supabase
       .from('events')
@@ -178,7 +187,7 @@ export function SetlistDeadlines() {
         setlists(status)
       `)
       .not('proposal_due_date', 'is', null)
-      .gte('event_date', now)
+      .gte('event_date', today)
       .order('proposal_due_date', { ascending: true });
 
     if (error) {
@@ -187,8 +196,9 @@ export function SetlistDeadlines() {
       return;
     }
 
-    const eventIds = (eventsData || []).map((e: any) => e.id);
-    let reminderCounts: Record<string, { count: number; last_sent: string | null }> = {};
+    const deadlineRows = (eventsData || []) as unknown as DeadlineEventRow[];
+    const eventIds = deadlineRows.map((e) => e.id);
+    const reminderCounts: Record<string, { count: number; last_sent: string | null }> = {};
 
     if (eventIds.length > 0) {
       const { data: reminders } = await supabase
@@ -209,8 +219,8 @@ export function SetlistDeadlines() {
       }
     }
 
-    const mapped: DeadlineEvent[] = (eventsData || []).map((e: any) => {
-      const statuses: string[] = (e.setlists || []).map((s: any) => s.status);
+    const mapped: DeadlineEvent[] = deadlineRows.map((e) => {
+      const statuses = (e.setlists || []).map((s) => s.status).filter(Boolean) as string[];
       let setlistStatus: string | null = null;
       if (statuses.includes('approved')) setlistStatus = 'approved';
       else if (statuses.includes('pending_review')) setlistStatus = 'pending_review';
@@ -221,7 +231,7 @@ export function SetlistDeadlines() {
         title: e.title,
         event_date: e.event_date,
         proposal_due_date: e.proposal_due_date,
-        song_leader: e.song_leader || null,
+        song_leader: Array.isArray(e.song_leader) ? e.song_leader[0] || null : e.song_leader || null,
         setlist_status: setlistStatus,
         reminder_count: reminderCounts[e.id]?.count ?? 0,
         last_reminder_at: reminderCounts[e.id]?.last_sent ?? null,
@@ -230,7 +240,7 @@ export function SetlistDeadlines() {
 
     setEvents(mapped);
     setLoading(false);
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     fetchDeadlines();
@@ -239,6 +249,10 @@ export function SetlistDeadlines() {
   const handleSendReminder = async (event: DeadlineEvent) => {
     if (!event.song_leader) {
       toast('error', 'No song leader assigned to this event');
+      return;
+    }
+    if (parseISO(event.event_date) < startOfDay(new Date())) {
+      toast('error', 'This event is already done, so reminders are no longer sent.');
       return;
     }
     if (sendingId) return;

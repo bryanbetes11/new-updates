@@ -95,21 +95,6 @@ function formatDateLong(dateStr: string): string {
   }).format(date);
 }
 
-function formatTime12Hour(date: Date): string {
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Manila",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  }).format(date);
-}
-
-function addManilaDays(date: Date, days: number): Date {
-  const copy = new Date(date);
-  copy.setDate(copy.getDate() + days);
-  return copy;
-}
-
 function startOfManilaDay(date: Date): Date {
   return new Date(`${formatManilaYmd(date)}T00:00:00+08:00`);
 }
@@ -235,6 +220,7 @@ Deno.serve(async (req: Request) => {
       ? parsedDebugNow
       : new Date();
     const phNow = getManilaNow(baseNow);
+    const phToday = formatManilaYmd(phNow);
     const slot = getReminderSlot(phNow);
 
     if (!slot) {
@@ -251,7 +237,8 @@ Deno.serve(async (req: Request) => {
     let eventsQuery = supabase
       .from("events")
       .select("id, org_id, title, proposal_due_date, event_date, event_assignments(user_id, profiles(first_name, last_name), roles(name)), setlists(status, submitted_at)")
-      .not("proposal_due_date", "is", null);
+      .not("proposal_due_date", "is", null)
+      .gte("event_date", phToday);
 
     if (debugEventId) {
       eventsQuery = eventsQuery.eq("id", debugEventId);
@@ -264,6 +251,7 @@ Deno.serve(async (req: Request) => {
 
     for (const event of (events || []) as EventRecord[]) {
       if (!event.proposal_due_date) continue;
+      if (event.event_date < phToday) continue;
       if (hasSubmittedProposal(event.setlists)) continue;
 
       const dueDate = new Date(event.proposal_due_date);
@@ -383,6 +371,7 @@ Deno.serve(async (req: Request) => {
         message: `Sent ${notificationsSent} proposal reminders`,
         notificationsSent,
         slot,
+        checkedFromEventDate: phToday,
         manilaNow: phNow.toISOString(),
       }),
       {

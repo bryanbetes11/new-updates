@@ -905,7 +905,8 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
               setSelectedSongs(new Set());
               setSelectModeSongs(false);
             }}
-            className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-semibold text-white transition-all active:scale-[0.97]"
+            style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', boxShadow: '0 3px 10px rgba(22,163,74,0.3)' }}
           >
             Back to setlists
           </button>

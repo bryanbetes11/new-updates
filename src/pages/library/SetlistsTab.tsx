@@ -71,13 +71,18 @@ function StatCard({ label, value, color = 'default', onClick, active }: { label:
   const Tag = onClick ? 'button' : 'div';
   return (
     <Tag
-      {...(onClick ? { type: 'button', onClick } : {})}
+      {...(onClick ? { type: 'button', onClick, 'aria-pressed': Boolean(active) } : {})}
       className={`group relative flex flex-col items-start gap-1 px-3.5 py-3 rounded-2xl bg-white dark:bg-white/[0.025] ring-1 transition-all ${
         active ? `ring-2 ${tone.activeRing}` : `${tone.ring} hover:bg-white dark:hover:bg-white/[0.04]`
-      } ${onClick ? 'cursor-pointer active:scale-[0.97]' : ''}`}
-      style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 4px 14px -10px rgba(15,23,42,0.10)' }}
+      } ${onClick ? 'cursor-pointer hover:-translate-y-0.5 hover:ring-2 hover:ring-emerald-300/70 dark:hover:ring-emerald-400/30 active:scale-[0.97]' : ''}`}
+      style={{ boxShadow: active ? '0 10px 24px -18px rgba(16,185,129,0.45)' : '0 1px 2px rgba(15,23,42,0.04), 0 4px 14px -10px rgba(15,23,42,0.10)' }}
     >
       <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.05] dark:via-white/[0.08] to-transparent" />
+      {onClick && (
+        <span className="absolute right-2 top-2 rounded-full bg-emerald-50 dark:bg-emerald-500/[0.12] px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300 opacity-80 group-hover:opacity-100">
+          Filter
+        </span>
+      )}
       <div className="flex items-center gap-1.5">
         <span className="h-1.5 w-1.5 rounded-full dark:hidden" style={{ background: tone.dot, boxShadow: `0 0 6px ${tone.dot}` }} />
         <span className="h-1.5 w-1.5 rounded-full hidden dark:block" style={{ background: tone.dotDark, boxShadow: `0 0 6px ${tone.dotDark}` }} />
@@ -121,7 +126,7 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
   const [importProgress, setImportProgress] = useState({ songsDone: 0, eventsDone: 0, totalSongs: 0, totalEvents: 0 });
   const [songLeaderMap, setSongLeaderMap] = useState<Record<string, string>>({});
   const [songLeaderAvatarMap, setSongLeaderAvatarMap] = useState<Record<string, { avatarUrl: string | null; firstName: string; lastName: string }>>({});
-  const [view] = useState<'setlists' | 'songs'>(initialView);
+  const [view, setView] = useState<'setlists' | 'songs'>(initialView);
   const [selectedSetlists, setSelectedSetlists] = useState<Set<string>>(new Set());
   const [selectedSongs, setSelectedSongs] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
@@ -469,6 +474,39 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
   const notReadyCount = songUsages.filter(s => !s.is_safe && s.days_since !== null).length;
   const neverUsed = songUsages.filter(s => s.days_since === null).length;
 
+  const showSongFilter = (filter: typeof activeFilter) => {
+    setActiveFilter(filter);
+    setSelectedSongs(new Set());
+    setSelectModeSongs(false);
+    setView('songs');
+  };
+
+  const viewSwitch = (
+    <div className="inline-flex w-full sm:w-auto rounded-2xl bg-gray-100/80 dark:bg-white/[0.04] p-1 ring-1 ring-black/[0.05] dark:ring-white/[0.07]">
+      {[
+        { id: 'setlists' as const, label: 'Setlists', icon: ListMusic },
+        { id: 'songs' as const, label: 'Song Tracker', icon: BarChart2 },
+      ].map(option => {
+        const active = view === option.id;
+        return (
+          <button
+            key={option.id}
+            type="button"
+            onClick={() => setView(option.id)}
+            className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-xl text-[11px] font-bold transition-all active:scale-[0.97] ${
+              active
+                ? 'bg-white dark:bg-white/[0.08] text-gray-900 dark:text-white shadow-sm ring-1 ring-black/[0.06] dark:ring-white/[0.08]'
+                : 'text-gray-500 dark:text-white/45 hover:text-gray-800 dark:hover:text-white/75 hover:bg-white/60 dark:hover:bg-white/[0.04]'
+            }`}
+          >
+            <option.icon className={`h-3.5 w-3.5 ${active ? 'text-emerald-600 dark:text-emerald-400' : ''}`} />
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="space-y-4 pt-1">
@@ -495,6 +533,9 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
   if (view === 'setlists') {
     return (
       <div className="space-y-5 pb-2">
+        <div className="flex justify-end">
+          {viewSwitch}
+        </div>
 
         {/* ── Header row: section label + import ── */}
         <SectionLabel
@@ -519,12 +560,30 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-          className="grid grid-cols-2 sm:grid-cols-4 gap-2"
+          className="grid grid-cols-2 sm:grid-cols-5 gap-2"
         >
           <StatCard label="Total" value={setlists.length} />
           <StatCard label="Songs" value={setlists.reduce((acc, s) => acc + (s.setlist_songs?.length ?? 0), 0)} />
-          <StatCard label="Song Ready" value={safeCount} color="green" />
-          <StatCard label="Not Ready" value={notReadyCount} color={notReadyCount > 0 ? 'red' : 'default'} />
+          <StatCard
+            label="Never Used"
+            value={neverUsed}
+            active={activeFilter === 'never_used'}
+            onClick={() => showSongFilter('never_used')}
+          />
+          <StatCard
+            label="Safe"
+            value={safeCount}
+            color="green"
+            active={activeFilter === 'safe'}
+            onClick={() => showSongFilter('safe')}
+          />
+          <StatCard
+            label="Not Ready"
+            value={notReadyCount}
+            color={notReadyCount > 0 ? 'red' : 'default'}
+            active={activeFilter === 'not_ready'}
+            onClick={() => showSongFilter('not_ready')}
+          />
         </motion.div>
 
         {setlists.length === 0 ? (
@@ -856,10 +915,13 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
   /* ────────────────────────── Song Tracker View ────────────────────────── */
   return (
     <div className="space-y-5 pb-2">
+      <div className="flex justify-end">
+        {viewSwitch}
+      </div>
 
       {/* ── Header row ── */}
       <SectionLabel
-        index="01"
+        index="02"
         action={
           <span className="text-[10px] font-mono font-medium text-gray-400 dark:text-white/30 tracking-wide">
             90-day rule

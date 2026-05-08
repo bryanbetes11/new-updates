@@ -1,14 +1,13 @@
 import { useState } from 'react';
-import { BookOpen, ListMusic, Video, BarChart2 } from 'lucide-react';
+import { BookOpen, ListMusic, Video } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { VideosTab } from './library/VideosTab';
 import { SetlistsTab } from './library/SetlistsTab';
 
-type Tab = 'setlists' | 'videos' | 'tracker';
+type Tab = 'setlists' | 'videos';
 
 const tabs: { id: Tab; label: string; shortLabel: string; icon: React.ElementType }[] = [
   { id: 'setlists', label: 'Setlists', shortLabel: 'Setlists', icon: ListMusic },
-  { id: 'tracker', label: 'Song Tracker', shortLabel: 'Tracker', icon: BarChart2 },
   { id: 'videos', label: 'Videos', shortLabel: 'Videos', icon: Video },
 ];
 
@@ -105,8 +104,6 @@ export function Library() {
         >
           {tab === 'setlists' ? (
             <SetlistsTab initialView="setlists" />
-          ) : tab === 'tracker' ? (
-            <SetlistsTab initialView="songs" />
           ) : (
             <VideosTab />
           )}

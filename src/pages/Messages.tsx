@@ -238,13 +238,22 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
   const [quickEmoji, setQuickEmoji] = useState(() => localStorage.getItem('msg-quick-action') || '👍');
   const [showQuickPicker, setShowQuickPicker] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const textRef = useRef<HTMLTextAreaElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { user } = useAuth();
+
+  const resizeComposer = useCallback(() => {
+    const el = textRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 132)}px`;
+  }, []);
 
   const handleSend = () => {
     if (!text.trim()) return;
     onSend(text);
     setText('');
+    requestAnimationFrame(resizeComposer);
   };
 
   const handleKey = (e: React.KeyboardEvent) => {
@@ -274,7 +283,7 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
   };
 
   return (
-    <div className="shrink-0 border-t border-gray-100 dark:border-white/[0.06] bg-white dark:bg-[#111013] pb-[env(safe-area-inset-bottom)]">
+    <div className="shrink-0 border-t border-gray-100 dark:border-white/[0.06] bg-white dark:bg-[#111013] pb-[max(0px,calc(env(safe-area-inset-bottom)-10px))]">
       <AnimatePresence>
         {replyTo && replyPreview && (
           <motion.div
@@ -291,7 +300,7 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
           </motion.div>
         )}
       </AnimatePresence>
-      <div className="flex items-end gap-2 px-3 py-3">
+      <div className="flex items-end gap-2 px-3 py-2.5">
         <button
           onClick={() => fileRef.current?.click()}
           disabled={uploading}
@@ -300,15 +309,16 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
           <ImageIcon className="h-4.5 w-4.5" style={{ width: '18px', height: '18px' }} />
         </button>
         <input ref={fileRef} type="file" accept="image/*" onChange={handleImage} className="hidden" />
-        <div className="flex-1 min-h-[36px] max-h-[120px] flex items-end rounded-2xl bg-gray-100 dark:bg-white/[0.06] border border-gray-200/80 dark:border-white/[0.06] overflow-hidden">
+        <div className="flex-1 min-h-[36px] max-h-[140px] flex items-end rounded-2xl bg-gray-100 dark:bg-white/[0.06] border border-gray-200/80 dark:border-white/[0.06] overflow-hidden">
           <textarea
+            ref={textRef}
             value={text}
-            onChange={e => { setText(e.target.value); onTyping(); }}
+            onChange={e => { setText(e.target.value); resizeComposer(); onTyping(); }}
             onKeyDown={handleKey}
             placeholder="Message…"
             rows={1}
-            style={{ resize: 'none', maxHeight: '120px' }}
-            className="flex-1 px-3.5 py-2 text-[14px] bg-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/25 outline-none leading-relaxed"
+            style={{ resize: 'none', maxHeight: '132px' }}
+            className="flex-1 px-3.5 py-2 text-[16px] sm:text-[14px] bg-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/25 outline-none leading-relaxed overflow-y-auto"
           />
         </div>
 
@@ -1133,6 +1143,29 @@ function useIsDesktop() {
   return isDesktop;
 }
 
+function useMessagesViewportHeight(active: boolean) {
+  useEffect(() => {
+    if (!active) return;
+
+    const setHeight = () => {
+      const height = window.visualViewport?.height ?? window.innerHeight;
+      document.documentElement.style.setProperty('--messages-viewport-height', `${height}px`);
+    };
+
+    setHeight();
+    window.visualViewport?.addEventListener('resize', setHeight);
+    window.visualViewport?.addEventListener('scroll', setHeight);
+    window.addEventListener('resize', setHeight);
+
+    return () => {
+      window.visualViewport?.removeEventListener('resize', setHeight);
+      window.visualViewport?.removeEventListener('scroll', setHeight);
+      window.removeEventListener('resize', setHeight);
+      document.documentElement.style.removeProperty('--messages-viewport-height');
+    };
+  }, [active]);
+}
+
 export function Messages() {
   const { conversationId: paramConvId } = useParams<{ conversationId?: string }>();
   const navigate = useNavigate();
@@ -1145,6 +1178,7 @@ export function Messages() {
   const [mobileShowChat, setMobileShowChat] = useState(Boolean(paramConvId));
 
   const { conversations, loading: convsLoading, refresh, createDirectConversation } = useConversations();
+  useMessagesViewportHeight(!isDesktop && mobileShowChat);
 
   const myUserId = user?.id ?? '';
 
@@ -1245,7 +1279,8 @@ export function Messages() {
 
       {/* ── Right: Chat window ── */}
       <motion.div
-        className={`flex flex-col ${isDesktop ? 'flex-1 min-w-0' : 'absolute inset-0'}`}
+        className={`flex flex-col ${isDesktop ? 'flex-1 min-w-0' : 'fixed inset-x-0 top-0 z-20'}`}
+        style={!isDesktop ? { height: 'var(--messages-viewport-height, 100dvh)' } : undefined}
         animate={!isDesktop ? { x: mobileShowChat ? '0%' : '100%' } : undefined}
         transition={slideTransition}
       >

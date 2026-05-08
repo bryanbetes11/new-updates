@@ -257,10 +257,6 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
     requestAnimationFrame(resizeComposer);
   };
 
-  const handleKey = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
-  };
-
   const focusComposerWithoutPageScroll = (e: React.PointerEvent<HTMLTextAreaElement>) => {
     if (e.pointerType !== 'touch') return;
     e.preventDefault();
@@ -349,9 +345,9 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
             onChange={e => { setText(e.target.value); resizeComposer(); onTyping(); }}
             onFocus={() => window.dispatchEvent(new Event('messages-composer-focus'))}
             onPointerDown={focusComposerWithoutPageScroll}
-            onKeyDown={handleKey}
             placeholder="Message…"
             rows={1}
+            enterKeyHint="enter"
             style={{ resize: 'none', maxHeight: '132px' }}
             className="flex-1 px-3.5 py-2 text-[16px] sm:text-[14px] bg-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/25 outline-none leading-relaxed overflow-y-auto"
           />
@@ -696,8 +692,9 @@ function ChatWindow({ conv, myUserId, onBack, onConvUpdate }: {
   }, [messages]);
 
   useEffect(() => {
-    const keepLatestVisible = () => {
-      if (!atBottomRef.current && !forceStickToLatestRef.current) return;
+    const keepLatestVisible = (force = false) => {
+      const composerFocused = document.activeElement instanceof HTMLTextAreaElement;
+      if (!force && !composerFocused && !atBottomRef.current && !forceStickToLatestRef.current) return;
       const scrollToLatest = () => {
         if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         messagesEndRef.current?.scrollIntoView({ block: 'end' });
@@ -705,20 +702,22 @@ function ChatWindow({ conv, myUserId, onBack, onConvUpdate }: {
       requestAnimationFrame(() => {
         scrollToLatest();
         setTimeout(scrollToLatest, 60);
+        setTimeout(scrollToLatest, 240);
       });
     };
     const handleComposerFocus = () => {
       forceStickToLatestRef.current = true;
-      keepLatestVisible();
+      keepLatestVisible(true);
     };
+    const handleKeyboardInsetChange = () => keepLatestVisible(true);
 
     window.addEventListener('messages-composer-focus', handleComposerFocus);
-    window.addEventListener('messages-keyboard-inset-change', keepLatestVisible);
-    window.visualViewport?.addEventListener('resize', keepLatestVisible);
+    window.addEventListener('messages-keyboard-inset-change', handleKeyboardInsetChange);
+    window.visualViewport?.addEventListener('resize', handleKeyboardInsetChange);
     return () => {
       window.removeEventListener('messages-composer-focus', handleComposerFocus);
-      window.removeEventListener('messages-keyboard-inset-change', keepLatestVisible);
-      window.visualViewport?.removeEventListener('resize', keepLatestVisible);
+      window.removeEventListener('messages-keyboard-inset-change', handleKeyboardInsetChange);
+      window.visualViewport?.removeEventListener('resize', handleKeyboardInsetChange);
     };
   }, []);
 
@@ -900,19 +899,21 @@ function ChatWindow({ conv, myUserId, onBack, onConvUpdate }: {
 
               <div className={`flex items-end gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'} ${isGrouped && !showDateDivider ? 'mt-0.5' : 'mt-3'}`}>
                 {/* Avatar spacer */}
-                <div className="shrink-0 w-7">
-                  {!isMe && showAvatar && (
+                {!isMe && (
+                  <div className="shrink-0 w-7">
+                    {showAvatar && (
                     <Avatar
                       src={msg.sender.avatar_url ?? undefined}
                       firstName={msg.sender.first_name || '?'}
                       lastName={msg.sender.last_name ?? undefined}
                       size="xs"
                     />
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Bubble + actions */}
-                <div className={`relative group flex flex-col max-w-[72%] ${isMe ? 'items-end' : 'items-start'}`}>
+                <div className={`relative group flex min-w-0 flex-col ${isMe ? 'items-end max-w-[82%]' : 'items-start max-w-[72%]'}`}>
                   {/* Sender name (group chats) */}
                   {!isMe && !isGrouped && isGroupChat && (
                     <span className="text-[11px] font-semibold text-gray-500 dark:text-white/40 mb-1 ml-1">{getSenderName(msg.sender)}</span>
@@ -966,7 +967,7 @@ function ChatWindow({ conv, myUserId, onBack, onConvUpdate }: {
                           className="max-w-[220px] max-h-[280px] rounded-xl object-cover"
                         />
                       ) : (
-                        <p className="text-[14px] whitespace-pre-wrap break-words">{content.text}</p>
+                        <p className="text-[14px] whitespace-pre-wrap break-words" style={{ overflowWrap: 'anywhere' }}>{content.text}</p>
                       )}
                       {msg.is_pinned && (
                         <Pin className="absolute -top-2 -right-2 h-3.5 w-3.5 text-amber-500 bg-white dark:bg-[#111013] rounded-full p-0.5" style={{ padding: '2px' }} />

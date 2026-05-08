@@ -261,6 +261,17 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
 
+  const focusComposerWithoutPageScroll = (e: React.PointerEvent<HTMLTextAreaElement>) => {
+    if (e.pointerType !== 'touch') return;
+    e.preventDefault();
+    const el = textRef.current;
+    if (!el) return;
+    window.dispatchEvent(new Event('messages-composer-focus'));
+    el.focus({ preventScroll: true });
+    const end = el.value.length;
+    el.setSelectionRange(end, end);
+  };
+
   useEffect(() => {
     const el = rootRef.current;
     if (!el) return;
@@ -337,6 +348,7 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
             value={text}
             onChange={e => { setText(e.target.value); resizeComposer(); onTyping(); }}
             onFocus={() => window.dispatchEvent(new Event('messages-composer-focus'))}
+            onPointerDown={focusComposerWithoutPageScroll}
             onKeyDown={handleKey}
             placeholder="Message…"
             rows={1}

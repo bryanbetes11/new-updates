@@ -139,11 +139,8 @@ export function useConversations() {
     const channel = supabase
       .channel(`conv-list-${user.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, fetchConversations)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversations' }, fetchConversations)
-      .on('postgres_changes', {
-        event: '*', schema: 'public', table: 'conversation_members',
-        filter: `user_id=eq.${user.id}`,
-      }, fetchConversations)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, fetchConversations)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversation_members' }, fetchConversations)
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user, fetchConversations]);

@@ -49,19 +49,48 @@ type MsgContent =
   | { type: 'image'; url: string }
   | { type: 'delete_request'; requestedBy: string; requesterName: string; requestedAt: string };
 function parseContent(content: string): MsgContent {
-  try {
-    const p = JSON.parse(content);
-    if (p.type === 'image' && typeof p.url === 'string') return p;
-    if (p.type === 'delete_request' && typeof p.requestedBy === 'string') {
+  const normalizeParsedContent = (value: unknown): MsgContent | null => {
+    if (!value || typeof value !== 'object') return null;
+    const p = value as Record<string, unknown>;
+    if (p.type === 'image' && typeof p.url === 'string') return { type: 'image', url: p.url };
+    if (p.type === 'delete_request') {
+      const requestedBy = typeof p.requestedBy === 'string'
+        ? p.requestedBy
+        : typeof p.requested_by === 'string'
+          ? p.requested_by
+          : '';
+      if (!requestedBy) return null;
       return {
         type: 'delete_request',
-        requestedBy: p.requestedBy,
-        requesterName: typeof p.requesterName === 'string' ? p.requesterName : 'Someone',
-        requestedAt: typeof p.requestedAt === 'string' ? p.requestedAt : '',
+        requestedBy,
+        requesterName: typeof p.requesterName === 'string'
+          ? p.requesterName
+          : typeof p.requester_name === 'string'
+            ? p.requester_name
+            : 'Someone',
+        requestedAt: typeof p.requestedAt === 'string'
+          ? p.requestedAt
+          : typeof p.requested_at === 'string'
+            ? p.requested_at
+            : '',
       };
+    }
+    return null;
+  };
+
+  try {
+    const parsed = JSON.parse(content);
+    const normalized = normalizeParsedContent(parsed);
+    if (normalized) return normalized;
+    if (typeof parsed === 'string') {
+      const nested = normalizeParsedContent(JSON.parse(parsed));
+      if (nested) return nested;
     }
   } catch {
     // Treat non-JSON content as a plain text message.
+  }
+  if (content.includes('"type"') && content.includes('delete_request')) {
+    return { type: 'delete_request', requestedBy: '', requesterName: 'Someone', requestedAt: '' };
   }
   return { type: 'text', text: content };
 }
@@ -1676,6 +1705,14 @@ export function Messages() {
   });
 
   const selectedConv = conversations.find(c => c.id === selectedConvId) ?? null;
+
+  useEffect(() => {
+    if (!selectedConvId || convsLoading) return;
+    if (conversations.some(c => c.id === selectedConvId)) return;
+    setMobileShowChat(false);
+    setSelectedConvId(null);
+    navigate('/messages', { replace: true });
+  }, [conversations, convsLoading, navigate, selectedConvId]);
 
   const selectConversation = (id: string) => {
     setSelectedConvId(id);

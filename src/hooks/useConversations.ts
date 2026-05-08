@@ -153,20 +153,29 @@ export function useConversations() {
     );
     if (existing) return existing.id;
 
-    const { data: newConv, error } = await supabase
-      .from('conversations')
-      .insert({ type: 'personal', created_by: user.id })
-      .select('id')
-      .single();
-    if (error || !newConv) return null;
+    const { data, error } = await supabase.rpc('create_personal_conversation', {
+      target_user_id: otherUserId,
+    });
+    if (error || !data) return null;
 
-    await supabase.from('conversation_members').insert([
-      { conversation_id: newConv.id, user_id: user.id },
-      { conversation_id: newConv.id, user_id: otherUserId },
-    ]);
     await fetchConversations();
-    return newConv.id;
+    return data as string;
   }, [user, conversations, fetchConversations]);
 
-  return { conversations, loading, refresh: fetchConversations, createDirectConversation };
+  const createGroupConversation = useCallback(async (memberIds: string[], groupName: string): Promise<string | null> => {
+    if (!user) return null;
+    const uniqueMemberIds = [...new Set(memberIds)].filter(id => id !== user.id);
+    if (uniqueMemberIds.length === 0) return null;
+
+    const { data, error } = await supabase.rpc('create_group_conversation', {
+      member_ids: uniqueMemberIds,
+      group_name: groupName.trim() || 'Group Chat',
+    });
+    if (error || !data) return null;
+
+    await fetchConversations();
+    return data as string;
+  }, [user, fetchConversations]);
+
+  return { conversations, loading, refresh: fetchConversations, createDirectConversation, createGroupConversation };
 }

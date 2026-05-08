@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Send, ImageIcon, X, Pin, CornerUpLeft,
-  MessageCircle, Plus, Search, Trash2, MoreHorizontal, ChevronRight,
+  MessageCircle, Plus, Search, Trash2, MoreHorizontal, ChevronRight, Check,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useConversations, type Conversation } from '../hooks/useConversations';
@@ -151,22 +151,49 @@ function ConvItem({ conv, selected, myUserId, onSelect }: {
 
 // ─── New Message Modal ───────────────────────────────────────────────────────
 
-function NewMessageModal({ open, onClose, onSelect }: {
-  open: boolean; onClose: () => void; onSelect: (userId: string) => void;
+function NewMessageModal({ open, onClose, onSelect, onCreateGroup, currentUserId }: {
+  open: boolean;
+  onClose: () => void;
+  onSelect: (userId: string) => void;
+  onCreateGroup: (userIds: string[], groupName: string) => void;
+  currentUserId: string;
 }) {
+  const [mode, setMode] = useState<'direct' | 'group'>('direct');
   const [query, setQuery] = useState('');
+  const [groupName, setGroupName] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [people, setPeople] = useState<Array<{ id: string; first_name: string | null; last_name: string | null; nickname: string | null; avatar_url: string | null }>>([]);
 
   useEffect(() => {
     if (!open) return;
+    setMode('direct');
+    setQuery('');
+    setGroupName('');
+    setSelectedIds(new Set());
     supabase.from('profiles').select('id, first_name, last_name, nickname, avatar_url').order('first_name')
-      .then(({ data }) => setPeople(data || []));
-  }, [open]);
+      .then(({ data }) => setPeople((data || []).filter(p => p.id !== currentUserId)));
+  }, [currentUserId, open]);
 
   const filtered = people.filter(p => {
     const name = `${p.nickname || ''} ${p.first_name || ''} ${p.last_name || ''}`.toLowerCase();
     return name.includes(query.toLowerCase());
   });
+  const selectedCount = selectedIds.size;
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const submitGroup = () => {
+    if (selectedIds.size === 0) return;
+    onCreateGroup([...selectedIds], groupName);
+    onClose();
+  };
 
   return (
     <AnimatePresence>
@@ -184,18 +211,45 @@ function NewMessageModal({ open, onClose, onSelect }: {
             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
             className="fixed inset-x-4 top-[15%] z-50 max-w-sm mx-auto bg-white dark:bg-[#1c1c1e] rounded-3xl border border-gray-100 dark:border-white/[0.08] shadow-2xl overflow-hidden"
           >
-            <div className="flex items-center gap-3 px-4 py-4 border-b border-gray-100 dark:border-white/[0.06]">
+            <div className="px-4 pt-4 pb-3 border-b border-gray-100 dark:border-white/[0.06]">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="grid grid-cols-2 gap-1 flex-1 rounded-2xl bg-gray-100 dark:bg-white/[0.06] p-1">
+                  {(['direct', 'group'] as const).map(option => (
+                    <button
+                      key={option}
+                      onClick={() => setMode(option)}
+                      className={`h-8 rounded-xl text-[12px] font-bold transition-colors ${
+                        mode === option
+                          ? 'bg-white dark:bg-white/[0.12] text-gray-900 dark:text-white shadow-sm'
+                          : 'text-gray-500 dark:text-white/45'
+                      }`}
+                    >
+                      {option === 'direct' ? 'Direct' : 'Group'}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={onClose} className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-white/60 transition-colors">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              {mode === 'group' && (
+                <input
+                  value={groupName}
+                  onChange={e => setGroupName(e.target.value)}
+                  placeholder="Group name"
+                  className="w-full h-10 px-3 mb-2 rounded-xl bg-gray-100 dark:bg-white/[0.06] text-[13px] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/25 outline-none"
+                />
+              )}
+              <div className="flex items-center gap-3">
               <Search className="h-4 w-4 text-gray-400 dark:text-white/30 shrink-0" />
               <input
                 autoFocus
                 value={query}
                 onChange={e => setQuery(e.target.value)}
-                placeholder="Search people…"
+                placeholder={mode === 'direct' ? 'Search people...' : 'Add people...'}
                 className="flex-1 text-[14px] bg-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/25 outline-none"
               />
-              <button onClick={onClose} className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-white/60 transition-colors">
-                <X className="h-4 w-4" />
-              </button>
+              </div>
             </div>
             <div className="overflow-y-auto max-h-72 p-2">
               {filtered.length === 0 && (
@@ -206,15 +260,42 @@ function NewMessageModal({ open, onClose, onSelect }: {
                 return (
                   <button
                     key={p.id}
-                    onClick={() => { onSelect(p.id); onClose(); }}
+                    onClick={() => {
+                      if (mode === 'group') {
+                        toggleSelected(p.id);
+                        return;
+                      }
+                      onSelect(p.id);
+                      onClose();
+                    }}
                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-white/[0.05] transition-colors"
                   >
                     <Avatar src={p.avatar_url ?? undefined} firstName={p.first_name || name.charAt(0)} lastName={p.last_name ?? undefined} size="sm" />
-                    <span className="text-[13px] font-medium text-gray-900 dark:text-white">{name}</span>
+                    <span className="flex-1 text-left text-[13px] font-medium text-gray-900 dark:text-white">{name}</span>
+                    {mode === 'group' && (
+                      <span className={`flex h-5 w-5 items-center justify-center rounded-full border ${
+                        selectedIds.has(p.id)
+                          ? 'bg-emerald-500 border-emerald-500 text-white'
+                          : 'border-gray-300 dark:border-white/20 text-transparent'
+                      }`}>
+                        <Check className="h-3 w-3" />
+                      </span>
+                    )}
                   </button>
                 );
               })}
             </div>
+            {mode === 'group' && (
+              <div className="p-3 border-t border-gray-100 dark:border-white/[0.06]">
+                <button
+                  onClick={submitGroup}
+                  disabled={selectedCount === 0}
+                  className="w-full h-10 rounded-xl bg-emerald-500 text-white text-[13px] font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Create Group{selectedCount > 0 ? ` (${selectedCount})` : ''}
+                </button>
+              </div>
+            )}
           </motion.div>
         </>
       )}
@@ -1236,8 +1317,9 @@ function useMessagesKeyboardInset(active: boolean) {
     document.documentElement.style.overflow = 'hidden';
 
     const setInset = () => {
+      const composerFocused = document.activeElement instanceof HTMLTextAreaElement;
       const viewport = window.visualViewport;
-      const inset = viewport
+      const inset = composerFocused && viewport
         ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
         : 0;
       document.documentElement.style.setProperty('--messages-keyboard-inset', `${Math.round(inset)}px`);
@@ -1249,11 +1331,15 @@ function useMessagesKeyboardInset(active: boolean) {
     window.visualViewport?.addEventListener('resize', setInset);
     window.visualViewport?.addEventListener('scroll', setInset);
     window.addEventListener('resize', setInset);
+    window.addEventListener('focusin', setInset);
+    window.addEventListener('focusout', setInset);
 
     return () => {
       window.visualViewport?.removeEventListener('resize', setInset);
       window.visualViewport?.removeEventListener('scroll', setInset);
       window.removeEventListener('resize', setInset);
+      window.removeEventListener('focusin', setInset);
+      window.removeEventListener('focusout', setInset);
       document.documentElement.style.removeProperty('--messages-keyboard-inset');
       document.body.style.overflow = previousBodyOverflow;
       document.body.style.position = previousBodyPosition;
@@ -1276,7 +1362,7 @@ export function Messages() {
   const [newMsgOpen, setNewMsgOpen] = useState(false);
   const [mobileShowChat, setMobileShowChat] = useState(Boolean(paramConvId));
 
-  const { conversations, loading: convsLoading, refresh, createDirectConversation } = useConversations();
+  const { conversations, loading: convsLoading, refresh, createDirectConversation, createGroupConversation } = useConversations();
   useMessagesKeyboardInset(!isDesktop && mobileShowChat);
 
   const myUserId = user?.id ?? '';
@@ -1303,6 +1389,11 @@ export function Messages() {
 
   const handleNewMessage = async (otherUserId: string) => {
     const id = await createDirectConversation(otherUserId);
+    if (id) selectConversation(id);
+  };
+
+  const handleNewGroup = async (userIds: string[], groupName: string) => {
+    const id = await createGroupConversation(userIds, groupName);
     if (id) selectConversation(id);
   };
 
@@ -1397,6 +1488,8 @@ export function Messages() {
         open={newMsgOpen}
         onClose={() => setNewMsgOpen(false)}
         onSelect={handleNewMessage}
+        onCreateGroup={handleNewGroup}
+        currentUserId={myUserId}
       />
     </div>
   );

@@ -533,7 +533,7 @@ export function Navigation({ hideMobile, collapsed, onCollapsedChange, mobileOpe
         <div
           className={`fixed bottom-0 left-0 right-0 z-50 lg:hidden ${useDockedMobileNav ? 'pointer-events-auto' : 'pointer-events-none'}`}
           style={{
-            paddingBottom: useDockedMobileNav ? '0px' : 'calc(env(safe-area-inset-bottom) + 2px)',
+            paddingBottom: useDockedMobileNav ? '0px' : 'max(0px, calc(env(safe-area-inset-bottom) - 4px))',
             paddingTop: useDockedMobileNav ? '0px' : '6px',
             background: useDockedMobileNav ? 'var(--sidebar-bg)' : undefined,
             WebkitBackdropFilter: useDockedMobileNav ? 'blur(28px) saturate(180%)' : undefined,

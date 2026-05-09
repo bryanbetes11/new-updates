@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { addDays, format } from 'date-fns';
+import { motion } from 'framer-motion';
 import { ArrowLeft, Building2, CalendarClock, CheckCircle2, CreditCard, Loader2, LogOut, Shield, Sparkles, Users, UserPlus, XCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
@@ -19,6 +20,26 @@ import type {
 type DashboardChurch = PlatformOrganizationSummary & { isPreview?: boolean };
 type DashboardChurchDetail = PlatformOrganizationDetail & { isPreview?: boolean };
 type DashboardChurchMember = PlatformOrganizationMember & { isPreview?: boolean };
+
+const container = {
+  initial: {},
+  animate: { transition: { staggerChildren: 0.06, delayChildren: 0.04 } },
+};
+
+const item = {
+  initial: { opacity: 0, y: 18, filter: 'blur(6px)' },
+  animate: {
+    opacity: 1,
+    y: 0,
+    filter: 'blur(0px)',
+    transition: { duration: 0.55, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] },
+  },
+};
+
+const surfaceCardClass = 'relative overflow-hidden rounded-3xl bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06]';
+const surfaceCardStyle = {
+  boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 28px -16px rgba(15,23,42,0.12)',
+};
 
 function formatStatus(status: string | null) {
   if (!status) return 'Exempt / not active';
@@ -420,39 +441,61 @@ export function PlatformDashboard() {
 
   return (
     <div className="page-container page-bottom-pad">
-      <div className="max-w-7xl mx-auto pt-6 sm:pt-8 space-y-6">
-        <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
-          <div>
-            <p className="text-[11px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-2">Platform Owner</p>
-            <h1 className="text-2xl sm:text-3xl font-black text-gray-900 dark:text-white tracking-tight">Platform Dashboard</h1>
-            <p className="text-sm text-gray-500 dark:text-white/45 mt-2 max-w-2xl">
-              Cross-church visibility, church management, and onboarding oversight. Preview tenants are included below only to help you judge the layout before more real churches exist.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="h-10 px-4 rounded-2xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] text-sm font-semibold text-gray-700 dark:text-white/70 hover:bg-gray-50 dark:hover:bg-white/[0.08] transition-colors flex items-center gap-2"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back to App
-            </button>
-            <button
-              onClick={handleSignOut}
-              className="h-10 px-4 rounded-2xl border border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/[0.08] text-sm font-semibold text-red-600 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-500/[0.14] transition-colors flex items-center gap-2"
-            >
-              <LogOut className="h-4 w-4" />
-              Sign Out
-            </button>
-            <div className="rounded-3xl border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-900/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
-              <span className="font-semibold">Owner-only:</span> preview churches never touch the real database.
+      <motion.div
+        variants={container}
+        initial="initial"
+        animate="animate"
+        className="max-w-2xl lg:max-w-6xl xl:max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pt-6 sm:pt-8 space-y-5 sm:space-y-6"
+      >
+        <motion.section
+          variants={item}
+          className={`${surfaceCardClass} p-5 sm:p-6 overflow-hidden`}
+          style={surfaceCardStyle}
+        >
+          <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.12] to-transparent" />
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="min-w-0">
+              <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-300 mb-2">Platform Owner</p>
+              <h1 className="text-[2rem] sm:text-[2.5rem] font-black text-gray-900 dark:text-white tracking-tight leading-none">Platform Dashboard</h1>
+              <p className="text-sm text-gray-500 dark:text-white/45 mt-3 max-w-2xl leading-relaxed">
+                Cross-church visibility, church management, and onboarding oversight. Preview tenants are included below only to help you judge the layout before more real churches exist.
+              </p>
+            </div>
+
+            <div className="w-full lg:w-auto space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <button
+                  onClick={() => navigate('/dashboard')}
+                  className="h-11 px-4 rounded-2xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] text-sm font-semibold text-gray-700 dark:text-white/70 hover:bg-gray-50 dark:hover:bg-white/[0.08] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Back to App
+                </button>
+                <button
+                  onClick={handleSignOut}
+                  className="h-11 px-4 rounded-2xl border border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/[0.08] text-sm font-semibold text-red-600 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-500/[0.14] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Sign Out
+                </button>
+              </div>
+
+              <div className="rounded-2xl border border-emerald-200/80 dark:border-emerald-900/40 bg-emerald-50/85 dark:bg-emerald-900/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
+                <span className="font-semibold">Owner-only:</span> preview churches never touch the real database.
+              </div>
             </div>
           </div>
-        </div>
+        </motion.section>
 
-        <div className="grid grid-cols-2 xl:grid-cols-6 gap-3">
+        <motion.section variants={item} className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-3">
           {metricCards.map(card => (
-            <div key={card.label} className="card p-4">
+            <motion.div
+              key={card.label}
+              variants={item}
+              className={`${surfaceCardClass} p-4 sm:p-5`}
+              style={surfaceCardStyle}
+            >
+              <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.05] dark:via-white/[0.08] to-transparent" />
               <div className="flex items-center justify-between mb-3">
                 <div
                   className="h-10 w-10 rounded-2xl flex items-center justify-center"
@@ -464,13 +507,13 @@ export function PlatformDashboard() {
               <div className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">{card.value}</div>
               <div className="text-xs text-gray-500 dark:text-white/45 mt-1">{card.label}</div>
               <div className="text-[11px] text-gray-400 dark:text-white/30 mt-2">{card.helper}</div>
-            </div>
+            </motion.div>
           ))}
-        </div>
+        </motion.section>
 
-        <div className="grid grid-cols-1 xl:grid-cols-[1.05fr,0.95fr] gap-6">
-          <div className="card p-0 overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800 flex items-start justify-between gap-3">
+        <motion.section variants={item} className="grid grid-cols-1 xl:grid-cols-[1.05fr,0.95fr] gap-5 sm:gap-6">
+          <div className={`${surfaceCardClass} p-0 overflow-hidden`} style={surfaceCardStyle}>
+            <div className="px-4 sm:px-5 py-4 border-b border-gray-200 dark:border-gray-800 flex items-start justify-between gap-3">
               <div>
                 <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1">Billing Queue</p>
                 <h2 className="text-lg font-bold text-gray-900 dark:text-white">Pending Payment Reviews</h2>
@@ -481,7 +524,7 @@ export function PlatformDashboard() {
               </div>
             </div>
             {pendingSubmissions.length === 0 ? (
-              <div className="p-5">
+              <div className="p-4 sm:p-5">
                 <div className="rounded-3xl border border-dashed border-gray-200 dark:border-white/[0.08] p-8 text-center text-sm text-gray-500 dark:text-white/40">
                   No payments are waiting for review.
                 </div>
@@ -489,7 +532,7 @@ export function PlatformDashboard() {
             ) : (
               <div className="divide-y divide-gray-100 dark:divide-gray-800">
                 {pendingSubmissions.map(submission => (
-                  <div key={submission.id} className="px-5 py-4">
+                  <div key={submission.id} className="px-4 sm:px-5 py-4">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
@@ -538,17 +581,17 @@ export function PlatformDashboard() {
             )}
           </div>
 
-          <div className="card p-0 overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800">
+          <div className={`${surfaceCardClass} p-0 overflow-hidden`} style={surfaceCardStyle}>
+            <div className="px-4 sm:px-5 py-4 border-b border-gray-200 dark:border-gray-800">
               <h2 className="text-lg font-bold text-gray-900 dark:text-white">Recent Billing Decisions</h2>
               <p className="text-xs text-gray-500 dark:text-white/40 mt-1">The latest verified or rejected submissions.</p>
             </div>
             {recentReviewedSubmissions.length === 0 ? (
-              <div className="px-5 py-8 text-center text-gray-500 dark:text-white/40">No billing decisions yet.</div>
+              <div className="px-4 sm:px-5 py-8 text-center text-gray-500 dark:text-white/40">No billing decisions yet.</div>
             ) : (
               <div className="divide-y divide-gray-100 dark:divide-gray-800">
                 {recentReviewedSubmissions.map(submission => (
-                  <div key={submission.id} className="px-5 py-4">
+                  <div key={submission.id} className="px-4 sm:px-5 py-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-gray-900 dark:text-white">{submission.church_name}</p>
@@ -575,10 +618,11 @@ export function PlatformDashboard() {
               </div>
             )}
           </div>
-        </div>
+        </motion.section>
 
-        <div className="grid grid-cols-1 xl:grid-cols-[1.2fr,0.8fr] gap-6">
-          <div className="card p-5">
+        <motion.section variants={item} className="grid grid-cols-1 xl:grid-cols-[1.2fr,0.8fr] gap-5 sm:gap-6">
+          <div className={`${surfaceCardClass} p-4 sm:p-5`} style={surfaceCardStyle}>
+            <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.12] to-transparent" />
             <div className="flex items-start justify-between gap-4 mb-5">
               <div>
                 <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1">Tenants</p>
@@ -592,13 +636,15 @@ export function PlatformDashboard() {
 
             <div className="space-y-3">
               {displayChurches.map(church => (
-                <button
+                <motion.button
                   key={church.id}
+                  variants={item}
                   onClick={() => openChurchModal(church.id)}
-                  className={`w-full text-left rounded-[26px] border px-4 py-4 transition-all duration-200 ${
+                  whileTap={{ scale: 0.985 }}
+                  className={`w-full text-left rounded-[26px] border px-4 py-4 sm:px-5 sm:py-[18px] transition-all duration-200 ${
                     selectedChurchId === church.id
-                      ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/15'
-                      : 'border-gray-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02] hover:border-gray-300 dark:hover:border-white/[0.12]'
+                      ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/15 shadow-[0_10px_30px_-22px_rgba(22,163,74,0.55)]'
+                      : 'border-gray-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02] hover:border-gray-300 dark:hover:border-white/[0.12] hover:-translate-y-px'
                   }`}
                 >
                   <div className="flex items-start gap-4">
@@ -638,13 +684,13 @@ export function PlatformDashboard() {
                       </p>
                     </div>
                   </div>
-                </button>
+                </motion.button>
               ))}
             </div>
           </div>
 
-          <div className="card p-0 overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between gap-3">
+          <div className={`${surfaceCardClass} p-0 overflow-hidden`} style={surfaceCardStyle}>
+            <div className="px-4 sm:px-5 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-bold text-gray-900 dark:text-white">Recent Registrations</h2>
                 <p className="text-xs text-gray-500 dark:text-white/40 mt-1">Compact by default so it doesn’t dominate the page.</p>
@@ -660,7 +706,7 @@ export function PlatformDashboard() {
             </div>
             <div className="divide-y divide-gray-100 dark:divide-gray-800">
               {visibleRegistrations.map(registration => (
-                <div key={registration.profile_id} className="px-5 py-4">
+                <div key={registration.profile_id} className="px-4 sm:px-5 py-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
@@ -685,12 +731,12 @@ export function PlatformDashboard() {
                 </div>
               ))}
               {registrations.length === 0 && (
-                <div className="px-5 py-8 text-center text-gray-500 dark:text-white/40">No registrations yet.</div>
+                <div className="px-4 sm:px-5 py-8 text-center text-gray-500 dark:text-white/40">No registrations yet.</div>
               )}
             </div>
           </div>
-        </div>
-      </div>
+        </motion.section>
+      </motion.div>
 
       <Modal
         open={churchModalOpen}

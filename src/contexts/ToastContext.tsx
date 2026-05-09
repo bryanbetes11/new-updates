@@ -9,6 +9,7 @@ interface Toast {
   message: string;
   actionLabel?: string;
   onClick?: () => void;
+  leaving?: boolean;
 }
 
 interface ToastContextValue {
@@ -31,20 +32,26 @@ const colors: Record<ToastType, string> = {
   info: 'bg-brand-50 dark:bg-brand-900/30 text-brand-800 dark:text-brand-200 ring-brand-200 dark:ring-brand-800',
 };
 
+const TOAST_VISIBLE_MS = 6500;
+const TOAST_EXIT_MS = 280;
+
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
+
+  const removeToast = useCallback((id: string) => {
+    setToasts(prev => prev.map(t => t.id === id ? { ...t, leaving: true } : t));
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, TOAST_EXIT_MS);
+  }, []);
 
   const addToast = useCallback((type: ToastType, message: string, options?: { actionLabel?: string; onClick?: () => void }) => {
     const id = crypto.randomUUID();
     setToasts(prev => [...prev, { id, type, message, ...options }]);
     setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
-    }, 4000);
-  }, []);
-
-  const removeToast = (id: string) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
-  };
+      removeToast(id);
+    }, TOAST_VISIBLE_MS);
+  }, [removeToast]);
 
   return (
     <ToastContext.Provider value={{ toast: addToast }}>
@@ -70,7 +77,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 e.preventDefault();
                 runAction();
               }}
-              className={`animate-slide-up flex items-center gap-3 rounded-full px-4 py-3 ring-1 backdrop-blur-xl ${colors[t.type]} ${t.onClick ? 'cursor-pointer hover:-translate-y-0.5 hover:scale-[1.01] active:translate-y-0 active:scale-[0.99] transition-transform' : ''}`}
+              className={`${t.leaving ? 'animate-toast-out pointer-events-none' : 'animate-toast-in'} flex items-center gap-3 rounded-full px-4 py-3 ring-1 backdrop-blur-xl ${colors[t.type]} ${t.onClick && !t.leaving ? 'cursor-pointer hover:-translate-y-0.5 hover:scale-[1.01] active:translate-y-0 active:scale-[0.99] transition-transform' : ''}`}
               style={{
                 boxShadow:
                   '0 18px 48px rgba(15,23,42,0.22), 0 8px 18px rgba(15,23,42,0.14), inset 0 1px 0 rgba(255,255,255,0.45)',

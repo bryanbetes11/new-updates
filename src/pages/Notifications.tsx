@@ -74,6 +74,7 @@ export function Notifications() {
       .from('notifications')
       .select('*')
       .eq('user_id', user.id)
+      .neq('type', 'message')
       .order('created_at', { ascending: false })
       .limit(50);
     setNotifications(data || []);
@@ -105,7 +106,7 @@ export function Notifications() {
 
   const markAllRead = async () => {
     if (!user) return;
-    await supabase.from('notifications').update({ is_read: true }).eq('user_id', user.id).eq('is_read', false);
+    await supabase.from('notifications').update({ is_read: true }).eq('user_id', user.id).eq('is_read', false).neq('type', 'message');
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
     window.dispatchEvent(new Event('notifications-updated'));
     toast('success', 'All notifications marked as read');
@@ -113,7 +114,7 @@ export function Notifications() {
 
   const clearAll = async () => {
     if (!user) return;
-    await supabase.from('notifications').delete().eq('user_id', user.id);
+    await supabase.from('notifications').delete().eq('user_id', user.id).neq('type', 'message');
     setNotifications([]);
     window.dispatchEvent(new Event('notifications-updated'));
     toast('info', 'Notifications cleared');

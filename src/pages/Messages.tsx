@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Send, ImageIcon, X, Pin, CornerUpLeft,
   MessageCircle, Plus, Search, Trash2, MoreHorizontal, ChevronRight, Check,
-  CalendarDays, Music2, Copy,
+  CalendarDays, Music2, Copy, Paperclip, FileText, Download,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useConversations, type Conversation } from '../hooks/useConversations';
@@ -47,12 +47,14 @@ function formatDateDivider(iso: string): string {
 type MsgContent =
   | { type: 'text'; text: string }
   | { type: 'image'; url: string }
+  | { type: 'file'; url: string; name: string; size: number }
   | { type: 'delete_request'; requestedBy: string; requesterName: string; requestedAt: string };
 function parseContent(content: string): MsgContent {
   const normalizeParsedContent = (value: unknown): MsgContent | null => {
     if (!value || typeof value !== 'object') return null;
     const p = value as Record<string, unknown>;
     if (p.type === 'image' && typeof p.url === 'string') return { type: 'image', url: p.url };
+    if (p.type === 'file' && typeof p.url === 'string') return { type: 'file', url: p.url, name: typeof p.name === 'string' ? p.name : 'File', size: typeof p.size === 'number' ? p.size : 0 };
     if (p.type === 'delete_request') {
       const requestedBy = typeof p.requestedBy === 'string'
         ? p.requestedBy
@@ -120,6 +122,7 @@ function getSenderName(sender: { first_name: string | null; last_name: string | 
 function previewContent(content: string): string {
   const parsed = parseContent(content);
   if (parsed.type === 'image') return '📷 Photo';
+  if (parsed.type === 'file') return `📎 ${parsed.name}`;
   if (parsed.type === 'delete_request') return 'Delete chat request';
   return parsed.text.length > 60 ? parsed.text.slice(0, 60) + '…' : parsed.text;
 }
@@ -417,6 +420,7 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
   const [showQuickPicker, setShowQuickPicker] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const attachRef = useRef<HTMLInputElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { user } = useAuth();
@@ -470,12 +474,32 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
     const ext = file.name.split('.').pop();
     const path = `${user.id}/${Date.now()}.${ext}`;
     const { error } = await supabase.storage.from('message-images').upload(path, file);
-    if (!error) {
+    if (error) {
+      console.error('[Upload] Image upload failed:', error.message);
+      alert('Failed to send photo. Please try again.');
+    } else {
       const { data: { publicUrl } } = supabase.storage.from('message-images').getPublicUrl(path);
       onSend(JSON.stringify({ type: 'image', url: publicUrl }));
     }
     setUploading(false);
     if (fileRef.current) fileRef.current.value = '';
+  };
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    setUploading(true);
+    const path = `${user.id}/files/${Date.now()}-${file.name}`;
+    const { error } = await supabase.storage.from('message-images').upload(path, file);
+    if (error) {
+      console.error('[Upload] File upload failed:', error.message);
+      alert('Failed to send file. Please try again.');
+    } else {
+      const { data: { publicUrl } } = supabase.storage.from('message-images').getPublicUrl(path);
+      onSend(JSON.stringify({ type: 'file', url: publicUrl, name: file.name, size: file.size }));
+    }
+    setUploading(false);
+    if (attachRef.current) attachRef.current.value = '';
   };
 
   const handleQuickPointerDown = () => {
@@ -515,7 +539,15 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
         >
           <ImageIcon className="h-4.5 w-4.5" style={{ width: '18px', height: '18px' }} />
         </button>
-        <input ref={fileRef} type="file" accept="image/*" onChange={handleImage} className="hidden" />
+        <input ref={fileRef} type="file" accept="image/*,video/*" onChange={handleImage} className="hidden" />
+        <button
+          onClick={() => attachRef.current?.click()}
+          disabled={uploading}
+          className="shrink-0 h-9 w-9 flex items-center justify-center rounded-full text-gray-400 dark:text-white/30 hover:text-emerald-500 dark:hover:text-emerald-400 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-all disabled:opacity-40"
+        >
+          <Paperclip className="h-4.5 w-4.5" style={{ width: '18px', height: '18px' }} />
+        </button>
+        <input ref={attachRef} type="file" accept="*/*" onChange={handleFile} className="hidden" />
         <div className="flex-1 min-h-[36px] max-h-[140px] flex items-end rounded-2xl bg-gray-100 dark:bg-white/[0.06] border border-gray-200/80 dark:border-white/[0.06] overflow-hidden">
           <textarea
             ref={textRef}
@@ -640,6 +672,7 @@ function ConvInfoPanel({
   const displayName = p ? getFullName(p) : (conv.name || 'Group Chat');
 
   const mediaItems = messages.filter(m => parseContent(m.content).type === 'image');
+  const fileItems = messages.filter(m => parseContent(m.content).type === 'file');
 
   const linkRegex = /https?:\/\/[^\s<>"]+/g;
   const linkItems: { url: string; msgId: string }[] = [];
@@ -829,6 +862,41 @@ function ConvInfoPanel({
                   >
                     <img src={c.url} alt="media" className="h-full w-full object-cover hover:opacity-90 transition-opacity" />
                   </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Files card */}
+        <div className="mx-4 mt-3 rounded-2xl bg-white dark:bg-[#111013] border border-gray-100 dark:border-white/[0.06] overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-white/[0.06]">
+            <span className="text-[13px] font-semibold text-gray-900 dark:text-white">Files</span>
+            <span className="text-[12px] text-gray-400 dark:text-white/30">{fileItems.length}</span>
+          </div>
+          {fileItems.length === 0 ? (
+            <p className="text-center text-[12px] text-gray-400 dark:text-white/25 py-5">No files yet</p>
+          ) : (
+            <div className="divide-y divide-gray-50 dark:divide-white/[0.04]">
+              {fileItems.map(m => {
+                const c = parseContent(m.content) as { type: 'file'; url: string; name: string; size: number };
+                return (
+                  <div key={m.id} className="flex items-center gap-3 px-4 py-3">
+                    <FileText className="h-8 w-8 shrink-0 text-gray-400 dark:text-white/30" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-medium text-gray-800 dark:text-white/80 truncate">{c.name}</p>
+                      <p className="text-[11px] text-gray-400 dark:text-white/30">{c.size > 0 ? `${(c.size / 1024).toFixed(0)} KB` : 'File'}</p>
+                    </div>
+                    <a
+                      href={c.url}
+                      download={c.name}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="shrink-0 p-1.5 rounded-full text-gray-400 hover:text-emerald-500 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors"
+                    >
+                      <Download className="h-4 w-4" />
+                    </a>
+                  </div>
                 );
               })}
             </div>
@@ -1280,7 +1348,7 @@ function ChatWindow({
                 return (
                   <p key={m.id} className="text-[12px] text-amber-800 dark:text-amber-300/80 leading-snug">
                     <span className="font-semibold">{getSenderName(m.sender)}: </span>
-                    {c.type === 'image' ? '📷 Photo' : c.type === 'delete_request' ? 'Delete chat request' : c.text}
+                    {c.type === 'image' ? '📷 Photo' : c.type === 'file' ? `📎 ${c.name}` : c.type === 'delete_request' ? 'Delete chat request' : c.text}
                   </p>
                 );
               })}
@@ -1421,6 +1489,22 @@ function ChatWindow({
                           alt="Sent image"
                           className="max-w-[220px] max-h-[280px] rounded-xl object-cover"
                         />
+                      ) : content.type === 'file' ? (
+                        <a
+                          href={content.url}
+                          download={content.name}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2.5 min-w-[160px] max-w-[220px]"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <FileText className="h-8 w-8 shrink-0 opacity-80" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[13px] font-medium truncate leading-tight">{content.name}</p>
+                            <p className="text-[11px] opacity-60 mt-0.5">{content.size > 0 ? `${(content.size / 1024).toFixed(0)} KB` : 'File'}</p>
+                          </div>
+                          <Download className="h-4 w-4 shrink-0 opacity-60" />
+                        </a>
                       ) : (
                         <p className="text-[14px] whitespace-pre-wrap break-words" style={{ overflowWrap: 'anywhere' }}>{content.text}</p>
                       )}
@@ -1525,9 +1609,9 @@ function ChatWindow({
                         >
                           <CornerUpLeft className="h-3.5 w-3.5" /> Reply
                         </button>
-                        {content.type !== 'image' && (
+                        {content.type === 'text' && (
                           <button
-                            onClick={() => { navigator.clipboard.writeText(content.text || ''); setActiveMsg(null); }}
+                            onClick={() => { navigator.clipboard.writeText(content.text); setActiveMsg(null); }}
                             className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[13px] text-gray-700 dark:text-white/70 hover:bg-gray-50 dark:hover:bg-white/[0.05] transition-colors"
                           >
                             <Copy className="h-3.5 w-3.5" /> Copy
@@ -1610,17 +1694,21 @@ function ChatWindow({
         <div ref={messagesEndRef} />
       </div>
 
-      <InputBar
-        onSend={handleSend}
-        replyTo={replyTo?.id ?? null}
-        replyPreview={replyTo?.preview ?? null}
-        onCancelReply={() => setReplyTo(null)}
-        onTyping={handleTyping}
-      />
-      <div
-        className="fixed inset-x-0 bottom-0 z-[25] bg-white dark:bg-[#111013] pointer-events-none lg:hidden"
-        style={{ height: 'max(var(--messages-keyboard-inset, 0px), env(safe-area-inset-bottom))' }}
-      />
+      {!showInfo && (
+        <>
+          <InputBar
+            onSend={handleSend}
+            replyTo={replyTo?.id ?? null}
+            replyPreview={replyTo?.preview ?? null}
+            onCancelReply={() => setReplyTo(null)}
+            onTyping={handleTyping}
+          />
+          <div
+            className="fixed inset-x-0 bottom-0 z-[25] bg-white dark:bg-[#111013] pointer-events-none lg:hidden"
+            style={{ height: 'max(var(--messages-keyboard-inset, 0px), env(safe-area-inset-bottom))' }}
+          />
+        </>
+      )}
 
       {/* Info panel slide-over — absolute inset, clips its own overflow */}
       <div className="absolute inset-0 z-20 overflow-hidden pointer-events-none">

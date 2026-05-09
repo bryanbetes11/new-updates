@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Send, ImageIcon, X, Pin, CornerUpLeft,
   MessageCircle, Plus, Search, Trash2, MoreHorizontal, ChevronRight, Check,
-  CalendarDays, Music2,
+  CalendarDays, Music2, Copy,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useConversations, type Conversation } from '../hooks/useConversations';
@@ -559,8 +559,9 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
                 onPointerDown={handleQuickPointerDown}
                 onPointerUp={handleQuickPointerUp}
                 onPointerLeave={handleQuickPointerUp}
+                onContextMenu={e => e.preventDefault()}
                 disabled={uploading}
-                className="h-9 w-9 flex items-center justify-center rounded-full bg-gray-100 dark:bg-white/[0.06] text-[22px] leading-none transition-all active:scale-90 disabled:opacity-40"
+                className="h-9 w-9 flex items-center justify-center rounded-full bg-gray-100 dark:bg-white/[0.06] text-[22px] leading-none transition-all active:scale-90 disabled:opacity-40 select-none"
               >
                 {quickEmoji}
               </motion.button>
@@ -1405,7 +1406,8 @@ function ChatWindow({
                       onPointerUp={() => { if (msgLongPressTimer.current) { clearTimeout(msgLongPressTimer.current); msgLongPressTimer.current = null; } }}
                       onPointerLeave={() => { if (msgLongPressTimer.current) { clearTimeout(msgLongPressTimer.current); msgLongPressTimer.current = null; } }}
                       onPointerCancel={() => { if (msgLongPressTimer.current) { clearTimeout(msgLongPressTimer.current); msgLongPressTimer.current = null; } }}
-                      className={`relative px-3.5 py-2 rounded-2xl leading-relaxed cursor-default ${
+                      onContextMenu={e => e.preventDefault()}
+                      className={`relative px-3.5 py-2 rounded-2xl leading-relaxed cursor-default select-none ${
                         msg.reactions.length > 0 ? 'mb-5' : ''
                       } ${
                         isMe
@@ -1523,6 +1525,14 @@ function ChatWindow({
                         >
                           <CornerUpLeft className="h-3.5 w-3.5" /> Reply
                         </button>
+                        {content.type !== 'image' && (
+                          <button
+                            onClick={() => { navigator.clipboard.writeText(content.text || ''); setActiveMsg(null); }}
+                            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[13px] text-gray-700 dark:text-white/70 hover:bg-gray-50 dark:hover:bg-white/[0.05] transition-colors"
+                          >
+                            <Copy className="h-3.5 w-3.5" /> Copy
+                          </button>
+                        )}
                         <button
                           onClick={() => { setEmojiMsgId(msg.id); setActiveMsg(null); }}
                           className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[13px] text-gray-700 dark:text-white/70 hover:bg-gray-50 dark:hover:bg-white/[0.05] transition-colors"

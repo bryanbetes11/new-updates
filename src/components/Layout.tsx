@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Navigation } from './Navigation';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 import { BillingStatusBanner } from './BillingStatusBanner';
 import { MessageRealtimeToasts } from './MessageRealtimeToasts';
 
@@ -33,6 +34,34 @@ export function Layout() {
 
   const sidebarWidth = collapsed ? 72 : 256;
   const applyOffset = isDesktop && user && !staticHideNav;
+
+  useEffect(() => {
+    if (!user?.id) return;
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return;
+    if (Notification.permission !== 'granted') return;
+
+    let cancelled = false;
+
+    const claimExistingPushSubscription = async () => {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (cancelled || !sub) return;
+
+        const subJson = sub.toJSON();
+        await supabase.rpc('claim_push_subscription', {
+          p_endpoint: subJson.endpoint || '',
+          p_p256dh: subJson.keys?.p256dh || '',
+          p_auth_key: subJson.keys?.auth || '',
+        });
+      } catch {
+        // Push ownership sync is best-effort; the Profile toggle can surface errors.
+      }
+    };
+
+    claimExistingPushSubscription();
+    return () => { cancelled = true; };
+  }, [user?.id]);
 
   return (
     <div className="min-h-screen">

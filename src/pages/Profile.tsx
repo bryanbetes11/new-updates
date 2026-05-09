@@ -176,12 +176,12 @@ export function Profile() {
   const savePushSubscription = useCallback(async (subscription: PushSubscription) => {
     if (!user) return;
     const subJson = subscription.toJSON();
-    await supabase.from('push_subscriptions').upsert({
-      user_id: user.id,
-      endpoint: subJson.endpoint || '',
-      p256dh: subJson.keys?.p256dh || '',
-      auth_key: subJson.keys?.auth || '',
-    }, { onConflict: 'user_id,endpoint' });
+    const { error } = await supabase.rpc('claim_push_subscription', {
+      p_endpoint: subJson.endpoint || '',
+      p_p256dh: subJson.keys?.p256dh || '',
+      p_auth_key: subJson.keys?.auth || '',
+    });
+    if (error) throw error;
   }, [user]);
 
   useEffect(() => {

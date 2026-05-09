@@ -5,7 +5,6 @@ import { Navigation } from './Navigation';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { BillingStatusBanner } from './BillingStatusBanner';
-import { MessageRealtimeToasts } from './MessageRealtimeToasts';
 
 function useIsDesktop() {
   const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 1024);
@@ -84,8 +83,6 @@ export function Layout() {
 
   return (
     <div className="min-h-screen">
-      {user && <MessageRealtimeToasts />}
-
       {user && !staticHideNav && (
         <Navigation
           hideMobile={hideNavMobile}

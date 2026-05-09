@@ -99,18 +99,22 @@ function getOtherMember(conv: Conversation, myId: string) {
   return conv.members.find(m => m.user_id !== myId);
 }
 
+function getFullName(profile: { first_name: string | null; last_name: string | null } | null | undefined, fallback = 'Unknown'): string {
+  const fullName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim();
+  return fullName || profile?.first_name || fallback;
+}
+
 function getConvName(conv: Conversation, myId: string): string {
   if (conv.name) return conv.name;
   if (conv.type === 'personal') {
     const other = getOtherMember(conv, myId);
-    const p = other?.profile;
-    return p?.nickname || `${p?.first_name || ''} ${p?.last_name || ''}`.trim() || 'Unknown';
+    return getFullName(other?.profile);
   }
   return 'Group Chat';
 }
 
 function getSenderName(sender: { first_name: string | null; last_name: string | null; nickname: string | null }): string {
-  return sender.nickname || sender.first_name || 'Unknown';
+  return getFullName(sender);
 }
 
 function previewContent(content: string): string {
@@ -347,7 +351,7 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
                     <p className="text-center text-[13px] text-gray-400 dark:text-white/30 py-6">No people found</p>
                   )}
                   {filtered.map(p => {
-                const name = p.nickname || `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown';
+                const name = getFullName(p);
                 return (
                   <button
                     key={p.id}
@@ -631,9 +635,7 @@ function ConvInfoPanel({
 
   const otherMember = conv.type === 'personal' ? conv.members.find(m => m.user_id !== myUserId) : null;
   const p = otherMember?.profile;
-  const displayName = p
-    ? (p.nickname || `${p.first_name || ''} ${p.last_name || ''}`.trim())
-    : (conv.name || 'Group Chat');
+  const displayName = p ? getFullName(p) : (conv.name || 'Group Chat');
 
   const mediaItems = messages.filter(m => parseContent(m.content).type === 'image');
 
@@ -985,9 +987,10 @@ function EventDiscussionCard({ eventId }: { eventId: string }) {
 }
 
 function DeleteRequestCard({
-  content, isMine, onConfirm, confirming,
+  content, requesterName, isMine, onConfirm, confirming,
 }: {
   content: Extract<MsgContent, { type: 'delete_request' }>;
+  requesterName: string;
   isMine: boolean;
   onConfirm: () => void;
   confirming: boolean;
@@ -999,7 +1002,7 @@ function DeleteRequestCard({
         <p className="mt-1 text-[12px] leading-relaxed text-red-700/75 dark:text-red-200/70">
           {isMine
             ? 'You asked to delete this chat. It will be removed for both sides after the other person confirms.'
-            : `${content.requesterName} wants to delete this chat for both sides.`}
+            : `${requesterName || content.requesterName} wants to delete this chat for both sides.`}
         </p>
         {!isMine && (
           <button
@@ -1135,7 +1138,7 @@ function ChatWindow({
 
   const handleTyping = useCallback(() => {
     if (typingThrottleRef.current) return;
-    const name = profile?.nickname || profile?.first_name || 'Someone';
+    const name = getFullName(profile, 'Someone');
     sendTyping(name);
     typingThrottleRef.current = setTimeout(() => { typingThrottleRef.current = null; }, 2000);
   }, [sendTyping, profile]);
@@ -1307,6 +1310,12 @@ function ChatWindow({
           const showAvatar = !isMe && (!isGrouped || i === 0);
           const isActionsOpen = activeMsg === msg.id;
           const isEmojiOpen = emojiMsgId === msg.id;
+          const deleteRequesterName = content.type === 'delete_request'
+            ? getFullName(
+                conv.members.find(member => member.user_id === content.requestedBy)?.profile,
+                content.requesterName || 'Someone',
+              )
+            : 'Someone';
 
           return (
             <div key={msg.id} ref={el => { messageRefs.current[msg.id] = el; }} className="rounded-xl">
@@ -1321,6 +1330,7 @@ function ChatWindow({
               {content.type === 'delete_request' ? (
                 <DeleteRequestCard
                   content={content}
+                  requesterName={deleteRequesterName}
                   isMine={isMe}
                   confirming={confirmingDelete}
                   onConfirm={handleConfirmDelete}
@@ -1526,7 +1536,7 @@ function ChatWindow({
                   {isGroupChat && seers.slice(0, 3).map(seer => {
                     const member = conv.members.find(m => m.user_id === seer.userId);
                     return (
-                      <div key={seer.userId} className="-ml-0.5 first:ml-0" title={`Seen by ${member?.profile?.nickname || member?.profile?.first_name || 'someone'} at ${formatMsgTime(seer.readAt)}`}>
+                      <div key={seer.userId} className="-ml-0.5 first:ml-0" title={`Seen by ${getFullName(member?.profile, 'someone')} at ${formatMsgTime(seer.readAt)}`}>
                         <Avatar
                           src={member?.profile?.avatar_url ?? undefined}
                           firstName={member?.profile?.first_name || '?'}

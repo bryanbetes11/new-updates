@@ -38,6 +38,10 @@ export interface MemberReadTime {
   last_read_at: string | null;
 }
 
+function getFullName(profile: { first_name: string | null; last_name: string | null } | null | undefined): string {
+  return `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || 'Unknown';
+}
+
 export function useMessages(conversationId: string | null) {
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -83,7 +87,7 @@ export function useMessages(conversationId: string | null) {
       if (replyData) {
         replyMap = Object.fromEntries(replyData.map((r: any) => {
           const p = r.profiles;
-          const senderName = p?.nickname || p?.first_name || 'Unknown';
+          const senderName = getFullName(p);
           return [r.id, { content: r.content, sender_name: senderName }];
         }));
       }

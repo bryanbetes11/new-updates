@@ -532,22 +532,18 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
         )}
       </AnimatePresence>
       <div className="flex items-end gap-2 px-3 py-2.5">
-        <button
-          onClick={() => fileRef.current?.click()}
-          disabled={uploading}
-          className="shrink-0 h-9 w-9 flex items-center justify-center rounded-full text-gray-400 dark:text-white/30 hover:text-emerald-500 dark:hover:text-emerald-400 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-all disabled:opacity-40"
+        <label
+          className={`shrink-0 h-9 w-9 flex items-center justify-center rounded-full text-gray-400 dark:text-white/30 hover:text-emerald-500 dark:hover:text-emerald-400 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-all cursor-pointer ${uploading ? 'opacity-40 pointer-events-none' : ''}`}
         >
           <ImageIcon className="h-4.5 w-4.5" style={{ width: '18px', height: '18px' }} />
-        </button>
-        <input ref={fileRef} type="file" accept="image/*,video/*" onChange={handleImage} className="hidden" />
-        <button
-          onClick={() => attachRef.current?.click()}
-          disabled={uploading}
-          className="shrink-0 h-9 w-9 flex items-center justify-center rounded-full text-gray-400 dark:text-white/30 hover:text-emerald-500 dark:hover:text-emerald-400 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-all disabled:opacity-40"
+          <input ref={fileRef} type="file" accept="image/*,video/*" onChange={handleImage} className="hidden" disabled={uploading} />
+        </label>
+        <label
+          className={`shrink-0 h-9 w-9 flex items-center justify-center rounded-full text-gray-400 dark:text-white/30 hover:text-emerald-500 dark:hover:text-emerald-400 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-all cursor-pointer ${uploading ? 'opacity-40 pointer-events-none' : ''}`}
         >
           <Paperclip className="h-4.5 w-4.5" style={{ width: '18px', height: '18px' }} />
-        </button>
-        <input ref={attachRef} type="file" accept="*/*" onChange={handleFile} className="hidden" />
+          <input ref={attachRef} type="file" accept="*/*" onChange={handleFile} className="hidden" disabled={uploading} />
+        </label>
         <div className="flex-1 min-h-[36px] max-h-[140px] flex items-end rounded-2xl bg-gray-100 dark:bg-white/[0.06] border border-gray-200/80 dark:border-white/[0.06] overflow-hidden">
           <textarea
             ref={textRef}

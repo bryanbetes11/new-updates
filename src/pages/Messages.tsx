@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useNavigationType } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Send, ImageIcon, X, Pin, CornerUpLeft,
@@ -1702,6 +1702,7 @@ function useMessagesKeyboardInset(active: boolean) {
 export function Messages() {
   const { conversationId: paramConvId } = useParams<{ conversationId?: string }>();
   const navigate = useNavigate();
+  const navigationType = useNavigationType();
   const { user } = useAuth();
 
   const isDesktop = useIsDesktop();
@@ -1787,6 +1788,7 @@ export function Messages() {
   };
 
   const slideTransition = { type: 'spring' as const, stiffness: 380, damping: 36 };
+  const routeTransition = !isDesktop && navigationType === 'POP' ? { duration: 0 } : slideTransition;
 
   return (
     <div className="relative flex h-full min-h-0 bg-[#f5f5f7] dark:bg-[#0d0d0f] overflow-hidden">
@@ -1797,7 +1799,7 @@ export function Messages() {
           isDesktop ? 'w-[320px] min-w-[320px] shrink-0 relative' : 'absolute inset-0 z-10'
         }`}
         animate={!isDesktop ? { x: mobileShowChat ? '-100%' : '0%' } : undefined}
-        transition={slideTransition}
+        transition={routeTransition}
       >
         {/* Mobile top bar spacer */}
         <div className="lg:hidden shrink-0" style={{ height: 'calc(3.5rem + env(safe-area-inset-top))' }} />
@@ -1856,7 +1858,7 @@ export function Messages() {
       <motion.div
         className={`flex flex-col ${isDesktop ? 'flex-1 min-w-0' : 'fixed inset-0 z-20 h-[100dvh]'}`}
         animate={!isDesktop ? { x: mobileShowChat ? '0%' : '100%' } : undefined}
-        transition={slideTransition}
+        transition={routeTransition}
       >
         {selectedConv ? (
           <ChatWindow

@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Send, ImageIcon, X, Pin, CornerUpLeft,
   MessageCircle, Plus, Search, Trash2, MoreHorizontal, ChevronRight, Check,
-  CalendarDays, Music2, Copy, Paperclip, FileText, Download,
+  CalendarDays, Music2, Copy, Paperclip, FileText, Download, ExternalLink,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useConversations, type Conversation } from '../hooks/useConversations';
@@ -1134,6 +1134,8 @@ function ChatWindow({
   const [tappedMsgId, setTappedMsgId] = useState<string | null>(null);
   const [showInfo, setShowInfo] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  const [previewFile, setPreviewFile] = useState<{ url: string; name: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -1507,14 +1509,11 @@ function ChatWindow({
                         <img
                           src={content.url}
                           alt="Sent image"
-                          className="max-w-[220px] max-h-[280px] rounded-xl object-cover"
+                          className="max-w-[220px] max-h-[280px] rounded-xl object-cover cursor-pointer"
+                          onClick={e => { e.stopPropagation(); setPreviewImageUrl(content.url); }}
                         />
                       ) : content.type === 'file' ? (
-                        <a
-                          href={content.url}
-                          download={content.name}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <div
                           className="flex items-center gap-2.5 min-w-[160px] max-w-[220px]"
                           onClick={e => e.stopPropagation()}
                         >
@@ -1523,8 +1522,26 @@ function ChatWindow({
                             <p className="text-[13px] font-medium truncate leading-tight">{content.name}</p>
                             <p className="text-[11px] opacity-60 mt-0.5">{content.size > 0 ? `${(content.size / 1024).toFixed(0)} KB` : 'File'}</p>
                           </div>
-                          <Download className="h-4 w-4 shrink-0 opacity-60" />
-                        </a>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              onClick={() => setPreviewFile({ url: content.url, name: content.name })}
+                              className="opacity-60 hover:opacity-100 transition-opacity p-0.5"
+                              title="Open"
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                            </button>
+                            <a
+                              href={content.url}
+                              download={content.name}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="opacity-60 hover:opacity-100 transition-opacity p-0.5"
+                              title="Download"
+                            >
+                              <Download className="h-4 w-4" />
+                            </a>
+                          </div>
+                        </div>
                       ) : (
                         <p className="text-[14px] whitespace-pre-wrap break-words" style={{ overflowWrap: 'anywhere' }}>{content.text}</p>
                       )}
@@ -1540,7 +1557,6 @@ function ChatWindow({
                         >
                           <CornerUpLeft className="h-2.5 w-2.5 shrink-0 text-emerald-500" />
                           <span className="truncate text-gray-500 dark:text-white/50">
-                            <span className="font-semibold text-gray-600 dark:text-white/70">{msg.reply_preview.sender_name}: </span>
                             {previewContent(msg.reply_preview.content)}
                           </span>
                         </div>
@@ -1743,6 +1759,82 @@ function ChatWindow({
           />
         </>
       )}
+
+      {/* Image lightbox */}
+      <AnimatePresence>
+        {previewImageUrl && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90"
+            onClick={() => setPreviewImageUrl(null)}
+          >
+            <motion.img
+              initial={{ scale: 0.9 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.9 }}
+              src={previewImageUrl}
+              alt="Preview"
+              className="max-w-full max-h-full object-contain select-none"
+              onClick={e => e.stopPropagation()}
+            />
+            <button
+              className="absolute top-4 right-4 text-white/70 hover:text-white bg-black/40 rounded-full p-2 transition-colors"
+              onClick={() => setPreviewImageUrl(null)}
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* File preview modal */}
+      <AnimatePresence>
+        {previewFile && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] flex flex-col bg-black/90"
+          >
+            <div className="flex items-center justify-between px-4 py-3 bg-black/60 shrink-0">
+              <span className="text-white text-[14px] font-medium truncate max-w-[70%]">{previewFile.name}</span>
+              <div className="flex items-center gap-3">
+                <a
+                  href={previewFile.url}
+                  download={previewFile.name}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-white/70 hover:text-white transition-colors"
+                  title="Download"
+                >
+                  <Download className="h-5 w-5" />
+                </a>
+                <button
+                  className="text-white/70 hover:text-white transition-colors"
+                  onClick={() => setPreviewFile(null)}
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 min-h-0">
+              <iframe
+                src={(() => {
+                  const ext = previewFile.name.split('.').pop()?.toLowerCase() || '';
+                  if (['doc','docx','xls','xlsx','ppt','pptx','txt','csv'].includes(ext))
+                    return `https://docs.google.com/viewer?url=${encodeURIComponent(previewFile.url)}&embedded=true`;
+                  return previewFile.url;
+                })()}
+                className="w-full h-full border-0"
+                title={previewFile.name}
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Info panel slide-over — absolute inset, clips its own overflow */}
       <div className="absolute inset-0 z-20 overflow-hidden pointer-events-none">

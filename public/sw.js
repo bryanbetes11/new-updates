@@ -31,9 +31,21 @@ self.addEventListener('push', function(event) {
   console.log('[SW] Showing notification:', data.title, options);
 
   event.waitUntil(
-    self.registration.showNotification(data.title || 'ServeSync', options)
-      .then(() => console.log('[SW] Notification shown successfully'))
-      .catch(err => console.error('[SW] Failed to show notification:', err))
+    (async () => {
+      const notificationType = data.data?.notification_type;
+      if (notificationType === 'message') {
+        const windowClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+        const hasVisibleApp = windowClients.some(client => client.visibilityState === 'visible' || client.focused);
+
+        if (hasVisibleApp) {
+          console.log('[SW] Suppressed chat system notification because app is visible');
+          return;
+        }
+      }
+
+      await self.registration.showNotification(data.title || 'ServeSync', options);
+      console.log('[SW] Notification shown successfully');
+    })().catch(err => console.error('[SW] Failed to handle push notification:', err))
   );
 });
 

@@ -71,13 +71,13 @@ export function More() {
   };
 
   const menuItems = [
+    { icon: LockKeyhole, label: 'Platform Management', desc: 'Owner dashboard', path: '/platform', show: isPlatformOwner, action: null, badge: 0, color: '#0f172a', glow: 'rgba(15,23,42,0.24)' },
     { icon: Library, label: 'Library', desc: 'Browse songs and setlists', path: '/library', show: true, action: null, badge: 0, color: '#16a34a', glow: 'rgba(22,163,74,0.3)' },
     { icon: Calendar, label: 'Request Leave', desc: 'Submit unavailability', path: null, show: true, action: () => setShowRequestLeave(true), badge: 0, color: '#f59e0b', glow: 'rgba(245,158,11,0.3)' },
     { icon: ClipboardCheck, label: 'Attendance Guide', desc: 'How tracking works', path: null, show: true, action: () => setShowAttendanceGuide(true), badge: 0, color: '#0ea5e9', glow: 'rgba(14,165,233,0.3)' },
     { icon: User, label: 'Profile', desc: 'Edit your info & avatar', path: '/profile', show: true, action: null, badge: 0, color: '#8b5cf6', glow: 'rgba(139,92,246,0.3)' },
     { icon: Bell, label: 'Notifications', desc: 'View all notifications', path: '/notifications', show: true, action: null, badge: 0, color: '#ec4899', glow: 'rgba(236,72,153,0.3)' },
     { icon: Users, label: 'Leadership', desc: isOrgAdmin && !isLeader ? 'Church admin tools' : 'Team management tools', path: isOrgAdmin && !isLeader ? '/leadership/church' : '/leadership/overview', show: isLeader || isOrgAdmin, action: null, badge: unread.pendingLeave, color: '#f97316', glow: 'rgba(249,115,22,0.3)' },
-    { icon: LockKeyhole, label: 'Platform Management', desc: 'Owner dashboard', path: '/platform', show: isPlatformOwner, action: null, badge: 0, color: '#0f172a', glow: 'rgba(15,23,42,0.24)' },
   ].filter(item => item.show);
 
   const displayName = profile?.nickname || `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim();

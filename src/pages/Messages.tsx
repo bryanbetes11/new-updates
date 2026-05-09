@@ -228,7 +228,7 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
     setSelectedIds(new Set());
     Promise.all([
       supabase.from('profiles').select('id, first_name, last_name, nickname, avatar_url').order('first_name'),
-      supabase.from('events').select('id, title, event_date, start_time, event_type').order('event_date', { ascending: false }).limit(60),
+      supabase.from('events').select('id, title, event_date, start_time, event_type').gte('event_date', new Date().toISOString().slice(0, 10)).order('event_date', { ascending: true }).limit(60),
     ]).then(([peopleRes, eventsRes]) => {
       setPeople((peopleRes.data || []).filter(p => p.id !== currentUserId));
       setEvents(eventsRes.data || []);
@@ -541,6 +541,7 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.4, opacity: 0 }}
                 transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
+                onMouseDown={e => e.preventDefault()}
                 onClick={handleSend}
                 disabled={uploading}
                 className="h-9 w-9 flex items-center justify-center rounded-full bg-emerald-500 hover:bg-emerald-600 text-white shadow-md shadow-emerald-500/25 transition-colors active:scale-95 disabled:opacity-40"
@@ -1039,6 +1040,7 @@ function ChatWindow({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const msgLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const atBottomRef = useRef(true);
   const forceStickToLatestRef = useRef(false);
   const typingThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1392,6 +1394,17 @@ function ChatWindow({
                     {/* Message bubble */}
                     <div
                       onClick={e => { e.stopPropagation(); setTappedMsgId(prev => prev === msg.id ? null : msg.id); }}
+                      onPointerDown={e => {
+                        if (e.pointerType !== 'touch') return;
+                        msgLongPressTimer.current = setTimeout(() => {
+                          setActiveMsg(msg.id);
+                          setEmojiMsgId(null);
+                          setTappedMsgId(null);
+                        }, 500);
+                      }}
+                      onPointerUp={() => { if (msgLongPressTimer.current) { clearTimeout(msgLongPressTimer.current); msgLongPressTimer.current = null; } }}
+                      onPointerLeave={() => { if (msgLongPressTimer.current) { clearTimeout(msgLongPressTimer.current); msgLongPressTimer.current = null; } }}
+                      onPointerCancel={() => { if (msgLongPressTimer.current) { clearTimeout(msgLongPressTimer.current); msgLongPressTimer.current = null; } }}
                       className={`relative px-3.5 py-2 rounded-2xl leading-relaxed cursor-default ${
                         msg.reactions.length > 0 ? 'mb-5' : ''
                       } ${
@@ -1509,6 +1522,12 @@ function ChatWindow({
                           className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[13px] text-gray-700 dark:text-white/70 hover:bg-gray-50 dark:hover:bg-white/[0.05] transition-colors"
                         >
                           <CornerUpLeft className="h-3.5 w-3.5" /> Reply
+                        </button>
+                        <button
+                          onClick={() => { setEmojiMsgId(msg.id); setActiveMsg(null); }}
+                          className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[13px] text-gray-700 dark:text-white/70 hover:bg-gray-50 dark:hover:bg-white/[0.05] transition-colors"
+                        >
+                          <span className="text-[13px] leading-none">😊</span> React
                         </button>
                         <button
                           onClick={() => { pinMessage(msg.id, !msg.is_pinned); setActiveMsg(null); }}

@@ -63,6 +63,25 @@ export function Layout() {
     return () => { cancelled = true; };
   }, [user?.id]);
 
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+
+    const handleServiceWorkerMessage = (event: MessageEvent) => {
+      if (event.data?.type !== 'servesync:visibility-check') return;
+      const visible = document.visibilityState === 'visible' && !document.hidden;
+      event.ports?.[0]?.postMessage({
+        type: 'servesync:visibility-response',
+        visible,
+        path: location.pathname,
+      });
+    };
+
+    navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
+    };
+  }, [location.pathname]);
+
   return (
     <div className="min-h-screen">
       {user && <MessageRealtimeToasts />}

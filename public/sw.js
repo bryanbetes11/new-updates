@@ -1,3 +1,34 @@
+function askClientVisibility(client) {
+  return new Promise(resolve => {
+    const channel = new MessageChannel();
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const timeout = setTimeout(() => resolve(false), 350);
+
+    channel.port1.onmessage = event => {
+      clearTimeout(timeout);
+      const payload = event.data || {};
+      resolve(Boolean(payload.visible));
+    };
+
+    try {
+      client.postMessage({ type: 'servesync:visibility-check', requestId }, [channel.port2]);
+    } catch {
+      clearTimeout(timeout);
+      resolve(false);
+    }
+  });
+}
+
+async function hasVisibleAppClient() {
+  const windowClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+  if (windowClients.some(client => client.visibilityState === 'visible' || client.focused)) {
+    return true;
+  }
+
+  const replies = await Promise.all(windowClients.map(client => askClientVisibility(client)));
+  return replies.some(Boolean);
+}
+
 self.addEventListener('push', function(event) {
   console.log('[SW] Push event received', event);
 
@@ -34,10 +65,7 @@ self.addEventListener('push', function(event) {
     (async () => {
       const notificationType = data.data?.notification_type;
       if (notificationType === 'message') {
-        const windowClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
-        const hasVisibleApp = windowClients.some(client => client.visibilityState === 'visible' || client.focused);
-
-        if (hasVisibleApp) {
+        if (await hasVisibleAppClient()) {
           console.log('[SW] Suppressed chat system notification because app is visible');
           return;
         }

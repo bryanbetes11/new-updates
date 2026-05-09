@@ -1552,11 +1552,11 @@ function ChatWindow({
                       {/* Reply preview — overlapping the top of the bubble */}
                       {msg.reply_preview && (
                         <div
-                          className={`absolute top-0 -translate-y-[72%] flex items-center gap-1 px-2 py-[3px] rounded-full text-[11px] bg-white dark:bg-[#1c1c1e] border border-gray-100 dark:border-white/[0.1] shadow-sm z-10 max-w-[90%] ${isMe ? 'right-0' : 'left-0'}`}
+                          className={`absolute top-0 -translate-y-[72%] flex items-start gap-1 px-2 py-[3px] rounded-xl text-[11px] bg-white dark:bg-[#1c1c1e] border border-gray-100 dark:border-white/[0.1] shadow-sm z-10 max-w-[90%] ${isMe ? 'right-0' : 'left-0'}`}
                           onClick={e => e.stopPropagation()}
                         >
-                          <CornerUpLeft className="h-2.5 w-2.5 shrink-0 text-emerald-500" />
-                          <span className="truncate text-gray-500 dark:text-white/50">
+                          <CornerUpLeft className="h-2.5 w-2.5 shrink-0 text-emerald-500 mt-[2px]" />
+                          <span className="line-clamp-2 text-gray-500 dark:text-white/50 break-words">
                             {previewContent(msg.reply_preview.content)}
                           </span>
                         </div>
@@ -1777,13 +1777,13 @@ function ChatWindow({
               src={previewImageUrl}
               alt="Preview"
               className="max-w-full max-h-full object-contain select-none"
-              onClick={e => e.stopPropagation()}
             />
             <button
-              className="absolute top-4 right-4 text-white/70 hover:text-white bg-black/40 rounded-full p-2 transition-colors"
+              className="absolute top-safe right-4 text-white bg-black/60 rounded-full p-3 transition-colors active:bg-black/80"
+              style={{ top: 'max(env(safe-area-inset-top, 0px), 16px)' }}
               onClick={() => setPreviewImageUrl(null)}
             >
-              <X className="h-5 w-5" />
+              <X className="h-6 w-6" />
             </button>
           </motion.div>
         )}

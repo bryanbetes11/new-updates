@@ -53,6 +53,17 @@ function decorateTitleWithOrganization(title: string, organizationName: string |
   return normalizedTitle.includes(suffix) ? normalizedTitle : `${normalizedTitle} ${suffix}`;
 }
 
+function resolvePushTitle(
+  title: string,
+  organizationName: string | null,
+  notificationType: unknown,
+): string {
+  if (notificationType === "message" && organizationName) {
+    return organizationName;
+  }
+  return decorateTitleWithOrganization(title, organizationName);
+}
+
 async function sendWebPush(
   subscription: PushSubscriptionRow,
   payload: { title: string; body: string; data?: Record<string, unknown> }
@@ -123,7 +134,7 @@ Deno.serve(async (req: Request) => {
       .eq("id", user_id)
       .maybeSingle();
     const organizationName = normalizeOrganizationName((profileOrgRow as OrgLookupRow | null) ?? null);
-    const decoratedTitle = decorateTitleWithOrganization(title, organizationName);
+    const resolvedTitle = resolvePushTitle(title, organizationName, data?.notification_type);
 
     const { data: subscriptions } = await supabase
       .from("push_subscriptions")
@@ -144,7 +155,7 @@ Deno.serve(async (req: Request) => {
     const results = await Promise.all((subscriptions as PushSubscriptionRow[]).map(async (sub) => {
       try {
         console.log(`[Push] Sending to endpoint: ${sub.endpoint.substring(0, 50)}...`);
-        const result = await sendWebPush(sub, { title: decoratedTitle, body, data });
+        const result = await sendWebPush(sub, { title: resolvedTitle, body, data });
         if (!result.ok && result.stale && sub.id) {
           await supabase.from("push_subscriptions").delete().eq("id", sub.id);
         }

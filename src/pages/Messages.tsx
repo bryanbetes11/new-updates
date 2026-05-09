@@ -1458,16 +1458,6 @@ function ChatWindow({
                     <span className="text-[11px] font-semibold text-gray-500 dark:text-white/40 mb-1 ml-1">{getSenderName(msg.sender)}</span>
                   )}
 
-                  {/* Reply preview */}
-                  {msg.reply_preview && (
-                    <div className={`flex items-start gap-1.5 px-2.5 py-1.5 mb-1 rounded-xl text-[11px] border-l-2 ${isMe ? 'bg-emerald-400/20 border-emerald-400/50' : 'bg-gray-100 dark:bg-white/[0.06] border-gray-300 dark:border-white/[0.15]'}`}>
-                      <CornerUpLeft className="h-3 w-3 shrink-0 mt-0.5 opacity-60" />
-                      <div className="min-w-0">
-                        <span className="font-semibold text-gray-600 dark:text-white/60">{msg.reply_preview.sender_name}: </span>
-                        <span className="text-gray-500 dark:text-white/40 truncate">{previewContent(msg.reply_preview.content)}</span>
-                      </div>
-                    </div>
-                  )}
 
                   <div className="flex items-end gap-1.5">
                     {/* Hover actions (my side) */}
@@ -1506,6 +1496,8 @@ function ChatWindow({
                       className={`relative px-3.5 py-2 rounded-2xl leading-relaxed cursor-default select-none ${
                         msg.reactions.length > 0 ? 'mb-5' : ''
                       } ${
+                        msg.reply_preview ? 'mt-4' : ''
+                      } ${
                         isMe
                           ? 'bg-emerald-500 text-white rounded-br-md'
                           : 'bg-gray-100 dark:bg-white/[0.07] text-gray-900 dark:text-white rounded-bl-md border border-gray-200/80 dark:border-white/[0.06]'
@@ -1538,6 +1530,20 @@ function ChatWindow({
                       )}
                       {msg.is_pinned && (
                         <Pin className="absolute -top-2 -right-2 h-3.5 w-3.5 text-amber-500 bg-white dark:bg-[#111013] rounded-full p-0.5" style={{ padding: '2px' }} />
+                      )}
+
+                      {/* Reply preview — overlapping the top of the bubble */}
+                      {msg.reply_preview && (
+                        <div
+                          className={`absolute top-0 -translate-y-[72%] flex items-center gap-1 px-2 py-[3px] rounded-full text-[11px] bg-white dark:bg-[#1c1c1e] border border-gray-100 dark:border-white/[0.1] shadow-sm z-10 max-w-[90%] ${isMe ? 'right-0' : 'left-0'}`}
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <CornerUpLeft className="h-2.5 w-2.5 shrink-0 text-emerald-500" />
+                          <span className="truncate text-gray-500 dark:text-white/50">
+                            <span className="font-semibold text-gray-600 dark:text-white/70">{msg.reply_preview.sender_name}: </span>
+                            {previewContent(msg.reply_preview.content)}
+                          </span>
+                        </div>
                       )}
 
                       {/* Reactions — sitting just below the bubble's bottom-right corner */}

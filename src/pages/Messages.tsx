@@ -416,6 +416,7 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
 }) {
   const [text, setText] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [quickEmoji, setQuickEmoji] = useState(() => localStorage.getItem('msg-quick-action') || '👍');
   const [showQuickPicker, setShowQuickPicker] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -470,15 +471,16 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
   const handleImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
+    setShowAttachMenu(false);
     setUploading(true);
     const ext = file.name.split('.').pop();
     const path = `${user.id}/${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from('message-images').upload(path, file);
+    const { error } = await supabase.storage.from('chat-attachments').upload(path, file);
     if (error) {
       console.error('[Upload] Image upload failed:', error.message);
       alert('Failed to send photo. Please try again.');
     } else {
-      const { data: { publicUrl } } = supabase.storage.from('message-images').getPublicUrl(path);
+      const { data: { publicUrl } } = supabase.storage.from('chat-attachments').getPublicUrl(path);
       onSend(JSON.stringify({ type: 'image', url: publicUrl }));
     }
     setUploading(false);
@@ -488,14 +490,15 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
+    setShowAttachMenu(false);
     setUploading(true);
     const path = `${user.id}/files/${Date.now()}-${file.name}`;
-    const { error } = await supabase.storage.from('message-images').upload(path, file);
+    const { error } = await supabase.storage.from('chat-attachments').upload(path, file);
     if (error) {
       console.error('[Upload] File upload failed:', error.message);
       alert('Failed to send file. Please try again.');
     } else {
-      const { data: { publicUrl } } = supabase.storage.from('message-images').getPublicUrl(path);
+      const { data: { publicUrl } } = supabase.storage.from('chat-attachments').getPublicUrl(path);
       onSend(JSON.stringify({ type: 'file', url: publicUrl, name: file.name, size: file.size }));
     }
     setUploading(false);
@@ -532,18 +535,47 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
         )}
       </AnimatePresence>
       <div className="flex items-end gap-2 px-3 py-2.5">
-        <label
-          className={`shrink-0 h-9 w-9 flex items-center justify-center rounded-full text-gray-400 dark:text-white/30 hover:text-emerald-500 dark:hover:text-emerald-400 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-all cursor-pointer ${uploading ? 'opacity-40 pointer-events-none' : ''}`}
-        >
-          <ImageIcon className="h-4.5 w-4.5" style={{ width: '18px', height: '18px' }} />
-          <input ref={fileRef} type="file" accept="image/*,video/*" onChange={handleImage} className="hidden" disabled={uploading} />
-        </label>
-        <label
-          className={`shrink-0 h-9 w-9 flex items-center justify-center rounded-full text-gray-400 dark:text-white/30 hover:text-emerald-500 dark:hover:text-emerald-400 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-all cursor-pointer ${uploading ? 'opacity-40 pointer-events-none' : ''}`}
-        >
-          <Paperclip className="h-4.5 w-4.5" style={{ width: '18px', height: '18px' }} />
-          <input ref={attachRef} type="file" accept="*/*" onChange={handleFile} className="hidden" disabled={uploading} />
-        </label>
+        {/* + attach button */}
+        <div className="relative shrink-0">
+          <button
+            onMouseDown={e => e.preventDefault()}
+            onClick={() => setShowAttachMenu(v => !v)}
+            disabled={uploading}
+            className="h-9 w-9 flex items-center justify-center rounded-full text-gray-400 dark:text-white/30 hover:text-emerald-500 dark:hover:text-emerald-400 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-all disabled:opacity-40"
+          >
+            <Plus className="h-5 w-5" />
+          </button>
+
+          <AnimatePresence>
+            {showAttachMenu && (
+              <>
+                <motion.div
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowAttachMenu(false)}
+                />
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.92, y: 6 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.92, y: 6 }}
+                  transition={{ duration: 0.13 }}
+                  className="absolute bottom-full mb-2 left-0 z-50 bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-100 dark:border-white/[0.08] shadow-xl overflow-hidden min-w-[170px]"
+                >
+                  <label className="flex items-center gap-3 px-4 py-3 text-[13px] text-gray-700 dark:text-white/70 hover:bg-gray-50 dark:hover:bg-white/[0.05] transition-colors cursor-pointer">
+                    <ImageIcon className="h-4 w-4 shrink-0" />
+                    Photo / Video
+                    <input ref={fileRef} type="file" accept="image/*,video/*" onChange={handleImage} className="hidden" disabled={uploading} />
+                  </label>
+                  <label className="flex items-center gap-3 px-4 py-3 text-[13px] text-gray-700 dark:text-white/70 hover:bg-gray-50 dark:hover:bg-white/[0.05] transition-colors cursor-pointer border-t border-gray-100 dark:border-white/[0.06]">
+                    <Paperclip className="h-4 w-4 shrink-0" />
+                    File
+                    <input ref={attachRef} type="file" accept="*/*" onChange={handleFile} className="hidden" disabled={uploading} />
+                  </label>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+        </div>
         <div className="flex-1 min-h-[36px] max-h-[140px] flex items-end rounded-2xl bg-gray-100 dark:bg-white/[0.06] border border-gray-200/80 dark:border-white/[0.06] overflow-hidden">
           <textarea
             ref={textRef}

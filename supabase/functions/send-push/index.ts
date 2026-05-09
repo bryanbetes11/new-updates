@@ -16,6 +16,13 @@ interface PushPayload {
   data?: Record<string, string>;
 }
 
+type PushSubscriptionRow = {
+  id?: string;
+  endpoint: string;
+  p256dh: string;
+  auth_key: string;
+};
+
 const VAPID_PUBLIC_KEY = "BFYGuTCBpjfMJWQrMBpZmTvPBD5Qc-0oVoWjle5UI4PKwY3iTUYdmJMi1J2VpoVV4Dfzg_XizPv80Zg5NGTS6rI";
 const VAPID_PRIVATE_KEY = "adWKInw27LTgLyKiRz4vOmZ78cJ6AyQ7XtOS6RGZrLo";
 
@@ -26,7 +33,7 @@ webpush.setVapidDetails(
 );
 
 async function sendWebPush(
-  subscription: { endpoint: string; p256dh: string; auth_key: string },
+  subscription: PushSubscriptionRow,
   payload: { title: string; body: string; data?: Record<string, string> }
 ) {
   const pushSubscription = {
@@ -40,12 +47,21 @@ async function sendWebPush(
   try {
     await webpush.sendNotification(
       pushSubscription,
-      JSON.stringify(payload)
+      JSON.stringify(payload),
+      { TTL: 60, timeout: 2500 }
     );
-    return true;
+    return { ok: true };
   } catch (error) {
     console.error("Push send error:", error);
-    return false;
+    const statusCode = typeof error === "object" && error !== null && "statusCode" in error
+      ? Number((error as { statusCode?: number }).statusCode)
+      : null;
+    return {
+      ok: false,
+      statusCode,
+      stale: statusCode === 404 || statusCode === 410,
+      message: error instanceof Error ? error.message : "Unknown push error",
+    };
   }
 }
 
@@ -78,7 +94,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: subscriptions } = await supabase
       .from("push_subscriptions")
-      .select("*")
+      .select("id, endpoint, p256dh, auth_key")
       .eq("user_id", user_id);
 
     console.log(`[Push] Found ${subscriptions?.length || 0} subscriptions for user ${user_id}`);
@@ -92,25 +108,35 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    let sent = 0;
-    const errors: string[] = [];
-    for (const sub of subscriptions) {
+    const results = await Promise.all((subscriptions as PushSubscriptionRow[]).map(async (sub) => {
       try {
         console.log(`[Push] Sending to endpoint: ${sub.endpoint.substring(0, 50)}...`);
-        const success = await sendWebPush(sub, { title, body, data });
-        if (success) {
-          sent++;
-          console.log(`[Push] Successfully sent to subscription`);
-        } else {
-          errors.push(`Failed to send to ${sub.endpoint.substring(0, 30)}`);
+        const result = await sendWebPush(sub, { title, body, data });
+        if (!result.ok && result.stale && sub.id) {
+          await supabase.from("push_subscriptions").delete().eq("id", sub.id);
         }
+        return { sub, ...result };
       } catch (err) {
         console.error("[Push] Error sending to subscription:", err);
-        errors.push(`Error: ${err instanceof Error ? err.message : "Unknown"}`);
+        return {
+          sub,
+          ok: false,
+          stale: false,
+          message: err instanceof Error ? err.message : "Unknown push error",
+        };
       }
-    }
+    }));
+
+    const sent = results.filter((result) => result.ok).length;
+    const stale = results.filter((result) => result.stale).length;
+    const errors = results
+      .filter((result) => !result.ok && !result.stale)
+      .map((result) => `Failed to send to ${result.sub.endpoint.substring(0, 30)}: ${result.message || "Unknown"}`);
 
     console.log(`[Push] Total sent: ${sent}/${subscriptions.length}`);
+    if (stale > 0) {
+      console.log(`[Push] Removed ${stale} stale subscriptions`);
+    }
     if (errors.length > 0) {
       console.error("[Push] Errors:", errors);
     }
@@ -120,6 +146,7 @@ Deno.serve(async (req: Request) => {
         message: `Sent ${sent} push notifications`,
         sent,
         total: subscriptions.length,
+        staleRemoved: stale,
         errors: errors.length > 0 ? errors : undefined
       }),
       {

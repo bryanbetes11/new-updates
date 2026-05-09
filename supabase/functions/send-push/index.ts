@@ -13,7 +13,7 @@ interface PushPayload {
   user_id: string;
   title: string;
   body: string;
-  data?: Record<string, string>;
+  data?: Record<string, unknown>;
 }
 
 type PushSubscriptionRow = {
@@ -34,7 +34,7 @@ webpush.setVapidDetails(
 
 async function sendWebPush(
   subscription: PushSubscriptionRow,
-  payload: { title: string; body: string; data?: Record<string, string> }
+  payload: { title: string; body: string; data?: Record<string, unknown> }
 ) {
   const pushSubscription = {
     endpoint: subscription.endpoint,
@@ -48,7 +48,11 @@ async function sendWebPush(
     await webpush.sendNotification(
       pushSubscription,
       JSON.stringify(payload),
-      { TTL: 60, timeout: 2500 }
+      {
+        TTL: 60 * 60 * 24,
+        urgency: payload.data?.notification_type === "message" ? "high" : "normal",
+        timeout: 5000,
+      }
     );
     return { ok: true };
   } catch (error) {

@@ -31,8 +31,20 @@ self.addEventListener('push', function(event) {
   console.log('[SW] Showing notification:', data.title, options);
 
   event.waitUntil(
-    self.registration.showNotification(data.title || 'ServeSync', options)
-      .then(() => console.log('[SW] Notification shown successfully'))
+    clients.matchAll({ type: 'window', includeUncontrolled: true })
+      .then(function(windowClients) {
+        const hasVisibleClient = windowClients.some(function(client) {
+          return client.visibilityState === 'visible';
+        });
+
+        if (data.data?.notification_type === 'message' && hasVisibleClient) {
+          console.log('[SW] Suppressed message system notification because the app is visible');
+          return undefined;
+        }
+
+        return self.registration.showNotification(data.title || 'ServeSync', options);
+      })
+      .then(() => console.log('[SW] Notification handling completed'))
       .catch(err => console.error('[SW] Failed to show notification:', err))
   );
 });

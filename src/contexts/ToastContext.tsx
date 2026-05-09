@@ -70,8 +70,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 e.preventDefault();
                 runAction();
               }}
-              className={`animate-slide-up flex items-center gap-3 rounded-full px-4 py-3 shadow-lg ring-1 backdrop-blur-md ${colors[t.type]} ${t.onClick ? 'cursor-pointer hover:scale-[1.01] active:scale-[0.99] transition-transform' : ''}`}
-              style={{ boxShadow: '0 10px 30px rgba(15,23,42,0.14)' }}
+              className={`animate-slide-up flex items-center gap-3 rounded-full px-4 py-3 ring-1 backdrop-blur-xl ${colors[t.type]} ${t.onClick ? 'cursor-pointer hover:-translate-y-0.5 hover:scale-[1.01] active:translate-y-0 active:scale-[0.99] transition-transform' : ''}`}
+              style={{
+                boxShadow:
+                  '0 18px 48px rgba(15,23,42,0.22), 0 8px 18px rgba(15,23,42,0.14), inset 0 1px 0 rgba(255,255,255,0.45)',
+              }}
               role={t.onClick ? 'button' : undefined}
               tabIndex={t.onClick ? 0 : undefined}
             >

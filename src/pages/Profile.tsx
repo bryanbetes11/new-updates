@@ -16,6 +16,7 @@ import { PageLoader } from '../components/LoadingSpinner';
 import { RoleBadge, sortRolesLeadershipFirst } from '../components/RoleBadge';
 import { isIosDevice, isStandalonePwa } from '../lib/device';
 import { phoneHref } from '../lib/phone';
+import { VAPID_PUBLIC_KEY } from '../lib/push';
 import type { DisciplineRecord } from '../types';
 
 interface AccountabilitySummary {
@@ -172,6 +173,37 @@ export function Profile() {
     return outputArray;
   };
 
+  const savePushSubscription = useCallback(async (subscription: PushSubscription) => {
+    if (!user) return;
+    const subJson = subscription.toJSON();
+    await supabase.from('push_subscriptions').upsert({
+      user_id: user.id,
+      endpoint: subJson.endpoint || '',
+      p256dh: subJson.keys?.p256dh || '',
+      auth_key: subJson.keys?.auth || '',
+    }, { onConflict: 'user_id,endpoint' });
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || !pushEnabled) return;
+    let cancelled = false;
+
+    const syncExistingSubscription = async () => {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (!cancelled && sub && Notification.permission === 'granted') {
+          await savePushSubscription(sub);
+        }
+      } catch {
+        // Push sync is best-effort and should not block the profile screen.
+      }
+    };
+
+    syncExistingSubscription();
+    return () => { cancelled = true; };
+  }, [pushEnabled, savePushSubscription, user]);
+
   const togglePush = async () => {
     if (!user) return;
     setPushLoading(true);
@@ -186,11 +218,11 @@ export function Profile() {
         const permission = await Notification.requestPermission();
         if (permission !== 'granted') { toast('error', 'Permission denied. Enable in settings.'); setPushLoading(false); return; }
         const reg = await navigator.serviceWorker.ready;
-        const vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+        const vapidPublicKey = VAPID_PUBLIC_KEY;
         if (!vapidPublicKey) { toast('error', 'Push not configured'); setPushLoading(false); return; }
-        const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) });
-        const subJson = sub.toJSON();
-        await supabase.from('push_subscriptions').upsert({ user_id: user.id, endpoint: subJson.endpoint || '', p256dh: subJson.keys?.p256dh || '', auth_key: subJson.keys?.auth || '' }, { onConflict: 'user_id,endpoint' });
+        const sub = await reg.pushManager.getSubscription()
+          || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) });
+        await savePushSubscription(sub);
         setPushEnabled(true);
         toast('success', 'Push notifications enabled');
       } catch (err) {

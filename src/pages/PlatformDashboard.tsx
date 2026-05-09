@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { addDays, format } from 'date-fns';
-import { Building2, CalendarClock, CheckCircle2, CreditCard, Loader2, Shield, Sparkles, Users, UserPlus, XCircle } from 'lucide-react';
+import { ArrowLeft, Building2, CalendarClock, CheckCircle2, CreditCard, Loader2, LogOut, Shield, Sparkles, Users, UserPlus, XCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -189,8 +190,9 @@ const previewMembers: Record<string, DashboardChurchMember[]> = {
 };
 
 export function PlatformDashboard() {
-  const { isPlatformOwner } = useAuth();
+  const { isPlatformOwner, signOut } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [showAllRegistrations, setShowAllRegistrations] = useState(false);
   const [churchModalOpen, setChurchModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -361,6 +363,11 @@ export function PlatformDashboard() {
     setRejectionModalOpen(true);
   };
 
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/platform', { replace: true });
+  };
+
   const handleRejectSubmission = async () => {
     if (!submissionToReject || !rejectionReason.trim()) return;
     setReviewingSubmissionId(submissionToReject.id);
@@ -422,8 +429,24 @@ export function PlatformDashboard() {
               Cross-church visibility, church management, and onboarding oversight. Preview tenants are included below only to help you judge the layout before more real churches exist.
             </p>
           </div>
-          <div className="rounded-3xl border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-900/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
-            <span className="font-semibold">Owner-only:</span> preview churches never touch the real database.
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => navigate('/dashboard')}
+              className="h-10 px-4 rounded-2xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] text-sm font-semibold text-gray-700 dark:text-white/70 hover:bg-gray-50 dark:hover:bg-white/[0.08] transition-colors flex items-center gap-2"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to App
+            </button>
+            <button
+              onClick={handleSignOut}
+              className="h-10 px-4 rounded-2xl border border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/[0.08] text-sm font-semibold text-red-600 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-500/[0.14] transition-colors flex items-center gap-2"
+            >
+              <LogOut className="h-4 w-4" />
+              Sign Out
+            </button>
+            <div className="rounded-3xl border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-900/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
+              <span className="font-semibold">Owner-only:</span> preview churches never touch the real database.
+            </div>
           </div>
         </div>
 

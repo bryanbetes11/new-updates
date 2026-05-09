@@ -103,7 +103,7 @@ interface NavigationProps {
 export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedChange, mobileOpen, onMobileOpenChange }: NavigationProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isLeader, isOrgAdmin, canApproveLeave, canManageDiscipline, profile, signOut } = useAuth();
+  const { isLeader, isOrgAdmin, isPlatformOwner, canApproveLeave, canManageDiscipline, profile, signOut } = useAuth();
   const unread = useUnreadCounts();
 
   const [mobileNavStyle, setMobileNavStyle] = useState<MobileNavStyle>(getStoredMobileNavStyle);
@@ -155,6 +155,9 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
     { path: '/request-leave', label: 'Request Leave', icon: LeaveIcon },
     ...(isLeader || isOrgAdmin || canApproveLeave || canManageDiscipline
       ? [{ path: isOrgAdmin && !isLeader ? '/leadership/church' : '/leadership/overview', label: isOrgAdmin && !isLeader ? 'Church' : 'Leadership', icon: ShieldNavIcon, badgeKey: 'pendingLeave' as const, badgeColor: 'amber' as const }]
+      : []),
+    ...(isPlatformOwner
+      ? [{ path: '/platform', label: 'Platform', icon: ShieldNavIcon }]
       : []),
   ];
 

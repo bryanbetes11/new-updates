@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import {
-  User, Users, Bell, LogOut, Shield, Library, Calendar, ClipboardCheck, ChevronRight,
+  User, Users, Bell, LogOut, Shield, Library, Calendar, ClipboardCheck, ChevronRight, LockKeyhole,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
@@ -30,7 +30,7 @@ const itemVariants = {
 };
 
 export function More() {
-  const { user, profile, isLeader, isOrgAdmin, signOut } = useAuth();
+  const { user, profile, isLeader, isOrgAdmin, isPlatformOwner, signOut } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const unread = useUnreadCounts();
@@ -77,6 +77,7 @@ export function More() {
     { icon: User, label: 'Profile', desc: 'Edit your info & avatar', path: '/profile', show: true, action: null, badge: 0, color: '#8b5cf6', glow: 'rgba(139,92,246,0.3)' },
     { icon: Bell, label: 'Notifications', desc: 'View all notifications', path: '/notifications', show: true, action: null, badge: 0, color: '#ec4899', glow: 'rgba(236,72,153,0.3)' },
     { icon: Users, label: 'Leadership', desc: isOrgAdmin && !isLeader ? 'Church admin tools' : 'Team management tools', path: isOrgAdmin && !isLeader ? '/leadership/church' : '/leadership/overview', show: isLeader || isOrgAdmin, action: null, badge: unread.pendingLeave, color: '#f97316', glow: 'rgba(249,115,22,0.3)' },
+    { icon: LockKeyhole, label: 'Platform Management', desc: 'Owner dashboard', path: '/platform', show: isPlatformOwner, action: null, badge: 0, color: '#0f172a', glow: 'rgba(15,23,42,0.24)' },
   ].filter(item => item.show);
 
   const displayName = profile?.nickname || `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim();

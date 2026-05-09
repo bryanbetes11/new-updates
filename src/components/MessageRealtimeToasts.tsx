@@ -76,7 +76,10 @@ export function MessageRealtimeToasts() {
         const conversationName = conversation?.name ? ` in ${conversation.name}` : '';
         toast('info', `${senderName}${conversationName}: ${previewMessage(message.content)}`, {
           actionLabel: 'Tap to open messages',
-          onClick: () => navigate(`/messages/${message.conversation_id}`),
+          onClick: () => {
+            navigate('/messages');
+            window.setTimeout(() => navigate(`/messages/${message.conversation_id}`), 0);
+          },
         });
         window.dispatchEvent(new Event('notifications-updated'));
       })

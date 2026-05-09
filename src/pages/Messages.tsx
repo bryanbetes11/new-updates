@@ -1738,6 +1738,16 @@ export function Messages() {
   const selectedConv = conversations.find(c => c.id === selectedConvId) ?? null;
 
   useEffect(() => {
+    if (paramConvId) {
+      setSelectedConvId(paramConvId);
+      setMobileShowChat(true);
+      return;
+    }
+    setSelectedConvId(null);
+    setMobileShowChat(false);
+  }, [paramConvId]);
+
+  useEffect(() => {
     if (!selectedConvId || convsLoading) return;
     if (conversations.some(c => c.id === selectedConvId)) return;
     setMobileShowChat(false);
@@ -1748,7 +1758,7 @@ export function Messages() {
   const selectConversation = (id: string) => {
     setSelectedConvId(id);
     setMobileShowChat(true);
-    navigate(`/messages/${id}`, { replace: true });
+    navigate(`/messages/${id}`);
   };
 
   const handleBack = async () => {

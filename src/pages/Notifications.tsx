@@ -121,6 +121,11 @@ export function Notifications() {
 
   const handleClick = (n: Notification) => {
     markRead(n.id);
+    if (n.data?.conversation_id) {
+      navigate('/messages');
+      window.setTimeout(() => navigate(`/messages/${n.data.conversation_id}`), 0);
+      return;
+    }
     if (n.data?.url) {
       navigate(n.data.url);
     } else if (n.data?.event_id) {

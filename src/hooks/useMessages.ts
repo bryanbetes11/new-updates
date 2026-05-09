@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { dispatchMessagingRefresh } from '../lib/realtimeSignals';
 
 export interface MessageSender {
   first_name: string | null;
@@ -105,11 +106,12 @@ export function useMessages(conversationId: string | null) {
 
   const markRead = useCallback(async () => {
     if (!conversationId || !user) return;
-    await supabase
+    const { error } = await supabase
       .from('conversation_members')
       .update({ last_read_at: new Date().toISOString() })
       .eq('conversation_id', conversationId)
       .eq('user_id', user.id);
+    if (!error) dispatchMessagingRefresh();
   }, [conversationId, user]);
 
   useEffect(() => {
@@ -175,6 +177,7 @@ export function useMessages(conversationId: string | null) {
     if (!error) {
       await supabase.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', conversationId);
       markRead();
+      dispatchMessagingRefresh();
     }
     return error;
   }, [conversationId, user, markRead]);

@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { BADGE_COUNTS_REFRESH_EVENT } from '../lib/realtimeSignals';
 
 interface UnreadCounts {
   announcements: number;
@@ -75,12 +76,12 @@ export function useUnreadCounts() {
 
   const debouncedFetch = useCallback(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(fetchCounts, 300);
+    debounceRef.current = setTimeout(fetchCounts, 80);
   }, [fetchCounts]);
 
   useEffect(() => {
     fetchCounts();
-    const interval = setInterval(fetchCounts, 60000);
+    const interval = setInterval(fetchCounts, 15000);
     return () => {
       clearInterval(interval);
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -102,10 +103,12 @@ export function useUnreadCounts() {
 
     const handleExternal = () => debouncedFetch();
     window.addEventListener('notifications-updated', handleExternal);
+    window.addEventListener(BADGE_COUNTS_REFRESH_EVENT, handleExternal);
 
     return () => {
       supabase.removeChannel(channel);
       window.removeEventListener('notifications-updated', handleExternal);
+      window.removeEventListener(BADGE_COUNTS_REFRESH_EVENT, handleExternal);
     };
   }, [user, debouncedFetch]);
 

@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { CONVERSATIONS_REFRESH_EVENT } from '../lib/realtimeSignals';
 
 export interface ConversationMember {
   user_id: string;
@@ -142,7 +143,14 @@ export function useConversations() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, fetchConversations)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'conversation_members' }, fetchConversations)
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+
+    const handleExternalRefresh = () => { fetchConversations(); };
+    window.addEventListener(CONVERSATIONS_REFRESH_EVENT, handleExternalRefresh);
+
+    return () => {
+      supabase.removeChannel(channel);
+      window.removeEventListener(CONVERSATIONS_REFRESH_EVENT, handleExternalRefresh);
+    };
   }, [user, fetchConversations]);
 
   const createDirectConversation = useCallback(async (otherUserId: string): Promise<string | null> => {

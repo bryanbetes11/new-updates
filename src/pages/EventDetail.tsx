@@ -13,6 +13,7 @@ import { PageLoader } from '../components/LoadingSpinner';
 import { RoleBadge } from '../components/RoleBadge';
 import { formatTime12Hour } from '../lib/timeFormat';
 import { Avatar } from '../components/Avatar';
+import { dispatchBadgeCountsRefresh } from '../lib/realtimeSignals';
 
 import type { Event, EventAssignment, Setlist, SetlistSong, Song, SetlistCheckerSong, ServiceFormat } from '../types';
 import { SetlistChecker } from '../components/SetlistChecker';
@@ -331,12 +332,14 @@ export function EventDetail() {
 
   const handleConfirm = async (assignmentId: string) => {
     await supabase.from('event_assignments').update({ status: 'confirmed', confirmed_at: new Date().toISOString() }).eq('id', assignmentId);
+    dispatchBadgeCountsRefresh();
     toast('success', 'Assignment confirmed');
     fetchAll();
   };
 
   const handleDecline = async (assignmentId: string) => {
     await supabase.from('event_assignments').update({ status: 'declined', decline_reason: declineReason }).eq('id', assignmentId);
+    dispatchBadgeCountsRefresh();
     toast('info', 'Assignment declined');
     setShowDecline(null);
     setDeclineReason('');

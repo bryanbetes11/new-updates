@@ -239,6 +239,11 @@ function BirthdayCard({ name, date }: { name: string; date: string }) {
         .maybeSingle();
       if (error || !newAnn) { toast('error', 'Could not send birthday wish'); setWishing(false); return; }
       setAnnouncementId(newAnn.id);
+      await supabase.from('announcement_reactions').insert({
+        announcement_id: newAnn.id,
+        user_id: user.id,
+        emoji: '🎉',
+      });
     } else {
       // Announcement already exists — just add a 🎉 reaction
       await supabase.from('announcement_reactions').insert({

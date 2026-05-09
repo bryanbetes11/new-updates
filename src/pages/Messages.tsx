@@ -488,8 +488,8 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
   return (
     <div
       ref={rootRef}
-      className="fixed inset-x-0 bottom-0 z-30 shrink-0 border-t border-gray-100 dark:border-white/[0.06] bg-white dark:bg-[#111013] pb-[max(0px,calc(env(safe-area-inset-bottom)-10px))] lg:relative lg:inset-auto lg:z-auto"
-      style={{ bottom: 'var(--messages-keyboard-inset, 0px)' }}
+      className="fixed inset-x-0 bottom-0 z-30 shrink-0 border-t border-gray-100 dark:border-white/[0.06] bg-white dark:bg-[#111013] lg:relative lg:inset-auto lg:z-auto"
+      style={{ bottom: 'max(var(--messages-keyboard-inset, 0px), env(safe-area-inset-bottom))' }}
     >
       <AnimatePresence>
         {replyTo && replyPreview && (
@@ -1619,7 +1619,7 @@ function ChatWindow({
       />
       <div
         className="fixed inset-x-0 bottom-0 z-[25] bg-white dark:bg-[#111013] pointer-events-none lg:hidden"
-        style={{ height: 'var(--messages-keyboard-inset, 0px)' }}
+        style={{ height: 'max(var(--messages-keyboard-inset, 0px), env(safe-area-inset-bottom))' }}
       />
 
       {/* Info panel slide-over — absolute inset, clips its own overflow */}

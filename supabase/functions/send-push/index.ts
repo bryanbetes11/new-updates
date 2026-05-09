@@ -16,6 +16,10 @@ interface PushPayload {
   data?: Record<string, unknown>;
 }
 
+type OrgLookupRow = {
+  organizations: { name: string | null } | { name: string | null }[] | null;
+};
+
 type PushSubscriptionRow = {
   id?: string;
   endpoint: string;
@@ -31,6 +35,23 @@ webpush.setVapidDetails(
   VAPID_PUBLIC_KEY,
   VAPID_PRIVATE_KEY
 );
+
+function normalizeOrganizationName(row: OrgLookupRow | null): string | null {
+  const orgData = row?.organizations;
+  if (!orgData) return null;
+  if (Array.isArray(orgData)) {
+    return orgData[0]?.name?.trim() || null;
+  }
+  return orgData.name?.trim() || null;
+}
+
+function decorateTitleWithOrganization(title: string, organizationName: string | null): string {
+  const normalizedTitle = title.trim();
+  if (!normalizedTitle) return organizationName ? `ServeSync from ${organizationName}` : "ServeSync";
+  if (!organizationName) return normalizedTitle;
+  const suffix = `from ${organizationName}`;
+  return normalizedTitle.includes(suffix) ? normalizedTitle : `${normalizedTitle} ${suffix}`;
+}
 
 async function sendWebPush(
   subscription: PushSubscriptionRow,
@@ -96,6 +117,14 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    const { data: profileOrgRow } = await supabase
+      .from("profiles")
+      .select("organizations(name)")
+      .eq("id", user_id)
+      .maybeSingle();
+    const organizationName = normalizeOrganizationName((profileOrgRow as OrgLookupRow | null) ?? null);
+    const decoratedTitle = decorateTitleWithOrganization(title, organizationName);
+
     const { data: subscriptions } = await supabase
       .from("push_subscriptions")
       .select("id, endpoint, p256dh, auth_key")
@@ -115,7 +144,7 @@ Deno.serve(async (req: Request) => {
     const results = await Promise.all((subscriptions as PushSubscriptionRow[]).map(async (sub) => {
       try {
         console.log(`[Push] Sending to endpoint: ${sub.endpoint.substring(0, 50)}...`);
-        const result = await sendWebPush(sub, { title, body, data });
+        const result = await sendWebPush(sub, { title: decoratedTitle, body, data });
         if (!result.ok && result.stale && sub.id) {
           await supabase.from("push_subscriptions").delete().eq("id", sub.id);
         }

@@ -294,7 +294,7 @@ export function Profile() {
         style={{ background: 'radial-gradient(circle, rgba(34,197,94,0.18), transparent 70%)', filter: 'blur(60px)' }}
       />
 
-      <div className="relative max-w-3xl mx-auto px-1 sm:px-2 pt-6 sm:pt-10 space-y-5 sm:space-y-6">
+      <div className="relative max-w-2xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-10 space-y-5 sm:space-y-6">
         {billingLocked && billingStatus === 'suspended' && (
           <div className="rounded-[26px] border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-900/10 px-4 py-4">
             <div className="flex items-start gap-3">

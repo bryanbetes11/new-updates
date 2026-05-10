@@ -413,7 +413,7 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
 
   return (
     <div className="page-container page-bottom-pad">
-      <div className="max-w-5xl mx-auto px-1 sm:px-2 pt-6 sm:pt-8">
+      <div className="max-w-2xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8">
         {inner}
       </div>
     </div>

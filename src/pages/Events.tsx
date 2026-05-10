@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format, parseISO, startOfDay, subWeeks, previousSunday, addDays, subDays, differenceInDays, eachDayOfInterval } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar, Plus, Search, ChevronRight, Filter, Users, Trash2, CalendarOff, LayoutGrid, List, AlertCircle, Clock, X, PartyPopper, Heart } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -363,7 +363,10 @@ function EventList({ events, calendarEntries, songLeaderMap, setlistInfoMap, onE
   const merged: ListItem[] = [
     ...displayEvents.map(e => ({ kind: 'event' as const, sortDate: e.event_date, event: e })),
     ...birthdayEntries.map(e => ({ kind: 'birthday' as const, sortDate: e.date, entry: e })),
-  ].sort((a, b) => a.sortDate.localeCompare(b.sortDate));
+  ].sort((a, b) => showPast
+    ? b.sortDate.localeCompare(a.sortDate)
+    : a.sortDate.localeCompare(b.sortDate)
+  );
 
   if (merged.length === 0) return null;
 
@@ -387,10 +390,23 @@ function EventList({ events, calendarEntries, songLeaderMap, setlistInfoMap, onE
   );
 }
 
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 1024);
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+  return isDesktop;
+}
+
 export function Events() {
   const { user, isLeader, roles } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const isDesktop = useIsDesktop();
+  const [tabDir, setTabDir] = useState<'left' | 'right'>('left');
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -596,7 +612,7 @@ export function Events() {
 
   return (
     <div className="page-container page-bottom-pad">
-      <div className="max-w-5xl mx-auto px-4 sm:px-5 lg:px-6 pt-6 sm:pt-8 pb-0 space-y-4">
+      <div className="max-w-2xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 pb-0 space-y-4">
 
         {/* ── Page Header ── */}
         <motion.div {...fadeUp(0)} className="flex items-start justify-between gap-3">
@@ -645,7 +661,12 @@ export function Events() {
             return (
               <button
                 key={tab}
-                onClick={() => setActiveTab(tab)}
+                onClick={() => {
+                  if (tab !== activeTab) {
+                    setTabDir(tab === 'past' ? 'left' : 'right');
+                    setActiveTab(tab);
+                  }
+                }}
                 className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-bold transition-all duration-200 ${
                   active
                     ? 'bg-white dark:bg-white/[0.06] shadow-sm ring-1 ring-black/[0.06] dark:ring-white/[0.09] text-gray-900 dark:text-white'
@@ -705,7 +726,7 @@ export function Events() {
       </div>
 
       {/* ── Content ── */}
-      <div className="max-w-5xl mx-auto px-4 sm:px-5 lg:px-6 pt-4">
+      <div className="max-w-2xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-4">
         {filtered.length === 0 ? (
           <EmptyState
             icon={<Calendar className="h-8 w-8" />}
@@ -722,9 +743,25 @@ export function Events() {
                 <EventList events={filtered} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={id => navigate(`/events/${id}`)} showPast={activeTab === 'past'} />
               )}
             </motion.div>
-            <motion.div {...fadeUp(0.1)} className="lg:hidden">
-              <EventList events={filtered} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={id => navigate(`/events/${id}`)} showPast={activeTab === 'past'} />
-            </motion.div>
+            <div className="lg:hidden overflow-hidden">
+              <AnimatePresence mode="wait" initial={false} custom={tabDir}>
+                <motion.div
+                  key={activeTab}
+                  custom={tabDir}
+                  variants={{
+                    initial: (dir: string) => ({ opacity: 0, x: dir === 'left' ? '55%' : '-55%' }),
+                    animate: { opacity: 1, x: 0 },
+                    exit: (dir: string) => ({ opacity: 0, x: dir === 'left' ? '-55%' : '55%' }),
+                  }}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  transition={{ type: 'spring', stiffness: 320, damping: 30, mass: 0.85 }}
+                >
+                  <EventList events={filtered} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={id => navigate(`/events/${id}`)} showPast={activeTab === 'past'} />
+                </motion.div>
+              </AnimatePresence>
+            </div>
           </>
         )}
       </div>

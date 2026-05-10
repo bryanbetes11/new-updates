@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Eye, MessageCircle, Send,
   AlertTriangle, AlertCircle, Image, Pencil, Trash2, MoreVertical, Lock,
@@ -319,6 +319,21 @@ function CommentItem({
   );
 }
 
+const blurUp = (delay = 0) => ({
+  initial: { opacity: 0, y: 22, filter: 'blur(10px)' },
+  animate: { opacity: 1, y: 0, filter: 'blur(0px)' },
+  transition: { duration: 0.85, delay, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] },
+});
+
+const blockList = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.15, delayChildren: 0.48 } },
+};
+const blockItem = {
+  hidden: { opacity: 0, y: 14, filter: 'blur(5px)' },
+  visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.65, ease: [0.16, 1, 0.3, 1] } },
+};
+
 export function AnnouncementDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -331,6 +346,7 @@ export function AnnouncementDetail() {
   const [replyingTo, setReplyingTo] = useState<AnnouncementComment | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isLeaving, setIsLeaving] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -557,16 +573,25 @@ export function AnnouncementDetail() {
   const pConfig = PRIORITY_CONFIG[announcement.priority as keyof typeof PRIORITY_CONFIG] ?? PRIORITY_CONFIG.normal;
   const PriorityIcon = pConfig.icon;
 
+  const goBack = () => {
+    setIsLeaving(true);
+    setTimeout(() => navigate('/announcements'), 300);
+  };
+
   return (
     <div className="page-container page-bottom-pad">
-      <div className="max-w-3xl mx-auto px-4 sm:px-5 lg:px-6 pt-6 sm:pt-8 space-y-5">
+      <motion.div
+        animate={isLeaving ? { opacity: 0, y: -12, filter: 'blur(8px)' } : { opacity: 1, y: 0, filter: 'blur(0px)' }}
+        transition={{ duration: 0.28, ease: [0.4, 0, 1, 1] }}
+        className="max-w-2xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 space-y-5"
+      >
 
         {/* ── Back ─────────────────────────────────────── */}
         <motion.button
-          initial={{ opacity: 0, x: -8 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          onClick={() => navigate('/announcements')}
+          initial={{ opacity: 0, x: -12 }}
+          animate={isLeaving ? { opacity: 0, x: -12 } : { opacity: 1, x: 0 }}
+          transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+          onClick={goBack}
           className="inline-flex items-center gap-1.5 pl-2 pr-3.5 h-8 rounded-full text-[12px] font-semibold text-gray-600 dark:text-white/55 bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-md hover:bg-white dark:hover:bg-white/[0.07] active:scale-[0.97] transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
@@ -575,9 +600,7 @@ export function AnnouncementDetail() {
 
         {/* ── Hero Card ────────────────────────────────── */}
         <motion.div
-          initial={{ opacity: 0, y: 14, filter: 'blur(6px)' }}
-          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          {...blurUp(0.08)}
           className="relative rounded-3xl overflow-hidden bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06]"
           style={{
             borderColor: pConfig.accentBorder ?? undefined,
@@ -692,32 +715,32 @@ export function AnnouncementDetail() {
           {/* Body */}
           <div className="relative px-5 sm:px-7 py-7">
             {blocks && blocks.length > 0 ? (
-              <div className="space-y-5">
+              <motion.div className="space-y-5" variants={blockList} initial="hidden" animate="visible">
                 {blocks.map((block, i) =>
                   block.type === 'text' ? (
-                    <div key={i} className="text-[15px] sm:text-[16px] leading-[1.8] text-gray-700 dark:text-white/70 whitespace-pre-wrap" style={{ letterSpacing: '-0.005em' }}>
+                    <motion.div key={i} variants={blockItem} className="text-[15px] sm:text-[16px] leading-[1.8] text-gray-700 dark:text-white/70 whitespace-pre-wrap" style={{ letterSpacing: '-0.005em' }}>
                       <FormattedText text={block.content} />
-                    </div>
+                    </motion.div>
                   ) : (
-                    <div key={i} className="rounded-2xl overflow-hidden border border-black/[0.06] dark:border-white/[0.07] bg-gray-50 dark:bg-white/[0.03]">
+                    <motion.div key={i} variants={blockItem} className="rounded-2xl overflow-hidden border border-black/[0.06] dark:border-white/[0.07] bg-gray-50 dark:bg-white/[0.03]">
                       <img src={block.content} alt="" className="w-full object-contain" />
-                    </div>
+                    </motion.div>
                   )
                 )}
-              </div>
+              </motion.div>
             ) : (
-              <div className="text-[15px] sm:text-[16px] leading-[1.8] text-gray-700 dark:text-white/70 whitespace-pre-wrap" style={{ letterSpacing: '-0.005em' }}>
-                <FormattedText text={announcement.content} />
-              </div>
+              <motion.div variants={blockList} initial="hidden" animate="visible">
+                <motion.div variants={blockItem} className="text-[15px] sm:text-[16px] leading-[1.8] text-gray-700 dark:text-white/70 whitespace-pre-wrap" style={{ letterSpacing: '-0.005em' }}>
+                  <FormattedText text={announcement.content} />
+                </motion.div>
+              </motion.div>
             )}
           </div>
         </motion.div>
 
         {/* ── Comments Card ────────────────────────────── */}
         <motion.div
-          initial={{ opacity: 0, y: 12, filter: 'blur(4px)' }}
-          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-          transition={{ duration: 0.5, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+          {...blurUp(0.22)}
           className="relative rounded-3xl overflow-hidden bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06]"
           style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -12px rgba(15,23,42,0.10)' }}
         >
@@ -739,23 +762,31 @@ export function AnnouncementDetail() {
             <p className="relative px-5 py-12 text-center text-[13px] text-gray-400 dark:text-white/30">No comments yet. Be the first to comment.</p>
           ) : (
             <div className="relative">
-              {rootComments.map(c => (
-                <CommentItem
-                  key={c.id}
-                  comment={c}
-                  replies={repliesMap[c.id] || []}
-                  user={user}
-                  editingCommentId={editingCommentId}
-                  editCommentContent={editCommentContent}
-                  setEditCommentContent={setEditCommentContent}
-                  savingComment={savingComment}
-                  onReply={startReply}
-                  onEdit={handleEditComment}
-                  onSaveEdit={handleSaveComment}
-                  onCancelEdit={() => { setEditingCommentId(null); setEditCommentContent(''); }}
-                  onDelete={(commentId) => { setDeletingCommentId(commentId); setShowDeleteCommentConfirm(true); }}
-                />
-              ))}
+              <AnimatePresence initial={true}>
+                {rootComments.map((c, i) => (
+                  <motion.div
+                    key={c.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.55, delay: i * 0.1, ease: [0.16, 1, 0.3, 1] }}
+                  >
+                    <CommentItem
+                      comment={c}
+                      replies={repliesMap[c.id] || []}
+                      user={user}
+                      editingCommentId={editingCommentId}
+                      editCommentContent={editCommentContent}
+                      setEditCommentContent={setEditCommentContent}
+                      savingComment={savingComment}
+                      onReply={startReply}
+                      onEdit={handleEditComment}
+                      onSaveEdit={handleSaveComment}
+                      onCancelEdit={() => { setEditingCommentId(null); setEditCommentContent(''); }}
+                      onDelete={(commentId) => { setDeletingCommentId(commentId); setShowDeleteCommentConfirm(true); }}
+                    />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
             </div>
           )}
 
@@ -806,7 +837,7 @@ export function AnnouncementDetail() {
             </div>
           </div>
         </motion.div>
-      </div>
+      </motion.div>
 
       {/* Viewers Modal */}
       <Modal open={showViewers} onClose={() => setShowViewers(false)} title="Who Read This">

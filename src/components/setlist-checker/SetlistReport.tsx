@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   CheckCircle, XCircle, AlertCircle, AlertTriangle, ChevronDown, ChevronUp,
-  Star, Copy, Check, ArrowLeft, RotateCcw, Send, Flag, ArrowRight,
+  Star, ArrowLeft, Send, Flag, ArrowRight,
 } from 'lucide-react';
 import type { SetlistCheckReport } from '../../types';
 
@@ -16,6 +16,10 @@ interface SetlistReportProps {
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
+
+function toTitleCase(str: string): string {
+  return str.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
 
 function VerdictIcon({ verdict, className }: { verdict: SetlistCheckReport['verdict']; className?: string }) {
   if (verdict === 'APPROVE') return <CheckCircle className={className} />;
@@ -89,21 +93,21 @@ function SlotBadge({ slot }: { slot: string }) {
 }
 
 function PriorityBadge({ tier }: { tier: string }) {
-  const normalizedTier = tier.replace(/_/g, ' ');
-  const lower = normalizedTier.toLowerCase();
+  const label = toTitleCase(tier);
+  const lower = tier.toLowerCase();
   if (lower.includes('gospel')) return (
     <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
-      {normalizedTier}
+      {label}
     </span>
   );
   if (lower.includes('god')) return (
     <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
-      {normalizedTier}
+      {label}
     </span>
   );
   return (
     <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300">
-      {normalizedTier}
+      {label}
     </span>
   );
 }
@@ -157,9 +161,11 @@ const Q_LABELS = ['Q1 Christ-exalting?', 'Q2 Theologically sound?', 'Q3 Emotiona
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
-      {children}
-    </p>
+    <div className="-mx-4 px-4 py-2 mb-3 bg-gray-50 dark:bg-gray-800/70 border-y border-gray-100 dark:border-gray-700/60">
+      <span className="text-[11px] font-extrabold text-gray-500 dark:text-gray-400 uppercase tracking-[0.14em]">
+        {children}
+      </span>
+    </div>
   );
 }
 
@@ -181,7 +187,6 @@ export function SetlistReport({
   canSubmit,
   setlistStatus,
 }: SetlistReportProps) {
-  const [copied, setCopied] = useState(false);
   const [expandedSongs, setExpandedSongs] = useState<Set<number>>(new Set());
   const [showReviseWarning, setShowReviseWarning] = useState(false);
 
@@ -191,13 +196,6 @@ export function SetlistReport({
     canSubmit &&
     ['draft', 'revision_requested'].includes(setlistStatus) &&
     report.verdict !== 'REJECT';
-
-  const handleCopyDiscord = () => {
-    navigator.clipboard.writeText(report.discordText).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
 
   const toggleSong = (idx: number) => {
     setExpandedSongs(prev => {
@@ -233,70 +231,17 @@ export function SetlistReport({
     >
       {/* ── Sticky Header ── */}
       <div className="sticky top-0 z-10 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 px-4 py-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={onBack}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Back to Setlist
-          </button>
-
-          {canShowSubmit && (
-            <button
-              onClick={handleSubmitClick}
-              className={`ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-colors ${
-                report.verdict === 'APPROVE'
-                  ? 'bg-green-600 hover:bg-green-700'
-                  : 'bg-amber-600 hover:bg-amber-700'
-              }`}
-            >
-              <Send className="h-3.5 w-3.5" />
-              {report.verdict === 'APPROVE' ? 'Submit Proposal' : 'Submit Anyway'}
-            </button>
-          )}
-
-          {report.verdict === 'REJECT' && canSubmit && ['draft', 'revision_requested'].includes(setlistStatus) && (
-            <div className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
-              <XCircle className="h-3.5 w-3.5" />
-              Address flagged issues before submitting.
-            </div>
-          )}
-        </div>
-
-        {/* Revise inline warning */}
-        <AnimatePresence>
-          {showReviseWarning && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="mt-2 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-3 py-2.5 text-xs text-amber-800 dark:text-amber-200"
-            >
-              <p className="font-medium mb-2">
-                Heads up: This setlist has issues flagged. Leaders may request revisions. Are you sure?
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowReviseWarning(false)}
-                  className="px-3 py-1.5 rounded-lg font-medium bg-white dark:bg-gray-900 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/40 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => { setShowReviseWarning(false); onSubmitProposal?.(); }}
-                  className="px-3 py-1.5 rounded-lg font-semibold bg-amber-600 hover:bg-amber-700 text-white transition-colors"
-                >
-                  Submit Anyway
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <button
+          onClick={onBack}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back to Setlist
+        </button>
       </div>
 
       {/* ── Body ── */}
-      <div className="px-4 py-4 space-y-5">
+      <div className="px-4 py-5 space-y-8">
 
         {/* ── Section 1: Verdict Banner ── */}
         <div className={`rounded-xl border px-4 py-4 ${colors.banner}`}>
@@ -313,15 +258,6 @@ export function SetlistReport({
                 {report.verdictExplanation}
               </p>
             </div>
-          </div>
-          <div className="mt-3 flex justify-end">
-            <button
-              onClick={handleCopyDiscord}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/70 dark:bg-gray-900/50 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-900/80 transition-colors border border-gray-200 dark:border-gray-700"
-            >
-              {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
-              {copied ? 'Copied!' : 'Copy for Discord'}
-            </button>
           </div>
         </div>
 
@@ -393,28 +329,24 @@ export function SetlistReport({
             {report.slotFitCheck.map((item, i) => (
               <Card key={i}>
                 <div className="px-4 py-3">
-                  <div className="flex items-start gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
                     <SlotBadge slot={item.slot} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{item.title}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{item.artist}</p>
-                    </div>
-                    <div className="flex items-center gap-1.5 flex-wrap shrink-0">
-                      <PriorityBadge tier={item.priorityTier} />
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold ${
-                        item.fits
-                          ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
-                          : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
-                      }`}>
-                        {item.fits ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-                        {item.fits ? 'Fits' : "Doesn't Fit"}
-                      </span>
-                    </div>
+                    <PriorityBadge tier={item.priorityTier} />
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold ${
+                      item.fits
+                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                        : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                    }`}>
+                      {item.fits ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+                      {item.fits ? 'Fits' : "Doesn't Fit"}
+                    </span>
+                    <span className="ml-auto shrink-0">
+                      <ActionBadge action={item.action} />
+                    </span>
                   </div>
-                  <p className="mt-2 text-xs text-gray-600 dark:text-gray-400 leading-relaxed">{item.reason}</p>
-                  <div className="mt-2">
-                    <ActionBadge action={item.action} />
-                  </div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">{item.title}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{item.artist}</p>
+                  <p className="mt-1.5 text-xs text-gray-600 dark:text-gray-400 leading-relaxed">{item.reason}</p>
                 </div>
               </Card>
             ))}
@@ -676,20 +608,66 @@ export function SetlistReport({
         </div>
 
         {/* ── Footer ── */}
-        <div className="pt-2 pb-4 flex items-center gap-2 border-t border-gray-100 dark:border-gray-800">
+        <div className="pt-4 pb-6 space-y-3 border-t border-gray-100 dark:border-gray-800">
+          {canShowSubmit && (
+            <>
+              <button
+                onClick={handleSubmitClick}
+                className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold text-white transition-colors ${
+                  report.verdict === 'APPROVE'
+                    ? 'bg-green-600 hover:bg-green-700'
+                    : 'bg-amber-600 hover:bg-amber-700'
+                }`}
+              >
+                <Send className="h-4 w-4" />
+                {report.verdict === 'APPROVE' ? 'Submit Proposal' : 'Submit Anyway'}
+              </button>
+
+              {/* Revise confirmation */}
+              <AnimatePresence>
+                {showReviseWarning && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-3 py-2.5 text-xs text-amber-800 dark:text-amber-200"
+                  >
+                    <p className="font-medium mb-2">
+                      Heads up: This setlist has issues flagged. Leaders may request revisions. Are you sure?
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setShowReviseWarning(false)}
+                        className="px-3 py-1.5 rounded-lg font-medium bg-white dark:bg-gray-900 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/40 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => { setShowReviseWarning(false); onSubmitProposal?.(); }}
+                        className="px-3 py-1.5 rounded-lg font-semibold bg-amber-600 hover:bg-amber-700 text-white transition-colors"
+                      >
+                        Submit Anyway
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </>
+          )}
+
+          {report.verdict === 'REJECT' && canSubmit && ['draft', 'revision_requested'].includes(setlistStatus) && (
+            <div className="flex items-center gap-2 rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+              <XCircle className="h-4 w-4 shrink-0" />
+              Address the flagged issues above before submitting this setlist.
+            </div>
+          )}
+
           <button
             onClick={onBack}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            className="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-700 transition-colors"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             Back to Setlist
-          </button>
-          <button
-            onClick={onRecheck}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            Recheck
           </button>
         </div>
 

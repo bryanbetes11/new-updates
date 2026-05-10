@@ -19,17 +19,17 @@ interface CheckingAnimationProps {
 }
 
 const STEPS = [
-  { icon: Music,     label: 'Reading setlist songs...',          duration: 700  },
-  { icon: AlignLeft, label: 'Fetching song lyrics...',           duration: 1800 },
-  { icon: BookOpen,  label: 'Checking gospel-centeredness...',   duration: 900  },
-  { icon: Target,    label: 'Analysing slot fit & flow...',      duration: 900  },
-  { icon: Shield,    label: 'Scanning for theological flags...', duration: 900  },
-  { icon: Zap,       label: 'Running five-question test...',     duration: 800  },
-  { icon: Star,      label: 'Scoring & computing verdict...',    duration: 700  },
-  { icon: Sparkles,  label: 'Building action plan...',           duration: 500  },
+  { icon: Music,     label: 'Looking at your songs',          duration: 1200 },
+  { icon: AlignLeft, label: 'Reading through the lyrics',     duration: 3500 },
+  { icon: BookOpen,  label: 'Checking if the gospel is clear',duration: 1800 },
+  { icon: Target,    label: 'Reviewing the worship flow',     duration: 1800 },
+  { icon: Shield,    label: 'Checking for any red flags',     duration: 1800 },
+  { icon: Zap,       label: 'Putting each song to the test',  duration: 1600 },
+  { icon: Star,      label: 'Coming up with a score',         duration: 1500 },
+  { icon: Sparkles,  label: 'Preparing your report',          duration: 800  },
 ];
 
-const MIN_ANIMATION_MS = STEPS.reduce((s, step) => s + step.duration, 0); // ~7200ms
+const MIN_ANIMATION_MS = STEPS.reduce((s, step) => s + step.duration, 0);
 
 export function CheckingAnimation({ songs, theme, language, onComplete }: CheckingAnimationProps) {
   const [currentStep, setCurrentStep] = useState(0);
@@ -39,7 +39,6 @@ export function CheckingAnimation({ songs, theme, language, onComplete }: Checki
   const animDoneRef = useRef(false);
   const apiDoneRef = useRef(false);
 
-  // Advance animation steps
   useEffect(() => {
     let stepIndex = 0;
     let cancelled = false;
@@ -69,10 +68,7 @@ export function CheckingAnimation({ songs, theme, language, onComplete }: Checki
     return () => { cancelled = true; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Call edge function
   useEffect(() => {
-    const startTime = Date.now();
-
     supabase.functions.invoke('check-setlist', {
       body: { theme, songs, language },
     }).then(({ data, error: fnErr }) => {
@@ -80,16 +76,9 @@ export function CheckingAnimation({ songs, theme, language, onComplete }: Checki
         setError(fnErr?.message || 'Analysis failed. Please try again.');
         return;
       }
-
       reportRef.current = data.report as SetlistCheckReport;
       apiDoneRef.current = true;
-
-      const elapsed = Date.now() - startTime;
-      const remaining = MIN_ANIMATION_MS - elapsed;
-
-      if (remaining <= 0 && animDoneRef.current) {
-        onComplete(data.report as SetlistCheckReport);
-      }
+      if (animDoneRef.current) onComplete(data.report as SetlistCheckReport);
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -101,22 +90,22 @@ export function CheckingAnimation({ songs, theme, language, onComplete }: Checki
         </div>
         <p className="text-sm font-medium text-red-700 dark:text-red-300 mb-1">Analysis failed</p>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">{error}</p>
-        <button
-          onClick={() => window.location.reload()}
-          className="btn-secondary text-xs"
-        >
+        <button onClick={() => window.location.reload()} className="btn-secondary text-xs">
           Try again
         </button>
       </div>
     );
   }
 
+  const progress = completedSteps.length / STEPS.length;
+
   return (
-    <div className="px-5 py-8">
-      {/* Title */}
-      <div className="flex items-center gap-2 mb-6">
-        <div className="w-8 h-8 rounded-lg bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center">
-          <Sparkles className="h-4 w-4 text-brand-600 dark:text-brand-400" />
+    <div className="px-5 py-7 space-y-5">
+
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-xl bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center shrink-0">
+          <Sparkles className="h-4.5 w-4.5 text-brand-600 dark:text-brand-400" />
         </div>
         <div>
           <p className="text-sm font-semibold text-gray-900 dark:text-white">Checking Setlist</p>
@@ -125,7 +114,7 @@ export function CheckingAnimation({ songs, theme, language, onComplete }: Checki
       </div>
 
       {/* Steps */}
-      <div className="space-y-3">
+      <div className="space-y-1.5">
         {STEPS.map((step, index) => {
           const Icon = step.icon;
           const isCompleted = completedSteps.includes(index);
@@ -135,30 +124,51 @@ export function CheckingAnimation({ songs, theme, language, onComplete }: Checki
           return (
             <motion.div
               key={index}
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: isPending ? 0.35 : 1, x: 0 }}
-              transition={{ delay: index * 0.05, duration: 0.3 }}
-              className="flex items-center gap-3"
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: isPending ? 0.3 : 1, x: 0 }}
+              transition={{ delay: index * 0.04, duration: 0.25 }}
+              className="relative overflow-hidden flex items-center gap-3 rounded-2xl px-4 py-2.5"
             >
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-colors duration-300 ${
-                isCompleted
-                  ? 'bg-green-100 dark:bg-green-900/30'
-                  : isActive
-                  ? 'bg-brand-100 dark:bg-brand-900/30'
-                  : 'bg-gray-100 dark:bg-gray-800'
+              {/* Active card background */}
+              <AnimatePresence>
+                {isActive && (
+                  <motion.div
+                    key="bg"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.25 }}
+                    className="absolute inset-0 rounded-2xl border border-brand-200 dark:border-brand-700/40 bg-gradient-to-r from-brand-50 to-white dark:from-brand-950/40 dark:to-gray-900"
+                  />
+                )}
+              </AnimatePresence>
+
+              {/* Shimmer — only while active */}
+              {isActive && (
+                <motion.div
+                  className="pointer-events-none absolute inset-0 rounded-2xl"
+                  animate={{ x: ['-100%', '150%'] }}
+                  transition={{ duration: 1.5, repeat: Infinity, ease: 'linear', repeatDelay: 0.4 }}
+                  style={{ background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.45) 50%, transparent 100%)' }}
+                />
+              )}
+
+              {/* Icon */}
+              <div className={`relative z-10 w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-colors duration-300 ${
+                isCompleted ? 'bg-brand-100 dark:bg-brand-900/30' : isActive ? 'bg-brand-100 dark:bg-brand-900/50' : 'bg-gray-100 dark:bg-gray-800'
               }`}>
                 <AnimatePresence mode="wait">
                   {isCompleted ? (
                     <motion.div
                       key="check"
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+                      initial={{ scale: 0, rotate: -15 }}
+                      animate={{ scale: 1, rotate: 0 }}
+                      transition={{ type: 'spring', stiffness: 500, damping: 22 }}
                     >
-                      <CheckCircle className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                      <CheckCircle className="h-3.5 w-3.5 text-brand-600 dark:text-brand-400" />
                     </motion.div>
                   ) : isActive ? (
-                    <motion.div key="loading" animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}>
+                    <motion.div key="loader" animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.2, ease: 'linear' }}>
                       <Loader2 className="h-3.5 w-3.5 text-brand-600 dark:text-brand-400" />
                     </motion.div>
                   ) : (
@@ -169,32 +179,55 @@ export function CheckingAnimation({ songs, theme, language, onComplete }: Checki
                 </AnimatePresence>
               </div>
 
-              <p className={`text-sm transition-colors duration-300 ${
-                isCompleted
-                  ? 'text-green-700 dark:text-green-400 line-through decoration-green-400/50'
-                  : isActive
-                  ? 'text-gray-900 dark:text-white font-medium'
-                  : 'text-gray-400 dark:text-gray-500'
-              }`}>
+              {/* Label */}
+              <motion.p
+                className={`relative z-10 text-sm flex-1 transition-colors duration-300 ${
+                  isCompleted ? 'text-brand-600 dark:text-brand-400 font-medium'
+                  : isActive   ? 'text-brand-700 dark:text-brand-300 font-semibold'
+                  :              'text-gray-400 dark:text-gray-500'
+                }`}
+                animate={isActive ? { opacity: [0.7, 1, 0.7] } : { opacity: 1 }}
+                transition={isActive ? { duration: 1.8, repeat: Infinity, ease: 'easeInOut' } : {}}
+              >
                 {step.label}
-              </p>
+              </motion.p>
+
+              {/* Done badge */}
+              <AnimatePresence>
+                {isCompleted && (
+                  <motion.span
+                    key="done"
+                    initial={{ opacity: 0, scale: 0.7 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.7 }}
+                    transition={{ duration: 0.2 }}
+                    className="relative z-10 text-[10px] font-semibold text-brand-500/60 dark:text-brand-400/50 shrink-0"
+                  >
+                    Done
+                  </motion.span>
+                )}
+              </AnimatePresence>
             </motion.div>
           );
         })}
       </div>
 
       {/* Progress bar */}
-      <div className="mt-6 h-1 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-        <motion.div
-          className="h-full bg-brand-500 rounded-full"
-          initial={{ width: 0 }}
-          animate={{ width: `${(completedSteps.length / STEPS.length) * 100}%` }}
-          transition={{ duration: 0.4, ease: 'easeOut' }}
-        />
+      <div className="space-y-1.5">
+        <div className="h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+          <motion.div
+            className="h-full rounded-full"
+            style={{ background: 'linear-gradient(90deg, #4ade80, #16a34a)' }}
+            initial={{ width: 0 }}
+            animate={{ width: `${progress * 100}%` }}
+            transition={{ duration: 0.5, ease: 'easeOut' }}
+          />
+        </div>
+        <p className="text-[11px] text-gray-400 dark:text-gray-500 text-center">
+          {completedSteps.length === STEPS.length ? 'Almost done…' : `Step ${Math.min(currentStep + 1, STEPS.length)} of ${STEPS.length}`}
+        </p>
       </div>
-      <p className="text-[11px] text-gray-400 dark:text-gray-500 text-center mt-2">
-        {completedSteps.length === STEPS.length ? 'Almost done...' : `Step ${Math.min(currentStep + 1, STEPS.length)} of ${STEPS.length}`}
-      </p>
+
     </div>
   );
 }

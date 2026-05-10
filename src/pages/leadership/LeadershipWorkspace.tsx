@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Shield, LayoutDashboard, Users, CalendarCheck, AlertTriangle, ListMusic, Building2, CreditCard } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUnreadCounts } from '../../hooks/useUnreadCounts';
@@ -13,6 +13,12 @@ import { OrganizationSettings } from './OrganizationSettings';
 import { OrganizationBilling } from './OrganizationBilling';
 
 type Tab = 'overview' | 'team' | 'leave' | 'discipline' | 'setlists' | 'church' | 'billing';
+
+const fadeUp = (delay = 0) => ({
+  initial: { opacity: 0, y: 14 },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.42, delay, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] },
+});
 
 interface TabConfig {
   id: Tab;
@@ -38,15 +44,24 @@ export function LeadershipWorkspace() {
   ];
 
   const visibleTabs = tabs.filter(t => t.show);
-
   const defaultTab = visibleTabs[0]?.id ?? 'overview';
-  const activeTab: Tab = (visibleTabs.find(t => t.id === tab) ? tab as Tab : null) ?? defaultTab;
+
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    const stored = localStorage.getItem('leadershipActiveTab') as Tab | null;
+    if (tab && visibleTabs.find(t => t.id === tab)) return tab as Tab;
+    if (stored && visibleTabs.find(t => t.id === stored)) return stored;
+    return defaultTab;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('leadershipActiveTab', activeTab);
+  }, [activeTab]);
 
   useEffect(() => {
     if (!tab || !visibleTabs.find(t => t.id === tab)) {
-      navigate(`/leadership/${defaultTab}`, { replace: true });
+      navigate(`/leadership/${activeTab}`, { replace: true });
     }
-  }, [tab]);
+  }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!isLeader && !canApproveLeave && !canManageDiscipline && !isOrgAdmin) {
     return (
@@ -67,15 +82,10 @@ export function LeadershipWorkspace() {
 
   return (
     <div className="page-container page-bottom-pad">
-      <div className="max-w-5xl mx-auto px-1 sm:px-2 pt-6 sm:pt-8 space-y-5 sm:space-y-6">
+      <div className="max-w-2xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 space-y-5 sm:space-y-6">
 
         {/* ── Header ───────────────────────────────────── */}
-        <motion.div
-          initial={{ opacity: 0, y: 14, filter: 'blur(6px)' }}
-          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          className="flex items-center gap-3.5"
-        >
+        <motion.div {...fadeUp(0)} className="flex items-center gap-3.5">
           <div className="relative shrink-0">
             <div
               className="absolute inset-0 rounded-2xl"
@@ -100,9 +110,7 @@ export function LeadershipWorkspace() {
 
         {/* ── Tab Strip ────────────────────────────────── */}
         <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
+          {...fadeUp(0.05)}
           className="flex gap-1 p-1 rounded-2xl overflow-x-auto no-scrollbar"
           style={{ background: 'rgba(0,0,0,0.04)', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.06)' }}
         >
@@ -112,19 +120,22 @@ export function LeadershipWorkspace() {
             return (
               <button
                 key={t.id}
-                onClick={() => navigate(`/leadership/${t.id}`)}
-                className={`relative flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2.5 rounded-xl transition-all duration-200 whitespace-nowrap flex-1 ${
-                  isActive
-                    ? 'bg-white dark:bg-white/[0.06] shadow-sm ring-1 ring-black/[0.06] dark:ring-white/[0.09]'
-                    : 'hover:bg-white/50 dark:hover:bg-white/[0.04]'
-                }`}
+                onClick={() => setActiveTab(t.id)}
+                className="relative flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2.5 rounded-xl whitespace-nowrap flex-1 hover:bg-white/50 dark:hover:bg-white/[0.04] transition-colors"
               >
-                <Icon className={`h-3.5 w-3.5 shrink-0 transition-colors ${isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-500'}`} />
-                <span className={`text-[12px] sm:text-[13px] font-bold transition-colors leading-none ${isActive ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-500'}`}>
+                {isActive && (
+                  <motion.div
+                    layoutId="leadership-tab-indicator"
+                    className="absolute inset-0 rounded-xl bg-white dark:bg-white/[0.06] shadow-sm ring-1 ring-black/[0.06] dark:ring-white/[0.09]"
+                    transition={{ type: 'spring', stiffness: 260, damping: 28 }}
+                  />
+                )}
+                <Icon className={`relative z-10 h-3.5 w-3.5 shrink-0 transition-colors duration-200 ${isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-500'}`} />
+                <span className={`relative z-10 text-[12px] sm:text-[13px] font-bold transition-colors duration-200 leading-none ${isActive ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-500'}`}>
                   {t.label}
                 </span>
                 {t.id === 'leave' && unread.pendingLeave > 0 && (
-                  <span className="flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-amber-500 text-white text-[9px] font-bold leading-none" style={{ boxShadow: '0 0 8px rgba(245,158,11,0.5)' }}>
+                  <span className="relative z-10 flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-amber-500 text-white text-[9px] font-bold leading-none" style={{ boxShadow: '0 0 8px rgba(245,158,11,0.5)' }}>
                     {unread.pendingLeave > 9 ? '9+' : unread.pendingLeave}
                   </span>
                 )}
@@ -134,20 +145,23 @@ export function LeadershipWorkspace() {
         </motion.div>
 
         {/* ── Tab Content ──────────────────────────────── */}
-        <motion.div
-          key={activeTab}
-          initial={{ opacity: 0, y: 8, filter: 'blur(3px)' }}
-          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-        >
-          {activeTab === 'overview' && <OverviewWrapper />}
-          {activeTab === 'team' && <TeamWrapper />}
-          {activeTab === 'leave' && <LeaveWrapper />}
-          {activeTab === 'discipline' && <DisciplineWrapper />}
-          {activeTab === 'setlists' && <SetlistDeadlines />}
-          {activeTab === 'church' && <OrganizationSettings />}
-          {activeTab === 'billing' && <OrganizationBilling />}
-        </motion.div>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
+          >
+            {activeTab === 'overview' && <OverviewWrapper />}
+            {activeTab === 'team' && <TeamWrapper />}
+            {activeTab === 'leave' && <LeaveWrapper />}
+            {activeTab === 'discipline' && <DisciplineWrapper />}
+            {activeTab === 'setlists' && <SetlistDeadlines />}
+            {activeTab === 'church' && <OrganizationSettings />}
+            {activeTab === 'billing' && <OrganizationBilling />}
+          </motion.div>
+        </AnimatePresence>
 
       </div>
     </div>

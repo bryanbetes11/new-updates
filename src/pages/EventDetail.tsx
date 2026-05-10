@@ -2,8 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { format, parseISO, differenceInDays, startOfDay, subWeeks, previousSunday, addDays, subDays } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
-import { motion } from 'framer-motion';
-import { ArrowLeft, Calendar, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronRight, LayoutPanelLeft, ListMusic, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, Copy, FileText } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ArrowLeft, Calendar, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronRight, LayoutPanelLeft, ListMusic, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -40,6 +40,12 @@ function getManilaEventDateTime(eventDate: string, timeValue: string) {
   return new Date(`${eventDate}T${timeValue}+08:00`);
 }
 
+const blurUp = (delay = 0) => ({
+  initial: { opacity: 0, y: 22, filter: 'blur(10px)' },
+  animate: { opacity: 1, y: 0, filter: 'blur(0px)' },
+  transition: { duration: 0.85, delay, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] },
+});
+
 export function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -68,6 +74,7 @@ export function EventDetail() {
   const [linkedServiceEvent, setLinkedServiceEvent] = useState<Event | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isLeaving, setIsLeaving] = useState(false);
   const [showAssign, setShowAssign] = useState(false);
   const [showSetlist, setShowSetlist] = useState(false);
   const [songSearch, setSongSearch] = useState('');
@@ -95,12 +102,19 @@ export function EventDetail() {
   const [allAttendance, setAllAttendance] = useState<EventAttendance[]>([]);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [cardView, setCardView] = useState<'setlist' | 'checking' | 'report'>('setlist');
+  const [cardDir, setCardDir] = useState<'forward' | 'back'>('forward');
+  const navigateCard = (view: 'setlist' | 'checking' | 'report', dir: 'forward' | 'back' = 'forward') => {
+    setCardDir(dir);
+    setCardView(view);
+  };
   const [checkReport, setCheckReport] = useState<SetlistCheckReport | null>(null);
   const [serviceTheme, setServiceTheme] = useState('');
   const [lyricsModalSong, setLyricsModalSong] = useState<SetlistSong | null>(null);
   const [lyricsInput, setLyricsInput] = useState('');
   const [savingLyrics, setSavingLyrics] = useState(false);
   const [fetchingLyrics, setFetchingLyrics] = useState(false);
+  const [artistPromptVisible, setArtistPromptVisible] = useState(false);
+  const [artistPromptValue, setArtistPromptValue] = useState('');
   const [lyricsSearchResults, setLyricsSearchResults] = useState<Array<{
     id: string;
     title: string;
@@ -653,56 +667,41 @@ export function EventDetail() {
   const handleDeleteEvent = async () => {
     if (!id) return;
     setDeleting(true);
+
+    // Setlists + their songs and submissions
+    const { data: eventSetlists } = await supabase.from('setlists').select('id').eq('event_id', id);
+    if (eventSetlists && eventSetlists.length > 0) {
+      const setlistIds = eventSetlists.map(s => s.id);
+      await supabase.from('setlist_songs').delete().in('setlist_id', setlistIds);
+      await supabase.from('setlist_submissions').delete().in('setlist_id', setlistIds);
+      await supabase.from('setlists').delete().in('id', setlistIds);
+    }
+
+    // Assignments and attendance
+    await supabase.from('event_assignments').delete().eq('event_id', id);
+    await supabase.from('event_attendance').delete().eq('event_id', id);
+
+    // Group chat conversation (messages → members → conversation)
+    const { data: conv } = await supabase.from('conversations').select('id').eq('event_id', id).maybeSingle();
+    if (conv?.id) {
+      await supabase.from('messages').delete().eq('conversation_id', conv.id);
+      await supabase.from('conversation_members').delete().eq('conversation_id', conv.id);
+      await supabase.from('conversations').delete().eq('id', conv.id);
+    }
+
+    // Unlink any rehearsal events that point to this one
+    await supabase.from('events').update({ linked_event_id: null }).eq('linked_event_id', id);
+
     const { error } = await supabase.from('events').delete().eq('id', id);
     setDeleting(false);
     if (error) { toast('error', 'Failed to delete event'); return; }
     toast('success', 'Event deleted');
-    navigate('/events');
+    setIsLeaving(true);
+    setTimeout(() => navigate('/events'), 300);
   };
 
-  const handleDuplicateEvent = async () => {
-    if (!event || !user) return;
-    const title = await generateEventTitle(event.song_leader_id, event.event_type);
-    const { data: newEvent, error: eventErr } = await supabase.from('events').insert({
-      title,
-      event_date: event.event_date,
-      start_time: event.start_time || null,
-      end_time: event.end_time || null,
-      event_type: event.event_type,
-      description: event.description || null,
-      created_by: user.id,
-      song_leader_id: event.song_leader_id || null,
-      proposal_due_date: event.proposal_due_date || null,
-    }).select('id').maybeSingle();
-    if (eventErr || !newEvent) { toast('error', 'Failed to duplicate event'); return; }
 
-    if (setlist && setlistSongs.length > 0) {
-      const { data: newSetlist, error: slErr } = await supabase.from('setlists').insert({
-        event_id: newEvent.id,
-        created_by: user.id,
-        status: 'draft',
-        service_format: serviceFormat || 'sunday_full',
-      }).select('id').maybeSingle();
-      if (!slErr && newSetlist) {
-        const songRows = setlistSongs
-          .sort((a, b) => a.position - b.position)
-          .map(ss => ({
-            setlist_id: newSetlist.id,
-            song_id: ss.song_id,
-            position: ss.position,
-            song_category: ss.song_category || null,
-            performed_key: ss.performed_key || null,
-            youtube_url: ss.youtube_url || null,
-          }));
-        await supabase.from('setlist_songs').insert(songRows);
-      }
-    }
-
-    toast('success', 'Event duplicated');
-    navigate(`/events/${newEvent.id}`);
-  };
-
-  const openLyricsModal = (ss: SetlistSong) => {
+const openLyricsModal = (ss: SetlistSong) => {
     setLyricsModalSong(ss);
     setLyricsInput(ss.songs?.lyrics || '');
     setLyricsSearchResults([]);
@@ -736,15 +735,16 @@ export function EventDetail() {
     }
   }, [isMissingSetlistSubmissionTableError, serviceTheme, setlist, setlistSongs, toast, user]);
 
-  const handleFindLyrics = async () => {
+  const handleFindLyrics = async (artistOverride?: string) => {
     if (!lyricsModalSong) return;
     const title = lyricsModalSong.songs?.title?.trim() || '';
-    const artist = lyricsModalSong.songs?.artist?.trim() || '';
+    const artist = artistOverride !== undefined ? artistOverride : (lyricsModalSong.songs?.artist?.trim() || '');
     if (!title) {
       toast('error', 'Song title is required to find lyrics');
       return;
     }
 
+    setArtistPromptVisible(false);
     setFetchingLyrics(true);
     const { data, error } = await supabase.functions.invoke('fetch-lyrics-from-link', {
       body: {
@@ -1022,16 +1022,25 @@ export function EventDetail() {
     ? 'text-amber-600 dark:text-amber-400'
     : 'text-emerald-600 dark:text-emerald-400/80';
 
+  const goBack = () => {
+    setIsLeaving(true);
+    setTimeout(() => navigate('/events'), 300);
+  };
+
   return (
     <div className="page-container page-bottom-pad">
-      <div className="max-w-3xl mx-auto px-4 sm:px-5 lg:px-6 pt-6 sm:pt-8 space-y-5">
+      <motion.div
+        animate={isLeaving ? { opacity: 0, y: -12, filter: 'blur(8px)' } : { opacity: 1, y: 0, filter: 'blur(0px)' }}
+        transition={{ duration: 0.28, ease: [0.4, 0, 1, 1] }}
+        className="max-w-2xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 space-y-5"
+      >
 
         {/* ── Back ─────────────────────────────────────── */}
         <motion.button
-          initial={{ opacity: 0, x: -8 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          onClick={() => navigate('/events')}
+          initial={{ opacity: 0, x: -12 }}
+          animate={isLeaving ? { opacity: 0, x: -12 } : { opacity: 1, x: 0 }}
+          transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+          onClick={goBack}
           className="inline-flex items-center gap-1.5 pl-2 pr-3.5 h-8 rounded-full text-[12px] font-semibold text-gray-600 dark:text-white/55 bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-md hover:bg-white dark:hover:bg-white/[0.07] active:scale-[0.97] transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
@@ -1040,9 +1049,7 @@ export function EventDetail() {
 
         {/* ── Hero Card ────────────────────────────────── */}
         <motion.div
-          initial={{ opacity: 0, y: 14, filter: 'blur(6px)' }}
-          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          {...blurUp(0.08)}
           className="relative rounded-3xl overflow-hidden bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06]"
           style={{
             backgroundImage: heroCardTint,
@@ -1195,15 +1202,6 @@ export function EventDetail() {
                 )}
                 {isLeader && (
                   <button
-                    onClick={handleDuplicateEvent}
-                    className="inline-flex items-center justify-center h-9 w-9 rounded-full text-gray-600 dark:text-white/55 bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-md hover:bg-white dark:hover:bg-white/[0.07] active:scale-[0.95] transition-colors"
-                    title="Duplicate Event"
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                  </button>
-                )}
-                {isLeader && (
-                  <button
                     onClick={() => setShowDeleteEvent(true)}
                     className="inline-flex items-center justify-center h-9 w-9 rounded-full text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/[0.1] border border-red-200 dark:border-red-500/25 hover:bg-red-100 dark:hover:bg-red-500/[0.18] active:scale-[0.95] transition-colors"
                     title="Delete"
@@ -1219,9 +1217,7 @@ export function EventDetail() {
         {/* ── Pending Assignment Banner ────────────────── */}
         {myAssignment && myAssignment.status === 'pending' && (
           <motion.div
-            initial={{ opacity: 0, y: 10, filter: 'blur(4px)' }}
-            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-            transition={{ duration: 0.4, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
+            {...blurUp(0.2)}
             className="relative rounded-3xl overflow-hidden border border-amber-200 dark:border-amber-500/25 bg-white dark:bg-[#120b05]"
             style={{
               backgroundImage: 'linear-gradient(135deg, rgba(245,158,11,0.14), rgba(245,158,11,0.04) 50%, transparent 80%)',
@@ -1611,7 +1607,15 @@ export function EventDetail() {
         ) : (
           <div className="animate-slide-up" style={{ animationDelay: '125ms' }}>
             <div className="card overflow-hidden">
+              <AnimatePresence mode="wait" initial={false}>
               {cardView === 'checking' ? (
+                <motion.div
+                  key="checking"
+                  initial={{ opacity: 0, x: cardDir === 'forward' ? 40 : -40 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: cardDir === 'forward' ? -40 : 40 }}
+                  transition={{ duration: 0.28, ease: 'easeInOut' }}
+                >
                 <CheckingAnimation
                   songs={setlistSongs.sort((a, b) => a.position - b.position).map(ss => ({
                     title: ss.songs?.title || '',
@@ -1623,20 +1627,36 @@ export function EventDetail() {
                   language="english"
                   onComplete={async (report) => {
                     setCheckReport(report);
-                    setCardView('report');
+                    navigateCard('report', 'forward');
                     await persistCheckReport(report);
                   }}
                 />
+                </motion.div>
               ) : cardView === 'report' && checkReport ? (
+                <motion.div
+                  key="report"
+                  initial={{ opacity: 0, x: cardDir === 'forward' ? 40 : -40 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: cardDir === 'forward' ? -40 : 40 }}
+                  transition={{ duration: 0.28, ease: 'easeInOut' }}
+                >
                 <SetlistReport
                   report={checkReport}
-                  onBack={() => setCardView('setlist')}
-                  onRecheck={() => { setCheckReport(null); setCardView('checking'); }}
+                  onBack={() => navigateCard('setlist', 'back')}
+                  onRecheck={() => { setCheckReport(null); navigateCard('checking', 'back'); }}
                   onSubmitProposal={canSubmitSetlist ? () => handleSetlistAction('pending_review') : undefined}
                   canSubmit={!hasMissingLyrics && canSubmitSetlist && ['draft', 'revision_requested'].includes(setlist.status)}
                   setlistStatus={setlist.status}
                 />
+                </motion.div>
               ) : (
+              <motion.div
+                key="setlist"
+                initial={{ opacity: 0, x: cardDir === 'forward' ? 40 : -40 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: cardDir === 'forward' ? -40 : 40 }}
+                transition={{ duration: 0.28, ease: 'easeInOut' }}
+              >
               <>
               {/* Header */}
               <div className="border-b border-gray-100 dark:border-gray-800">
@@ -2024,7 +2044,7 @@ export function EventDetail() {
                     <button
                       onClick={() => {
                         if (!ensureLyricsReady('check')) return;
-                        setCardView('checking');
+                        navigateCard('checking', 'forward');
                       }}
                       disabled={hasMissingLyrics}
                       className="w-full btn-primary text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -2033,7 +2053,7 @@ export function EventDetail() {
                     </button>
                     {checkReport && (
                       <button
-                        onClick={() => setCardView('report')}
+                        onClick={() => navigateCard('report', 'forward')}
                         className="w-full btn-secondary text-sm flex items-center justify-center gap-2"
                       >
                         <FileText className="h-4 w-4" /> View Last Result
@@ -2043,7 +2063,9 @@ export function EventDetail() {
                 )}
               </div>
             </>
+            </motion.div>
             )}
+              </AnimatePresence>
           </div>
         </div>
         )}
@@ -2348,67 +2370,182 @@ export function EventDetail() {
         </Modal>
 
         {/* Lyrics Modal */}
-        <Modal open={!!lyricsModalSong} onClose={() => setLyricsModalSong(null)} title="Song Lyrics">
+        <Modal open={!!lyricsModalSong} onClose={() => { setLyricsModalSong(null); setArtistPromptVisible(false); setArtistPromptValue(''); }} title="Song Lyrics">
           {lyricsModalSong && (
             <div className="space-y-4">
               <div>
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">{lyricsModalSong.songs?.title}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">{lyricsModalSong.songs?.artist}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{lyricsModalSong.songs?.artist || <span className="italic">No artist</span>}</p>
               </div>
               <div>
-                <div className="flex items-center justify-between gap-3 rounded-xl border border-gray-200/80 bg-gray-50/70 px-3 py-3 dark:border-white/[0.08] dark:bg-white/[0.03]">
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">
-                      Auto Find Lyrics
-                    </p>
-                    <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                      Search by this song&apos;s title{lyricsModalSong.songs?.artist?.trim() ? ' and artist' : ''}, then review the result before saving.
-                    </p>
-                  </div>
-                  <button
-                    onClick={handleFindLyrics}
-                    disabled={fetchingLyrics}
-                    className="btn-secondary shrink-0 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {fetchingLyrics ? 'Finding...' : 'Find Lyrics'}
-                  </button>
-                </div>
-                {lyricsSearchResults.length > 0 && (
-                  <div className="mt-3 space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">
-                      Search Results
-                    </p>
-                    <div className="max-h-72 space-y-2 overflow-y-auto rounded-2xl border border-gray-200/80 bg-gray-50/70 p-2 dark:border-white/[0.08] dark:bg-white/[0.03]">
-                      {lyricsSearchResults.map((result) => (
-                        <button
-                          key={result.id}
-                          onClick={() => setLyricsInput(result.lyrics)}
-                          type="button"
-                          className="w-full rounded-2xl border border-gray-200/80 bg-white px-3 py-3 text-left transition-colors hover:bg-gray-50 dark:border-white/[0.08] dark:bg-[#10151f] dark:hover:bg-white/[0.05]"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold text-gray-900 dark:text-white">{result.title}</p>
-                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{result.artist}</p>
-                              {(result.album || result.duration) && (
-                                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
-                                  {result.album ? result.album : 'Unknown album'}
-                                  {result.duration ? ` · ${Math.round(result.duration)}s` : ''}
+                <AnimatePresence mode="wait">
+                  {fetchingLyrics ? (
+                    <motion.div
+                      key="searching"
+                      initial={{ opacity: 0, scale: 0.97 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.97 }}
+                      transition={{ duration: 0.2 }}
+                      className="relative overflow-hidden rounded-xl border border-brand-200 dark:border-brand-800/40 px-4 py-5 flex flex-col items-center gap-4"
+                      style={{ background: 'linear-gradient(135deg, #f0fdf5 0%, #dcfce8 60%, #f0fdf5 100%)' }}
+                    >
+                      {/* Shimmer sweep */}
+                      <motion.div
+                        className="pointer-events-none absolute inset-0"
+                        animate={{ x: ['-100%', '100%'] }}
+                        transition={{ duration: 1.8, repeat: Infinity, ease: 'linear' }}
+                        style={{ background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.55) 50%, transparent 100%)' }}
+                      />
+                      {/* Waveform bars */}
+                      <div className="flex items-end gap-1.5 h-10">
+                        {[0.4, 0.7, 1, 0.6, 0.9, 0.5, 0.8, 0.45, 0.75, 0.55].map((base, i) => (
+                          <motion.div
+                            key={i}
+                            className="w-1.5 rounded-full"
+                            style={{ background: 'linear-gradient(180deg, #4ade80, #16a34a)', minHeight: 4 }}
+                            animate={{ scaleY: [base, base * 0.3, base * 1.2, base * 0.5, base] }}
+                            transition={{ duration: 0.8 + i * 0.07, repeat: Infinity, ease: 'easeInOut', delay: i * 0.08 }}
+                          />
+                        ))}
+                      </div>
+                      {/* Label */}
+                      <motion.span
+                        className="text-sm font-semibold tracking-wide"
+                        animate={{ opacity: [0.4, 1, 0.4] }}
+                        transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+                        style={{ color: '#16a34a' }}
+                      >
+                        Finding lyrics…
+                      </motion.span>
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="idle"
+                      initial={{ opacity: 0, scale: 0.97 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.97 }}
+                      transition={{ duration: 0.2 }}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-gray-200/80 bg-gray-50/70 px-3 py-3 dark:border-white/[0.08] dark:bg-white/[0.03]"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">
+                          Auto Find Lyrics
+                        </p>
+                        <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                          Search by this song&apos;s title{lyricsModalSong.songs?.artist?.trim() ? ' and artist' : ''}, then review the result before saving.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (!lyricsModalSong.songs?.artist?.trim()) {
+                            setArtistPromptVisible(v => !v);
+                          } else {
+                            handleFindLyrics();
+                          }
+                        }}
+                        className="btn-secondary shrink-0 text-sm"
+                      >
+                        Find Lyrics
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Artist prompt — shown when song has no artist */}
+                <AnimatePresence>
+                  {artistPromptVisible && !lyricsModalSong.songs?.artist?.trim() && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -6, height: 0 }}
+                      animate={{ opacity: 1, y: 0, height: 'auto' }}
+                      exit={{ opacity: 0, y: -6, height: 0 }}
+                      transition={{ duration: 0.22, ease: 'easeOut' }}
+                      className="overflow-hidden"
+                    >
+                      <div className="mt-2 rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-3 py-3 space-y-2.5">
+                        <p className="text-xs font-medium text-amber-800 dark:text-amber-200">
+                          This song has no artist. Add one for more accurate results:
+                        </p>
+                        <input
+                          type="text"
+                          value={artistPromptValue}
+                          onChange={e => setArtistPromptValue(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') { handleFindLyrics(artistPromptValue.trim()); } }}
+                          placeholder="e.g. Hillsong Worship"
+                          autoFocus
+                          className="w-full text-sm rounded-lg border border-amber-200 dark:border-amber-500/30 bg-white dark:bg-gray-900 px-3 py-2 placeholder-gray-400 dark:placeholder-gray-500 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleFindLyrics(artistPromptValue.trim())}
+                            disabled={fetchingLyrics}
+                            className="btn-primary flex-1 text-sm disabled:opacity-50"
+                          >
+                            {fetchingLyrics ? 'Finding...' : 'Search with Artist'}
+                          </button>
+                          <button
+                            onClick={() => handleFindLyrics('')}
+                            disabled={fetchingLyrics}
+                            className="btn-secondary text-sm disabled:opacity-50"
+                          >
+                            Skip
+                          </button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                <AnimatePresence>
+                  {lyricsSearchResults.length > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, height: 0 }}
+                      animate={{ opacity: 1, y: 0, height: 'auto' }}
+                      exit={{ opacity: 0, y: 10, height: 0 }}
+                      transition={{ duration: 0.28, ease: 'easeOut' }}
+                      className="mt-3 space-y-2 overflow-hidden"
+                    >
+                      <motion.p
+                        initial={{ opacity: 0, x: -6 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.1, duration: 0.2 }}
+                        className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400"
+                      >
+                        {lyricsSearchResults.length} result{lyricsSearchResults.length > 1 ? 's' : ''} found
+                      </motion.p>
+                      <div className="max-h-72 space-y-2 overflow-y-auto rounded-2xl border border-gray-200/80 bg-gray-50/70 p-2 dark:border-white/[0.08] dark:bg-white/[0.03]">
+                        {lyricsSearchResults.map((result, i) => (
+                          <motion.button
+                            key={result.id}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.15 + i * 0.07, duration: 0.22, ease: 'easeOut' }}
+                            onClick={() => setLyricsInput(result.lyrics)}
+                            type="button"
+                            className="w-full rounded-2xl border border-gray-200/80 bg-white px-3 py-3 text-left transition-colors hover:bg-gray-50 dark:border-white/[0.08] dark:bg-[#10151f] dark:hover:bg-white/[0.05]"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-gray-900 dark:text-white">{result.title}</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{result.artist}</p>
+                                {(result.album || result.duration) && (
+                                  <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+                                    {result.album ? result.album : 'Unknown album'}
+                                    {result.duration ? ` · ${Math.round(result.duration)}s` : ''}
+                                  </p>
+                                )}
+                                <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                                  {result.lyrics}
                                 </p>
-                              )}
-                              <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                                {result.lyrics}
-                              </p>
+                              </div>
+                              <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-500/12 dark:text-emerald-300">
+                                Use
+                              </span>
                             </div>
-                            <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-500/12 dark:text-emerald-300">
-                              Use
-                            </span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                          </motion.button>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
               <div>
                 <textarea
@@ -2420,6 +2557,9 @@ export function EventDetail() {
                 />
                 <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
                   Lyrics are shared across all setlists — other members won&apos;t need to add them again.
+                </p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                  Can&apos;t find lyrics using the button above? You can manually type or paste them into the box.
                 </p>
               </div>
               <div className="flex justify-end gap-3">
@@ -2585,7 +2725,7 @@ export function EventDetail() {
           </form>
         </Modal>
 
-      </div>
+      </motion.div>
     </div>
   );
 }

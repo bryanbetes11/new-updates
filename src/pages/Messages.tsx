@@ -1615,7 +1615,7 @@ function EventDetailPanel({ eventId, onClose, onViewFullEvent }: {
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto">
-          <div className="px-4 pt-5 pb-6 space-y-4 max-w-lg mx-auto">
+          <div className="max-w-2xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-6 space-y-4">
 
             {/* Hero card */}
             <div className="rounded-3xl overflow-hidden bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06]"
@@ -2754,7 +2754,7 @@ export function Messages() {
     if (id) selectConversation(id);
   };
 
-  const slideTransition = { type: 'spring' as const, stiffness: 380, damping: 36 };
+  const slideTransition = { type: 'spring' as const, stiffness: 320, damping: 30, mass: 0.85 };
   const routeTransition = !isDesktop && navigationType === 'POP' ? { duration: 0 } : slideTransition;
 
   return (
@@ -2827,28 +2827,53 @@ export function Messages() {
         animate={!isDesktop ? { x: mobileShowChat ? '0%' : '100%' } : undefined}
         transition={routeTransition}
       >
-        {selectedConv ? (
-          <ChatWindow
-            conv={selectedConv}
-            myUserId={myUserId}
-            onBack={handleBack}
-            onConvUpdate={refresh}
-              onRequestDelete={requestDeleteConversation}
-              onConfirmDelete={confirmDeleteConversation}
-              onDeleteAsCreator={deleteConversationAsCreator}
-              onRenameGroup={renameGroupConversation}
-              onAddMembers={addGroupConversationMembers}
-              onUpdateGroupPhoto={updateGroupConversationPhoto}
-            />
-        ) : selectedConvId && convsLoading ? (
-          <div className="flex items-center justify-center h-full">
-            <span className="h-6 w-6 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
-          </div>
-        ) : isDesktop ? (
-          <EmptyState onNew={() => setNewMsgOpen(true)} />
-        ) : (
-          <div className="hidden" />
-        )}
+        <AnimatePresence mode="wait" initial={false}>
+          {selectedConv ? (
+            <motion.div
+              key={selectedConv.id}
+              initial={{ opacity: 0, x: isDesktop ? 20 : 0 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: isDesktop ? -20 : 0 }}
+              transition={{ duration: 0.22, ease: 'easeOut' }}
+              className="flex flex-col h-full min-h-0"
+            >
+              <ChatWindow
+                conv={selectedConv}
+                myUserId={myUserId}
+                onBack={handleBack}
+                onConvUpdate={refresh}
+                onRequestDelete={requestDeleteConversation}
+                onConfirmDelete={confirmDeleteConversation}
+                onDeleteAsCreator={deleteConversationAsCreator}
+                onRenameGroup={renameGroupConversation}
+                onAddMembers={addGroupConversationMembers}
+                onUpdateGroupPhoto={updateGroupConversationPhoto}
+              />
+            </motion.div>
+          ) : selectedConvId && convsLoading ? (
+            <motion.div
+              key="loading"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex items-center justify-center h-full"
+            >
+              <span className="h-6 w-6 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
+            </motion.div>
+          ) : isDesktop ? (
+            <motion.div
+              key="empty"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="h-full"
+            >
+              <EmptyState onNew={() => setNewMsgOpen(true)} />
+            </motion.div>
+          ) : (
+            <div className="hidden" />
+          )}
+        </AnimatePresence>
       </motion.div>
 
       <NewMessageModal

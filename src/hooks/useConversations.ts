@@ -26,6 +26,7 @@ export interface Conversation {
   id: string;
   type: 'personal' | 'group' | 'event';
   name: string | null;
+  photo_url: string | null;
   event_id: string | null;
   created_by: string;
   created_at: string;
@@ -55,10 +56,10 @@ export function useConversations() {
     }
 
     const convIds = myMemberships.map(m => m.conversation_id);
-    const [convRes, membersRes] = await Promise.all([
+    const [convResWithPhoto, membersRes] = await Promise.all([
       supabase
         .from('conversations')
-        .select('id, type, name, event_id, created_by, created_at, updated_at')
+        .select('id, type, name, photo_url, event_id, created_by, created_at, updated_at')
         .in('id', convIds)
         .order('updated_at', { ascending: false }),
       supabase
@@ -66,6 +67,23 @@ export function useConversations() {
         .select('conversation_id, user_id, last_read_at')
         .in('conversation_id', convIds),
     ]);
+
+    let convRows = convResWithPhoto.data;
+    if (convResWithPhoto.error) {
+      const { data: fallbackRows, error: fallbackError } = await supabase
+        .from('conversations')
+        .select('id, type, name, event_id, created_by, created_at, updated_at')
+        .in('id', convIds)
+        .order('updated_at', { ascending: false });
+
+      if (fallbackError) {
+        setConversations([]);
+        setLoading(false);
+        return;
+      }
+
+      convRows = (fallbackRows || []).map(row => ({ ...row, photo_url: null }));
+    }
 
     const memberUserIds = [...new Set((membersRes.data || []).map(m => m.user_id))];
     const { data: profilesData } = await supabase
@@ -114,10 +132,11 @@ export function useConversations() {
     const lastMsgMap = Object.fromEntries(lastMsgResults.map(({ cid, msg }) => [cid, msg]));
     const unreadMap = Object.fromEntries(unreadResults.map(({ cid, count }) => [cid, count]));
 
-    const result: Conversation[] = (convRes.data || []).map((c) => ({
+    const result: Conversation[] = (convRows || []).map((c) => ({
       id: c.id,
       type: c.type as 'personal' | 'group' | 'event',
       name: c.name,
+      photo_url: c.photo_url ?? null,
       event_id: c.event_id,
       created_by: c.created_by,
       created_at: c.created_at,
@@ -237,6 +256,54 @@ export function useConversations() {
     return !error;
   }, [user, fetchConversations]);
 
+  const addGroupConversationMembers = useCallback(async (conversationId: string, memberIds: string[]): Promise<boolean> => {
+    if (!user) return false;
+    const uniqueMemberIds = [...new Set(memberIds)].filter(Boolean);
+    if (uniqueMemberIds.length === 0) return true;
+
+    const { error } = await supabase.rpc('add_group_conversation_members', {
+      p_conversation_id: conversationId,
+      p_member_ids: uniqueMemberIds,
+    });
+    if (!error) await fetchConversations();
+    return !error;
+  }, [user, fetchConversations]);
+
+  const updateGroupConversationPhoto = useCallback(async (conversationId: string, photoUrl: string | null): Promise<boolean> => {
+    if (!user) return false;
+    const { error } = await supabase.rpc('set_group_conversation_photo', {
+      p_conversation_id: conversationId,
+      p_photo_url: photoUrl,
+    });
+
+    if (!error) {
+      await fetchConversations();
+      return true;
+    }
+
+    const rpcMissing =
+      error.code === 'PGRST202' ||
+      error.code === '404' ||
+      /set_group_conversation_photo/i.test(error.message);
+
+    if (!rpcMissing) return false;
+
+    const { error: fallbackError } = await supabase
+      .from('conversations')
+      .update({
+        photo_url: photoUrl,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', conversationId)
+      .eq('type', 'group')
+      .eq('created_by', user.id);
+
+    if (fallbackError) return false;
+
+    await fetchConversations();
+    return true;
+  }, [user, fetchConversations]);
+
   const discardEmptyConversation = useCallback(async (conversationId: string): Promise<boolean> => {
     if (!user) return false;
     const { error } = await supabase.rpc('discard_empty_conversation', {
@@ -257,6 +324,8 @@ export function useConversations() {
     confirmDeleteConversation,
     deleteConversationAsCreator,
     renameGroupConversation,
+    addGroupConversationMembers,
+    updateGroupConversationPhoto,
     discardEmptyConversation,
   };
 }

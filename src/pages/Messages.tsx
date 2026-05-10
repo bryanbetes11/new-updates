@@ -2,15 +2,17 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, useNavigationType } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ArrowLeft, Send, ImageIcon, X, Pin, CornerUpLeft,
+  ArrowLeft, Send, ImageIcon, X, Pin, CornerUpLeft, Camera,
   MessageCircle, Plus, Search, Trash2, MoreHorizontal, ChevronRight, Check,
-  CalendarDays, Music2, Copy, Paperclip, FileText, Download, ExternalLink,
+  CalendarDays, Music2, Copy, Paperclip, FileText, Download, ExternalLink, UserPlus,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { useConversations, type Conversation } from '../hooks/useConversations';
 import { useMessages } from '../hooks/useMessages';
 import { supabase } from '../lib/supabase';
 import { Avatar } from '../components/Avatar';
+import { Modal } from '../components/Modal';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -119,12 +121,44 @@ function getSenderName(sender: { first_name: string | null; last_name: string | 
   return getFullName(sender);
 }
 
+function getConversationAvatarSrc(conv: Conversation, myId: string): string | undefined {
+  if (conv.type === 'personal') {
+    return getOtherMember(conv, myId)?.profile?.avatar_url ?? undefined;
+  }
+  return conv.photo_url ?? undefined;
+}
+
+function getConversationAvatarName(conv: Conversation, myId: string): { firstName: string; lastName?: string } {
+  if (conv.type === 'personal') {
+    const other = getOtherMember(conv, myId);
+    return {
+      firstName: other?.profile?.first_name || getConvName(conv, myId).charAt(0) || '?',
+      lastName: other?.profile?.last_name ?? undefined,
+    };
+  }
+
+  const name = getConvName(conv, myId).trim() || 'Group Chat';
+  const [firstWord = 'G', ...rest] = name.split(/\s+/);
+  return {
+    firstName: firstWord,
+    lastName: rest.length > 0 ? rest[rest.length - 1] : undefined,
+  };
+}
+
 function previewContent(content: string): string {
   const parsed = parseContent(content);
   if (parsed.type === 'image') return '📷 Photo';
   if (parsed.type === 'file') return `📎 ${parsed.name}`;
   if (parsed.type === 'delete_request') return 'Delete chat request';
   return parsed.text.length > 60 ? parsed.text.slice(0, 60) + '…' : parsed.text;
+}
+
+function replyPreviewContent(content: string): string {
+  const parsed = parseContent(content);
+  if (parsed.type === 'image') return 'Photo';
+  if (parsed.type === 'file') return parsed.name;
+  if (parsed.type === 'delete_request') return 'Delete chat request';
+  return parsed.text;
 }
 
 const QUICK_EMOJIS = ['❤️', '👍', '😂', '😮', '😢', '🙏'];
@@ -153,9 +187,9 @@ function ConvItem({ conv, selected, myUserId, onSelect }: {
   conv: Conversation; selected: boolean; myUserId: string; onSelect: () => void;
 }) {
   const name = getConvName(conv, myUserId);
-  const other = conv.type === 'personal' ? getOtherMember(conv, myUserId) : null;
   const lastContent = conv.last_message ? previewContent(conv.last_message.content) : 'No messages yet';
   const isMyLast = conv.last_message?.sender_id === myUserId;
+  const avatarName = getConversationAvatarName(conv, myUserId);
 
   return (
     <button
@@ -168,9 +202,9 @@ function ConvItem({ conv, selected, myUserId, onSelect }: {
     >
       <div className="relative shrink-0">
         <Avatar
-          src={other?.profile?.avatar_url ?? undefined}
-          firstName={other?.profile?.first_name || name.charAt(0)}
-          lastName={other?.profile?.last_name ?? undefined}
+          src={getConversationAvatarSrc(conv, myUserId)}
+          firstName={avatarName.firstName}
+          lastName={avatarName.lastName}
           size="md"
         />
         {conv.unread_count > 0 && (
@@ -526,7 +560,9 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
           >
             <div className="flex items-center gap-2 px-4 pt-2.5 pb-0">
               <CornerUpLeft className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-              <p className="flex-1 text-[12px] text-gray-500 dark:text-white/40 truncate">{replyPreview}</p>
+              <div className="flex-1 max-h-24 overflow-y-auto whitespace-pre-wrap break-words text-[12px] text-gray-500 dark:text-white/40">
+                {replyPreview}
+              </div>
               <button onClick={onCancelReply} className="p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-white/60 transition-colors">
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -674,7 +710,7 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
 
 function ConvInfoPanel({
   conv, messages, myUserId, onClose, onBack, onScrollToMessage, onConvUpdate,
-  onRequestDelete, onDeleteAsCreator, onRenameGroup,
+  onRequestDelete, onDeleteAsCreator, onRenameGroup, onAddMembers, onUpdateGroupPhoto,
 }: {
   conv: Conversation;
   messages: ReturnType<typeof import('../hooks/useMessages').useMessages>['messages'];
@@ -686,21 +722,39 @@ function ConvInfoPanel({
   onRequestDelete: (conversationId: string) => Promise<boolean>;
   onDeleteAsCreator: (conversationId: string) => Promise<boolean>;
   onRenameGroup: (conversationId: string, name: string) => Promise<boolean>;
+  onAddMembers: (conversationId: string, memberIds: string[]) => Promise<boolean>;
+  onUpdateGroupPhoto: (conversationId: string, photoUrl: string | null) => Promise<boolean>;
 }) {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [leaveConfirm, setLeaveConfirm] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(conv.name || '');
   const [savingName, setSavingName] = useState(false);
+  const [addMembersOpen, setAddMembersOpen] = useState(false);
+  const [memberSearch, setMemberSearch] = useState('');
+  const [availablePeople, setAvailablePeople] = useState<Array<{ id: string; first_name: string | null; last_name: string | null; nickname: string | null; avatar_url: string | null }>>([]);
+  const [loadingAvailablePeople, setLoadingAvailablePeople] = useState(false);
+  const [selectedMemberIds, setSelectedMemberIds] = useState<Set<string>>(new Set());
+  const [addingMembers, setAddingMembers] = useState(false);
+  const [showMembersModal, setShowMembersModal] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [removingPhoto, setRemovingPhoto] = useState(false);
+  const [infoView, setInfoView] = useState<'main' | 'media' | 'files' | 'links'>('main');
+  const groupPhotoInputRef = useRef<HTMLInputElement | null>(null);
 
   const otherMember = conv.type === 'personal' ? conv.members.find(m => m.user_id !== myUserId) : null;
   const p = otherMember?.profile;
   const displayName = p ? getFullName(p) : (conv.name || 'Group Chat');
+  const convAvatarName = getConversationAvatarName(conv, myUserId);
+  const sortedMembers = [...conv.members].sort((a, b) => getFullName(a.profile).localeCompare(getFullName(b.profile)));
 
   const mediaItems = messages.filter(m => parseContent(m.content).type === 'image');
   const fileItems = messages.filter(m => parseContent(m.content).type === 'file');
+  const latestMediaItem = mediaItems[mediaItems.length - 1] ?? null;
+  const latestFileItem = fileItems[fileItems.length - 1] ?? null;
 
   const linkRegex = /https?:\/\/[^\s<>"]+/g;
   const linkItems: { url: string; msgId: string }[] = [];
@@ -711,6 +765,7 @@ function ConvInfoPanel({
       if (found) found.forEach(url => linkItems.push({ url, msgId: m.id }));
     }
   });
+  const latestLinkItem = linkItems[linkItems.length - 1] ?? null;
 
   const searchResults = search.trim()
     ? messages.filter(m => {
@@ -738,6 +793,11 @@ function ConvInfoPanel({
 
   const isCreator = conv.created_by === myUserId;
   const canDelete = conv.type === 'personal' || isCreator;
+  const existingMemberIds = useMemo(() => new Set(conv.members.map(member => member.user_id)), [conv.members]);
+  const filteredAvailablePeople = availablePeople.filter(person => {
+    const haystack = `${person.nickname || ''} ${person.first_name || ''} ${person.last_name || ''}`.toLowerCase();
+    return haystack.includes(memberSearch.toLowerCase());
+  });
 
   const saveGroupName = async () => {
     const nextName = renameValue.trim();
@@ -751,33 +811,266 @@ function ConvInfoPanel({
     }
   };
 
+  useEffect(() => {
+    if (conv.type !== 'group' || !addMembersOpen) return;
+    let cancelled = false;
+    setLoadingAvailablePeople(true);
+    supabase
+      .from('profiles')
+      .select('id, first_name, last_name, nickname, avatar_url')
+      .order('first_name')
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          setAvailablePeople([]);
+          setLoadingAvailablePeople(false);
+          toast('error', 'Failed to load people');
+          return;
+        }
+        setAvailablePeople((data || []).filter(person => !existingMemberIds.has(person.id)));
+        setLoadingAvailablePeople(false);
+      });
+    return () => { cancelled = true; };
+  }, [addMembersOpen, conv.type, existingMemberIds, toast]);
+
+  const toggleSelectedMember = (memberId: string) => {
+    setSelectedMemberIds(prev => {
+      const next = new Set(prev);
+      if (next.has(memberId)) next.delete(memberId);
+      else next.add(memberId);
+      return next;
+    });
+  };
+
+  const handleAddMembers = async () => {
+    if (selectedMemberIds.size === 0) return;
+    setAddingMembers(true);
+    const nextIds = [...selectedMemberIds];
+    const ok = await onAddMembers(conv.id, nextIds);
+    setAddingMembers(false);
+    if (!ok) {
+      toast('error', 'Failed to add members');
+      return;
+    }
+    setSelectedMemberIds(new Set());
+    setMemberSearch('');
+    setAddMembersOpen(false);
+    onConvUpdate();
+    toast('success', `${nextIds.length} member${nextIds.length > 1 ? 's' : ''} added`);
+  };
+
+  const handleGroupPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !user || conv.type !== 'group') return;
+    if (!file.type.startsWith('image/')) {
+      toast('error', 'Please select an image');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast('error', 'Image must be under 5MB');
+      return;
+    }
+
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+    const safeExt = ext.replace(/[^a-z0-9]/g, '') || 'jpg';
+    const path = `${user.id}/group-photos/${conv.id}-${Date.now()}.${safeExt}`;
+    setUploadingPhoto(true);
+    const { error: uploadError } = await supabase.storage.from('chat-attachments').upload(path, file);
+    if (uploadError) {
+      setUploadingPhoto(false);
+      toast('error', uploadError.message || 'Failed to upload group photo');
+      return;
+    }
+
+    const { data: { publicUrl } } = supabase.storage.from('chat-attachments').getPublicUrl(path);
+    const ok = await onUpdateGroupPhoto(conv.id, `${publicUrl}?t=${Date.now()}`);
+    setUploadingPhoto(false);
+    if (!ok) {
+      toast('error', 'Failed to save group photo');
+      return;
+    }
+    onConvUpdate();
+    toast('success', 'Group photo updated');
+  };
+
+  const handleRemoveGroupPhoto = async () => {
+    if (conv.type !== 'group' || !conv.photo_url) return;
+    setRemovingPhoto(true);
+    const ok = await onUpdateGroupPhoto(conv.id, null);
+    setRemovingPhoto(false);
+    if (!ok) {
+      toast('error', 'Failed to remove group photo');
+      return;
+    }
+    onConvUpdate();
+    toast('success', 'Group photo removed');
+  };
+
   return (
     <div className="flex flex-col h-full bg-[#f5f5f7] dark:bg-[#0d0d0f]">
       {/* Header */}
       <div className="shrink-0 flex items-center gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+12px)] bg-white dark:bg-[#111013] border-b border-gray-100 dark:border-white/[0.06]">
         <button
-          onClick={onClose}
+          onClick={() => {
+            if (infoView !== 'main') {
+              setInfoView('main');
+              return;
+            }
+            onClose();
+          }}
           className="h-8 w-8 flex items-center justify-center rounded-full text-gray-500 dark:text-white/40 hover:bg-gray-100 dark:hover:bg-white/[0.07] transition-colors"
         >
           <ArrowLeft style={{ width: '18px', height: '18px' }} />
         </button>
-        <h2 className="text-[15px] font-bold text-gray-900 dark:text-white">Info</h2>
+        <h2 className="text-[15px] font-bold text-gray-900 dark:text-white">
+          {infoView === 'main' ? 'Info' : infoView === 'media' ? 'Media' : infoView === 'files' ? 'Files' : 'Links'}
+        </h2>
       </div>
 
       <div className="flex-1 overflow-y-auto">
+        {infoView === 'media' && (
+          <div className="mx-4 mt-4 mb-6 rounded-2xl bg-white dark:bg-[#111013] border border-gray-100 dark:border-white/[0.06] overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-white/[0.06]">
+              <span className="text-[13px] font-semibold text-gray-900 dark:text-white">All Media</span>
+              <span className="text-[12px] text-gray-400 dark:text-white/30">{mediaItems.length}</span>
+            </div>
+            {mediaItems.length === 0 ? (
+              <p className="text-center text-[12px] text-gray-400 dark:text-white/25 py-5">No photos yet</p>
+            ) : (
+              <div className="grid grid-cols-3 gap-0.5 p-0.5">
+                {mediaItems.map(m => {
+                  const c = parseContent(m.content) as { type: 'image'; url: string };
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() => { onScrollToMessage(m.id); onClose(); }}
+                      className="aspect-square overflow-hidden"
+                    >
+                      <img src={c.url} alt="media" className="h-full w-full object-cover hover:opacity-90 transition-opacity" />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {infoView === 'files' && (
+          <div className="mx-4 mt-4 mb-6 rounded-2xl bg-white dark:bg-[#111013] border border-gray-100 dark:border-white/[0.06] overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-white/[0.06]">
+              <span className="text-[13px] font-semibold text-gray-900 dark:text-white">All Files</span>
+              <span className="text-[12px] text-gray-400 dark:text-white/30">{fileItems.length}</span>
+            </div>
+            {fileItems.length === 0 ? (
+              <p className="text-center text-[12px] text-gray-400 dark:text-white/25 py-5">No files yet</p>
+            ) : (
+              <div className="divide-y divide-gray-50 dark:divide-white/[0.04]">
+                {fileItems.map(m => {
+                  const c = parseContent(m.content) as { type: 'file'; url: string; name: string; size: number };
+                  return (
+                    <div key={m.id} className="flex items-center gap-3 px-4 py-3">
+                      <FileText className="h-8 w-8 shrink-0 text-gray-400 dark:text-white/30" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-medium text-gray-800 dark:text-white/80 truncate">{c.name}</p>
+                        <p className="text-[11px] text-gray-400 dark:text-white/30">{c.size > 0 ? `${(c.size / 1024).toFixed(0)} KB` : 'File'}</p>
+                      </div>
+                      <a
+                        href={c.url}
+                        download={c.name}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0 p-1.5 rounded-full text-gray-400 hover:text-emerald-500 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors"
+                      >
+                        <Download className="h-4 w-4" />
+                      </a>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {infoView === 'links' && (
+          <div className="mx-4 mt-4 mb-6 rounded-2xl bg-white dark:bg-[#111013] border border-gray-100 dark:border-white/[0.06] overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-white/[0.06]">
+              <span className="text-[13px] font-semibold text-gray-900 dark:text-white">All Links</span>
+              <span className="text-[12px] text-gray-400 dark:text-white/30">{linkItems.length}</span>
+            </div>
+            {linkItems.length === 0 ? (
+              <p className="text-center text-[12px] text-gray-400 dark:text-white/25 py-5">No links yet</p>
+            ) : (
+              <div className="divide-y divide-gray-50 dark:divide-white/[0.04]">
+                {linkItems.map(({ url, msgId }, i) => (
+                  <div key={`${msgId}-${i}`} className="flex items-center gap-3 px-4 py-3">
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 text-[12px] text-emerald-600 dark:text-emerald-400 truncate hover:underline"
+                    >
+                      {url}
+                    </a>
+                    <button
+                      onClick={() => { onScrollToMessage(msgId); onClose(); }}
+                      className="shrink-0 text-[11px] font-semibold text-gray-400 dark:text-white/30 hover:text-gray-600 dark:hover:text-white/50 transition-colors whitespace-nowrap"
+                    >
+                      View
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {infoView === 'main' && (
+          <>
         {/* Profile card */}
         <div className="mx-4 mt-4 rounded-2xl bg-white dark:bg-[#111013] border border-gray-100 dark:border-white/[0.06] flex flex-col items-center py-6 px-4">
-          {p?.avatar_url ? (
-            <img src={p.avatar_url} alt={displayName} className="h-20 w-20 rounded-full object-cover mb-3" />
+          {getConversationAvatarSrc(conv, myUserId) ? (
+            <img src={getConversationAvatarSrc(conv, myUserId)} alt={displayName} className="h-20 w-20 rounded-full object-cover mb-3" />
           ) : (
             <div className="h-20 w-20 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-emerald-700 dark:text-emerald-300 font-bold text-3xl mb-3">
-              {(p?.first_name?.[0] || displayName[0] || '?').toUpperCase()}
+              {(convAvatarName.firstName[0] || displayName[0] || '?').toUpperCase()}
             </div>
           )}
           <p className="text-[16px] font-bold text-gray-900 dark:text-white">{displayName}</p>
           <p className="text-[12px] text-gray-400 dark:text-white/30 mt-0.5">
             {conv.members.length} {conv.members.length === 1 ? 'member' : 'members'}
           </p>
+          {conv.type === 'group' && (
+            <>
+              <input
+                ref={groupPhotoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleGroupPhotoUpload}
+              />
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                <button
+                  onClick={() => groupPhotoInputRef.current?.click()}
+                  disabled={uploadingPhoto || removingPhoto}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full bg-emerald-50 px-3.5 text-[12px] font-bold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-45 dark:bg-emerald-500/10 dark:text-emerald-300 dark:hover:bg-emerald-500/15"
+                >
+                  <Camera className="h-3.5 w-3.5" />
+                  {uploadingPhoto ? 'Uploading…' : conv.photo_url ? 'Change Photo' : 'Add Photo'}
+                </button>
+                {conv.photo_url && (
+                  <button
+                    onClick={handleRemoveGroupPhoto}
+                    disabled={uploadingPhoto || removingPhoto}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-full bg-red-50 px-3.5 text-[12px] font-bold text-red-600 transition-colors hover:bg-red-100 disabled:opacity-45 dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-500/15"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    {removingPhoto ? 'Removing…' : 'Remove Photo'}
+                  </button>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {conv.type === 'group' && (
@@ -823,6 +1116,21 @@ function ConvInfoPanel({
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {conv.type === 'group' && (
+          <div className="mx-4 mt-3 rounded-2xl bg-white dark:bg-[#111013] border border-gray-100 dark:border-white/[0.06] overflow-hidden">
+            <button
+              onClick={() => setShowMembersModal(true)}
+              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-white/[0.03] transition-colors"
+            >
+              <div className="min-w-0">
+                <p className="text-[13px] font-semibold text-gray-900 dark:text-white">Members</p>
+                <p className="text-[11px] text-gray-400 dark:text-white/30">{conv.members.length} in this group</p>
+              </div>
+              <ChevronRight className="h-4 w-4 shrink-0 text-gray-300 dark:text-white/20" />
+            </button>
           </div>
         )}
 
@@ -879,19 +1187,27 @@ function ConvInfoPanel({
           {mediaItems.length === 0 ? (
             <p className="text-center text-[12px] text-gray-400 dark:text-white/25 py-5">No photos yet</p>
           ) : (
-            <div className="grid grid-cols-3 gap-0.5 p-0.5">
-              {mediaItems.map(m => {
-                const c = parseContent(m.content) as { type: 'image'; url: string };
-                return (
+            <div className="p-3">
+              <div className="flex items-center gap-3">
+                {latestMediaItem && (
                   <button
-                    key={m.id}
-                    onClick={() => { onScrollToMessage(m.id); onClose(); }}
-                    className="aspect-square overflow-hidden"
+                    onClick={() => { onScrollToMessage(latestMediaItem.id); onClose(); }}
+                    className="h-16 w-16 shrink-0 overflow-hidden rounded-xl"
                   >
-                    <img src={c.url} alt="media" className="h-full w-full object-cover hover:opacity-90 transition-opacity" />
+                    <img src={(parseContent(latestMediaItem.content) as { type: 'image'; url: string }).url} alt="latest media" className="h-full w-full object-cover" />
                   </button>
-                );
-              })}
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-medium text-gray-900 dark:text-white">Latest photo</p>
+                  <p className="mt-0.5 text-[11px] text-gray-400 dark:text-white/30">{latestMediaItem ? formatMsgTime(latestMediaItem.created_at) : ''}</p>
+                </div>
+                <button
+                  onClick={() => setInfoView('media')}
+                  className="shrink-0 text-[12px] font-semibold text-emerald-600 dark:text-emerald-400"
+                >
+                  View All
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -905,28 +1221,24 @@ function ConvInfoPanel({
           {fileItems.length === 0 ? (
             <p className="text-center text-[12px] text-gray-400 dark:text-white/25 py-5">No files yet</p>
           ) : (
-            <div className="divide-y divide-gray-50 dark:divide-white/[0.04]">
-              {fileItems.map(m => {
-                const c = parseContent(m.content) as { type: 'file'; url: string; name: string; size: number };
-                return (
-                  <div key={m.id} className="flex items-center gap-3 px-4 py-3">
-                    <FileText className="h-8 w-8 shrink-0 text-gray-400 dark:text-white/30" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-medium text-gray-800 dark:text-white/80 truncate">{c.name}</p>
-                      <p className="text-[11px] text-gray-400 dark:text-white/30">{c.size > 0 ? `${(c.size / 1024).toFixed(0)} KB` : 'File'}</p>
-                    </div>
-                    <a
-                      href={c.url}
-                      download={c.name}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="shrink-0 p-1.5 rounded-full text-gray-400 hover:text-emerald-500 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors"
-                    >
-                      <Download className="h-4 w-4" />
-                    </a>
-                  </div>
-                );
-              })}
+            <div className="p-3">
+              <div className="flex items-center gap-3">
+                <FileText className="h-10 w-10 shrink-0 text-gray-400 dark:text-white/30" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] font-medium text-gray-900 dark:text-white">
+                    {latestFileItem ? (parseContent(latestFileItem.content) as { type: 'file'; name: string }).name : 'Latest file'}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-gray-400 dark:text-white/30">
+                    {latestFileItem ? formatMsgTime(latestFileItem.created_at) : ''}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setInfoView('files')}
+                  className="shrink-0 text-[12px] font-semibold text-emerald-600 dark:text-emerald-400"
+                >
+                  View All
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -940,25 +1252,27 @@ function ConvInfoPanel({
           {linkItems.length === 0 ? (
             <p className="text-center text-[12px] text-gray-400 dark:text-white/25 py-5">No links yet</p>
           ) : (
-            <div className="divide-y divide-gray-50 dark:divide-white/[0.04]">
-              {linkItems.map(({ url, msgId }, i) => (
-                <div key={i} className="flex items-center gap-3 px-4 py-3">
+            <div className="p-3">
+              <div className="flex items-center gap-3">
+                <ExternalLink className="h-10 w-10 shrink-0 text-gray-400 dark:text-white/30" />
+                <div className="min-w-0 flex-1">
                   <a
-                    href={url}
+                    href={latestLinkItem?.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex-1 text-[12px] text-emerald-600 dark:text-emerald-400 truncate hover:underline"
+                    className="block truncate text-[12px] text-emerald-600 dark:text-emerald-400 hover:underline"
                   >
-                    {url}
+                    {latestLinkItem?.url}
                   </a>
-                  <button
-                    onClick={() => { onScrollToMessage(msgId); onClose(); }}
-                    className="shrink-0 text-[11px] font-semibold text-gray-400 dark:text-white/30 hover:text-gray-600 dark:hover:text-white/50 transition-colors whitespace-nowrap"
-                  >
-                    View
-                  </button>
+                  <p className="mt-0.5 text-[11px] text-gray-400 dark:text-white/30">Latest link</p>
                 </div>
-              ))}
+                <button
+                  onClick={() => setInfoView('links')}
+                  className="shrink-0 text-[12px] font-semibold text-emerald-600 dark:text-emerald-400"
+                >
+                  View All
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -999,7 +1313,118 @@ function ConvInfoPanel({
             </div>
           )}
         </div>
+          </>
+        )}
       </div>
+
+      {conv.type === 'group' && (
+        <Modal
+          open={showMembersModal}
+          onClose={() => { setShowMembersModal(false); setAddMembersOpen(false); setSelectedMemberIds(new Set()); setMemberSearch(''); }}
+          title="Group Members"
+          size="md"
+        >
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[14px] font-semibold text-gray-900 dark:text-white">{conv.name || 'Group Chat'}</p>
+                <p className="text-[12px] text-gray-400 dark:text-white/30">{conv.members.length} members</p>
+              </div>
+              <button
+                onClick={() => setAddMembersOpen(prev => !prev)}
+                className="shrink-0 h-9 px-3 rounded-full bg-emerald-50 dark:bg-emerald-500/10 text-[12px] font-bold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/15 transition-colors"
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  <UserPlus className="h-3.5 w-3.5" />
+                  Add Member
+                </span>
+              </button>
+            </div>
+
+            {addMembersOpen && (
+              <div className="rounded-2xl border border-gray-100 dark:border-white/[0.06] p-3">
+                <div className="flex items-center gap-2 rounded-xl bg-gray-100 dark:bg-white/[0.06] px-3">
+                  <Search className="h-3.5 w-3.5 text-gray-400 dark:text-white/30 shrink-0" />
+                  <input
+                    value={memberSearch}
+                    onChange={e => setMemberSearch(e.target.value)}
+                    placeholder="Search people to add..."
+                    className="flex-1 h-10 bg-transparent text-[13px] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/25 outline-none"
+                  />
+                </div>
+                <div className="mt-3 max-h-56 overflow-y-auto rounded-xl border border-gray-100 dark:border-white/[0.06]">
+                  {loadingAvailablePeople ? (
+                    <p className="py-4 text-center text-[12px] text-gray-400 dark:text-white/25">Loading people…</p>
+                  ) : filteredAvailablePeople.length === 0 ? (
+                    <p className="py-4 text-center text-[12px] text-gray-400 dark:text-white/25">No more people available</p>
+                  ) : (
+                    filteredAvailablePeople.map(person => (
+                      <button
+                        key={person.id}
+                        onClick={() => toggleSelectedMember(person.id)}
+                        className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-colors"
+                      >
+                        <Avatar src={person.avatar_url ?? undefined} firstName={person.first_name || '?'} lastName={person.last_name ?? undefined} size="sm" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[13px] font-medium text-gray-900 dark:text-white">{getFullName(person)}</p>
+                          {person.nickname && (
+                            <p className="truncate text-[11px] text-gray-400 dark:text-white/30">{person.nickname}</p>
+                          )}
+                        </div>
+                        <span className={`flex h-5 w-5 items-center justify-center rounded-full border ${
+                          selectedMemberIds.has(person.id)
+                            ? 'bg-emerald-500 border-emerald-500 text-white'
+                            : 'border-gray-300 dark:border-white/20 text-transparent'
+                        }`}>
+                          <Check className="h-3 w-3" />
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    onClick={() => { setAddMembersOpen(false); setSelectedMemberIds(new Set()); setMemberSearch(''); }}
+                    className="flex-1 h-10 rounded-xl border border-gray-200 dark:border-white/[0.08] text-[13px] font-semibold text-gray-600 dark:text-white/50 hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAddMembers}
+                    disabled={addingMembers || selectedMemberIds.size === 0}
+                    className="flex-1 h-10 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-semibold disabled:opacity-40 transition-colors"
+                  >
+                    {addingMembers ? 'Adding…' : `Add ${selectedMemberIds.size > 0 ? `(${selectedMemberIds.size})` : ''}`}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="overflow-hidden rounded-2xl border border-gray-100 dark:border-white/[0.06]">
+              <div className="divide-y divide-gray-50 dark:divide-white/[0.04]">
+                {sortedMembers.map(member => {
+                  const name = getFullName(member.profile);
+                  const isYou = member.user_id === myUserId;
+                  const isOwner = member.user_id === conv.created_by;
+                  return (
+                    <div key={member.user_id} className="flex items-center gap-3 px-4 py-3">
+                      <Avatar src={member.profile?.avatar_url ?? undefined} firstName={member.profile?.first_name || '?'} lastName={member.profile?.last_name ?? undefined} size="sm" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[13px] font-medium text-gray-900 dark:text-white">{name}</p>
+                        <div className="mt-0.5 flex items-center gap-2 text-[11px] text-gray-400 dark:text-white/30">
+                          {isYou && <span>You</span>}
+                          {isOwner && <span>Creator</span>}
+                          {!isYou && !isOwner && member.profile?.nickname && <span>{member.profile.nickname}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -1117,7 +1542,7 @@ function DeleteRequestCard({
 }
 
 function ChatWindow({
-  conv, myUserId, onBack, onConvUpdate, onRequestDelete, onConfirmDelete, onDeleteAsCreator, onRenameGroup,
+  conv, myUserId, onBack, onConvUpdate, onRequestDelete, onConfirmDelete, onDeleteAsCreator, onRenameGroup, onAddMembers, onUpdateGroupPhoto,
 }: {
   conv: Conversation;
   myUserId: string;
@@ -1127,6 +1552,8 @@ function ChatWindow({
   onConfirmDelete: (conversationId: string) => Promise<boolean>;
   onDeleteAsCreator: (conversationId: string) => Promise<boolean>;
   onRenameGroup: (conversationId: string, name: string) => Promise<boolean>;
+  onAddMembers: (conversationId: string, memberIds: string[]) => Promise<boolean>;
+  onUpdateGroupPhoto: (conversationId: string, photoUrl: string | null) => Promise<boolean>;
 }) {
   const [replyTo, setReplyTo] = useState<{ id: string; preview: string } | null>(null);
   const [activeMsg, setActiveMsg] = useState<string | null>(null);
@@ -1152,7 +1579,7 @@ function ChatWindow({
 
   const convName = getConvName(conv, myUserId);
 
-  const otherMember = conv.type === 'personal' ? getOtherMember(conv, myUserId) : null;
+  const avatarName = getConversationAvatarName(conv, myUserId);
 
   useEffect(() => {
     let stopped = false;
@@ -1326,9 +1753,9 @@ function ChatWindow({
           <ArrowLeft className="h-4.5 w-4.5" style={{ width: '18px', height: '18px' }} />
         </button>
         <Avatar
-          src={otherMember?.profile?.avatar_url ?? undefined}
-          firstName={otherMember?.profile?.first_name || convName.charAt(0)}
-          lastName={otherMember?.profile?.last_name ?? undefined}
+          src={getConversationAvatarSrc(conv, myUserId)}
+          firstName={avatarName.firstName}
+          lastName={avatarName.lastName}
           size="sm"
         />
         <button
@@ -1461,7 +1888,39 @@ function ChatWindow({
                   )}
 
 
-                  <div className="flex items-end gap-1.5">
+                  <div className={`flex w-fit max-w-full flex-col ${isMe ? 'items-end self-end' : 'items-start self-start'}`}>
+                    {msg.reply_preview && (
+                      <div
+                        className={`max-w-full ${isMe ? 'self-end' : 'self-start'}`}
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <div className={`mb-0.5 flex items-center gap-1.5 px-1 text-[10px] font-medium ${isMe ? 'text-emerald-200 dark:text-emerald-300/80' : 'text-gray-400 dark:text-white/35'}`}>
+                          <CornerUpLeft className={`h-3 w-3 shrink-0 ${isMe ? 'text-emerald-200 dark:text-emerald-300/80' : 'text-emerald-500'}`} />
+                          <span>{`Replied to ${msg.reply_preview.sender_name}`}</span>
+                        </div>
+                        <div
+                          className={`relative z-[1] w-fit max-w-full min-w-0 rounded-[18px] px-3 py-2.5 pb-5 text-[11px] leading-snug ${
+                            isMe
+                              ? 'bg-white/18 text-white/70 dark:bg-white/12 dark:text-white/65'
+                              : 'bg-[#f1f2f4] text-gray-500 dark:bg-white/[0.045] dark:text-white/55'
+                          }`}
+                        >
+                          <p
+                            className="overflow-hidden whitespace-pre-wrap break-words"
+                            style={{
+                              overflowWrap: 'anywhere',
+                              display: '-webkit-box',
+                              WebkitLineClamp: 5,
+                              WebkitBoxOrient: 'vertical',
+                            }}
+                          >
+                            {replyPreviewContent(msg.reply_preview.content)}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                  <div className={`flex w-fit max-w-full items-end gap-1.5 ${msg.reply_preview ? '-mt-3 relative z-[2]' : ''}`}>
                     {/* Hover actions (my side) */}
                     {isMe && (
                       <div className="hidden sm:flex opacity-0 group-hover:opacity-100 transition-opacity items-center gap-0.5 mb-1">
@@ -1495,14 +1954,14 @@ function ChatWindow({
                       onPointerLeave={() => { if (msgLongPressTimer.current) { clearTimeout(msgLongPressTimer.current); msgLongPressTimer.current = null; } }}
                       onPointerCancel={() => { if (msgLongPressTimer.current) { clearTimeout(msgLongPressTimer.current); msgLongPressTimer.current = null; } }}
                       onContextMenu={e => e.preventDefault()}
-                      className={`relative px-3.5 py-2 rounded-2xl leading-relaxed cursor-default select-none ${
+                      className={`relative leading-relaxed cursor-default select-none ${
                         msg.reactions.length > 0 ? 'mb-5' : ''
                       } ${
-                        msg.reply_preview ? 'mt-4' : ''
-                      } ${
-                        isMe
-                          ? 'bg-emerald-500 text-white rounded-br-md'
-                          : 'bg-gray-100 dark:bg-white/[0.07] text-gray-900 dark:text-white rounded-bl-md border border-gray-200/80 dark:border-white/[0.06]'
+                        content.type === 'image'
+                          ? 'px-0 py-0 bg-transparent border-0 shadow-none rounded-none'
+                          : isMe
+                            ? 'px-3.5 py-2 rounded-2xl bg-emerald-500 text-white rounded-br-md'
+                            : 'px-3.5 py-2 rounded-2xl bg-gray-100 dark:bg-white/[0.07] text-gray-900 dark:text-white rounded-bl-md border border-gray-200/80 dark:border-white/[0.06]'
                       } ${msg.is_pinned ? 'ring-1 ring-amber-400/50' : ''}`}
                     >
                       {content.type === 'image' ? (
@@ -1547,19 +2006,6 @@ function ChatWindow({
                       )}
                       {msg.is_pinned && (
                         <Pin className="absolute -top-2 -right-2 h-3.5 w-3.5 text-amber-500 bg-white dark:bg-[#111013] rounded-full p-0.5" style={{ padding: '2px' }} />
-                      )}
-
-                      {/* Reply preview — overlapping the top of the bubble */}
-                      {msg.reply_preview && (
-                        <div
-                          className={`absolute top-0 -translate-y-[72%] flex items-start gap-1 px-2 py-[3px] rounded-xl text-[11px] bg-white dark:bg-[#1c1c1e] border border-gray-100 dark:border-white/[0.1] shadow-sm z-10 max-w-[90%] ${isMe ? 'right-0' : 'left-0'}`}
-                          onClick={e => e.stopPropagation()}
-                        >
-                          <CornerUpLeft className="h-2.5 w-2.5 shrink-0 text-emerald-500 mt-[2px]" />
-                          <span className="line-clamp-2 text-gray-500 dark:text-white/50 break-words">
-                            {previewContent(msg.reply_preview.content)}
-                          </span>
-                        </div>
                       )}
 
                       {/* Reactions — sitting just below the bubble's bottom-right corner */}
@@ -1610,6 +2056,7 @@ function ChatWindow({
                       </div>
                     )}
                   </div>
+                  </div>
 
                   {/* Time — only visible when message is tapped */}
                   <AnimatePresence>
@@ -1654,7 +2101,7 @@ function ChatWindow({
                         onClick={e => e.stopPropagation()}
                       >
                         <button
-                          onClick={() => { setReplyTo({ id: msg.id, preview: `${getSenderName(msg.sender)}: ${previewContent(msg.content)}` }); setActiveMsg(null); }}
+                          onClick={() => { setReplyTo({ id: msg.id, preview: `${getSenderName(msg.sender)}: ${replyPreviewContent(msg.content)}` }); setActiveMsg(null); }}
                           className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[13px] text-gray-700 dark:text-white/70 hover:bg-gray-50 dark:hover:bg-white/[0.05] transition-colors"
                         >
                           <CornerUpLeft className="h-3.5 w-3.5" /> Reply
@@ -1858,6 +2305,8 @@ function ChatWindow({
                 onRequestDelete={onRequestDelete}
                 onDeleteAsCreator={onDeleteAsCreator}
                 onRenameGroup={onRenameGroup}
+                onAddMembers={onAddMembers}
+                onUpdateGroupPhoto={onUpdateGroupPhoto}
               />
             </motion.div>
           )}
@@ -1975,6 +2424,8 @@ export function Messages() {
     confirmDeleteConversation,
     deleteConversationAsCreator,
     renameGroupConversation,
+    addGroupConversationMembers,
+    updateGroupConversationPhoto,
     discardEmptyConversation,
   } = useConversations();
   useMessagesKeyboardInset(!isDesktop && mobileShowChat);
@@ -2119,11 +2570,13 @@ export function Messages() {
             myUserId={myUserId}
             onBack={handleBack}
             onConvUpdate={refresh}
-            onRequestDelete={requestDeleteConversation}
-            onConfirmDelete={confirmDeleteConversation}
-            onDeleteAsCreator={deleteConversationAsCreator}
-            onRenameGroup={renameGroupConversation}
-          />
+              onRequestDelete={requestDeleteConversation}
+              onConfirmDelete={confirmDeleteConversation}
+              onDeleteAsCreator={deleteConversationAsCreator}
+              onRenameGroup={renameGroupConversation}
+              onAddMembers={addGroupConversationMembers}
+              onUpdateGroupPhoto={updateGroupConversationPhoto}
+            />
         ) : selectedConvId && convsLoading ? (
           <div className="flex items-center justify-center h-full">
             <span className="h-6 w-6 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />

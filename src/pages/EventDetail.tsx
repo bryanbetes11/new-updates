@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { format, parseISO, differenceInDays, startOfDay, subWeeks, previousSunday, addDays, subDays } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Calendar, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronUp, ChevronRight, LayoutPanelLeft, ListMusic, Search, GripVertical, ArrowUp, ArrowDown } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronUp, ChevronRight, LayoutPanelLeft, ListMusic, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -93,12 +93,13 @@ export function EventDetail() {
   const [reorderSongs, setReorderSongs] = useState<SetlistSong[]>([]);
   const [savingOrder, setSavingOrder] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [eventConversationId, setEventConversationId] = useState<string | null | undefined>(undefined);
 
 
   const fetchAll = useCallback(async () => {
     if (!id) return;
     try {
-      const [eventRes, assignRes, membersRes, memberRolesRes, setlistRes, songsRes, allSetlistsRes, sundayServicesRes] = await Promise.all([
+      const [eventRes, assignRes, membersRes, memberRolesRes, setlistRes, songsRes, allSetlistsRes, sundayServicesRes, convRes] = await Promise.all([
         supabase.from('events').select('*').eq('id', id).maybeSingle(),
         supabase.from('event_assignments').select('*, profiles(first_name, last_name, avatar_url), roles(name)').eq('event_id', id),
         supabase.from('profiles').select('id, first_name, last_name'),
@@ -107,7 +108,9 @@ export function EventDetail() {
         supabase.from('songs').select('*').order('title'),
         supabase.from('setlists').select('id, status, event_id, events(event_date), setlist_songs(song_id)').eq('status', 'approved'),
         supabase.from('events').select('*').eq('event_type', 'Sunday Service').gte('event_date', new Date().toISOString().split('T')[0]).order('event_date'),
+        supabase.from('conversations').select('id').eq('event_id', id).eq('type', 'event').maybeSingle(),
       ]);
+      setEventConversationId((convRes.data as any)?.id ?? null);
       setEvent(eventRes.data);
       setAssignments(assignRes.data || []);
       setMembers(membersRes.data || []);
@@ -806,6 +809,26 @@ export function EventDetail() {
           <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.12] to-transparent" />
 
           <div className="relative px-5 sm:px-7 pt-6 pb-5">
+            {/* Event chat button */}
+            {eventConversationId !== undefined && (
+              <div className="absolute top-4 right-4 sm:top-5 sm:right-5">
+                {eventConversationId ? (
+                  <button
+                    onClick={() => navigate(`/messages/${eventConversationId}`)}
+                    className="flex items-center gap-1.5 h-9 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-[12px] font-bold shadow-md shadow-emerald-500/25 transition-colors active:scale-95"
+                    title="Open group chat"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    <span className="hidden sm:inline">Group Chat</span>
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-1.5 h-9 px-3 rounded-xl bg-gray-100 dark:bg-white/[0.06] text-gray-400 dark:text-white/30 text-[12px] font-semibold" title="No group chat for this event">
+                    <MessageCircle className="h-4 w-4" />
+                    <span className="hidden sm:inline">No Chat</span>
+                  </div>
+                )}
+              </div>
+            )}
             <div className="flex items-start gap-4">
               {/* Date chip — gradient encodes urgency */}
               <div

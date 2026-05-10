@@ -1729,6 +1729,7 @@ function ChatWindow({
 
   const pinnedMessages = messages.filter(m => m.is_pinned);
   const [showPinned, setShowPinned] = useState(false);
+  const latestPinnedMessage = pinnedMessages[pinnedMessages.length - 1] ?? null;
 
   // Group messages: same sender within 5 min = grouped
   const grouped = useMemo(() => {
@@ -1779,16 +1780,36 @@ function ChatWindow({
             </p>
           )}
         </button>
-        {pinnedMessages.length > 0 && (
-          <button
-            onClick={() => setShowPinned(v => !v)}
-            className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/[0.1] hover:bg-amber-100 dark:hover:bg-amber-500/[0.15] transition-colors"
-          >
-            <Pin className="h-3 w-3" />
-            {pinnedMessages.length}
-          </button>
-        )}
       </div>
+
+      {latestPinnedMessage && (
+        <button
+          onClick={() => setShowPinned(v => !v)}
+          className="shrink-0 flex items-center gap-3 px-4 py-2.5 border-b border-amber-100 dark:border-amber-500/[0.1] bg-amber-50/80 dark:bg-amber-500/[0.08] text-left hover:bg-amber-100/80 dark:hover:bg-amber-500/[0.12] transition-colors"
+        >
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-500/[0.18] dark:text-amber-300">
+            <Pin className="h-3.5 w-3.5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[10px] font-bold uppercase tracking-[0.12em] text-amber-700 dark:text-amber-300">Pinned Message</span>
+            <span className="mt-0.5 block truncate text-[12px] text-amber-900/80 dark:text-amber-100/80">
+              {(() => {
+                const c = parseContent(latestPinnedMessage.content);
+                return c.type === 'image'
+                  ? `${getSenderName(latestPinnedMessage.sender)}: Photo`
+                  : c.type === 'file'
+                    ? `${getSenderName(latestPinnedMessage.sender)}: ${c.name}`
+                    : c.type === 'delete_request'
+                      ? `${getSenderName(latestPinnedMessage.sender)}: Delete chat request`
+                      : `${getSenderName(latestPinnedMessage.sender)}: ${c.text}`;
+              })()}
+            </span>
+          </span>
+          <span className="shrink-0 rounded-full bg-amber-100 px-2 py-1 text-[10px] font-semibold text-amber-700 dark:bg-amber-500/[0.18] dark:text-amber-300">
+            {pinnedMessages.length}
+          </span>
+        </button>
+      )}
 
       {conv.type === 'event' && conv.event_id && (
         <EventDiscussionCard eventId={conv.event_id} />

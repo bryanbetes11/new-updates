@@ -8,6 +8,9 @@ interface ReleaseNotesModalProps {
   onClose: () => void;
 }
 
+export const RELEASE_NOTES_VERSION = '2026-05-10-group-chat-and-mobile-chat-updates';
+export const RELEASE_NOTES_PUBLISHED_AT = '2026-05-10T00:00:00Z';
+
 const features = [
   {
     icon: Music2,
@@ -346,7 +349,7 @@ export function ReleaseNotesModal({ open, onClose }: ReleaseNotesModalProps) {
               boxShadow: '0 4px 14px rgba(22,163,74,0.35)',
             }}
           >
-            {isLast ? 'Got it' : 'Next'}
+            {isLast ? 'Mark as read' : 'Next'}
             {!isLast && <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />}
           </button>
         </div>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { format, isAfter, parseISO, startOfToday, differenceInDays } from 'date-fns';
+import { differenceInCalendarDays, format, isAfter, parseISO, startOfToday } from 'date-fns';
 import { motion } from 'framer-motion';
 import { Calendar, CheckCircle, Clock, Music, ChevronRight, Megaphone, Image as ImageIcon, UserX, Trash2, ArrowUpRight, LayoutDashboard, Users, ClipboardCheck, ListChecks, Shield } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -8,7 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { DashboardSkeleton } from '../components/LoadingSpinner';
 import { Avatar } from '../components/Avatar';
 import { formatTime12Hour } from '../lib/timeFormat';
-import { ReleaseNotesModal } from '../components/ReleaseNotesModal';
+import { ReleaseNotesModal, RELEASE_NOTES_PUBLISHED_AT, RELEASE_NOTES_VERSION } from '../components/ReleaseNotesModal';
 import { Modal } from '../components/Modal';
 import type { Event, EventAssignment, Setlist, Announcement, UserAvailability } from '../types';
 
@@ -33,6 +33,22 @@ const item = {
     transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] },
   },
 };
+
+const MANILA_TIMEZONE = 'Asia/Manila';
+
+function getManilaTodayKey(date = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: MANILA_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+function getManilaEventDateTime(eventDate: string, timeValue: string | null | undefined) {
+  if (!timeValue) return new Date(`${eventDate}T23:59:59+08:00`);
+  return new Date(`${eventDate}T${timeValue}+08:00`);
+}
 
 // Premium card — soft dual-shadow, theme-aware border, subtle inner top-edge highlight
 function Card({ children, className = '', interactive = false }: { children: React.ReactNode; className?: string; interactive?: boolean }) {
@@ -111,7 +127,7 @@ export function Dashboard() {
 
   useEffect(() => {
     if (!user) return;
-    const today = startOfToday().toISOString().split('T')[0];
+    const today = getManilaTodayKey();
     const load = async () => {
       const [eventsRes, assignRes, setlistsRes, announcementsRes, unavailableRes, pendingLeaveRes] = await Promise.all([
         supabase.from('events').select('*').gte('event_date', today).order('event_date').limit(5),
@@ -155,9 +171,17 @@ export function Dashboard() {
       setPendingLeaveCount(pendingLeaveRes.count || 0);
       const upcoming = assignments.filter(a => a.events && isAfter(parseISO(a.events.event_date), startOfToday()));
       setStats({ total: upcoming.length, confirmed: upcoming.filter(a => a.status === 'confirmed').length, pending: upcoming.filter(a => a.status === 'pending').length });
-      const { data: prefs } = await supabase.from('user_preferences').select('release_notes_last_viewed_at').eq('user_id', user.id).maybeSingle();
+      const { data: prefs } = await supabase
+        .from('user_preferences')
+        .select('release_notes_last_viewed_at')
+        .eq('user_id', user.id)
+        .maybeSingle();
       const lastViewed = prefs?.release_notes_last_viewed_at;
-      setShowReleaseNotes(!lastViewed || differenceInDays(new Date(), new Date(lastViewed)) >= 7);
+      const lastReadVersion = localStorage.getItem('release-notes-last-read-version');
+      const releaseNotesRead =
+        lastReadVersion === RELEASE_NOTES_VERSION ||
+        Boolean(lastViewed && new Date(lastViewed).getTime() >= Date.parse(RELEASE_NOTES_PUBLISHED_AT));
+      setShowReleaseNotes(!releaseNotesRead);
       setLoading(false);
     };
     load();
@@ -165,6 +189,7 @@ export function Dashboard() {
 
   const handleCloseReleaseNotes = async () => {
     setShowReleaseNotes(false);
+    localStorage.setItem('release-notes-last-read-version', RELEASE_NOTES_VERSION);
     if (!user) return;
     await supabase.from('user_preferences').upsert({ user_id: user.id, release_notes_last_viewed_at: new Date().toISOString() }, { onConflict: 'user_id' });
   };
@@ -186,8 +211,10 @@ export function Dashboard() {
     return 'Good evening';
   })();
 
-  const nextEvent = upcomingEvents[0];
-  const daysUntilNext = nextEvent ? differenceInDays(parseISO(nextEvent.event_date), startOfToday()) : null;
+  const nextEvent = upcomingEvents.find(event => getManilaEventDateTime(event.event_date, event.start_time) >= now) ?? upcomingEvents[0];
+  const daysUntilNext = nextEvent
+    ? Math.max(0, differenceInCalendarDays(parseISO(nextEvent.event_date), parseISO(getManilaTodayKey(now))))
+    : null;
   const nextAssignment = myAssignments[0];
   const nextSongLeader = nextAssignment ? songLeaderByEvent[nextAssignment.event_id] : '';
 

@@ -13,7 +13,6 @@ import { Onboarding } from './pages/Onboarding';
 import { Dashboard } from './pages/Dashboard';
 import { Events } from './pages/Events';
 import { EventDetail } from './pages/EventDetail';
-import { ChatEventDetail } from './pages/ChatEventDetail';
 import { Announcements } from './pages/Announcements';
 import { AnnouncementDetail } from './pages/AnnouncementDetail';
 import { Library } from './pages/Library';
@@ -103,7 +102,6 @@ export default function App() {
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/events" element={<Events />} />
                   <Route path="/events/:id" element={<EventDetail />} />
-                  <Route path="/events/:id/chat" element={<ChatEventDetail />} />
                   <Route path="/announcements" element={<Announcements />} />
                   <Route path="/announcements/:id" element={<AnnouncementDetail />} />
                   <Route path="/library" element={<Library />} />

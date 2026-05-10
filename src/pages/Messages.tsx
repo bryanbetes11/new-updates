@@ -5,7 +5,10 @@ import {
   ArrowLeft, Send, ImageIcon, X, Pin, CornerUpLeft, Camera,
   MessageCircle, Plus, Search, Trash2, MoreHorizontal, ChevronRight, Check,
   CalendarDays, Music2, Copy, Paperclip, FileText, Download, ExternalLink, UserPlus,
+  Calendar, Clock,
 } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
+import { formatTime12Hour } from '../lib/timeFormat';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useConversations, type Conversation } from '../hooks/useConversations';
@@ -1466,8 +1469,7 @@ type EventDiscussionDetails = {
   songs: Array<{ id: string; title: string; artist: string | null; performed_key: string | null; song_key: string | null }>;
 };
 
-function EventDiscussionCard({ eventId }: { eventId: string }) {
-  const navigate = useNavigate();
+function EventDiscussionCard({ eventId, onOpen }: { eventId: string; onOpen: () => void }) {
   const [details, setDetails] = useState<EventDiscussionDetails | null>(null);
 
   useEffect(() => {
@@ -1504,7 +1506,7 @@ function EventDiscussionCard({ eventId }: { eventId: string }) {
   return (
     <div className="shrink-0 border-b border-emerald-100 dark:border-emerald-500/10 bg-emerald-50/70 dark:bg-emerald-500/[0.06] px-4 py-3">
       <button
-        onClick={() => navigate(`/events/${eventId}/chat`)}
+        onClick={onOpen}
         className="w-full text-left rounded-2xl bg-white dark:bg-[#161619] border border-emerald-100 dark:border-emerald-500/15 px-3.5 py-3 shadow-sm shadow-emerald-900/5"
       >
         <div className="flex items-start gap-3">
@@ -1531,6 +1533,198 @@ function EventDiscussionCard({ eventId }: { eventId: string }) {
           <ChevronRight className="h-4 w-4 text-gray-300 dark:text-white/20 mt-2 shrink-0" />
         </div>
       </button>
+    </div>
+  );
+}
+
+type EventPanelData = {
+  id: string;
+  title: string;
+  event_date: string;
+  start_time: string | null;
+  end_time: string | null;
+  event_type: string | null;
+  description: string | null;
+  songs: Array<{ id: string; title: string; artist: string | null; performed_key: string | null; song_key: string | null }>;
+};
+
+function EventDetailPanel({ eventId, onClose, onViewFullEvent }: {
+  eventId: string;
+  onClose: () => void;
+  onViewFullEvent: () => void;
+}) {
+  const [data, setData] = useState<EventPanelData | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const [{ data: event }, { data: setlist }] = await Promise.all([
+        supabase.from('events').select('id, title, event_date, start_time, end_time, event_type, description').eq('id', eventId).maybeSingle(),
+        supabase.from('setlists').select('id, setlist_songs(id, position, performed_key, songs(id, title, artist, song_key))').eq('event_id', eventId).maybeSingle(),
+      ]);
+      if (cancelled || !event) return;
+      const songs = ((setlist as any)?.setlist_songs || [])
+        .sort((a: any, b: any) => (a.position || 0) - (b.position || 0))
+        .map((item: any) => ({
+          id: item.songs?.id || item.id,
+          title: item.songs?.title || 'Untitled',
+          artist: item.songs?.artist || null,
+          performed_key: item.performed_key || null,
+          song_key: item.songs?.song_key || null,
+        }));
+      setData({ ...(event as any), songs });
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [eventId]);
+
+  const isPast = data ? new Date(data.event_date) < new Date(new Date().toDateString()) : false;
+  const chipBg = isPast
+    ? 'bg-gray-100 dark:bg-white/[0.05]'
+    : 'bg-emerald-500';
+  const chipTextPrimary = isPast ? 'text-gray-500 dark:text-white/35' : 'text-white';
+  const chipTextSub = isPast ? 'text-gray-400 dark:text-white/20' : 'text-white/70';
+
+  return (
+    <div className="flex flex-col h-full bg-gray-50 dark:bg-[#0d0d0f]">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3 px-4 py-3 bg-white dark:bg-[#111013] border-b border-gray-200/60 dark:border-white/[0.06] shrink-0">
+        <button
+          onClick={onClose}
+          className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 text-[14px] font-semibold"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back
+        </button>
+        <span className="text-[14px] font-bold text-gray-900 dark:text-white">Event Info</span>
+        <button
+          onClick={onViewFullEvent}
+          className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 text-[13px] font-semibold"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+          Full Event
+        </button>
+      </div>
+
+      {!data ? (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="h-6 w-6 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin" />
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto">
+          <div className="px-4 pt-5 pb-6 space-y-4 max-w-lg mx-auto">
+
+            {/* Hero card */}
+            <div className="rounded-3xl overflow-hidden bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06]"
+              style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 28px -16px rgba(15,23,42,0.12)' }}
+            >
+              <div className="px-5 pt-6 pb-5">
+                <div className="flex items-start gap-4">
+                  {/* Date chip */}
+                  <div className={`flex flex-col items-center justify-center h-[68px] w-14 rounded-2xl shrink-0 ${chipBg}`}>
+                    <span className={`text-[10px] font-black uppercase tracking-widest leading-none ${chipTextSub}`}>
+                      {format(parseISO(data.event_date), 'MMM')}
+                    </span>
+                    <span className={`text-[28px] font-black leading-none mt-1 ${chipTextPrimary}`} style={{ letterSpacing: '-0.05em' }}>
+                      {format(parseISO(data.event_date), 'd')}
+                    </span>
+                    <span className={`text-[9px] font-bold leading-none mt-0.5 ${chipTextSub}`}>
+                      {format(parseISO(data.event_date), 'EEE')}
+                    </span>
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] font-mono font-medium uppercase tracking-[0.22em] mb-1 text-gray-400 dark:text-white/30">
+                      {isPast ? 'Past event' : 'Upcoming'}
+                    </p>
+                    <h2 className="text-[1.4rem] font-black text-gray-900 dark:text-white leading-[1.1]" style={{ letterSpacing: '-0.03em' }}>
+                      {data.title}
+                    </h2>
+                    {data.event_type && (
+                      <div className="mt-2">
+                        <span className="badge-blue text-[10px]">{data.event_type}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Meta row */}
+                <div className="mt-5 pt-5 border-t border-black/[0.05] dark:border-white/[0.05] grid grid-cols-2 gap-3">
+                  {[
+                    {
+                      icon: Calendar,
+                      label: 'Date',
+                      value: format(parseISO(data.event_date), 'EEEE'),
+                      detail: format(parseISO(data.event_date), 'MMM d, yyyy'),
+                    },
+                    {
+                      icon: Clock,
+                      label: 'Time',
+                      value: formatTime12Hour(data.start_time || '') || 'TBA',
+                      detail: data.end_time ? `Ends ${formatTime12Hour(data.end_time)}` : '',
+                    },
+                  ].map(item => {
+                    const Icon = item.icon;
+                    return (
+                      <div key={item.label} className="flex items-center gap-3 rounded-2xl bg-white/65 dark:bg-white/[0.035] border border-black/[0.06] dark:border-white/[0.07] px-3.5 py-3.5">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-white/45">
+                          <Icon className="h-4 w-4" />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400 dark:text-white/30">{item.label}</span>
+                          <span className="block text-[14px] font-black text-gray-900 dark:text-white truncate leading-tight mt-0.5">{item.value}</span>
+                          {item.detail && <span className="block text-[11px] text-gray-500 dark:text-white/45 truncate mt-0.5">{item.detail}</span>}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {data.description && (
+                  <p className="mt-4 text-[13px] text-gray-500 dark:text-white/40 leading-relaxed">{data.description}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Setlist */}
+            <div className="rounded-2xl bg-white dark:bg-white/[0.04] border border-gray-200/80 dark:border-white/[0.06] overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-white/[0.05]">
+                <div className="flex items-center gap-2">
+                  <Music2 className="h-4 w-4 text-emerald-500" />
+                  <span className="text-[14px] font-bold text-gray-900 dark:text-white">Setlist</span>
+                </div>
+                <span className="text-[12px] text-gray-400 dark:text-white/30">{data.songs.length} songs</span>
+              </div>
+
+              {data.songs.length === 0 ? (
+                <div className="py-8 text-center">
+                  <Music2 className="h-8 w-8 text-gray-200 dark:text-white/10 mx-auto mb-2" />
+                  <p className="text-[13px] text-gray-400 dark:text-white/25">No setlist yet</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-50 dark:divide-white/[0.04]">
+                  {data.songs.map((song, i) => {
+                    const key = song.performed_key || song.song_key;
+                    return (
+                      <div key={song.id} className="flex items-center gap-3 px-5 py-3">
+                        <span className="text-[12px] font-bold text-gray-300 dark:text-white/20 w-5 text-right shrink-0">{i + 1}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[14px] font-semibold text-gray-900 dark:text-white truncate">{song.title}</p>
+                          {song.artist && <p className="text-[12px] text-gray-400 dark:text-white/30 truncate">{song.artist}</p>}
+                        </div>
+                        {key && (
+                          <span className="shrink-0 px-2 py-0.5 rounded-full bg-gray-100 dark:bg-white/[0.06] text-[11px] font-bold text-gray-500 dark:text-white/40">{key}</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1586,6 +1780,7 @@ function ChatWindow({
   const [emojiMsgId, setEmojiMsgId] = useState<string | null>(null);
   const [tappedMsgId, setTappedMsgId] = useState<string | null>(null);
   const [showInfo, setShowInfo] = useState(false);
+  const [showEventDetail, setShowEventDetail] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [previewFile, setPreviewFile] = useState<{ url: string; name: string } | null>(null);
@@ -1596,6 +1791,7 @@ function ChatWindow({
   const atBottomRef = useRef(true);
   const forceStickToLatestRef = useRef(false);
   const typingThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const navigate = useNavigate();
 
   const { profile } = useAuth();
   const {
@@ -1835,7 +2031,7 @@ function ChatWindow({
       )}
 
       {conv.type === 'event' && conv.event_id && (
-        <EventDiscussionCard eventId={conv.event_id} />
+        <EventDiscussionCard eventId={conv.event_id} onOpen={() => setShowEventDetail(true)} />
       )}
 
       {/* Pinned messages panel */}
@@ -2321,6 +2517,27 @@ function ChatWindow({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Event detail slide-over — sits above info panel */}
+      <div className="absolute inset-0 z-30 overflow-hidden pointer-events-none">
+        <AnimatePresence>
+          {showEventDetail && conv.event_id && (
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', stiffness: 400, damping: 38 }}
+              className="absolute inset-0 pointer-events-auto"
+            >
+              <EventDetailPanel
+                eventId={conv.event_id}
+                onClose={() => setShowEventDetail(false)}
+                onViewFullEvent={() => { setShowEventDetail(false); navigate(`/events/${conv.event_id}`); }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       {/* Info panel slide-over — absolute inset, clips its own overflow */}
       <div className="absolute inset-0 z-20 overflow-hidden pointer-events-none">

@@ -8,7 +8,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { DashboardSkeleton } from '../components/LoadingSpinner';
 import { Avatar } from '../components/Avatar';
 import { formatTime12Hour } from '../lib/timeFormat';
-import { ReleaseNotesModal, RELEASE_NOTES_PUBLISHED_AT, RELEASE_NOTES_VERSION } from '../components/ReleaseNotesModal';
 import { Modal } from '../components/Modal';
 import type { Event, EventAssignment, Setlist, Announcement, UserAvailability } from '../types';
 
@@ -113,7 +112,6 @@ export function Dashboard() {
   const [unavailableMembers, setUnavailableMembers] = useState<UserAvailability[]>([]);
   const [pendingLeaveCount, setPendingLeaveCount] = useState(0);
   const [stats, setStats] = useState({ total: 0, confirmed: 0, pending: 0 });
-  const [showReleaseNotes, setShowReleaseNotes] = useState(false);
   const [selectedUnavailability, setSelectedUnavailability] = useState<UserAvailability | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [now, setNow] = useState(new Date());
@@ -171,28 +169,10 @@ export function Dashboard() {
       setPendingLeaveCount(pendingLeaveRes.count || 0);
       const upcoming = assignments.filter(a => a.events && isAfter(parseISO(a.events.event_date), startOfToday()));
       setStats({ total: upcoming.length, confirmed: upcoming.filter(a => a.status === 'confirmed').length, pending: upcoming.filter(a => a.status === 'pending').length });
-      const { data: prefs } = await supabase
-        .from('user_preferences')
-        .select('release_notes_last_viewed_at')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      const lastViewed = prefs?.release_notes_last_viewed_at;
-      const lastReadVersion = localStorage.getItem('release-notes-last-read-version');
-      const releaseNotesRead =
-        lastReadVersion === RELEASE_NOTES_VERSION ||
-        Boolean(lastViewed && new Date(lastViewed).getTime() >= Date.parse(RELEASE_NOTES_PUBLISHED_AT));
-      setShowReleaseNotes(!releaseNotesRead);
       setLoading(false);
     };
     load();
   }, [user, isLeader]);
-
-  const handleCloseReleaseNotes = async () => {
-    setShowReleaseNotes(false);
-    localStorage.setItem('release-notes-last-read-version', RELEASE_NOTES_VERSION);
-    if (!user) return;
-    await supabase.from('user_preferences').upsert({ user_id: user.id, release_notes_last_viewed_at: new Date().toISOString() }, { onConflict: 'user_id' });
-  };
 
   const handleConfirmDelete = async () => {
     if (!selectedUnavailability) return;
@@ -220,8 +200,6 @@ export function Dashboard() {
 
   return (
     <div className="page-container page-bottom-pad relative">
-      <ReleaseNotesModal open={showReleaseNotes} onClose={handleCloseReleaseNotes} />
-
       <motion.div
         variants={container}
         initial="initial"

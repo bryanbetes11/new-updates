@@ -10,6 +10,9 @@ interface ModalProps {
   size?: 'sm' | 'md' | 'lg';
   hideCloseButton?: boolean;
   hideHeader?: boolean;
+  closeOnBackdrop?: boolean;
+  closeOnEscape?: boolean;
+  titleAlign?: 'left' | 'center';
 }
 
 const desktopSizes = {
@@ -18,7 +21,18 @@ const desktopSizes = {
   lg: 'sm:max-w-xl',
 };
 
-export function Modal({ open, onClose, title, children, size = 'md', hideCloseButton = false, hideHeader = false }: ModalProps) {
+export function Modal({
+  open,
+  onClose,
+  title,
+  children,
+  size = 'md',
+  hideCloseButton = false,
+  hideHeader = false,
+  closeOnBackdrop = true,
+  closeOnEscape = true,
+  titleAlign = 'left',
+}: ModalProps) {
   const [visible, setVisible] = useState(false);
   const [closing, setClosing] = useState(false);
 
@@ -42,11 +56,11 @@ export function Modal({ open, onClose, title, children, size = 'md', hideCloseBu
   useEffect(() => {
     if (!visible) return;
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (closeOnEscape && e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
-  }, [visible, onClose]);
+  }, [visible, onClose, closeOnEscape]);
 
   if (!visible) return null;
 
@@ -58,7 +72,7 @@ export function Modal({ open, onClose, title, children, size = 'md', hideCloseBu
   return createPortal(
     <div
       className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center"
-      onClick={onClose}
+      onClick={() => { if (closeOnBackdrop) onClose(); }}
     >
       <div className={`fixed inset-0 bg-black/50 backdrop-blur-sm ${backdropClass}`} />
       <div
@@ -70,9 +84,12 @@ export function Modal({ open, onClose, title, children, size = 'md', hideCloseBu
         onClick={e => e.stopPropagation()}
       >
         {!hideHeader && (
-          <div className="relative flex items-center justify-between px-5 pt-5 pb-4 border-b border-black/[0.05] dark:border-white/[0.06] shrink-0">
+          <div className="relative flex items-center justify-between px-5 pt-7 pb-4 border-b border-black/[0.05] dark:border-white/[0.06] shrink-0">
             <div className="absolute top-3 left-1/2 -translate-x-1/2 w-8 h-1 rounded-full bg-gray-200 dark:bg-gray-700 sm:hidden" />
-            <h2 className="text-[15px] font-bold text-gray-900 dark:text-white" style={{ letterSpacing: '-0.02em' }}>
+            <h2
+              className={`text-[15px] font-bold text-gray-900 dark:text-white ${titleAlign === 'center' ? 'absolute left-1/2 -translate-x-1/2 text-center' : ''}`}
+              style={{ letterSpacing: '-0.02em' }}
+            >
               {title}
             </h2>
             {!hideCloseButton && (

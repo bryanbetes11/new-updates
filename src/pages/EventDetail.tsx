@@ -837,7 +837,7 @@ export function EventDetail() {
                 ) : (
                   <button
                     onClick={() => setShowCreateChatModal(true)}
-                    className="flex items-center gap-1.5 h-9 px-3 rounded-xl border-2 border-dashed border-gray-300 dark:border-white/20 text-gray-400 dark:text-white/35 hover:border-emerald-400 hover:text-emerald-600 dark:hover:border-emerald-500 dark:hover:text-emerald-400 text-[12px] font-semibold transition-colors"
+                    className="flex items-center gap-1.5 h-9 px-3 rounded-xl border border-emerald-400 dark:border-emerald-500/60 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 text-[12px] font-bold transition-colors active:scale-95"
                     title="Create group chat for this event"
                   >
                     <MessageCircle className="h-4 w-4" />

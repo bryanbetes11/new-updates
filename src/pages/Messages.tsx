@@ -814,8 +814,22 @@ function ConvInfoPanel({
     }
   };
 
+  const handleRemoveMember = async (userId: string) => {
+    const { error } = await supabase
+      .from('conversation_members')
+      .delete()
+      .eq('conversation_id', conv.id)
+      .eq('user_id', userId);
+    if (error) {
+      toast('error', 'Failed to remove member');
+      return;
+    }
+    onConvUpdate();
+    toast('success', 'Member removed');
+  };
+
   useEffect(() => {
-    if (conv.type !== 'group' || !addMembersOpen) return;
+    if ((conv.type !== 'group' && conv.type !== 'event') || !addMembersOpen) return;
     let cancelled = false;
     setLoadingAvailablePeople(true);
     supabase
@@ -1122,7 +1136,7 @@ function ConvInfoPanel({
           </div>
         )}
 
-        {conv.type === 'group' && (
+        {(conv.type === 'group' || conv.type === 'event') && (
           <div className="mx-4 mt-3 rounded-2xl bg-white dark:bg-[#111013] border border-gray-100 dark:border-white/[0.06] overflow-hidden">
             <button
               onClick={() => setShowMembersModal(true)}
@@ -1320,11 +1334,11 @@ function ConvInfoPanel({
         )}
       </div>
 
-      {conv.type === 'group' && (
+      {(conv.type === 'group' || conv.type === 'event') && (
         <Modal
           open={showMembersModal}
           onClose={() => { setShowMembersModal(false); setAddMembersOpen(false); setSelectedMemberIds(new Set()); setMemberSearch(''); }}
-          title="Group Members"
+          title="Members"
           size="md"
         >
           <div className="space-y-4">
@@ -1420,6 +1434,15 @@ function ConvInfoPanel({
                           {!isYou && !isOwner && member.profile?.nickname && <span>{member.profile.nickname}</span>}
                         </div>
                       </div>
+                      {!isYou && (
+                        <button
+                          onClick={() => handleRemoveMember(member.user_id)}
+                          className="shrink-0 p-1.5 rounded-lg text-gray-300 dark:text-white/20 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+                          title="Remove member"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -1481,7 +1504,7 @@ function EventDiscussionCard({ eventId }: { eventId: string }) {
   return (
     <div className="shrink-0 border-b border-emerald-100 dark:border-emerald-500/10 bg-emerald-50/70 dark:bg-emerald-500/[0.06] px-4 py-3">
       <button
-        onClick={() => navigate(`/events/${eventId}`)}
+        onClick={() => navigate(`/events/${eventId}/chat`)}
         className="w-full text-left rounded-2xl bg-white dark:bg-[#161619] border border-emerald-100 dark:border-emerald-500/15 px-3.5 py-3 shadow-sm shadow-emerald-900/5"
       >
         <div className="flex items-start gap-3">

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
@@ -13,6 +13,7 @@ import { Onboarding } from './pages/Onboarding';
 import { Dashboard } from './pages/Dashboard';
 import { Events } from './pages/Events';
 import { EventDetail } from './pages/EventDetail';
+import { ChatEventDetail } from './pages/ChatEventDetail';
 import { Announcements } from './pages/Announcements';
 import { AnnouncementDetail } from './pages/AnnouncementDetail';
 import { Library } from './pages/Library';
@@ -29,6 +30,15 @@ import { ChangePassword } from './pages/ChangePassword';
 import { ResetPassword } from './pages/ResetPassword';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { isPasswordRecoveryUrl, recoveryRedirectPath } from './lib/authRedirect';
+import { AppUpdateModal } from './components/AppUpdateModal';
+import { APP_UPDATE_VERSION, APP_VERSION_LABEL } from './lib/appUpdate';
+import {
+  APP_UPDATE_AVAILABLE_EVENT,
+  applyPendingAppUpdate,
+  getInstalledAppVersion,
+  hasPendingAppUpdate,
+  shouldRequireAppUpdate,
+} from './lib/serviceWorkerUpdate';
 
 function PasswordRecoveryRedirect() {
   const location = useLocation();
@@ -44,12 +54,40 @@ function PasswordRecoveryRedirect() {
 }
 
 export default function App() {
+  const [showAppUpdate, setShowAppUpdate] = useState(false);
+  const [applyingUpdate, setApplyingUpdate] = useState(false);
+  const [installedVersion, setInstalledVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleUpdateAvailable = () => {
+      setInstalledVersion(getInstalledAppVersion());
+      setShowAppUpdate(shouldRequireAppUpdate());
+    };
+
+    window.addEventListener(APP_UPDATE_AVAILABLE_EVENT, handleUpdateAvailable);
+
+    setInstalledVersion(getInstalledAppVersion());
+    if (hasPendingAppUpdate() && shouldRequireAppUpdate()) setShowAppUpdate(true);
+
+    return () => window.removeEventListener(APP_UPDATE_AVAILABLE_EVENT, handleUpdateAvailable);
+  }, []);
+
   return (
     <BrowserRouter>
       <PasswordRecoveryRedirect />
       <ThemeProvider>
         <AuthProvider>
           <ToastProvider>
+            <AppUpdateModal
+              open={showAppUpdate}
+              currentVersion={installedVersion || APP_VERSION_LABEL}
+              targetVersion={APP_UPDATE_VERSION}
+              onUpdate={() => {
+                setApplyingUpdate(true);
+                applyPendingAppUpdate();
+              }}
+              applying={applyingUpdate}
+            />
             <Routes>
               <Route path="/platform" element={<PlatformPortal />} />
               <Route element={<Layout />}>
@@ -65,6 +103,7 @@ export default function App() {
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/events" element={<Events />} />
                   <Route path="/events/:id" element={<EventDetail />} />
+                  <Route path="/events/:id/chat" element={<ChatEventDetail />} />
                   <Route path="/announcements" element={<Announcements />} />
                   <Route path="/announcements/:id" element={<AnnouncementDetail />} />
                   <Route path="/library" element={<Library />} />

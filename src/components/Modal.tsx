@@ -84,7 +84,7 @@ export function Modal({
         onClick={e => e.stopPropagation()}
       >
         {!hideHeader && (
-          <div className="relative flex items-center justify-between px-5 pt-7 pb-4 border-b border-black/[0.05] dark:border-white/[0.06] shrink-0">
+          <div className={`relative flex items-center justify-between px-5 border-b border-black/[0.05] dark:border-white/[0.06] shrink-0 ${titleAlign === 'center' ? 'pt-8 pb-5' : 'pt-7 pb-4'}`}>
             <div className="absolute top-3 left-1/2 -translate-x-1/2 w-8 h-1 rounded-full bg-gray-200 dark:bg-gray-700 sm:hidden" />
             <h2
               className={`text-[15px] font-bold text-gray-900 dark:text-white ${titleAlign === 'center' ? 'absolute left-1/2 -translate-x-1/2 text-center' : ''}`}

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { format, parseISO, differenceInDays, startOfDay, subWeeks, previousSunday, addDays, subDays } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Calendar, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronUp, ChevronRight, LayoutPanelLeft, ListMusic, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronRight, LayoutPanelLeft, ListMusic, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, Copy, FileText } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -15,10 +15,10 @@ import { formatTime12Hour } from '../lib/timeFormat';
 import { Avatar } from '../components/Avatar';
 import { dispatchBadgeCountsRefresh } from '../lib/realtimeSignals';
 
-import type { Event, EventAssignment, Setlist, SetlistSong, Song, SetlistCheckerSong, ServiceFormat } from '../types';
-import { SetlistChecker } from '../components/SetlistChecker';
-import { LiveSetlistGuidance } from '../components/LiveSetlistGuidance';
-import { inferServiceFormat, SERVICE_FORMAT_LABELS, type CheckerSong } from '../lib/setlistCheckerEngine';
+import type { Event, EventAssignment, Setlist, SetlistSong, Song, ServiceFormat, SetlistCheckReport } from '../types';
+import { inferServiceFormat, SERVICE_FORMAT_LABELS } from '../lib/setlistCheckerEngine';
+import { SetlistReport } from '../components/setlist-checker/SetlistReport';
+import { CheckingAnimation } from '../components/setlist-checker/CheckingAnimation';
 
 interface EventAttendance {
   id: string;
@@ -46,6 +46,16 @@ export function EventDetail() {
 
   const { user, roles, userRoles, isLeader, isProductionDirector } = useAuth();
   const { toast } = useToast();
+
+  const isMissingSetlistSubmissionTableError = useCallback((message?: string | null) => {
+    if (!message) return false;
+    const lower = message.toLowerCase();
+    return lower.includes('setlist_submissions') && (
+      lower.includes('schema cache') ||
+      lower.includes('could not find the table') ||
+      lower.includes('relation')
+    );
+  }, []);
 
   const [event, setEvent] = useState<Event | null>(null);
   const [assignments, setAssignments] = useState<EventAssignment[]>([]);
@@ -84,11 +94,25 @@ export function EventDetail() {
   const [attendance, setAttendance] = useState<EventAttendance | null>(null);
   const [allAttendance, setAllAttendance] = useState<EventAttendance[]>([]);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
-  const [showChecker, setShowChecker] = useState(false);
+  const [cardView, setCardView] = useState<'setlist' | 'checking' | 'report'>('setlist');
+  const [checkReport, setCheckReport] = useState<SetlistCheckReport | null>(null);
+  const [serviceTheme, setServiceTheme] = useState('');
+  const [lyricsModalSong, setLyricsModalSong] = useState<SetlistSong | null>(null);
+  const [lyricsInput, setLyricsInput] = useState('');
+  const [savingLyrics, setSavingLyrics] = useState(false);
+  const [fetchingLyrics, setFetchingLyrics] = useState(false);
+  const [lyricsSearchResults, setLyricsSearchResults] = useState<Array<{
+    id: string;
+    title: string;
+    artist: string;
+    album?: string | null;
+    duration?: number | null;
+    source: string;
+    lyrics: string;
+  }>>([]);
   const [countdownParts, setCountdownParts] = useState<{ hours: number; minutes: number; seconds: number }>({ hours: 0, minutes: 0, seconds: 0 });
   const [serviceFormat, setServiceFormat] = useState<ServiceFormat | null>(null);
-  const [setlistTab, setSetlistTab] = useState<'songs' | 'guidance' | 'notes'>('songs');
-  const [guidanceLanguage, setGuidanceLanguage] = useState<'english' | 'tagalog_english'>('english');
+  const [setlistTab, setSetlistTab] = useState<'songs' | 'notes'>('songs');
   const [isReordering, setIsReordering] = useState(false);
   const [reorderSongs, setReorderSongs] = useState<SetlistSong[]>([]);
   const [savingOrder, setSavingOrder] = useState(false);
@@ -120,9 +144,32 @@ export function EventDetail() {
       if (setlistRes.data) {
         setSetlist(setlistRes.data);
         setSetlistSongs(setlistRes.data.setlist_songs || []);
+
+        const { data: latestSubmission, error: latestSubmissionError } = await supabase
+          .from('setlist_submissions')
+          .select('report, theme')
+          .eq('setlist_id', setlistRes.data.id)
+          .order('submitted_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (latestSubmissionError) {
+          if (!isMissingSetlistSubmissionTableError(latestSubmissionError.message)) {
+            console.error('Failed to load last setlist check report:', latestSubmissionError);
+          }
+          setCheckReport(null);
+        } else if (latestSubmission?.report) {
+          setCheckReport(latestSubmission.report as unknown as SetlistCheckReport);
+          if (typeof latestSubmission.theme === 'string' && latestSubmission.theme.trim()) {
+            setServiceTheme(prev => prev || latestSubmission.theme);
+          }
+        } else {
+          setCheckReport(null);
+        }
       } else {
         setSetlist(null);
         setSetlistSongs([]);
+        setCheckReport(null);
       }
       setLinkedSetlist(null);
       setLinkedSetlistSongs([]);
@@ -170,7 +217,7 @@ export function EventDetail() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, isMissingSetlistSubmissionTableError]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -514,6 +561,7 @@ export function EventDetail() {
 
   const handleSetlistAction = async (action: 'pending_review' | 'approved' | 'revision_requested' | 'rejected' | 'draft', notes?: string) => {
     if (!setlist) return;
+    if (action === 'pending_review' && !ensureLyricsReady('submit')) return;
     const now = new Date().toISOString();
     const update: Record<string, string | null> = { status: action };
     const isReviewDecision = action === 'approved' || action === 'revision_requested' || action === 'rejected';
@@ -612,6 +660,139 @@ export function EventDetail() {
     navigate('/events');
   };
 
+  const handleDuplicateEvent = async () => {
+    if (!event || !user) return;
+    const title = await generateEventTitle(event.song_leader_id, event.event_type);
+    const { data: newEvent, error: eventErr } = await supabase.from('events').insert({
+      title,
+      event_date: event.event_date,
+      start_time: event.start_time || null,
+      end_time: event.end_time || null,
+      event_type: event.event_type,
+      description: event.description || null,
+      created_by: user.id,
+      song_leader_id: event.song_leader_id || null,
+      proposal_due_date: event.proposal_due_date || null,
+    }).select('id').maybeSingle();
+    if (eventErr || !newEvent) { toast('error', 'Failed to duplicate event'); return; }
+
+    if (setlist && setlistSongs.length > 0) {
+      const { data: newSetlist, error: slErr } = await supabase.from('setlists').insert({
+        event_id: newEvent.id,
+        created_by: user.id,
+        status: 'draft',
+        service_format: serviceFormat || 'sunday_full',
+      }).select('id').maybeSingle();
+      if (!slErr && newSetlist) {
+        const songRows = setlistSongs
+          .sort((a, b) => a.position - b.position)
+          .map(ss => ({
+            setlist_id: newSetlist.id,
+            song_id: ss.song_id,
+            position: ss.position,
+            song_category: ss.song_category || null,
+            performed_key: ss.performed_key || null,
+            youtube_url: ss.youtube_url || null,
+          }));
+        await supabase.from('setlist_songs').insert(songRows);
+      }
+    }
+
+    toast('success', 'Event duplicated');
+    navigate(`/events/${newEvent.id}`);
+  };
+
+  const openLyricsModal = (ss: SetlistSong) => {
+    setLyricsModalSong(ss);
+    setLyricsInput(ss.songs?.lyrics || '');
+    setLyricsSearchResults([]);
+  };
+
+  const persistCheckReport = useCallback(async (report: SetlistCheckReport) => {
+    if (!setlist || !user) return;
+
+    const { error } = await supabase.from('setlist_submissions').insert({
+      user_id: user.id,
+      setlist_id: setlist.id,
+      theme: serviceTheme.trim(),
+      songs: setlistSongs.map(ss => ({
+        id: ss.id,
+        song_id: ss.song_id,
+        title: ss.songs?.title || '',
+        artist: ss.songs?.artist || '',
+        slot: ss.song_category || '',
+        lyrics: ss.songs?.lyrics || '',
+      })),
+      report,
+      verdict: report.verdict,
+      rating: report.rating,
+    });
+
+    if (error) {
+      console.error('Failed to persist setlist check report:', error);
+      if (!isMissingSetlistSubmissionTableError(error.message)) {
+        toast('warning', error.message || 'Checked setlist, but failed to save the last result');
+      }
+    }
+  }, [isMissingSetlistSubmissionTableError, serviceTheme, setlist, setlistSongs, toast, user]);
+
+  const handleFindLyrics = async () => {
+    if (!lyricsModalSong) return;
+    const title = lyricsModalSong.songs?.title?.trim() || '';
+    const artist = lyricsModalSong.songs?.artist?.trim() || '';
+    if (!title) {
+      toast('error', 'Song title is required to find lyrics');
+      return;
+    }
+
+    setFetchingLyrics(true);
+    const { data, error } = await supabase.functions.invoke('fetch-lyrics-from-link', {
+      body: {
+        title,
+        artist,
+      },
+    });
+    setFetchingLyrics(false);
+
+    if (error) {
+      console.error('Failed to find lyrics:', error);
+      toast('error', error.message || 'Failed to find lyrics');
+      return;
+    }
+
+    const results = Array.isArray(data?.results) ? data.results : [];
+    if (results.length === 0) {
+      toast('error', 'No lyrics found for this song');
+      return;
+    }
+
+    setLyricsSearchResults(results);
+    if (results.length === 1 && typeof results[0]?.lyrics === 'string') {
+      setLyricsInput(results[0].lyrics.trim());
+    }
+    toast('success', `Found ${results.length} lyrics result${results.length > 1 ? 's' : ''}`);
+  };
+
+  const handleSaveLyrics = async () => {
+    if (!lyricsModalSong) return;
+    setSavingLyrics(true);
+    const trimmed = lyricsInput.trim() || null;
+    const { error } = await supabase.from('songs').update({ lyrics: trimmed }).eq('id', lyricsModalSong.song_id);
+    setSavingLyrics(false);
+    if (error) {
+      console.error('Failed to save lyrics:', error);
+      toast('error', error.message || 'Failed to save lyrics');
+      return;
+    }
+    setSetlistSongs(prev => prev.map(s =>
+      s.song_id === lyricsModalSong.song_id
+        ? { ...s, songs: s.songs ? { ...s.songs, lyrics: trimmed } : s.songs }
+        : s
+    ));
+    toast('success', 'Lyrics saved');
+    setLyricsModalSong(null);
+  };
+
   const calculateProposalDueDate = (eventDate: string, eventType: string): string | null => {
     if (!eventDate) return null;
     const date = parseISO(eventDate);
@@ -677,6 +858,24 @@ export function EventDetail() {
       linked_event_id: '',
     }));
   };
+
+  const missingLyricsSongs = setlistSongs.filter(ss => !ss.songs?.lyrics?.trim());
+  const hasMissingLyrics = missingLyricsSongs.length > 0;
+  const missingLyricsLabel = missingLyricsSongs
+    .map(ss => ss.songs?.title || 'Untitled song')
+    .slice(0, 3)
+    .join(', ');
+
+  const ensureLyricsReady = useCallback((action: 'check' | 'submit') => {
+    if (!hasMissingLyrics) return true;
+
+    const actionLabel = action === 'check' ? 'check' : 'submit';
+    const moreCount = missingLyricsSongs.length - Math.min(missingLyricsSongs.length, 3);
+    const suffix = moreCount > 0 ? ` and ${moreCount} more` : '';
+
+    toast('error', `Add lyrics first before you can ${actionLabel} this setlist. Missing lyrics: ${missingLyricsLabel}${suffix}.`);
+    return false;
+  }, [hasMissingLyrics, missingLyricsLabel, missingLyricsSongs.length, toast]);
 
   const getSongLeaders = () => {
     const songLeaderRole = roles.find(r => r.name === 'Song Leader');
@@ -992,6 +1191,15 @@ export function EventDetail() {
                     title="Edit"
                   >
                     <Edit className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                {isLeader && (
+                  <button
+                    onClick={handleDuplicateEvent}
+                    className="inline-flex items-center justify-center h-9 w-9 rounded-full text-gray-600 dark:text-white/55 bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-md hover:bg-white dark:hover:bg-white/[0.07] active:scale-[0.95] transition-colors"
+                    title="Duplicate Event"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
                   </button>
                 )}
                 {isLeader && (
@@ -1403,6 +1611,33 @@ export function EventDetail() {
         ) : (
           <div className="animate-slide-up" style={{ animationDelay: '125ms' }}>
             <div className="card overflow-hidden">
+              {cardView === 'checking' ? (
+                <CheckingAnimation
+                  songs={setlistSongs.sort((a, b) => a.position - b.position).map(ss => ({
+                    title: ss.songs?.title || '',
+                    artist: ss.songs?.artist || '',
+                    slot: (ss.song_category || 'Worship') as 'Opening' | 'Praise' | 'Worship' | 'Closing' | 'Offering' | 'Special' | 'Others',
+                    lyrics: ss.songs?.lyrics || undefined,
+                  }))}
+                  theme={serviceTheme}
+                  language="english"
+                  onComplete={async (report) => {
+                    setCheckReport(report);
+                    setCardView('report');
+                    await persistCheckReport(report);
+                  }}
+                />
+              ) : cardView === 'report' && checkReport ? (
+                <SetlistReport
+                  report={checkReport}
+                  onBack={() => setCardView('setlist')}
+                  onRecheck={() => { setCheckReport(null); setCardView('checking'); }}
+                  onSubmitProposal={canSubmitSetlist ? () => handleSetlistAction('pending_review') : undefined}
+                  canSubmit={!hasMissingLyrics && canSubmitSetlist && ['draft', 'revision_requested'].includes(setlist.status)}
+                  setlistStatus={setlist.status}
+                />
+              ) : (
+              <>
               {/* Header */}
               <div className="border-b border-gray-100 dark:border-gray-800">
                 {/* Mobile: stacked two-row layout */}
@@ -1470,7 +1705,7 @@ export function EventDetail() {
               </div>
 
               <div className="flex border-b border-gray-100 dark:border-gray-800 lg:hidden">
-                {(['songs', 'guidance', 'notes'] as const).map(tab => (
+                {(['songs', 'notes'] as const).map(tab => (
                   <button
                     key={tab}
                     onClick={() => setSetlistTab(tab)}
@@ -1480,14 +1715,14 @@ export function EventDetail() {
                         : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                     }`}
                   >
-                    {tab === 'songs' ? <ListMusic className="h-3.5 w-3.5 inline mr-1" /> : tab === 'guidance' ? <Sparkles className="h-3.5 w-3.5 inline mr-1" /> : <LayoutPanelLeft className="h-3.5 w-3.5 inline mr-1" />}
+                    {tab === 'songs' ? <ListMusic className="h-3.5 w-3.5 inline mr-1" /> : <LayoutPanelLeft className="h-3.5 w-3.5 inline mr-1" />}
                     {tab}
                   </button>
                 ))}
               </div>
 
-              <div className="lg:flex lg:divide-x lg:divide-gray-100 lg:dark:divide-gray-800">
-                <div className={`lg:flex-1 lg:min-w-0 ${setlistTab !== 'songs' ? 'hidden lg:block' : ''}`}>
+              <div>
+                <div className={setlistTab !== 'songs' ? 'hidden' : ''}>
                   {isReordering ? (
                     <div>
                       <div className="px-4 py-2.5 bg-brand-50 dark:bg-brand-900/20 border-b border-brand-100 dark:border-brand-800 flex items-center justify-between">
@@ -1544,6 +1779,7 @@ export function EventDetail() {
                         const isSafe = !usage || usage.days >= 90;
                         const displayKey = ss.performed_key || ss.songs?.song_key || '';
                         const keyChanged = ss.performed_key && ss.songs?.song_key && ss.performed_key !== ss.songs.song_key;
+                        const lyricsMissing = !ss.songs?.lyrics?.trim();
                         return (
                           <div key={ss.id} className="px-4 py-2.5">
                             {/* Desktop: original single-row layout */}
@@ -1553,6 +1789,12 @@ export function EventDetail() {
                                 <div className="flex items-center gap-1.5 min-w-0">
                                   <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{ss.songs?.title}</p>
                                   {ss.song_category && <span className="badge-blue text-[10px] shrink-0">{ss.song_category}</span>}
+                                  {lyricsMissing && (
+                                    <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-500/12 dark:text-amber-300 shrink-0">
+                                      <AlertCircle className="h-3 w-3" />
+                                      Lyrics needed
+                                    </span>
+                                  )}
                                   {displayKey && (
                                     <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${keyChanged ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'}`}>
                                       {displayKey}
@@ -1576,6 +1818,18 @@ export function EventDetail() {
                                   <CheckCircle className="h-4 w-4" /> New
                                 </span>
                               )}
+                              <button
+                                onClick={() => openLyricsModal(ss)}
+                                title={ss.songs?.lyrics ? 'Edit lyrics' : 'Add lyrics'}
+                                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold transition-colors shrink-0 ${
+                                  ss.songs?.lyrics
+                                    ? 'bg-green-50 text-green-600 hover:text-green-700 dark:bg-green-500/12 dark:text-green-300 dark:hover:text-green-200'
+                                    : 'bg-amber-50 text-amber-600 hover:text-amber-700 dark:bg-amber-500/12 dark:text-amber-300 dark:hover:text-amber-200'
+                                }`}
+                              >
+                                <FileText className="h-4 w-4" />
+                                <span>{ss.songs?.lyrics ? 'Edit Lyrics' : 'Add Lyrics'}</span>
+                              </button>
                               {canEditSetlist && (
                                 <button onClick={() => openEditSong(ss)} className="p-1 text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">
                                   <Edit className="h-4 w-4" />
@@ -1593,8 +1847,28 @@ export function EventDetail() {
                               {/* Line 1: number + title + action icons */}
                               <div className="flex items-start gap-2.5">
                                 <span className="flex items-center justify-center h-6 w-6 rounded-md bg-gray-100 dark:bg-gray-800 text-xs font-medium text-gray-500 dark:text-gray-400 shrink-0 mt-0.5">{i + 1}</span>
-                                <p className="text-sm font-medium text-gray-900 dark:text-white flex-1 min-w-0 leading-snug">{ss.songs?.title}</p>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 dark:text-white leading-snug">{ss.songs?.title}</p>
+                                  {lyricsMissing && (
+                                    <span className="mt-1 inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-500/12 dark:text-amber-300">
+                                      <AlertCircle className="h-3 w-3" />
+                                      Lyrics needed
+                                    </span>
+                                  )}
+                                </div>
                                 <div className="flex items-center gap-0.5 shrink-0">
+                                  <button
+                                    onClick={() => openLyricsModal(ss)}
+                                    title={ss.songs?.lyrics ? 'Edit lyrics' : 'Add lyrics'}
+                                    className={`inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-[10px] font-semibold transition-colors ${
+                                      ss.songs?.lyrics
+                                        ? 'bg-green-50 text-green-600 dark:bg-green-500/12 dark:text-green-300'
+                                        : 'bg-amber-50 text-amber-600 dark:bg-amber-500/12 dark:text-amber-300'
+                                    }`}
+                                  >
+                                    <FileText className="h-3.5 w-3.5" />
+                                    <span>{ss.songs?.lyrics ? 'Edit Lyrics' : 'Add Lyrics'}</span>
+                                  </button>
                                   {canEditSetlist && (
                                     <button onClick={() => openEditSong(ss)} className="p-1.5 text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">
                                       <Edit className="h-3.5 w-3.5" />
@@ -1659,12 +1933,20 @@ export function EventDetail() {
 
                       {/* CREATOR ACTIONS */}
                       {canSubmitSetlist && setlist.status === 'draft' && (
-                        <button onClick={() => handleSetlistAction('pending_review')} className="btn-primary text-xs ml-auto">
+                        <button
+                          onClick={() => handleSetlistAction('pending_review')}
+                          disabled={hasMissingLyrics}
+                          className="btn-primary text-xs ml-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
                           <Send className="h-3.5 w-3.5" /> Submit Proposal
                         </button>
                       )}
                       {canSubmitSetlist && setlist.status === 'revision_requested' && (
-                        <button onClick={() => handleSetlistAction('pending_review')} className="btn-primary text-xs ml-auto">
+                        <button
+                          onClick={() => handleSetlistAction('pending_review')}
+                          disabled={hasMissingLyrics}
+                          className="btn-primary text-xs ml-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
                           <Send className="h-3.5 w-3.5" /> Resubmit
                         </button>
                       )}
@@ -1701,36 +1983,8 @@ export function EventDetail() {
                   )}
                 </div>
 
-                <div className={`lg:w-60 xl:w-64 shrink-0 ${setlistTab !== 'guidance' ? 'hidden lg:block' : ''}`}>
-                  <div className="px-3 py-3">
-                    <div className="flex justify-end mb-2">
-                      <button
-                        onClick={() => setGuidanceLanguage(l => l === 'english' ? 'tagalog_english' : 'english')}
-                        className="text-[10px] font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                      >
-                        {guidanceLanguage === 'english' ? 'EN' : 'TGL-EN'}
-                      </button>
-                    </div>
-                    <LiveSetlistGuidance
-                      songs={setlistSongs.sort((a, b) => a.position - b.position).map((ss, i): CheckerSong => ({
-                        id: ss.id,
-                        song_id: ss.song_id,
-                        title: ss.songs?.title || '',
-                        artist: ss.songs?.artist || '',
-                        song_key: ss.performed_key || ss.songs?.song_key || '',
-                        category: ss.song_category || 'Worship',
-                        duration: ss.songs?.duration || '',
-                        youtube_url: ss.youtube_url || ss.songs?.youtube_url || '',
-                        position: i + 1,
-                      }))}
-                      serviceFormat={serviceFormat || 'sunday_full'}
-                      language={guidanceLanguage}
-                    />
-                  </div>
-                </div>
-
                 {setlistTab === 'notes' && (
-                  <div className="lg:hidden px-5 py-4">
+                  <div className="px-5 py-4 border-t border-gray-100 dark:border-gray-800">
                     {(setlist.review_note || setlist.approval_notes) && setlist.status !== 'approved' ? (
                       <div className={`rounded-xl p-4 ${
                         setlist.status === 'revision_requested' ? 'bg-amber-50 dark:bg-amber-900/20'
@@ -1749,48 +2003,49 @@ export function EventDetail() {
                     )}
                   </div>
                 )}
-              </div>
-            </div>
 
-            {(canManageSetlist || canReviewSetlist) && (
-              <div className="card mt-3 overflow-hidden">
-                <button
-                  onClick={() => setShowChecker(s => !s)}
-                  className="w-full flex items-center justify-between px-5 py-4"
-                >
-                  <h2 className="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-brand-600 dark:text-brand-400" /> Full Setlist Analysis
-                  </h2>
-                  {showChecker ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
-                </button>
-                {showChecker && (
-                  <div className="px-3 sm:px-5 pb-4 sm:pb-5 border-t border-gray-100 dark:border-gray-800 pt-4">
-                    <SetlistChecker
-                      setlistId={setlist.id}
-                      setlistStatus={setlist.status}
-                      serviceFormat={serviceFormat || 'sunday_full'}
-                      initialSongs={setlistSongs.sort((a, b) => a.position - b.position).map((ss, i): SetlistCheckerSong => ({
-                        id: ss.id,
-                        song_id: ss.song_id,
-                        title: ss.songs?.title || '',
-                        artist: ss.songs?.artist || '',
-                        song_key: ss.performed_key || ss.songs?.song_key || '',
-                        category: ss.song_category || 'Worship',
-                        duration: ss.songs?.duration || '',
-                        youtube_url: ss.youtube_url || ss.songs?.youtube_url || '',
-                        position: i + 1,
-                      }))}
-                      onDecision={(decision, notes) => {
-                        if (decision === 'approve') handleSetlistAction('approved', notes);
-                        else if (decision === 'revision') handleSetlistAction('revision_requested', notes);
-                        else if (decision === 'reject') handleSetlistAction('rejected', notes);
-                      }}
+                {(canSubmitSetlist || canManageSetlist) && setlistSongs.length > 0 && (
+                  <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800 space-y-2">
+                    {hasMissingLyrics && (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12px] leading-relaxed text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
+                        Add lyrics to every song before checking or submitting this setlist.
+                        <span className="block mt-1 font-medium">
+                          Missing: {missingLyricsLabel}{missingLyricsSongs.length > 3 ? ` and ${missingLyricsSongs.length - 3} more` : ''}
+                        </span>
+                      </div>
+                    )}
+                    <input
+                      type="text"
+                      placeholder="Service theme (optional, e.g. God is Faithful)"
+                      value={serviceTheme}
+                      onChange={e => setServiceTheme(e.target.value)}
+                      className="w-full text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 placeholder-gray-400 dark:placeholder-gray-500 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 dark:focus:ring-brand-400"
                     />
+                    <button
+                      onClick={() => {
+                        if (!ensureLyricsReady('check')) return;
+                        setCardView('checking');
+                      }}
+                      disabled={hasMissingLyrics}
+                      className="w-full btn-primary text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Sparkles className="h-4 w-4" /> Check Setlist
+                    </button>
+                    {checkReport && (
+                      <button
+                        onClick={() => setCardView('report')}
+                        className="w-full btn-secondary text-sm flex items-center justify-center gap-2"
+                      >
+                        <FileText className="h-4 w-4" /> View Last Result
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
+            </>
             )}
           </div>
+        </div>
         )}
 
         <Modal open={showAssign} onClose={() => setShowAssign(false)} title="Assign Team Member">
@@ -2090,6 +2345,91 @@ export function EventDetail() {
               </button>
             </div>
           </div>
+        </Modal>
+
+        {/* Lyrics Modal */}
+        <Modal open={!!lyricsModalSong} onClose={() => setLyricsModalSong(null)} title="Song Lyrics">
+          {lyricsModalSong && (
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">{lyricsModalSong.songs?.title}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{lyricsModalSong.songs?.artist}</p>
+              </div>
+              <div>
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-gray-200/80 bg-gray-50/70 px-3 py-3 dark:border-white/[0.08] dark:bg-white/[0.03]">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">
+                      Auto Find Lyrics
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                      Search by this song&apos;s title{lyricsModalSong.songs?.artist?.trim() ? ' and artist' : ''}, then review the result before saving.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleFindLyrics}
+                    disabled={fetchingLyrics}
+                    className="btn-secondary shrink-0 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {fetchingLyrics ? 'Finding...' : 'Find Lyrics'}
+                  </button>
+                </div>
+                {lyricsSearchResults.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">
+                      Search Results
+                    </p>
+                    <div className="max-h-72 space-y-2 overflow-y-auto rounded-2xl border border-gray-200/80 bg-gray-50/70 p-2 dark:border-white/[0.08] dark:bg-white/[0.03]">
+                      {lyricsSearchResults.map((result) => (
+                        <button
+                          key={result.id}
+                          onClick={() => setLyricsInput(result.lyrics)}
+                          type="button"
+                          className="w-full rounded-2xl border border-gray-200/80 bg-white px-3 py-3 text-left transition-colors hover:bg-gray-50 dark:border-white/[0.08] dark:bg-[#10151f] dark:hover:bg-white/[0.05]"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-gray-900 dark:text-white">{result.title}</p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{result.artist}</p>
+                              {(result.album || result.duration) && (
+                                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+                                  {result.album ? result.album : 'Unknown album'}
+                                  {result.duration ? ` · ${Math.round(result.duration)}s` : ''}
+                                </p>
+                              )}
+                              <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                                {result.lyrics}
+                              </p>
+                            </div>
+                            <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-500/12 dark:text-emerald-300">
+                              Use
+                            </span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div>
+                <textarea
+                  value={lyricsInput}
+                  onChange={e => setLyricsInput(e.target.value)}
+                  placeholder="Paste the full song lyrics here..."
+                  rows={12}
+                  className="input-field resize-none text-sm leading-relaxed"
+                />
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
+                  Lyrics are shared across all setlists — other members won&apos;t need to add them again.
+                </p>
+              </div>
+              <div className="flex justify-end gap-3">
+                <button onClick={() => setLyricsModalSong(null)} className="btn-secondary text-sm">Cancel</button>
+                <button onClick={handleSaveLyrics} disabled={savingLyrics} className="btn-primary text-sm">
+                  {savingLyrics ? 'Saving...' : 'Save Lyrics'}
+                </button>
+              </div>
+            </div>
+          )}
         </Modal>
 
         <Modal open={showDeleteEvent} onClose={() => setShowDeleteEvent(false)} title="Delete Event" size="sm">

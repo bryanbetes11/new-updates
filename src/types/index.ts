@@ -219,6 +219,7 @@ export interface Song {
   duration: string;
   key_notes: string;
   youtube_url: string;
+  lyrics?: string | null;
   created_by: string;
   created_at: string;
 }
@@ -459,4 +460,78 @@ export interface SetlistCheckerSession {
   language_mode: 'english' | 'tagalog_english';
   created_at: string;
   updated_at: string;
+}
+
+// ── Setlist Check Report (theological analysis) ──────────────────────────────
+
+export interface SlotCheck {
+  title: string;
+  artist: string;
+  slot: string;
+  fits: boolean;
+  reason: string;
+  action: 'APPROVED' | 'APPROVED_WITH_CAUTION' | 'NEEDS_LEADER_REVIEW' | 'REJECTED';
+  priorityTier: string;
+}
+
+export interface SetlistCheckReport {
+  verdict: 'APPROVE' | 'REVISE' | 'REJECT';
+  rating: number;
+  verdictExplanation: string;
+  flowCheck: {
+    ok: boolean;
+    issues: string[];
+    actsSummary: {
+      act: string;
+      purpose: string;
+      songTitles: string[];
+    }[];
+  };
+  slotFitCheck: SlotCheck[];
+  suggestedFlowCorrection?: {
+    orderedSongs: { title: string; slot: string }[];
+    fixes: string[];
+  };
+  themeAlignment: {
+    theme: string;
+    skipped?: boolean;
+    summary?: string;
+    strengths: { title: string; reason: string }[];
+    mismatches: { title: string; reason: string }[];
+  };
+  gospelCenteredness: {
+    checks: { question: string; passed: boolean; explanation: string }[];
+    allPassed: boolean;
+  };
+  theologicalFlags: {
+    songTitle: string;
+    lyricExcerpt: string;
+    flagType: string;
+    concern: string;
+    recommendation: string;
+  }[];
+  fiveQuestionTest: {
+    title: string;
+    artist: string;
+    slot: string;
+    q1: { result: 'Pass' | 'Needs Revision' | 'Fail'; reason: string };
+    q2: { result: 'Pass' | 'Needs Revision' | 'Fail'; reason: string };
+    q3: { result: 'Pass' | 'Needs Revision' | 'Fail'; reason: string };
+    q4: { result: 'Pass' | 'Needs Revision' | 'Fail'; reason: string };
+    q5: { result: 'Pass' | 'Needs Revision' | 'Fail'; reason: string };
+    passedQuestions: number;
+    flaggedQuestions: number;
+    decision: string;
+    leaderNote: string;
+  }[];
+  actionPlan: string[];
+  discordText: string;
+  analyzedAt: string;
+  language: string;
+  songsWithLyrics: {
+    title: string;
+    artist: string;
+    slot: string;
+    lyricsSource: 'provided' | 'fetched' | 'unavailable';
+  }[];
 }

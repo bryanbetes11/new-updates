@@ -7,6 +7,7 @@ const INSTALLED_APP_VERSION_KEY = 'servesync-installed-app-version';
 let pendingRegistration: ServiceWorkerRegistration | null = null;
 let installedAppVersion = readStoredInstalledAppVersion();
 let userRequestedUpdate = false;
+let hasRegisteredControllerChangeHandler = false;
 
 function readStoredInstalledAppVersion() {
   if (typeof window === 'undefined') return null;
@@ -88,6 +89,21 @@ export function applyPendingAppUpdate() {
 
 export function registerAppServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
+  if (import.meta.env.DEV) {
+    window.addEventListener('load', async () => {
+      try {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(
+          registrations
+            .filter(registration => registration.scope.startsWith(window.location.origin))
+            .map(registration => registration.unregister()),
+        );
+      } catch (error) {
+        console.warn('Failed to clean up development service workers:', error);
+      }
+    });
+    return;
+  }
 
   window.addEventListener('load', async () => {
     try {
@@ -111,12 +127,15 @@ export function registerAppServiceWorker() {
         });
       });
 
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (userRequestedUpdate) {
-          persistInstalledAppVersion(APP_UPDATE_VERSION);
-          window.location.reload();
-        }
-      });
+      if (!hasRegisteredControllerChangeHandler) {
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (userRequestedUpdate) {
+            persistInstalledAppVersion(APP_UPDATE_VERSION);
+            window.location.reload();
+          }
+        });
+        hasRegisteredControllerChangeHandler = true;
+      }
 
       const triggerUpdateCheck = () => {
         registration.update().catch(error => {
@@ -129,7 +148,6 @@ export function registerAppServiceWorker() {
         if (document.visibilityState === 'visible') triggerUpdateCheck();
       });
 
-      window.setTimeout(triggerUpdateCheck, 5000);
     } catch (error) {
       console.error('Service Worker registration failed:', error);
     }

@@ -57,7 +57,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={{ toast: addToast }}>
       {children}
       <div
-        className="fixed left-4 right-4 sm:left-auto sm:top-auto sm:bottom-4 sm:right-4 z-[100] flex flex-col gap-2 sm:max-w-sm"
+        className="pointer-events-none fixed left-4 right-4 sm:left-auto sm:top-auto sm:bottom-4 sm:right-4 z-[100] flex flex-col gap-2 sm:max-w-sm"
         style={{ top: 'calc(env(safe-area-inset-top) + 12px)' }}
       >
         {toasts.map(t => {
@@ -77,7 +77,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 e.preventDefault();
                 runAction();
               }}
-              className={`${t.leaving ? 'animate-toast-out pointer-events-none' : 'animate-toast-in'} flex items-center gap-3 rounded-full px-4 py-3 ring-1 backdrop-blur-xl ${colors[t.type]} ${t.onClick && !t.leaving ? 'cursor-pointer hover:-translate-y-0.5 hover:scale-[1.01] active:translate-y-0 active:scale-[0.99] transition-transform' : ''}`}
+              className={`pointer-events-auto ${t.leaving ? 'animate-toast-out pointer-events-none' : 'animate-toast-in'} flex items-center gap-3 rounded-full px-4 py-3 ring-1 backdrop-blur-xl ${colors[t.type]} ${t.onClick && !t.leaving ? 'cursor-pointer hover:-translate-y-0.5 hover:scale-[1.01] active:translate-y-0 active:scale-[0.99] transition-transform' : ''}`}
               style={{
                 boxShadow:
                   '0 18px 48px rgba(15,23,42,0.22), 0 8px 18px rgba(15,23,42,0.14), inset 0 1px 0 rgba(255,255,255,0.45)',
@@ -97,6 +97,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                   e.stopPropagation();
                   removeToast(t.id);
                 }}
+                type="button"
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/45 dark:bg-white/[0.06] opacity-70 hover:opacity-100 transition-opacity"
               >
                 <X className="h-4 w-4" />

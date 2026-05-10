@@ -1587,11 +1587,14 @@ function EventDetailPanel({ eventId, onClose, onViewFullEvent }: {
 
   return (
     <div className="flex flex-col h-full bg-gray-50 dark:bg-[#0d0d0f]">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3 px-4 py-3 bg-white dark:bg-[#111013] border-b border-gray-200/60 dark:border-white/[0.06] shrink-0">
+      {/* Header — padded below the status bar on iOS/Android */}
+      <div
+        className="flex items-center justify-between gap-3 px-4 pb-3 bg-white dark:bg-[#111013] border-b border-gray-200/60 dark:border-white/[0.06] shrink-0"
+        style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 12px)' }}
+      >
         <button
           onClick={onClose}
-          className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 text-[14px] font-semibold"
+          className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 text-[14px] font-semibold active:opacity-70"
         >
           <ArrowLeft className="h-4 w-4" />
           Back
@@ -1599,7 +1602,7 @@ function EventDetailPanel({ eventId, onClose, onViewFullEvent }: {
         <span className="text-[14px] font-bold text-gray-900 dark:text-white">Event Info</span>
         <button
           onClick={onViewFullEvent}
-          className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 text-[13px] font-semibold"
+          className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 text-[13px] font-semibold active:opacity-70"
         >
           <ExternalLink className="h-3.5 w-3.5" />
           Full Event

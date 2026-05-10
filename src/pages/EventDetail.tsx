@@ -94,6 +94,8 @@ export function EventDetail() {
   const [savingOrder, setSavingOrder] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [eventConversationId, setEventConversationId] = useState<string | null | undefined>(undefined);
+  const [showCreateChatModal, setShowCreateChatModal] = useState(false);
+  const [creatingChat, setCreatingChat] = useState(false);
 
 
   const fetchAll = useCallback(async () => {
@@ -557,6 +559,17 @@ export function EventDetail() {
     setRejectReason('');
   };
 
+  const handleCreateChat = async () => {
+    if (!id) return;
+    setCreatingChat(true);
+    const { data, error } = await supabase.rpc('create_event_conversation', { p_event_id: id });
+    setCreatingChat(false);
+    setShowCreateChatModal(false);
+    if (error || !data) { toast('error', 'Failed to create group chat'); return; }
+    setEventConversationId(data as string);
+    navigate(`/messages/${data}`);
+  };
+
   const handleDeleteEvent = async () => {
     if (!id) return;
     setDeleting(true);
@@ -822,10 +835,14 @@ export function EventDetail() {
                     <span className="hidden sm:inline">Group Chat</span>
                   </button>
                 ) : (
-                  <div className="flex items-center gap-1.5 h-9 px-3 rounded-xl bg-gray-100 dark:bg-white/[0.06] text-gray-400 dark:text-white/30 text-[12px] font-semibold" title="No group chat for this event">
+                  <button
+                    onClick={() => setShowCreateChatModal(true)}
+                    className="flex items-center gap-1.5 h-9 px-3 rounded-xl border-2 border-dashed border-gray-300 dark:border-white/20 text-gray-400 dark:text-white/35 hover:border-emerald-400 hover:text-emerald-600 dark:hover:border-emerald-500 dark:hover:text-emerald-400 text-[12px] font-semibold transition-colors"
+                    title="Create group chat for this event"
+                  >
                     <MessageCircle className="h-4 w-4" />
-                    <span className="hidden sm:inline">No Chat</span>
-                  </div>
+                    <span className="hidden sm:inline">Create Chat</span>
+                  </button>
                 )}
               </div>
             )}
@@ -2018,6 +2035,30 @@ export function EventDetail() {
             <div className="flex justify-end gap-3">
               <button onClick={() => setShowDecline(null)} className="btn-secondary">Cancel</button>
               <button onClick={() => showDecline && handleDecline(showDecline)} className="btn-danger">Decline</button>
+            </div>
+          </div>
+        </Modal>
+
+        <Modal open={showCreateChatModal} onClose={() => setShowCreateChatModal(false)} title="Create Group Chat" size="sm">
+          <div className="space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400">
+                <MessageCircle className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-[14px] font-semibold text-gray-900 dark:text-white">Create a group chat for this event?</p>
+                <p className="mt-1 text-[13px] leading-relaxed text-gray-500 dark:text-white/50">
+                  A group chat will be created for <strong className="text-gray-700 dark:text-white/70">{event.title}</strong> and all assigned team members will be added automatically.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setShowCreateChatModal(false)} className="flex-1 h-10 rounded-xl border border-gray-200 dark:border-white/[0.08] text-[13px] font-semibold text-gray-600 dark:text-white/50 hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-colors">
+                Cancel
+              </button>
+              <button onClick={handleCreateChat} disabled={creatingChat} className="flex-1 h-10 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-semibold disabled:opacity-45 transition-colors">
+                {creatingChat ? 'Creating…' : 'Create Chat'}
+              </button>
             </div>
           </div>
         </Modal>

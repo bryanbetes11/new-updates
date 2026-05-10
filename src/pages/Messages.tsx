@@ -550,7 +550,10 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
     <div
       ref={rootRef}
       className="fixed inset-x-0 bottom-0 z-30 shrink-0 border-t border-gray-100 dark:border-white/[0.06] bg-white dark:bg-[#111013] lg:relative lg:inset-auto lg:z-auto"
-      style={{ bottom: 'var(--messages-keyboard-inset, 0px)' }}
+      style={{
+        bottom: 'var(--messages-keyboard-inset, 0px)',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+      }}
     >
       <AnimatePresence>
         {replyTo && replyPreview && (
@@ -1888,7 +1891,7 @@ function ChatWindow({
                   )}
 
 
-                  <div className={`flex w-fit max-w-full flex-col ${isMe ? 'items-end self-end' : 'items-start self-start'}`}>
+                  <div className={`flex max-w-full flex-col ${isMe ? 'items-end self-end' : 'items-start self-start'}`}>
                     {msg.reply_preview && (
                       <div
                         className={`max-w-full ${isMe ? 'self-end' : 'self-start'}`}
@@ -1899,11 +1902,7 @@ function ChatWindow({
                           <span>{`Replied to ${msg.reply_preview.sender_name}`}</span>
                         </div>
                         <div
-                          className={`relative z-[1] w-fit max-w-full min-w-0 rounded-[18px] px-3 py-2.5 pb-5 text-[11px] leading-snug ${
-                            isMe
-                              ? 'bg-white/18 text-white/70 dark:bg-white/12 dark:text-white/65'
-                              : 'bg-[#f1f2f4] text-gray-500 dark:bg-white/[0.045] dark:text-white/55'
-                          }`}
+                          className="relative z-[1] max-w-full min-w-[180px] rounded-[18px] bg-[#f1f2f4] px-3 py-2.5 pb-5 text-[11px] leading-snug text-gray-500 dark:bg-white/[0.045] dark:text-white/55 sm:min-w-[220px]"
                         >
                           <p
                             className="overflow-hidden whitespace-pre-wrap break-words"
@@ -1920,7 +1919,7 @@ function ChatWindow({
                       </div>
                     )}
 
-                  <div className={`flex w-fit max-w-full items-end gap-1.5 ${msg.reply_preview ? '-mt-3 relative z-[2]' : ''}`}>
+                  <div className={`flex max-w-full items-end gap-1.5 ${isMe ? 'self-end' : 'self-start'} ${msg.reply_preview ? '-mt-3 relative z-[2]' : ''}`}>
                     {/* Hover actions (my side) */}
                     {isMe && (
                       <div className="hidden sm:flex opacity-0 group-hover:opacity-100 transition-opacity items-center gap-0.5 mb-1">
@@ -2200,10 +2199,6 @@ function ChatWindow({
             onCancelReply={() => setReplyTo(null)}
             onTyping={handleTyping}
           />
-          <div
-            className="fixed inset-x-0 bottom-0 z-[25] bg-white dark:bg-[#111013] pointer-events-none lg:hidden"
-            style={{ height: 'var(--messages-keyboard-inset, 0px)' }}
-          />
         </>
       )}
 
@@ -2369,9 +2364,10 @@ function useMessagesKeyboardInset(active: boolean) {
     const setInset = () => {
       const composerFocused = document.activeElement instanceof HTMLTextAreaElement;
       const viewport = window.visualViewport;
-      const inset = composerFocused && viewport
+      const rawInset = composerFocused && viewport
         ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
         : 0;
+      const inset = rawInset > 80 ? rawInset : 0;
       document.documentElement.style.setProperty('--messages-keyboard-inset', `${Math.round(inset)}px`);
       window.scrollTo(0, 0);
       window.dispatchEvent(new Event('messages-keyboard-inset-change'));
@@ -2560,7 +2556,7 @@ export function Messages() {
 
       {/* ── Right: Chat window ── */}
       <motion.div
-        className={`flex flex-col ${isDesktop ? 'flex-1 min-w-0' : 'fixed inset-0 z-20 h-[100dvh]'}`}
+        className={`flex flex-col ${isDesktop ? 'flex-1 min-w-0' : 'fixed inset-0 z-20 h-[100dvh] min-h-[100dvh]'}`}
         animate={!isDesktop ? { x: mobileShowChat ? '0%' : '100%' } : undefined}
         transition={routeTransition}
       >

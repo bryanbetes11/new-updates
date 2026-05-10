@@ -11,6 +11,8 @@ import { Avatar } from '../components/Avatar';
 import { AttendanceGuideModal } from '../components/AttendanceGuideModal';
 import { LeaveRequestModal } from '../components/LeaveRequestModal';
 import { useUnreadCounts } from '../hooks/useUnreadCounts';
+import { APP_UPDATE_VERSION, APP_VERSION_LABEL } from '../lib/appUpdate';
+import { getInstalledAppVersion } from '../lib/serviceWorkerUpdate';
 import {
   fetchMobileNavStylePreference,
   getDefaultMobileNavStyle,
@@ -38,6 +40,7 @@ export function More() {
   const [showAttendanceGuide, setShowAttendanceGuide] = useState(false);
   const [mobileNavStyle, setMobileNavStyle] = useState<MobileNavStyle>(getStoredMobileNavStyle);
   const [savingNavStyle, setSavingNavStyle] = useState(false);
+  const [installedAppVersion, setInstalledAppVersion] = useState<string | null>(getInstalledAppVersion);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -49,6 +52,10 @@ export function More() {
 
     return () => { cancelled = true; };
   }, [user?.id]);
+
+  useEffect(() => {
+    setInstalledAppVersion(getInstalledAppVersion());
+  }, []);
 
   const handleSignOut = async () => {
     await signOut();
@@ -81,6 +88,8 @@ export function More() {
   ].filter(item => item.show);
 
   const displayName = profile?.nickname || `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim();
+  const pwaVersionLabel = installedAppVersion ? `v${installedAppVersion}` : 'Unavailable';
+  const versionMatches = installedAppVersion === null || installedAppVersion === APP_UPDATE_VERSION;
 
   return (
     <div className="page-container page-bottom-pad">
@@ -226,6 +235,37 @@ export function More() {
             <p className="text-[11px] text-gray-500 dark:text-white/38">
               Current default: {getDefaultMobileNavStyle() === 'floating' ? 'Floating' : 'Docked'}
             </p>
+          </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 14, filter: 'blur(6px)' }}
+          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1], delay: 0.12 }}
+          className="relative rounded-3xl p-5 bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] overflow-hidden"
+          style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 28px -16px rgba(15,23,42,0.12)' }}
+        >
+          <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.12] to-transparent" />
+
+          <div className="space-y-3">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-white/45">App Version</p>
+              <h3 className="mt-1 text-[16px] font-black text-gray-900 dark:text-white" style={{ letterSpacing: '-0.025em' }}>
+                {APP_VERSION_LABEL}
+              </h3>
+              <p className="mt-1.5 text-[12px] leading-snug text-gray-500 dark:text-white/40">
+                Installed PWA version: {pwaVersionLabel}
+              </p>
+            </div>
+
+            <div className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold ${
+              versionMatches
+                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/[0.12] dark:text-emerald-300'
+                : 'bg-amber-50 text-amber-700 dark:bg-amber-500/[0.12] dark:text-amber-300'
+            }`}
+            >
+              {versionMatches ? 'PWA is up to date' : 'Update required'}
+            </div>
           </div>
         </motion.div>
 

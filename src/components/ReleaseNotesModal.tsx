@@ -2,14 +2,15 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Bell, UserX, Circle, ArrowLeft, ArrowRight, Timer, PanelBottom, Music2 } from 'lucide-react';
 import { Modal } from './Modal';
+import { APP_UPDATE_PUBLISHED_AT, APP_UPDATE_VERSION } from '../lib/appUpdate';
 
 interface ReleaseNotesModalProps {
   open: boolean;
   onClose: () => void;
 }
 
-export const RELEASE_NOTES_VERSION = '2026-05-10-group-chat-and-mobile-chat-updates';
-export const RELEASE_NOTES_PUBLISHED_AT = '2026-05-10T00:00:00Z';
+export const RELEASE_NOTES_VERSION = APP_UPDATE_VERSION;
+export const RELEASE_NOTES_PUBLISHED_AT = APP_UPDATE_PUBLISHED_AT;
 
 const features = [
   {

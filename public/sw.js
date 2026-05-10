@@ -107,9 +107,15 @@ self.addEventListener('fetch', function(event) {
 });
 
 self.addEventListener('install', function() {
-  self.skipWaiting();
+  // Wait for explicit approval from the client before activating over an existing app shell.
 });
 
 self.addEventListener('activate', function(event) {
   event.waitUntil(self.clients.claim());
+});
+
+self.addEventListener('message', function(event) {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });

@@ -1920,11 +1920,10 @@ function ChatWindow({
     }, 250);
   }, []);
 
-  // Compute seen-by map: for each member, what's the last message id they've seen
+  // Compute seen-by map: for each member (including self), what's the last message id they've seen
   const seenMap = useMemo(() => {
     const result: Record<string, string> = {};
-    const otherMembers = memberReadTimes.filter(m => m.user_id !== myUserId);
-    for (const member of otherMembers) {
+    for (const member of memberReadTimes) {
       if (!member.last_read_at) continue;
       const readTime = new Date(member.last_read_at).getTime();
       for (let i = messages.length - 1; i >= 0; i--) {
@@ -1935,7 +1934,7 @@ function ChatWindow({
       }
     }
     return result;
-  }, [memberReadTimes, messages, myUserId]);
+  }, [memberReadTimes, messages]);
 
   // Which message has seen avatars to display below it
   const seenByMessage = useMemo(() => {
@@ -2077,10 +2076,9 @@ function ChatWindow({
           const isMe = msg.sender_id === myUserId;
           const content = parseContent(msg.content);
           const seers = seenByMessage[msg.id] || [];
-          const latestSeenAt = seers.length > 0 ? seers.map(s => s.readAt).sort()[seers.length - 1] : '';
-          const seenLabel = seers.length > 0
-            ? `Seen ${formatMsgTime(latestSeenAt)}`
-            : '';
+          // Exclude the message sender from the seers list (they trivially "see" their own message)
+          const displaySeers = seers.filter(s => s.userId !== msg.sender_id);
+          const latestSeenAt = displaySeers.length > 0 ? displaySeers.map(s => s.readAt).sort()[displaySeers.length - 1] : '';
           const showAvatar = !isMe && (!isGrouped || i === 0);
           const isActionsOpen = activeMsg === msg.id;
           const isEmojiOpen = emojiMsgId === msg.id;
@@ -2382,13 +2380,16 @@ function ChatWindow({
                 </div>
               </div>
 
-              {/* Seen receipts */}
-              {isMe && seers.length > 0 && (
+              {/* Seen receipts — shown under my messages for all, and under others' messages in group chats */}
+              {displaySeers.length > 0 && (isMe || isGroupChat) && (
                 <div className={`flex items-center gap-1 mt-1 ${isMe ? 'justify-end mr-1' : 'ml-9'}`}>
-                  {isGroupChat && seers.slice(0, 3).map(seer => {
+                  {displaySeers.slice(0, 3).map(seer => {
                     const member = conv.members.find(m => m.user_id === seer.userId);
+                    const label = seer.userId === myUserId
+                      ? `You at ${formatMsgTime(seer.readAt)}`
+                      : `Seen by ${getFullName(member?.profile, 'someone')} at ${formatMsgTime(seer.readAt)}`;
                     return (
-                      <div key={seer.userId} className="-ml-0.5 first:ml-0" title={`Seen by ${getFullName(member?.profile, 'someone')} at ${formatMsgTime(seer.readAt)}`}>
+                      <div key={seer.userId} className="-ml-0.5 first:ml-0" title={label}>
                         <Avatar
                           src={member?.profile?.avatar_url ?? undefined}
                           firstName={member?.profile?.first_name || '?'}
@@ -2399,7 +2400,9 @@ function ChatWindow({
                       </div>
                     );
                   })}
-                  <span className="text-[10px] font-medium text-gray-400 dark:text-white/25 self-center">{seenLabel}</span>
+                  {isMe && !isGroupChat && latestSeenAt && (
+                    <span className="text-[10px] font-medium text-gray-400 dark:text-white/25 self-center">{`Seen ${formatMsgTime(latestSeenAt)}`}</span>
+                  )}
                 </div>
               )}
               </>

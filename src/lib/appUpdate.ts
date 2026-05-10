@@ -1,7 +1,7 @@
-export const APP_VERSION = '2026.05.10.3';
+export const APP_VERSION = '2026.05.10.6';
 export const APP_UPDATE_VERSION = APP_VERSION;
 export const APP_VERSION_LABEL = `v${APP_VERSION}`;
-export const APP_UPDATE_PUBLISHED_AT = '2026-05-10T14:00:00Z';
+export const APP_UPDATE_PUBLISHED_AT = '2026-05-10T17:00:00Z';
 
 export const APP_UPDATE_FEATURES = [
   'Tap any photo in chat to view it full-screen.',
@@ -18,4 +18,8 @@ export const APP_UPDATE_FIXES = [
   'Reply preview now overlaps the message bubble and shows content only.',
   'Keyboard no longer dismisses before sending a message on mobile.',
   'Push notifications now show your organisation name for chat messages.',
+  'Event detail setlist desktop layout: Live Guidance panel no longer squeezes the songs column.',
+  'Review notes and revision history are now hidden once a setlist is approved.',
+  'Editing an approved setlist (add, remove, reorder, or update songs) now requires re-approval and notifies the approver.',
+  'Chat seen receipts now include your own avatar under messages you have read, and show accurately for all participants.',
 ];

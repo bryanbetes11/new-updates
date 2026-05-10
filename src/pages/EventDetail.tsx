@@ -394,7 +394,11 @@ export function EventDetail() {
     setReorderSongs([]);
     setDragIndex(null);
     setSavingOrder(false);
-    toast('success', 'Song order saved');
+    if (setlist?.status === 'approved') {
+      await markSetlistNeedsReapproval();
+    } else {
+      toast('success', 'Song order saved');
+    }
   };
 
   const moveReorderSong = (from: number, to: number) => {
@@ -416,13 +420,33 @@ export function EventDetail() {
 
   const handleDragEnd = () => setDragIndex(null);
 
+  const markSetlistNeedsReapproval = async () => {
+    if (!setlist || setlist.status !== 'approved' || !event) return;
+    await supabase.from('setlists').update({ status: 'pending_review' }).eq('id', setlist.id);
+    setSetlist(prev => prev ? { ...prev, status: 'pending_review' } : prev);
+    if (setlist.approved_by) {
+      await supabase.from('notifications').insert({
+        user_id: setlist.approved_by,
+        type: 'setlist_changed',
+        title: 'Setlist Updated — Re-approval Needed',
+        body: `The setlist for "${event.title}" was updated after approval and needs to be reviewed again.`,
+        data: { event_id: event.id, setlist_id: setlist.id },
+      });
+    }
+    toast('info', 'Setlist updated — re-approval required');
+  };
+
   const handleAddSongToSetlist = async (songId: string, category: string, youtubeUrl: string, performedKey: string) => {
     if (!setlist) return;
     const { error } = await supabase.from('setlist_songs').insert({
       setlist_id: setlist.id, song_id: songId, position: setlistSongs.length + 1, song_category: category, youtube_url: youtubeUrl, performed_key: performedKey,
     });
     if (error) { toast('error', error.message); return; }
-    toast('success', 'Song added');
+    if (setlist.status === 'approved') {
+      await markSetlistNeedsReapproval();
+    } else {
+      toast('success', 'Song added');
+    }
     fetchAll();
   };
 
@@ -443,7 +467,11 @@ export function EventDetail() {
   };
 
   const handleRemoveSongFromSetlist = async (slSongId: string) => {
-    await supabase.from('setlist_songs').delete().eq('id', slSongId);
+    const { error } = await supabase.from('setlist_songs').delete().eq('id', slSongId);
+    if (error) { toast('error', error.message); return; }
+    if (setlist?.status === 'approved') {
+      await markSetlistNeedsReapproval();
+    }
     fetchAll();
   };
 
@@ -464,7 +492,11 @@ export function EventDetail() {
       performed_key: editSongForm.performed_key,
     }).eq('id', editingSongId);
     if (error) { toast('error', error.message); return; }
-    toast('success', 'Song updated');
+    if (setlist?.status === 'approved') {
+      await markSetlistNeedsReapproval();
+    } else {
+      toast('success', 'Song updated');
+    }
     setEditingSongId(null);
     fetchAll();
   };
@@ -1518,16 +1550,16 @@ export function EventDetail() {
                             <div className="hidden lg:flex lg:items-center lg:gap-3">
                               <span className="flex items-center justify-center h-7 w-7 rounded-lg bg-gray-100 dark:bg-gray-800 text-xs font-medium text-gray-500 dark:text-gray-400 shrink-0">{i + 1}</span>
                               <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <p className="text-sm font-medium text-gray-900 dark:text-white">{ss.songs?.title}</p>
-                                  {ss.song_category && <span className="badge-blue text-[10px]">{ss.song_category}</span>}
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{ss.songs?.title}</p>
+                                  {ss.song_category && <span className="badge-blue text-[10px] shrink-0">{ss.song_category}</span>}
                                   {displayKey && (
-                                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${keyChanged ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'}`}>
+                                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${keyChanged ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'}`}>
                                       {displayKey}
                                     </span>
                                   )}
                                 </div>
-                                <p className="text-xs text-gray-500 dark:text-gray-400">{ss.songs?.artist}</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{ss.songs?.artist}</p>
                               </div>
                               {ss.youtube_url && (
                                 <a href={ss.youtube_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 transition-colors shrink-0">
@@ -1661,7 +1693,7 @@ export function EventDetail() {
                     </div>
                   </div>
 
-                  {(setlist.review_note || setlist.approval_notes) && !['revision_requested', 'rejected'].includes(setlist.status) && (
+                  {(setlist.review_note || setlist.approval_notes) && !['revision_requested', 'rejected', 'approved'].includes(setlist.status) && (
                     <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
                       <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Notes</p>
                       <p className="text-sm text-gray-500 dark:text-gray-400">{setlist.review_note || setlist.approval_notes}</p>
@@ -1669,12 +1701,9 @@ export function EventDetail() {
                   )}
                 </div>
 
-                <div className={`lg:w-80 xl:w-96 shrink-0 ${setlistTab !== 'guidance' ? 'hidden lg:block' : ''}`}>
-                  <div className="px-4 py-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
-                        <Sparkles className="h-3.5 w-3.5 text-brand-500" /> Live Guidance
-                      </p>
+                <div className={`lg:w-60 xl:w-64 shrink-0 ${setlistTab !== 'guidance' ? 'hidden lg:block' : ''}`}>
+                  <div className="px-3 py-3">
+                    <div className="flex justify-end mb-2">
                       <button
                         onClick={() => setGuidanceLanguage(l => l === 'english' ? 'tagalog_english' : 'english')}
                         className="text-[10px] font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
@@ -1702,7 +1731,7 @@ export function EventDetail() {
 
                 {setlistTab === 'notes' && (
                   <div className="lg:hidden px-5 py-4">
-                    {(setlist.review_note || setlist.approval_notes) ? (
+                    {(setlist.review_note || setlist.approval_notes) && setlist.status !== 'approved' ? (
                       <div className={`rounded-xl p-4 ${
                         setlist.status === 'revision_requested' ? 'bg-amber-50 dark:bg-amber-900/20'
                         : setlist.status === 'rejected' ? 'bg-red-50 dark:bg-red-900/20'

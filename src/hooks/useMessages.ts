@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { dispatchMessagingRefresh } from '../lib/realtimeSignals';
 
 export interface MessageSender {
@@ -44,6 +45,7 @@ function getFullName(profile: { first_name: string | null; last_name: string | n
 
 export function useMessages(conversationId: string | null) {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
@@ -187,21 +189,40 @@ export function useMessages(conversationId: string | null) {
   }, [conversationId, user, markRead]);
 
   const pinMessage = useCallback(async (messageId: string, pinned: boolean) => {
-    if (!user) return;
-    await supabase.from('messages').update({
+    if (!user) return false;
+    const { error } = await supabase.from('messages').update({
       is_pinned: pinned,
       pinned_by: pinned ? user.id : null,
       pinned_at: pinned ? new Date().toISOString() : null,
     }).eq('id', messageId);
-  }, [user]);
+
+    if (error) {
+      console.error('Failed to update pinned message state:', error);
+      toast('error', error.message || `Failed to ${pinned ? 'pin' : 'unpin'} message`);
+      return false;
+    }
+
+    setMessages(prev => prev.map(message => (
+      message.id === messageId ? { ...message, is_pinned: pinned } : message
+    )));
+    return true;
+  }, [toast, user]);
 
   const deleteMessage = useCallback(async (messageId: string) => {
-    if (!user) return;
-    await supabase.from('messages').update({
+    if (!user) return false;
+    const { error } = await supabase.from('messages').update({
       deleted_at: new Date().toISOString(),
       deleted_by: user.id,
     }).eq('id', messageId);
-  }, [user]);
+
+    if (error) {
+      console.error('Failed to delete message:', error);
+      toast('error', error.message || 'Failed to delete message');
+      return false;
+    }
+
+    return true;
+  }, [toast, user]);
 
   const toggleReaction = useCallback(async (messageId: string, emoji: string) => {
     if (!user) return;

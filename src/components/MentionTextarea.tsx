@@ -260,7 +260,7 @@ export function MentionTextarea({
   };
 
   return (
-    <div className="relative">
+    <div className="relative min-w-0 flex-1 self-stretch">
       <textarea
         ref={ref}
         value={value}
@@ -277,7 +277,7 @@ export function MentionTextarea({
         onFocus={onFocus}
         onPointerDown={onPointerDown}
         placeholder={placeholder}
-        className={className}
+        className={`block w-full min-w-0 ${className}`}
         style={style}
         rows={rows}
       />

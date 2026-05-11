@@ -1,7 +1,7 @@
-export const APP_VERSION = '2026.05.11.25';
+export const APP_VERSION = '2026.05.11.27';
 export const APP_UPDATE_VERSION = APP_VERSION;
 export const APP_VERSION_LABEL = `v${APP_VERSION}`;
-export const APP_UPDATE_PUBLISHED_AT = '2026-05-11T17:20:00Z';
+export const APP_UPDATE_PUBLISHED_AT = '2026-05-11T19:00:00Z';
 
 export const APP_UPDATE_FEATURES = [
   'Chats now support @mentions, and mentioned users receive a dedicated mention notification with push delivery.',
@@ -19,9 +19,13 @@ export const APP_UPDATE_FEATURES = [
   'You can now view, add, and remove members in event group chats.',
   'The chat info panel now shows shared photos, files, and links in one place.',
   'Events in group chats are now sorted by the nearest upcoming date.',
+  'You can now leave a group chat from the info panel without deleting it for everyone.',
+  'When creating a group chat, you can now give it a name right away and select all members with one tap.',
+  'Event group chats now only allow adding members who are actually part of that event.',
 ];
 
 export const APP_UPDATE_FIXES = [
+  'The desktop chat composer now uses the full available width while typing, so messages no longer wrap onto new lines too early.',
   'Mentioned names in chat now render cleanly instead of showing raw underscore handles.',
   'Pages throughout the app now open and close with smooth animations.',
   'Switching between Upcoming and Past Events on mobile now slides in the right direction.',

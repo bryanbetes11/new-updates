@@ -5,7 +5,7 @@ import {
   ArrowLeft, Send, ImageIcon, X, Pin, CornerUpLeft, Camera,
   MessageCircle, Plus, Search, Trash2, MoreHorizontal, ChevronRight, Check,
   CalendarDays, Music2, Copy, Paperclip, FileText, Download, ExternalLink, UserPlus,
-  Calendar, Clock,
+  Calendar, Clock, LogOut,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { formatTime12Hour } from '../lib/timeFormat';
@@ -326,9 +326,22 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
     });
   };
 
+  const allFilteredSelected = filtered.length > 0 && filtered.every(p => selectedIds.has(p.id));
+  const toggleSelectAll = () => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (allFilteredSelected) {
+        filtered.forEach(p => next.delete(p.id));
+      } else {
+        filtered.forEach(p => next.add(p.id));
+      }
+      return next;
+    });
+  };
+
   const submitGroup = () => {
-    if (selectedIds.size === 0) return;
-    onCreateGroup([...selectedIds], groupName);
+    if (selectedIds.size === 0 || !groupName.trim()) return;
+    onCreateGroup([...selectedIds], groupName.trim());
     onClose();
   };
 
@@ -370,24 +383,41 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
                 </button>
               </div>
               {mode === 'group' && (
-                <input
-                  value={groupName}
-                  onChange={e => setGroupName(e.target.value)}
-                  placeholder="Group name"
-                  className="w-full h-10 px-3 mb-2 rounded-xl bg-gray-100 dark:bg-white/[0.06] text-[13px] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/25 outline-none"
-                />
+                <div className="mb-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-white/30 mb-1 px-1">Group Name</p>
+                  <input
+                    autoFocus
+                    value={groupName}
+                    onChange={e => setGroupName(e.target.value)}
+                    placeholder="e.g. Worship Team May 13"
+                    className="w-full h-10 px-3 rounded-xl bg-gray-100 dark:bg-white/[0.06] text-[13px] font-medium text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/25 outline-none"
+                  />
+                </div>
               )}
               <div className="flex items-center gap-3">
               <Search className="h-4 w-4 text-gray-400 dark:text-white/30 shrink-0" />
               <input
-                autoFocus
+                autoFocus={mode !== 'group'}
                 value={query}
                 onChange={e => setQuery(e.target.value)}
-                placeholder={mode === 'event' ? 'Search events...' : mode === 'direct' ? 'Search people...' : 'Add people...'}
+                placeholder={mode === 'event' ? 'Search events...' : mode === 'direct' ? 'Search people...' : 'Search members...'}
                 className="flex-1 text-[14px] bg-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/25 outline-none"
               />
               </div>
             </div>
+            {mode === 'group' && filtered.length > 0 && (
+              <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100 dark:border-white/[0.06]">
+                <span className="text-[12px] text-gray-400 dark:text-white/30">
+                  {selectedCount > 0 ? `${selectedCount} selected` : `${filtered.length} members`}
+                </span>
+                <button
+                  onClick={toggleSelectAll}
+                  className="text-[12px] font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
+                >
+                  {allFilteredSelected ? 'Deselect All' : 'Select All'}
+                </button>
+              </div>
+            )}
             <div className="overflow-y-auto max-h-72 p-2">
               {mode === 'event' ? (
                 <>
@@ -456,9 +486,12 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
             </div>
             {mode === 'group' && (
               <div className="p-3 border-t border-gray-100 dark:border-white/[0.06]">
+                {!groupName.trim() && selectedCount > 0 && (
+                  <p className="text-center text-[11px] text-amber-500 dark:text-amber-400 mb-2">Please enter a group name above</p>
+                )}
                 <button
                   onClick={submitGroup}
-                  disabled={selectedCount === 0}
+                  disabled={selectedCount === 0 || !groupName.trim()}
                   className="w-full h-10 rounded-xl bg-emerald-500 text-white text-[13px] font-bold disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Create Group{selectedCount > 0 ? ` (${selectedCount})` : ''}
@@ -585,7 +618,7 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
   return (
     <div
       ref={rootRef}
-      className="fixed inset-x-0 bottom-0 z-30 shrink-0 border-t border-gray-100 dark:border-white/[0.06] bg-white dark:bg-[#111013] lg:relative lg:inset-auto lg:z-auto"
+      className="fixed inset-x-0 bottom-0 z-30 shrink-0 border-t border-gray-100 dark:border-white/[0.06] bg-white dark:bg-[#111013] lg:relative lg:inset-auto lg:z-auto lg:w-full"
       style={{
         bottom: 'var(--messages-keyboard-inset, 0px)',
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
@@ -782,6 +815,8 @@ function ConvInfoPanel({
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [removingPhoto, setRemovingPhoto] = useState(false);
   const [infoView, setInfoView] = useState<'main' | 'media' | 'files' | 'links'>('main');
+  const [leaveGroupConfirm, setLeaveGroupConfirm] = useState(false);
+  const [leavingGroup, setLeavingGroup] = useState(false);
   const groupPhotoInputRef = useRef<HTMLInputElement | null>(null);
 
   const otherMember = conv.type === 'personal' ? conv.members.find(m => m.user_id !== myUserId) : null;
@@ -864,15 +899,53 @@ function ConvInfoPanel({
     toast('success', 'Member removed');
   };
 
+  const handleLeaveGroup = async () => {
+    if (!user) return;
+    setLeavingGroup(true);
+    const { error } = await supabase
+      .from('conversation_members')
+      .delete()
+      .eq('conversation_id', conv.id)
+      .eq('user_id', user.id);
+    setLeavingGroup(false);
+    if (error) {
+      toast('error', 'Failed to leave group');
+      return;
+    }
+    onBack();
+    onConvUpdate();
+  };
+
   useEffect(() => {
     if ((conv.type !== 'group' && conv.type !== 'event') || !addMembersOpen) return;
     let cancelled = false;
     setLoadingAvailablePeople(true);
-    supabase
-      .from('profiles')
-      .select('id, first_name, last_name, nickname, avatar_url')
-      .order('first_name')
-      .then(({ data, error }) => {
+
+    const fetchPeople = async () => {
+      try {
+        let userIds: string[] | null = null;
+
+        if (conv.type === 'event' && conv.event_id) {
+          const [{ data: assigned }, { data: attending }] = await Promise.all([
+            supabase.from('event_assignments').select('user_id').eq('event_id', conv.event_id),
+            supabase.from('event_attendance').select('user_id').eq('event_id', conv.event_id),
+          ]);
+          userIds = [...new Set([
+            ...(assigned || []).map(a => a.user_id as string),
+            ...(attending || []).map(a => a.user_id as string),
+          ])];
+        }
+
+        let query = supabase.from('profiles').select('id, first_name, last_name, nickname, avatar_url').order('first_name');
+        if (userIds !== null) {
+          if (userIds.length === 0) {
+            if (!cancelled) { setAvailablePeople([]); setLoadingAvailablePeople(false); }
+            return;
+          }
+          query = query.in('id', userIds);
+        }
+
+        const { data, error } = await query;
         if (cancelled) return;
         if (error) {
           setAvailablePeople([]);
@@ -882,9 +955,14 @@ function ConvInfoPanel({
         }
         setAvailablePeople((data || []).filter(person => !existingMemberIds.has(person.id)));
         setLoadingAvailablePeople(false);
-      });
+      } catch {
+        if (!cancelled) { setAvailablePeople([]); setLoadingAvailablePeople(false); }
+      }
+    };
+
+    fetchPeople();
     return () => { cancelled = true; };
-  }, [addMembersOpen, conv.type, existingMemberIds, toast]);
+  }, [addMembersOpen, conv.type, conv.event_id, existingMemberIds, toast]);
 
   const toggleSelectedMember = (memberId: string) => {
     setSelectedMemberIds(prev => {
@@ -1330,18 +1408,58 @@ function ConvInfoPanel({
           )}
         </div>
 
-        {/* Delete / Leave card */}
-        <div className="mx-4 mt-3 mb-6">
-          {!leaveConfirm ? (
+        {/* Leave / Delete card */}
+        <div className="mx-4 mt-3 mb-6 space-y-2">
+
+          {/* Leave Group — group/event chats, all members */}
+          {(conv.type === 'group' || conv.type === 'event') && !leaveGroupConfirm && !leaveConfirm && (
+            <button
+              onClick={() => setLeaveGroupConfirm(true)}
+              disabled={leavingGroup}
+              className="w-full h-11 flex items-center justify-center gap-2 rounded-2xl text-[13px] font-semibold text-amber-600 dark:text-amber-400 bg-white dark:bg-[#111013] border border-amber-200 dark:border-amber-500/20 hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-colors disabled:opacity-45"
+            >
+              <LogOut className="h-4 w-4" />
+              Leave Group
+            </button>
+          )}
+
+          {/* Leave Group confirmation */}
+          {leaveGroupConfirm && (
+            <div className="rounded-2xl bg-white dark:bg-[#111013] border border-gray-100 dark:border-white/[0.06] p-4 space-y-3">
+              <p className="text-center text-[13px] text-gray-500 dark:text-white/40">
+                Leave this group chat? You can be added back by a member.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setLeaveGroupConfirm(false)}
+                  className="flex-1 h-10 rounded-xl border border-gray-200 dark:border-white/[0.08] text-[13px] font-semibold text-gray-600 dark:text-white/50 hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleLeaveGroup}
+                  disabled={leavingGroup}
+                  className="flex-1 h-10 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-[13px] font-semibold disabled:opacity-40 transition-colors"
+                >
+                  {leavingGroup ? 'Leaving…' : 'Yes, Leave'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Delete Chat — personal chats or group creators */}
+          {canDelete && !leaveConfirm && !leaveGroupConfirm && (
             <button
               onClick={() => setLeaveConfirm(true)}
-              disabled={!canDelete}
-              className="w-full h-11 flex items-center justify-center gap-2 rounded-2xl text-[13px] font-semibold text-red-500 bg-white dark:bg-[#111013] border border-red-200 dark:border-red-500/20 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors disabled:opacity-45 disabled:cursor-not-allowed"
+              className="w-full h-11 flex items-center justify-center gap-2 rounded-2xl text-[13px] font-semibold text-red-500 bg-white dark:bg-[#111013] border border-red-200 dark:border-red-500/20 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
             >
               <Trash2 className="h-4 w-4" />
-              {canDelete ? 'Delete Chat' : 'Only Creator Can Delete'}
+              Delete Chat
             </button>
-          ) : (
+          )}
+
+          {/* Delete confirmation */}
+          {leaveConfirm && (
             <div className="rounded-2xl bg-white dark:bg-[#111013] border border-gray-100 dark:border-white/[0.06] p-4 space-y-3">
               <p className="text-center text-[13px] text-gray-500 dark:text-white/40">
                 {conv.type === 'personal'

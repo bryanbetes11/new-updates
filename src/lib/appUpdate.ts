@@ -1,9 +1,10 @@
-export const APP_VERSION = '2026.05.11.24';
+export const APP_VERSION = '2026.05.11.25';
 export const APP_UPDATE_VERSION = APP_VERSION;
 export const APP_VERSION_LABEL = `v${APP_VERSION}`;
-export const APP_UPDATE_PUBLISHED_AT = '2026-05-11T16:50:00Z';
+export const APP_UPDATE_PUBLISHED_AT = '2026-05-11T17:20:00Z';
 
 export const APP_UPDATE_FEATURES = [
+  'Chats now support @mentions, and mentioned users receive a dedicated mention notification with push delivery.',
   'New Worship Setlist Checker — review your setlist before submitting. It checks gospel clarity, worship flow, song slot fit, and gives an overall score based on MCJC\'s theological standards.',
   'Songs now need to pass all five review questions to be marked Approved. If only some pass, the song is marked Approved with Caution.',
   'Checker results are saved automatically — leaders can reopen the last report without having to run it again.',
@@ -21,6 +22,7 @@ export const APP_UPDATE_FEATURES = [
 ];
 
 export const APP_UPDATE_FIXES = [
+  'Mentioned names in chat now render cleanly instead of showing raw underscore handles.',
   'Pages throughout the app now open and close with smooth animations.',
   'Switching between Upcoming and Past Events on mobile now slides in the right direction.',
   'Setlist checker song cards are now better organised — labels on one row with the song title below.',

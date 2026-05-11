@@ -16,6 +16,7 @@ import { useMessages } from '../hooks/useMessages';
 import { supabase } from '../lib/supabase';
 import { Avatar } from '../components/Avatar';
 import { Modal } from '../components/Modal';
+import { MentionTextarea } from '../components/MentionTextarea';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -124,6 +125,36 @@ function getSenderName(sender: { first_name: string | null; last_name: string | 
   return getFullName(sender);
 }
 
+function formatMentionToken(token: string): string {
+  return token.replace(/_/g, ' ');
+}
+
+function humanizeMentions(text: string): string {
+  return text.replace(/@([^\s@]+_[^\s@]+)/g, (_match, handle: string) => `@${formatMentionToken(handle)}`);
+}
+
+function renderMessageText(text: string, isMe: boolean) {
+  const parts = text.split(/(@[^\s@]+_[^\s@]+)/g);
+  return parts.map((part, index) => {
+    if (!part.match(/^@[^\s@]+_[^\s@]+$/)) {
+      return <span key={`${part}-${index}`}>{part}</span>;
+    }
+
+    return (
+      <span
+        key={`${part}-${index}`}
+        className={`rounded-md px-1 py-0.5 font-semibold ${
+          isMe
+            ? 'bg-white/15 text-white'
+            : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
+        }`}
+      >
+        {formatMentionToken(part)}
+      </span>
+    );
+  });
+}
+
 function getConversationAvatarSrc(conv: Conversation, myId: string): string | undefined {
   if (conv.type === 'personal') {
     return getOtherMember(conv, myId)?.profile?.avatar_url ?? undefined;
@@ -153,7 +184,8 @@ function previewContent(content: string): string {
   if (parsed.type === 'image') return '📷 Photo';
   if (parsed.type === 'file') return `📎 ${parsed.name}`;
   if (parsed.type === 'delete_request') return 'Delete chat request';
-  return parsed.text.length > 60 ? parsed.text.slice(0, 60) + '…' : parsed.text;
+  const text = humanizeMentions(parsed.text);
+  return text.length > 60 ? text.slice(0, 60) + '…' : text;
 }
 
 function replyPreviewContent(content: string): string {
@@ -161,7 +193,7 @@ function replyPreviewContent(content: string): string {
   if (parsed.type === 'image') return 'Photo';
   if (parsed.type === 'file') return parsed.name;
   if (parsed.type === 'delete_request') return 'Delete chat request';
-  return parsed.text;
+  return humanizeMentions(parsed.text);
 }
 
 const QUICK_EMOJIS = ['❤️', '👍', '😂', '😮', '😢', '🙏'];
@@ -444,12 +476,13 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
 
 const QUICK_ACTION_OPTIONS = ['👍', '❤️', '🙏', '😂', '🔥', '👏'];
 
-function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
+function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, mentionProfiles }: {
   onSend: (text: string, imageUrl?: string) => void;
   replyTo: string | null;
   replyPreview: string | null;
   onCancelReply: () => void;
   onTyping: () => void;
+  mentionProfiles: Array<{ id: string; first_name: string; last_name: string; avatar_url: string | null; gender: string | null }>;
 }) {
   const [text, setText] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -619,15 +652,15 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping }: {
           </AnimatePresence>
         </div>
         <div className="flex-1 min-h-[36px] max-h-[140px] flex items-end rounded-2xl bg-gray-100 dark:bg-white/[0.06] border border-gray-200/80 dark:border-white/[0.06] overflow-hidden">
-          <textarea
-            ref={textRef}
+          <MentionTextarea
+            textareaRef={textRef}
             value={text}
-            onChange={e => { setText(e.target.value); resizeComposer(); onTyping(); }}
+            profiles={mentionProfiles}
+            onChange={(value) => { setText(value); resizeComposer(); onTyping(); }}
             onFocus={() => window.dispatchEvent(new Event('messages-composer-focus'))}
             onPointerDown={focusComposerWithoutPageScroll}
             placeholder="Message…"
             rows={1}
-            enterKeyHint="enter"
             style={{ resize: 'none', maxHeight: '132px' }}
             className="flex-1 px-3.5 py-2 text-[16px] sm:text-[14px] bg-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/25 outline-none leading-relaxed overflow-y-auto"
           />
@@ -1803,6 +1836,18 @@ function ChatWindow({
   } = useMessages(conv.id);
 
   const convName = getConvName(conv, myUserId);
+  const mentionProfiles = useMemo(
+    () => conv.members
+      .filter(member => member.user_id !== myUserId && member.profile?.first_name && member.profile?.last_name)
+      .map(member => ({
+        id: member.user_id,
+        first_name: member.profile?.first_name || '',
+        last_name: member.profile?.last_name || '',
+        avatar_url: member.profile?.avatar_url || null,
+        gender: null,
+      })),
+    [conv.members, myUserId]
+  );
 
   const avatarName = getConversationAvatarName(conv, myUserId);
 
@@ -2242,7 +2287,9 @@ function ChatWindow({
                           </div>
                         </div>
                       ) : (
-                        <p className="text-[14px] whitespace-pre-wrap break-words" style={{ overflowWrap: 'anywhere' }}>{content.text}</p>
+                        <p className="text-[14px] whitespace-pre-wrap break-words" style={{ overflowWrap: 'anywhere' }}>
+                          {renderMessageText(content.text, isMe)}
+                        </p>
                       )}
                       {msg.is_pinned && (
                         <Pin className="absolute -top-2 -right-2 h-3.5 w-3.5 text-amber-500 bg-white dark:bg-[#111013] rounded-full p-0.5" style={{ padding: '2px' }} />
@@ -2444,6 +2491,7 @@ function ChatWindow({
             replyPreview={replyTo?.preview ?? null}
             onCancelReply={() => setReplyTo(null)}
             onTyping={handleTyping}
+            mentionProfiles={mentionProfiles}
           />
         </>
       )}

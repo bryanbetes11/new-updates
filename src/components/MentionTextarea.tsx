@@ -20,6 +20,11 @@ interface MentionTextareaProps {
   rows?: number;
   onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   textareaRef?: React.RefObject<HTMLTextAreaElement>;
+  profiles?: Profile[];
+  onFocus?: React.FocusEventHandler<HTMLTextAreaElement>;
+  onPointerDown?: React.PointerEventHandler<HTMLTextAreaElement>;
+  onScroll?: React.UIEventHandler<HTMLTextAreaElement>;
+  onClick?: React.MouseEventHandler<HTMLTextAreaElement>;
 }
 
 export function MentionTextarea({
@@ -31,6 +36,11 @@ export function MentionTextarea({
   rows = 1,
   onKeyDown,
   textareaRef: externalRef,
+  profiles: providedProfiles,
+  onFocus,
+  onPointerDown,
+  onScroll,
+  onClick,
 }: MentionTextareaProps) {
   const internalRef = useRef<HTMLTextAreaElement>(null);
   const ref = externalRef || internalRef;
@@ -107,12 +117,17 @@ export function MentionTextarea({
   }, []);
 
   useEffect(() => {
+    if (providedProfiles) {
+      setProfiles(providedProfiles);
+      return;
+    }
+
     supabase
       .from('profiles')
       .select('id, first_name, last_name, avatar_url, gender')
       .order('first_name')
       .then(({ data }) => setProfiles((data || []) as Profile[]));
-  }, []);
+  }, [providedProfiles]);
 
   const filtered = profiles.filter(p => {
     if (!query) return true;
@@ -194,7 +209,10 @@ export function MentionTextarea({
     const cursor = ref.current?.selectionStart ?? value.length;
     const before = value.slice(0, mentionStart);
     const after = value.slice(cursor);
-    const mention = `@${profile.first_name}_${profile.last_name}`;
+    const mentionHandle = `${profile.first_name} ${profile.last_name}`
+      .trim()
+      .replace(/\s+/g, '_');
+    const mention = `@${mentionHandle}`;
     const newValue = `${before}${mention} ${after}`;
     onChange(newValue);
     setShowDropdown(false);
@@ -247,9 +265,17 @@ export function MentionTextarea({
         ref={ref}
         value={value}
         onChange={handleChange}
-        onClick={() => { if (showDropdown) computeDropdownPosition(); }}
-        onScroll={() => { if (showDropdown) computeDropdownPosition(); }}
+        onClick={e => {
+          if (showDropdown) computeDropdownPosition();
+          onClick?.(e);
+        }}
+        onScroll={e => {
+          if (showDropdown) computeDropdownPosition();
+          onScroll?.(e);
+        }}
         onKeyDown={handleKeyDown}
+        onFocus={onFocus}
+        onPointerDown={onPointerDown}
         placeholder={placeholder}
         className={className}
         style={style}

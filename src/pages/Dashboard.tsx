@@ -149,14 +149,19 @@ export function Dashboard() {
       if (nextEventIds.length > 0) {
         const { data: songLeaderAssignments } = await supabase
           .from('event_assignments')
-          .select('event_id, profiles(first_name, last_name), roles(name)')
+          .select('event_id, profiles(first_name, last_name, gender), roles(name)')
           .in('event_id', nextEventIds);
         const leaders: Record<string, string> = {};
         (songLeaderAssignments || []).forEach((assignment: any) => {
           if (assignment.roles?.name !== 'Song Leader' || leaders[assignment.event_id]) return;
           const firstName = assignment.profiles?.first_name || '';
           const lastName = assignment.profiles?.last_name || '';
-          const name = `${firstName} ${lastName}`.trim();
+          const gender = assignment.profiles?.gender || '';
+          const prefix = gender === 'male' ? 'Bro.' : gender === 'female' ? 'Sis.' : '';
+          const lastInitial = lastName ? lastName[0].toUpperCase() + '.' : '';
+          const name = prefix
+            ? `${prefix} ${firstName} ${lastInitial}`.trim()
+            : `${firstName} ${lastInitial}`.trim();
           if (name) leaders[assignment.event_id] = name;
         });
         setSongLeaderByEvent(leaders);
@@ -382,16 +387,11 @@ export function Dashboard() {
 
                   <div className="flex-1 min-w-0 pb-2">
                     <p className="text-[18px] sm:text-[22px] font-bold text-gray-950 dark:text-white leading-tight tracking-tight truncate" style={{ letterSpacing: '-0.025em' }}>
-                      {nextAssignment.events.title}
+                      {(() => { const parts = (nextAssignment.events.title || '').split(' '); if (parts.length > 1) { parts[parts.length - 1] = parts[parts.length - 1][0].toUpperCase() + '.'; } return parts.join(' '); })()}
                     </p>
                     {nextAssignment.events.start_time && (
                       <p className="text-[12px] text-gray-500 dark:text-white/50 mt-1 font-mono">
                         {formatTime12Hour(nextAssignment.events.start_time)}
-                      </p>
-                    )}
-                    {nextSongLeader && (
-                      <p className="text-[13px] sm:text-[14px] font-bold text-gray-800 dark:text-white/80 mt-3 truncate">
-                        {nextSongLeader}
                       </p>
                     )}
                     <div className="flex items-center gap-1.5 flex-wrap mt-3">

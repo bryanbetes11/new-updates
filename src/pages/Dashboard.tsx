@@ -379,6 +379,7 @@ export function Dashboard() {
               {incomingSwapRequests.map(req => {
                 const requesterName = req.requester?.nickname || `${req.requester?.first_name} ${req.requester?.last_name}`.trim();
                 const isResponding = respondingSwap === req.id;
+                const isSub = !req.target_assignment_id;
                 return (
                   <div
                     key={req.id}
@@ -391,30 +392,34 @@ export function Dashboard() {
                         <div className="h-6 w-6 rounded-lg flex items-center justify-center bg-indigo-100 dark:bg-indigo-500/20 shrink-0">
                           <ArrowLeftRight className="h-3 w-3 text-indigo-600 dark:text-indigo-400" />
                         </div>
-                        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-indigo-600 dark:text-indigo-400">Swap Request</p>
+                        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-indigo-600 dark:text-indigo-400">
+                          {isSub ? 'Sub Request' : 'Swap Request'}
+                        </p>
                       </div>
 
                       <p className="text-[14px] font-bold text-gray-900 dark:text-white mb-0.5" style={{ letterSpacing: '-0.02em' }}>
-                        {requesterName} wants to swap schedules
+                        {requesterName} {isSub ? 'needs a sub' : 'wants to swap schedules'}
                       </p>
 
-                      <div className="grid grid-cols-2 gap-2 my-3">
+                      <div className={`grid ${isSub ? 'grid-cols-1' : 'grid-cols-2'} gap-2 my-3`}>
                         <div className="rounded-xl bg-gray-50 dark:bg-white/[0.04] border border-gray-100 dark:border-white/[0.06] px-3 py-2.5">
-                          <p className="text-[9px] font-mono font-bold uppercase tracking-[0.15em] text-gray-400 dark:text-white/25 mb-1">They give up</p>
+                          <p className="text-[9px] font-mono font-bold uppercase tracking-[0.15em] text-gray-400 dark:text-white/25 mb-1">Their assignment</p>
                           <p className="text-[12px] font-bold text-gray-900 dark:text-white truncate leading-tight">{req.requester_assignment?.events?.title}</p>
                           <p className="text-[10px] text-gray-500 dark:text-white/35 font-mono mt-0.5">
                             {req.requester_assignment?.events?.event_date && format(parseISO(req.requester_assignment.events.event_date), 'MMM d')}
                             {req.requester_assignment?.roles?.name && ` · ${req.requester_assignment.roles.name}`}
                           </p>
                         </div>
-                        <div className="rounded-xl bg-indigo-50 dark:bg-indigo-500/[0.08] border border-indigo-100 dark:border-indigo-500/20 px-3 py-2.5">
-                          <p className="text-[9px] font-mono font-bold uppercase tracking-[0.15em] text-indigo-500 dark:text-indigo-400 mb-1">Your assignment</p>
-                          <p className="text-[12px] font-bold text-gray-900 dark:text-white truncate leading-tight">{req.target_assignment?.events?.title}</p>
-                          <p className="text-[10px] text-gray-500 dark:text-white/35 font-mono mt-0.5">
-                            {req.target_assignment?.events?.event_date && format(parseISO(req.target_assignment.events.event_date), 'MMM d')}
-                            {req.target_assignment?.roles?.name && ` · ${req.target_assignment.roles.name}`}
-                          </p>
-                        </div>
+                        {!isSub && (
+                          <div className="rounded-xl bg-indigo-50 dark:bg-indigo-500/[0.08] border border-indigo-100 dark:border-indigo-500/20 px-3 py-2.5">
+                            <p className="text-[9px] font-mono font-bold uppercase tracking-[0.15em] text-indigo-500 dark:text-indigo-400 mb-1">Your assignment</p>
+                            <p className="text-[12px] font-bold text-gray-900 dark:text-white truncate leading-tight">{req.target_assignment?.events?.title}</p>
+                            <p className="text-[10px] text-gray-500 dark:text-white/35 font-mono mt-0.5">
+                              {req.target_assignment?.events?.event_date && format(parseISO(req.target_assignment.events.event_date), 'MMM d')}
+                              {req.target_assignment?.roles?.name && ` · ${req.target_assignment.roles.name}`}
+                            </p>
+                          </div>
+                        )}
                       </div>
 
                       <p className="text-[11px] text-gray-500 dark:text-white/40 italic mb-3 leading-relaxed">

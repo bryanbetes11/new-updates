@@ -214,7 +214,7 @@ export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
         type: isSub ? 'sub_request' : 'swap_request',
         title: notifTitle,
         body: notifBody,
-        data: { swap_request_id: sr.id, url: '/my-assignments' },
+        data: { swap_request_id: sr.id, url: '/dashboard' },
       });
 
       toast('success', isSub ? 'Sub request sent!' : 'Swap request sent!');

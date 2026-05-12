@@ -1810,7 +1810,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                   <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{ss.songs?.title}</p>
                                   {ss.song_category && <span className="badge-blue text-[10px] shrink-0">{ss.song_category}</span>}
                                   {lyricsMissing && (
-                                    <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-500/12 dark:text-amber-300 shrink-0">
+                                    <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200/70 dark:bg-amber-950/60 dark:text-amber-400 dark:ring-amber-700/40 shrink-0">
                                       <AlertCircle className="h-3 w-3" />
                                       Lyrics needed
                                     </span>
@@ -1843,8 +1843,8 @@ const openLyricsModal = (ss: SetlistSong) => {
                                 title={ss.songs?.lyrics ? 'Edit lyrics' : 'Add lyrics'}
                                 className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold transition-colors shrink-0 ${
                                   ss.songs?.lyrics
-                                    ? 'bg-green-50 text-green-600 hover:text-green-700 dark:bg-green-500/12 dark:text-green-300 dark:hover:text-green-200'
-                                    : 'bg-amber-50 text-amber-600 hover:text-amber-700 dark:bg-amber-500/12 dark:text-amber-300 dark:hover:text-amber-200'
+                                    ? 'bg-green-50 text-green-600 hover:text-green-700 ring-1 ring-green-200/70 dark:bg-green-950/60 dark:text-green-400 dark:hover:text-green-300 dark:ring-green-700/40'
+                                    : 'bg-amber-50 text-amber-600 hover:text-amber-700 ring-1 ring-amber-200/70 dark:bg-amber-950/60 dark:text-amber-400 dark:hover:text-amber-300 dark:ring-amber-700/40'
                                 }`}
                               >
                                 <FileText className="h-4 w-4" />
@@ -1870,7 +1870,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                 <div className="flex-1 min-w-0">
                                   <p className="text-sm font-medium text-gray-900 dark:text-white leading-snug">{ss.songs?.title}</p>
                                   {lyricsMissing && (
-                                    <span className="mt-1 inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-500/12 dark:text-amber-300">
+                                    <span className="mt-1 inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200/70 dark:bg-amber-950/60 dark:text-amber-400 dark:ring-amber-700/40">
                                       <AlertCircle className="h-3 w-3" />
                                       Lyrics needed
                                     </span>
@@ -1882,8 +1882,8 @@ const openLyricsModal = (ss: SetlistSong) => {
                                     title={ss.songs?.lyrics ? 'Edit lyrics' : 'Add lyrics'}
                                     className={`inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-[10px] font-semibold transition-colors ${
                                       ss.songs?.lyrics
-                                        ? 'bg-green-50 text-green-600 dark:bg-green-500/12 dark:text-green-300'
-                                        : 'bg-amber-50 text-amber-600 dark:bg-amber-500/12 dark:text-amber-300'
+                                        ? 'bg-green-50 text-green-600 ring-1 ring-green-200/70 dark:bg-green-950/60 dark:text-green-400 dark:ring-green-700/40'
+                                        : 'bg-amber-50 text-amber-600 ring-1 ring-amber-200/70 dark:bg-amber-950/60 dark:text-amber-400 dark:ring-amber-700/40'
                                     }`}
                                   >
                                     <FileText className="h-3.5 w-3.5" />

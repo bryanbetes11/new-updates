@@ -6,7 +6,6 @@ import { Calendar, CheckCircle, Clock, Music, ChevronRight, Megaphone, Image as 
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { DashboardSkeleton } from '../components/LoadingSpinner';
-import { Avatar } from '../components/Avatar';
 import { formatTime12Hour } from '../lib/timeFormat';
 import { Modal } from '../components/Modal';
 import type { Event, EventAssignment, Setlist, Announcement, UserAvailability } from '../types';
@@ -214,7 +213,8 @@ export function Dashboard() {
 
         {/* ── 01 · Editorial Hero ── */}
         <motion.section variants={item} className="pb-2">
-          <div className="flex items-start justify-between gap-6">
+          <div className="flex items-start justify-between gap-4 sm:block">
+            {/* Copy */}
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2.5 mb-4">
                 <span className="relative flex h-1.5 w-1.5">
@@ -258,42 +258,28 @@ export function Dashboard() {
               )}
             </div>
 
-            <button onClick={() => navigate('/profile')} className="shrink-0 relative group">
-              <div
-                className="absolute inset-0 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                style={{ background: 'radial-gradient(circle, rgba(34,197,94,0.35), transparent 70%)', filter: 'blur(12px)', transform: 'scale(1.4)' }}
-              />
-              <Avatar
-                src={profile?.avatar_url}
-                firstName={profile?.first_name || '?'}
-                lastName={profile?.last_name}
-                size="lg"
-                className="relative ring-1 ring-black/10 dark:ring-white/10 transition-transform duration-300 group-hover:scale-[1.06]"
-              />
-              {stats.pending > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full bg-amber-400 ring-[2.5px] ring-white dark:ring-[#0d0d0f]" style={{ boxShadow: '0 0 12px rgba(245,158,11,0.6)' }} />
-              )}
-            </button>
-          </div>
-
-          {/* Floating glass stat pills */}
-          <div className="mt-8 flex flex-wrap gap-2">
-            {[
-              { label: 'Upcoming', value: stats.total, dot: 'rgba(107,114,128,0.7)', dotDark: 'rgba(255,255,255,0.45)' },
-              { label: 'Confirmed', value: stats.confirmed, dot: '#22c55e', dotDark: '#22c55e' },
-              { label: 'Pending', value: stats.pending, dot: stats.pending > 0 ? '#f59e0b' : 'rgba(156,163,175,0.6)', dotDark: stats.pending > 0 ? '#f59e0b' : 'rgba(255,255,255,0.25)' },
-            ].map(s => (
-              <button
-                key={s.label}
-                onClick={() => navigate('/my-assignments')}
-                className="group flex items-center gap-2.5 pl-3 pr-4 h-9 rounded-full transition-all duration-200 hover:scale-[1.03] active:scale-[0.97] bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-md"
-              >
-                <span className="h-1.5 w-1.5 rounded-full dark:hidden" style={{ background: s.dot, boxShadow: `0 0 8px ${s.dot}` }} />
-                <span className="h-1.5 w-1.5 rounded-full hidden dark:block" style={{ background: s.dotDark, boxShadow: `0 0 8px ${s.dotDark}` }} />
-                <span className="text-[14px] font-bold tabular-nums text-gray-900 dark:text-white" style={{ letterSpacing: '-0.02em' }}>{s.value}</span>
-                <span className="text-[11px] font-medium text-gray-500 dark:text-white/45 tracking-tight">{s.label}</span>
-              </button>
-            ))}
+            {/* Stat pills — stacked on mobile (right column), row below on sm+ */}
+            <div className="flex flex-col gap-2 shrink-0 sm:flex-row sm:flex-wrap sm:items-center sm:mt-8">
+              {[
+                { label: 'Upcoming', value: stats.total, dot: 'rgba(107,114,128,0.7)', dotDark: 'rgba(255,255,255,0.45)', status: 'all' },
+                { label: 'Confirmed', value: stats.confirmed, dot: '#22c55e', dotDark: '#22c55e', status: 'confirmed' },
+                { label: 'Pending', value: stats.pending, dot: stats.pending > 0 ? '#f59e0b' : 'rgba(156,163,175,0.6)', dotDark: stats.pending > 0 ? '#f59e0b' : 'rgba(255,255,255,0.25)', status: 'pending' },
+              ].map(s => (
+                <button
+                  key={s.label}
+                  onClick={() => navigate(`/my-assignments?status=${s.status}`)}
+                  className="group flex items-center justify-between gap-2.5 pl-3 pr-2.5 h-9 w-full sm:w-auto rounded-full transition-all duration-200 hover:scale-[1.03] hover:border-black/[0.12] dark:hover:border-white/[0.14] active:scale-[0.97] bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-md"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="h-1.5 w-1.5 rounded-full dark:hidden shrink-0" style={{ background: s.dot, boxShadow: `0 0 8px ${s.dot}` }} />
+                    <span className="h-1.5 w-1.5 rounded-full hidden dark:block shrink-0" style={{ background: s.dotDark, boxShadow: `0 0 8px ${s.dotDark}` }} />
+                    <span className="text-[14px] font-bold tabular-nums text-gray-900 dark:text-white" style={{ letterSpacing: '-0.02em' }}>{s.value}</span>
+                    <span className="text-[11px] font-medium text-gray-500 dark:text-white/45 tracking-tight">{s.label}</span>
+                  </div>
+                  <ChevronRight className="h-3.5 w-3.5 text-gray-400 dark:text-white/25 group-hover:text-gray-600 dark:group-hover:text-white/50 transition-colors shrink-0" />
+                </button>
+              ))}
+            </div>
           </div>
         </motion.section>
 
@@ -418,39 +404,42 @@ export function Dashboard() {
         {/* ── 04 · Leadership Quick Access ── */}
         {isLeader && (
           <motion.section variants={item}>
-            <Card className="p-5 sm:p-6">
-              <SectionLabel index="04">
-                <span className="flex items-center gap-1.5"><Shield className="h-3 w-3" /> Leadership</span>
-              </SectionLabel>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+            <Card>
+              <div className="flex items-center gap-2 px-5 py-3.5 border-b border-gray-100 dark:border-white/[0.06]">
+                <span className="text-[10px] font-mono font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-white/30">04</span>
+                <div className="h-3 w-px bg-gray-200 dark:bg-white/[0.08]" />
+                <Shield className="h-3 w-3 text-gray-400 dark:text-white/30" />
+                <span className="text-[10px] font-mono font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-white/30">Leadership</span>
+              </div>
+              <div className="grid grid-cols-2 divide-x divide-y divide-gray-100 dark:divide-white/[0.05]">
                 {[
-                  { label: 'Overview', icon: LayoutDashboard, path: '/leadership/overview', badge: 0 },
-                  { label: 'Manage Team', icon: Users, path: '/leadership/team', badge: 0 },
-                  { label: 'Leave Requests', icon: ClipboardCheck, path: '/leadership/leave', badge: pendingLeaveCount },
-                  { label: 'Setlist Reviews', icon: ListChecks, path: '/leadership/setlists', badge: pendingSetlists.length },
-                  { label: 'Unavailable', icon: UserX, path: '/unavailable-members', badge: unavailableMembers.length },
+                  { label: 'Overview',        icon: LayoutDashboard, path: '/leadership/overview',  badge: 0 },
+                  { label: 'Manage Team',     icon: Users,           path: '/leadership/team',       badge: 0 },
+                  { label: 'Leave Requests',  icon: ClipboardCheck,  path: '/leadership/leave',      badge: pendingLeaveCount },
+                  { label: 'Setlist Reviews', icon: ListChecks,      path: '/leadership/setlists',   badge: pendingSetlists.length },
+                  { label: 'Unavailable',     icon: UserX,           path: '/unavailable-members',   badge: unavailableMembers.length },
                   ...(isProductionDirector ? [{ label: 'Discipline', icon: Shield, path: '/discipline', badge: 0 }] : []),
-                ].map((action) => {
+                ].map((action, i, arr) => {
                   const Icon = action.icon;
+                  const isLastOdd = arr.length % 2 !== 0 && i === arr.length - 1;
                   return (
                     <button
                       key={action.label}
                       onClick={() => navigate(action.path)}
-                      className="group relative flex flex-col items-center justify-center gap-2.5 px-3 py-4 rounded-2xl bg-gray-50/70 dark:bg-white/[0.025] border border-gray-200/70 dark:border-white/[0.05] hover:bg-white dark:hover:bg-white/[0.05] hover:border-emerald-300 dark:hover:border-emerald-500/30 hover:-translate-y-0.5 transition-all duration-200"
+                      className={`group relative flex items-center gap-2.5 px-4 py-2.5 w-full text-left hover:bg-gray-50 dark:hover:bg-white/[0.03] transition-colors duration-150 ${isLastOdd ? 'col-span-2' : ''}`}
                     >
-                      <div className="h-10 w-10 rounded-xl flex items-center justify-center bg-emerald-50 dark:bg-emerald-500/[0.1] text-emerald-600 dark:text-emerald-400 transition-transform group-hover:scale-105">
-                        <Icon className="h-[18px] w-[18px]" />
+                      <div className="h-7 w-7 rounded-lg flex items-center justify-center bg-emerald-50 dark:bg-emerald-500/[0.10] text-emerald-600 dark:text-emerald-400 shrink-0">
+                        <Icon className="h-[13px] w-[13px]" />
                       </div>
-                      <span className="text-[12px] font-semibold text-gray-700 dark:text-white/80 text-center leading-tight" style={{ letterSpacing: '-0.01em' }}>
+                      <span className="flex-1 text-[12px] font-semibold text-gray-800 dark:text-white/75 truncate" style={{ letterSpacing: '-0.01em' }}>
                         {action.label}
                       </span>
                       {action.badge > 0 && (
-                        <span
-                          className="absolute top-2 right-2 flex h-5 min-w-5 items-center justify-center rounded-full border border-amber-300/60 bg-amber-400 px-1 text-[10px] font-black leading-none text-amber-950 shadow-[0_6px_14px_-6px_rgba(245,158,11,0.8)] ring-2 ring-white/90 dark:border-amber-300/30 dark:bg-amber-400/15 dark:text-amber-200 dark:shadow-[0_0_16px_rgba(245,158,11,0.22)] dark:ring-[#18181a]"
-                        >
+                        <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-400 dark:bg-amber-400/20 px-1 text-[9px] font-black text-amber-950 dark:text-amber-300 ring-1 ring-amber-300/50 dark:ring-amber-500/30 shrink-0">
                           {action.badge > 9 ? '9+' : action.badge}
                         </span>
                       )}
+                      <ChevronRight className="h-3 w-3 text-gray-300 dark:text-white/20 group-hover:text-gray-500 dark:group-hover:text-white/40 transition-colors shrink-0" />
                     </button>
                   );
                 })}

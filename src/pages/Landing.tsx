@@ -1,464 +1,297 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, useInView, useReducedMotion, useScroll, useTransform } from 'framer-motion';
 import {
   ArrowRight,
   BellRing,
-  CalendarDays,
+  Calendar,
   Check,
-  CheckCircle2,
-  CreditCard,
+  GripVertical,
   Layers3,
   Music2,
+  Play,
   ShieldCheck,
-  Sparkles,
-  Users,
   Users2,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
-function Reveal({
-  children,
-  delay = 0,
-  className = '',
-}: {
-  children: React.ReactNode;
-  delay?: number;
-  className?: string;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { once: true, margin: '-80px' });
+// ── shared primitives ───────────────────────────────────────────
 
+function Eyebrow({ children }: { children: React.ReactNode }) {
   return (
-    <motion.div
-      ref={ref}
-      initial={{ opacity: 0, y: 18 }}
-      animate={inView ? { opacity: 1, y: 0 } : {}}
-      transition={{ duration: 0.58, delay, ease: [0.16, 1, 0.3, 1] }}
-      className={className}
-    >
+    <span className="inline-flex items-center gap-2 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-400">
+      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
       {children}
-    </motion.div>
+    </span>
   );
 }
 
-const chips = ['10-day free trial', 'No complex billing', 'Built for worship teams'];
-
-const pricingPlans = [
-  {
-    name: 'Free',
-    price: '₱0',
-    cadence: 'month',
-    description: 'For small teams trying ServeSync.',
-    cta: 'Start Free',
-    members: 'Up to 5 members',
-    featured: false,
-    features: [
-      'Core workspace access',
-      'Basic schedules',
-      'Basic setlists',
-      'Announcements',
-      'Upgrade anytime',
-    ],
-  },
-  {
-    name: 'Starter',
-    price: '₱599',
-    cadence: 'month',
-    description: 'For one worship team getting organized.',
-    members: 'Up to 12 members',
-    cta: 'Start Starter',
-    featured: false,
-    features: [
-      'Everything in Free',
-      'Full schedule planning',
-      'Setlists and service notes',
-      'Attendance tracking',
-      'Team announcements',
-    ],
-  },
-  {
-    name: 'Team',
-    price: '₱999',
-    cadence: 'month',
-    description: 'For growing worship teams with regular rotations.',
-    members: 'Up to 25 members',
-    cta: 'Start Team',
-    featured: true,
-    features: [
-      'Everything in Starter',
-      'More team seats',
-      'Better for weekly rotations',
-      'Cleaner team coordination',
-      'Priority workspace features',
-    ],
-  },
-  {
-    name: 'Ministry',
-    price: '₱1,799',
-    cadence: 'month',
-    description: 'For larger ministries with multiple teams.',
-    members: 'Up to 60 members',
-    cta: 'Start Ministry',
-    featured: false,
-    features: [
-      'Everything in Team',
-      'Larger team capacity',
-      'Best for established ministries',
-      'Multi-service planning support',
-      'Built for long-term ministry rhythm',
-    ],
-  },
-];
-
-const featureCards = [
-  {
-    title: 'Schedule with confidence',
-    body: 'Plan services, assign team members, and keep everyone aligned.',
-    icon: CalendarDays,
-  },
-  {
-    title: 'Keep setlists organized',
-    body: 'Give leaders and musicians one clear place for songs, notes, and service flow.',
-    icon: Music2,
-  },
-  {
-    title: 'Track team rhythm',
-    body: 'Manage attendance, announcements, and team visibility without messy spreadsheets.',
-    icon: BellRing,
-  },
-  {
-    title: 'Manage availability',
-    body: 'Collect unavailable dates early so leaders stop chasing last-minute replies.',
-    icon: Users2,
-  },
-  {
-    title: 'Keep ministry updates visible',
-    body: 'Post important team announcements where everyone can actually find them.',
-    icon: Layers3,
-  },
-  {
-    title: 'Protect accountability',
-    body: 'See attendance trends and leadership follow-up in one consistent place.',
-    icon: ShieldCheck,
-  },
-];
-
-const heroSignals = [
-  { label: 'Schedules', icon: CalendarDays },
-  { label: 'Setlists', icon: Music2 },
-  { label: 'Attendance', icon: Users },
-  { label: 'Billing', icon: CreditCard },
-];
-
-const heroFloatingCards = [
-  {
-    label: 'ServeSync activity',
-    title: 'Sunday service ready',
-    body: 'Setlist locked in',
-    tone: 'emerald',
-    className: 'left-[4.5vw] top-[50%] hidden xl:flex',
-    width: 'large' as const,
-    opacity: 0.9,
-    rotate: 1,
-    duration: 10,
-  },
-  {
-    label: 'Live',
-    title: 'New team update',
-    body: '2 announcements posted',
-    tone: 'cyan',
-    className: 'right-[5.5vw] top-[46%] hidden xl:flex',
-    width: 'large' as const,
-    opacity: 0.9,
-    rotate: -1,
-    duration: 9.5,
-  },
-  {
-    label: 'Billing synced',
-    title: 'Plan active',
-    body: 'Team plan monthly',
-    tone: 'amber',
-    className: 'right-[11vw] top-[62%] hidden xl:flex',
-    width: 'medium' as const,
-    opacity: 0.8,
-    rotate: 2,
-    duration: 11,
-  },
-  {
-    label: 'Music team',
-    title: 'Setlist approved',
-    body: '8 songs ready',
-    tone: 'emerald',
-    className: 'left-[11vw] top-[72%] hidden xl:flex',
-    width: 'small' as const,
-    opacity: 0.58,
-    rotate: -1.5,
-    duration: 9,
-  },
-  {
-    label: 'This week',
-    title: 'Rehearsal flow set',
-    body: 'Friday 7:30 PM',
-    tone: 'cyan',
-    className: 'right-[15vw] top-[76%] hidden xl:flex',
-    width: 'small' as const,
-    opacity: 0.54,
-    rotate: -2,
-    duration: 10.5,
-  },
-  {
-    label: 'Team workspace',
-    title: '18 members active',
-    body: '3 serving teams',
-    tone: 'violet',
-    className: 'left-[7vw] top-[24%] hidden xl:flex',
-    width: 'medium' as const,
-    opacity: 0.68,
-    rotate: -2,
-    duration: 8,
-  },
-  {
-    label: 'Live',
-    title: 'Attendance synced',
-    body: '92% this week',
-    tone: 'violet',
-    className: 'right-[9.5vw] top-[23%] hidden xl:flex',
-    width: 'medium' as const,
-    opacity: 0.7,
-    rotate: 1.5,
-    duration: 9,
-  },
-];
-
-const heroFloatingCardsLg = [
-  {
-    label: 'Team workspace',
-    title: '18 members active',
-    body: '3 serving teams',
-    tone: 'violet' as FloatingTone,
-    className: 'left-[7vw] top-[24%] hidden lg:flex xl:hidden',
-    width: 'medium' as const,
-    opacity: 0.78,
-    rotate: -2,
-    duration: 8.5,
-  },
-  {
-    label: 'ServeSync activity',
-    title: 'Sunday service ready',
-    body: 'Setlist locked in',
-    tone: 'emerald' as FloatingTone,
-    className: 'left-[4.5vw] top-[53%] hidden lg:flex xl:hidden',
-    width: 'large' as const,
-    opacity: 0.88,
-    rotate: 1,
-    duration: 10,
-  },
-  {
-    label: 'Live',
-    title: 'Attendance synced',
-    body: '92% this week',
-    tone: 'violet' as FloatingTone,
-    className: 'right-[9.5vw] top-[23%] hidden lg:flex xl:hidden',
-    width: 'medium' as const,
-    opacity: 0.74,
-    rotate: 1.5,
-    duration: 9,
-  },
-  {
-    label: 'Live',
-    title: 'New team update',
-    body: '2 announcements posted',
-    tone: 'cyan' as FloatingTone,
-    className: 'right-[5.5vw] top-[47%] hidden lg:flex xl:hidden',
-    width: 'large' as const,
-    opacity: 0.88,
-    rotate: -1,
-    duration: 9.5,
-  },
-];
-
-type FloatingTone = 'emerald' | 'cyan' | 'violet' | 'amber';
-
-function FloatingStatusCard({
-  label,
-  title,
-  body,
-  tone,
-  className,
-  delay = 0,
-  compact = false,
-  width = 'medium',
-  opacity = 1,
-  rotate = 0,
-  duration = 8,
-}: {
-  label: string;
-  title: string;
-  body: string;
-  tone: FloatingTone;
-  className: string;
-  delay?: number;
-  compact?: boolean;
-  width?: 'small' | 'medium' | 'large';
-  opacity?: number;
-  rotate?: number;
-  duration?: number;
-}) {
-  const reduceMotion = useReducedMotion();
-
-  const widthClass = compact
-    ? 'w-[168px]'
-    : width === 'small'
-      ? 'w-[152px]'
-      : width === 'large'
-        ? 'w-[190px]'
-        : 'w-[172px]';
-
-  const toneClasses =
-    tone === 'emerald'
-      ? 'bg-emerald-300 shadow-[0_0_16px_rgba(110,231,183,0.85)]'
-      : tone === 'cyan'
-        ? 'bg-cyan-300 shadow-[0_0_16px_rgba(103,232,249,0.85)]'
-        : tone === 'amber'
-          ? 'bg-amber-300 shadow-[0_0_16px_rgba(252,211,77,0.85)]'
-          : 'bg-violet-300 shadow-[0_0_16px_rgba(196,181,253,0.85)]';
-
+function Wrap({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <motion.div
-      initial={false}
-      animate={
-        reduceMotion
-          ? { y: 0, rotate }
-          : { y: [0, -6, 0], rotate }
-      }
-      transition={
-        reduceMotion
-          ? { duration: 0 }
-          : { duration, repeat: Infinity, ease: 'easeInOut', delay }
-      }
-      style={{ opacity }}
-      className={`pointer-events-none absolute z-20 flex ${widthClass} flex-col rounded-[22px] border border-white/[0.08] bg-[linear-gradient(180deg,rgba(19,29,39,0.92),rgba(11,17,24,0.95))] p-3.5 text-left shadow-[0_22px_48px_-24px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl ${className}`}
-    >
-      <div className="flex items-start gap-2.5">
-        <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${toneClasses}`} />
-        <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/42">
-            {label}
-          </p>
-          <p className="mt-1 text-sm font-semibold leading-5 text-white/88">{title}</p>
-          <p className="mt-1 text-xs leading-5 text-white/58">{body}</p>
-        </div>
-      </div>
-      <div className="mt-3 h-px bg-[linear-gradient(90deg,rgba(255,255,255,0.1),transparent)]" />
-      <div className="mt-2 text-[11px] font-medium text-white/40">ServeSync</div>
-    </motion.div>
-  );
-}
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-[11px] font-mono font-semibold uppercase tracking-[0.18em] text-emerald-300/75">
-      {children}
-    </p>
-  );
-}
-
-function Surface({
-  children,
-  className = '',
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div
-      className={`rounded-[32px] bg-[linear-gradient(180deg,rgba(18,27,36,0.94),rgba(11,17,24,0.96))] ring-1 ring-white/[0.08] shadow-[0_28px_90px_-56px_rgba(0,0,0,0.95),inset_0_1px_0_rgba(255,255,255,0.05)] ${className}`}
-    >
+    <div className={`mx-auto w-full max-w-[1180px] px-5 lg:px-7 ${className}`}>
       {children}
     </div>
   );
 }
 
-function SectionDivider() {
+// ── in-product visuals ──────────────────────────────────────────
+
+function ScheduleVisual() {
+  const days = [
+    { n: 'Mon', has: false },
+    { n: 'Tue', has: false },
+    { n: 'Wed', has: true },
+    { n: 'Thu', has: false },
+    { n: 'Fri', has: true },
+    { n: 'Sat', has: false },
+    { n: 'Sun', has: true, big: true },
+  ];
   return (
-    <div className="mx-auto w-full max-w-[1120px] px-4 sm:px-6 lg:px-8">
-      <div className="h-px bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.1),transparent)]" />
+    <div className="rounded-[18px] bg-[#0e1a26] border border-white/[0.07] p-5">
+      <div className="flex items-center justify-between mb-4">
+        <span className="font-mono text-[11px] text-white/50">This week · May 11–17</span>
+        <span className="font-mono text-[11px] text-white/35">Week 19</span>
+      </div>
+      <div className="grid grid-cols-7 gap-1.5">
+        {days.map(d => (
+          <div
+            key={d.n}
+            className={`flex flex-col items-center gap-1.5 rounded-xl py-2.5 px-1 ${
+              d.has
+                ? 'bg-[rgba(52,211,153,0.14)] border border-[rgba(52,211,153,0.30)]'
+                : 'bg-white/[0.03] border border-white/[0.06]'
+            }`}
+          >
+            <span className={`font-mono text-[10px] font-semibold ${d.has ? 'text-emerald-400' : 'text-white/40'}`}>
+              {d.n}
+            </span>
+            {d.has && <span className="h-1.5 w-full rounded-full bg-emerald-400/70" />}
+            {d.has && d.big && <span className="h-1 w-full rounded-full bg-emerald-400/40" />}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-function HeroPreviewPanel() {
+function SetlistVisual() {
+  const songs = [
+    { n: '01', t: 'Goodness of God', s: 'Bethel · 72 BPM', k: 'A' },
+    { n: '02', t: 'Build My Life', s: 'Pat Barrett · 72 BPM', k: 'E', active: true },
+    { n: '03', t: 'Way Maker', s: 'Sinach · 70 BPM', k: 'D' },
+    { n: '04', t: 'King of Kings', s: 'Hillsong · 73 BPM', k: 'D' },
+  ];
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 18 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.7, delay: 0.18, ease: [0.16, 1, 0.3, 1] }}
-      className="relative mx-auto mt-5 w-full max-w-[740px]"
-    >
-      <div className="pointer-events-none absolute inset-x-10 -top-6 h-24 rounded-full bg-emerald-400/16 blur-3xl" />
-      <div className="pointer-events-none absolute inset-0 rounded-[30px] bg-[radial-gradient(circle_at_50%_0%,rgba(103,232,249,0.12),transparent_40%)]" />
-      <div className="pointer-events-none absolute inset-x-10 bottom-[-0.75rem] h-24 rounded-full bg-sky-400/10 blur-3xl" />
-
-      <div className="relative overflow-hidden rounded-[30px] border border-white/[0.07] bg-[linear-gradient(180deg,rgba(18,27,36,0.8),rgba(10,16,24,0.9))] px-4 py-4 shadow-[0_28px_80px_-44px_rgba(0,0,0,0.92),inset_0_1px_0_rgba(255,255,255,0.06),inset_0_-18px_40px_-32px_rgba(0,0,0,0.65)] backdrop-blur-xl sm:px-6 sm:py-5">
-        <div className="pointer-events-none absolute inset-0 rounded-[30px] ring-1 ring-white/[0.03]" />
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.24),transparent)]" />
-        <div className="flex items-center justify-between gap-3 border-b border-white/[0.07] pb-4">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/38">Workspace Preview</p>
-            <h3 className="mt-1 text-sm font-semibold text-white/88 sm:text-base">This Week in ServeSync</h3>
-          </div>
-          <div className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-[11px] font-semibold text-emerald-200">
-            Ready for rehearsal
-          </div>
-        </div>
-
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <div className="flex min-h-[118px] flex-col rounded-[22px] border border-white/[0.06] bg-white/[0.03] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/36">Schedule</p>
-            <p className="mt-3 text-sm font-semibold text-white/88 sm:text-base">Sunday Service</p>
-            <p className="mt-1 text-sm text-white/56">7:30 AM call time</p>
-          </div>
-
-          <div className="flex min-h-[118px] flex-col rounded-[22px] border border-white/[0.06] bg-white/[0.03] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/36">Setlist</p>
-            <p className="mt-3 text-sm font-semibold text-white/88 sm:text-base">8 songs ready</p>
-            <p className="mt-1 text-sm text-white/56">Leader approved</p>
-          </div>
-
-          <div className="flex min-h-[118px] flex-col rounded-[22px] border border-white/[0.06] bg-white/[0.03] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/36">Team</p>
-            <p className="mt-3 text-sm font-semibold text-white/88 sm:text-base">18 active members</p>
-            <p className="mt-1 text-sm text-white/56">92% attendance</p>
-          </div>
-        </div>
-
-        <div className="mt-3.5 flex flex-wrap items-center justify-center gap-2 text-[11px] font-medium text-white/34">
-          <span>Built for weekly planning</span>
-          <span className="h-1 w-1 rounded-full bg-white/18" />
-          <span>rehearsal flow</span>
-          <span className="h-1 w-1 rounded-full bg-white/18" />
-          <span>team coordination</span>
-        </div>
+    <div className="rounded-[18px] bg-[#0e1a26] border border-white/[0.07] overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.07]">
+        <span className="text-sm font-semibold text-[#eef3f8]">Sunday — May 17</span>
+        <span className="font-mono text-[11px] text-white/45">5 songs · 28 min</span>
       </div>
-    </motion.div>
+      <div className="divide-y divide-white/[0.05]">
+        {songs.map(r => (
+          <div
+            key={r.n}
+            className={`flex items-center gap-3 px-4 py-2.5 ${
+              r.active ? 'bg-[rgba(52,211,153,0.10)] border-l-2 border-emerald-400' : ''
+            }`}
+          >
+            <GripVertical className="h-3.5 w-3.5 text-white/25 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className={`text-[13px] font-semibold truncate ${r.active ? 'text-emerald-400' : 'text-[#eef3f8]'}`}>
+                {r.t}
+              </div>
+              <div className="font-mono text-[10px] text-white/40 truncate">{r.s}</div>
+            </div>
+            <span
+              className={`font-mono text-[11px] font-semibold px-2 py-0.5 rounded-md shrink-0 ${
+                r.active ? 'bg-emerald-400/20 text-emerald-400' : 'bg-white/[0.07] text-white/50'
+              }`}
+            >
+              {r.k}
+            </span>
+            <Play className="h-3.5 w-3.5 text-white/30 shrink-0" />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
-export function Landing() {
-  const navigate = useNavigate();
-  const { user } = useAuth();
+function AttendanceVisual() {
+  const bars = [42, 56, 48, 68, 72, 65, 80, 74, 82, 88, 84, 92];
+  return (
+    <div className="rounded-[18px] bg-[#0e1a26] border border-white/[0.07] p-5">
+      <div className="flex items-start justify-between mb-5">
+        <div>
+          <div className="font-mono text-[11px] text-white/45 mb-2">12-week attendance</div>
+          <div className="flex items-end gap-1">
+            <span className="font-mono text-5xl font-semibold text-[#eef3f8] leading-none">92</span>
+            <span className="font-mono text-xl text-white/40 mb-0.5">%</span>
+          </div>
+        </div>
+        <span className="font-mono text-[12px] font-semibold text-emerald-400 bg-[rgba(52,211,153,0.14)] px-2.5 py-1 rounded-full mt-1">
+          +11 vs Q1
+        </span>
+      </div>
+      <div className="flex items-end gap-1 h-20">
+        {bars.map((h, i) => (
+          <div
+            key={i}
+            className={`flex-1 rounded-sm ${i < 6 ? 'bg-white/[0.12]' : 'bg-emerald-400/70'}`}
+            style={{ height: `${h}%` }}
+          />
+        ))}
+      </div>
+      <div className="flex justify-between mt-2.5">
+        {['W1', 'W6', 'W12'].map(l => (
+          <span key={l} className="font-mono text-[10px] text-white/35">{l}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── nav ─────────────────────────────────────────────────────────
+
+function Nav({ onSignIn, onStartFree }: { onSignIn: () => void; onStartFree: () => void }) {
   const [scrolled, setScrolled] = useState(false);
-  const reduceMotion = useReducedMotion();
-  const { scrollYProgress } = useScroll();
-  const heroGlowY = useTransform(scrollYProgress, [0, 1], [0, 180]);
-  const gridOpacity = useTransform(scrollYProgress, [0, 0.45], [0.16, 0.06]);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 14);
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
+
+  return (
+    <nav className="sticky top-4 z-50 px-5 lg:px-7">
+      <div
+        className={`mx-auto flex h-[60px] max-w-[1180px] items-center justify-between rounded-full border border-white/[0.08] px-5 transition-colors duration-200`}
+        style={{ backdropFilter: 'blur(14px)', background: scrolled ? 'rgba(7,16,26,0.92)' : 'rgba(14,26,38,0.70)' }}
+      >
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 rounded-[9px] bg-white flex items-center justify-center shrink-0">
+            <Music2 className="h-4 w-4 text-[#07101a]" />
+          </div>
+          <span className="font-semibold text-[#eef3f8] text-sm">ServeSync</span>
+        </div>
+
+        <div className="hidden md:flex items-center gap-7">
+          {[['Features', '#features'], ['Product', '#walkthrough'], ['Pricing', '#pricing'], ['FAQ', '#faq']].map(
+            ([label, href]) => (
+              <a
+                key={label}
+                href={href}
+                className="text-[13px] text-white/55 hover:text-white transition-colors duration-150"
+              >
+                {label}
+              </a>
+            )
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onSignIn}
+            className="h-[38px] px-4 rounded-full border border-white/[0.10] text-[13px] font-semibold text-white/70 hover:text-white hover:bg-white/[0.06] transition-all duration-150"
+          >
+            Sign in
+          </button>
+          <button
+            onClick={onStartFree}
+            className="h-[38px] px-4 rounded-full bg-emerald-400 text-[#07101a] text-[13px] font-bold hover:bg-emerald-300 transition-colors duration-150 flex items-center gap-1.5 hover:-translate-y-px"
+          >
+            Start free <ArrowRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    </nav>
+  );
+}
+
+// ── main export ─────────────────────────────────────────────────
+
+const FEATURES = [
+  { icon: Calendar,  n: '01', title: 'Schedules that stick',       body: 'Plan services, assign team members, and stop chasing replies in five different group chats.' },
+  { icon: Music2,    n: '02', title: 'One home for setlists',      body: 'Songs, keys, notes, and service flow — visible to leaders and musicians before rehearsal starts.' },
+  { icon: BellRing,  n: '03', title: 'Announcements that land',    body: 'Post team updates where everyone can actually find them. No more buried Messenger threads.' },
+  { icon: Users2,    n: '04', title: 'Availability up front',      body: 'Collect unavailable dates early so leaders aren\'t filling slots the night before.' },
+  { icon: Layers3,   n: '05', title: 'Attendance in context',      body: 'See who\'s serving, who\'s missed two weeks in a row, and who\'s quietly carrying the team.' },
+  { icon: ShieldCheck, n: '06', title: 'Built for ministry rhythm', body: 'Weekly cadence, multi-team support, and structured accountability — without the spreadsheet.' },
+];
+
+const WALK = [
+  {
+    label: 'Schedules',
+    title: 'Plan the next four Sundays in one view.',
+    body: 'Drag people into slots. See conflicts before they happen. Send confirmation in one click.',
+    checks: ['Recurring services', 'Conflict detection', 'Replacement requests'],
+    visual: <ScheduleVisual />,
+    flip: false,
+  },
+  {
+    label: 'Setlists',
+    title: 'Songs, keys, and notes in the right place.',
+    body: 'Build a setlist, lock the keys, share notes with the band. Everyone walks into rehearsal already prepared.',
+    checks: ['Reusable song library', 'Per-service notes', 'Synced to the team'],
+    visual: <SetlistVisual />,
+    flip: true,
+  },
+  {
+    label: 'Attendance',
+    title: 'See who shows up — and who needs a check-in.',
+    body: 'Track who served, who missed, and who is quietly burning out. Trends you can actually act on.',
+    checks: ['Weekly check-in', '12-week trend', 'Leader follow-ups'],
+    visual: <AttendanceVisual />,
+    flip: false,
+  },
+];
+
+const STEPS = [
+  { n: 'Step 01', title: 'Create your church',  body: 'Sign up, name your church, invite your worship team. Free 10-day trial — no card.' },
+  { n: 'Step 02', title: 'Set the cadence',      body: 'Add your recurring services and rehearsals. ServeSync builds the weekly view automatically.' },
+  { n: 'Step 03', title: 'Build a setlist',      body: 'Drop in songs, set the keys, write the notes. Share with the band in one tap.' },
+  { n: 'Step 04', title: 'Run a calmer week',    body: 'Mark attendance, post updates, and let the rhythm carry the team instead of leaders chasing it.' },
+];
+
+const PLANS = [
+  {
+    name: 'Free',     price: '₱0',     seats: 'Up to 5 members',
+    desc: 'For small teams trying ServeSync.',
+    cta: 'Start free', feat: false,
+    features: ['Core workspace', 'Basic schedules', 'Basic setlists', 'Announcements'],
+  },
+  {
+    name: 'Starter',  price: '₱599',   seats: 'Up to 12 members',
+    desc: 'For one worship team getting organized.',
+    cta: 'Start Starter', feat: false,
+    features: ['Everything in Free', 'Full schedule planning', 'Setlists + service notes', 'Attendance tracking'],
+  },
+  {
+    name: 'Team',     price: '₱999',   seats: 'Up to 25 members',
+    desc: 'For growing teams with regular rotations.',
+    cta: 'Start Team', feat: true,
+    features: ['Everything in Starter', 'More team seats', 'Built for weekly rotations', 'Priority workspace features'],
+  },
+  {
+    name: 'Ministry', price: '₱1,799', seats: 'Up to 60 members',
+    desc: 'For larger ministries with multiple teams.',
+    cta: 'Start Ministry', feat: false,
+    features: ['Everything in Team', 'Larger team capacity', 'Multi-service planning', 'Long-term ministry rhythm'],
+  },
+];
+
+const FAQS = [
+  { q: 'Do I need a credit card to start the trial?', a: 'No. You can create a church workspace and invite your team without entering payment details. We only ask for billing if you decide to upgrade after the 10-day trial.' },
+  { q: 'How is the team size counted?', a: 'A "member" is anyone you invite into the workspace — leaders, musicians, vocalists, tech volunteers. Inactive members can be archived without removing their history.' },
+  { q: 'Can we use ServeSync for multiple teams or campuses?', a: 'Yes. The Ministry plan supports multiple worship teams and parallel service planning. Each team gets its own schedules, setlists, and announcements.' },
+  { q: 'Does ServeSync work on mobile?', a: 'Yes. The app is built mobile-first — musicians can check setlists, confirm availability, and see schedules from their phones.' },
+  { q: 'What happens to our data if we cancel?', a: 'You can export your schedules, setlists, and member list at any time. After cancelling, your workspace is preserved read-only for 30 days before deletion.' },
+  { q: 'Why peso pricing?', a: 'ServeSync is built and operated in the Philippines. We price for ministry budgets here. Card payments work internationally.' },
+];
+
+export function Landing() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   useEffect(() => {
     if (user) navigate('/dashboard', { replace: true });
@@ -467,493 +300,570 @@ export function Landing() {
   if (user) return null;
 
   return (
-    <div
-      className="min-h-screen overflow-x-hidden bg-[#081019] text-white"
-      style={{
-        colorScheme: 'dark',
-        fontFamily: 'Inter, Geist, system-ui, sans-serif',
-      }}
-    >
-      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-        <motion.div
-          className="absolute inset-0"
-          style={{ y: heroGlowY }}
-        >
-          <div
-            className="absolute inset-0"
-            style={{
-              background:
-                'radial-gradient(circle at 50% 0%, rgba(16,185,129,0.16), transparent 30%),' +
-                'radial-gradient(circle at 18% 18%, rgba(20,184,166,0.12), transparent 22%),' +
-                'radial-gradient(circle at 82% 16%, rgba(56,189,248,0.10), transparent 18%),' +
-                'linear-gradient(180deg, #0f1722 0%, #0a1118 55%, #081019 100%)',
-            }}
-          />
-          <div className="absolute left-1/2 top-24 h-[26rem] w-[26rem] -translate-x-1/2 rounded-full bg-emerald-400/8 blur-[120px]" />
-          <div className="absolute right-[8%] top-48 h-56 w-56 rounded-full bg-cyan-400/6 blur-[110px]" />
-        </motion.div>
-        <motion.div
-          animate={{
-            x: [0, 24, -12, 0],
-            y: [0, -18, 12, 0],
-            scale: [1, 1.04, 0.98, 1],
-          }}
-          transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut' }}
-          className="absolute left-[-8rem] top-32 h-[22rem] w-[22rem] rounded-full bg-emerald-300/6 blur-[120px]"
-        />
-        <motion.div
-          animate={{
-            x: [0, -20, 10, 0],
-            y: [0, 24, -10, 0],
-            scale: [1, 0.96, 1.02, 1],
-          }}
-          transition={{ duration: 22, repeat: Infinity, ease: 'easeInOut' }}
-          className="absolute bottom-24 right-[-6rem] h-[24rem] w-[24rem] rounded-full bg-sky-300/5 blur-[130px]"
-        />
-        <motion.div
-          style={{ opacity: gridOpacity }}
-          className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.012)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.012)_1px,transparent_1px)] bg-[size:96px_96px]"
-        />
-        <div className="absolute inset-0 opacity-[0.035] mix-blend-screen [background-image:radial-gradient(circle_at_20%_20%,white_0.6px,transparent_0.8px)] [background-size:22px_22px]" />
-        <div className="absolute inset-x-0 top-0 h-40 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent)]" />
-      </div>
+    <div className="min-h-screen bg-[#07101a] text-[#eef3f8] overflow-x-hidden" style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}>
 
-      <motion.header
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.42 }}
-        className="sticky top-0 z-50 px-4 pt-4 transition-all sm:px-6 lg:px-8"
-      >
-        <div
-          className={`mx-auto flex h-16 max-w-[1120px] items-center justify-between rounded-full border border-white/[0.08] px-4 shadow-[0_18px_40px_-30px_rgba(0,0,0,0.7),inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-xl sm:px-5 ${
-            scrolled
-              ? 'bg-[#0c141d]/88'
-              : 'bg-[linear-gradient(180deg,rgba(19,29,39,0.78),rgba(11,17,24,0.72))]'
-          }`}
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/[0.12] bg-white text-gray-950 shadow-[0_14px_34px_-20px_rgba(255,255,255,0.35)]">
-              <Music2 className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-sm font-black tracking-tight">ServeSync</p>
-              <p className="text-[10px] uppercase tracking-[0.16em] text-white/40">Worship team workspace</p>
-            </div>
-          </div>
+      {/* bg-field: faint grid + accent glow */}
+      <div
+        className="pointer-events-none fixed inset-0 -z-10"
+        style={{
+          backgroundImage: 'linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)',
+          backgroundSize: '88px 88px',
+          WebkitMaskImage: 'radial-gradient(ellipse 80% 55% at 50% 0%, black 0%, transparent 100%)',
+          maskImage: 'radial-gradient(ellipse 80% 55% at 50% 0%, black 0%, transparent 100%)',
+        }}
+      />
+      <div
+        className="pointer-events-none fixed inset-0 -z-10"
+        style={{ background: 'radial-gradient(ellipse 1200px 720px at 50% -60px, rgba(52,211,153,0.11) 0%, rgba(125,211,252,0.05) 55%, transparent 100%)' }}
+      />
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => navigate('/login')}
-              className="inline-flex h-10 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.03] px-4 text-sm font-semibold text-white/82 transition-all hover:bg-white/[0.08] hover:text-white"
-            >
-              Sign In
-            </button>
-            <button
-              onClick={() => navigate('/create-church')}
-              className="inline-flex h-10 items-center justify-center rounded-full bg-white px-4 text-sm font-semibold text-gray-950 shadow-[0_18px_44px_-24px_rgba(255,255,255,0.42)] transition-all hover:-translate-y-0.5 hover:bg-emerald-50"
-            >
-              Create Church
-            </button>
-          </div>
-        </div>
-      </motion.header>
+      <Nav onSignIn={() => navigate('/login')} onStartFree={() => navigate('/create-church')} />
 
-      <main>
-        <section className="relative flex min-h-[calc(100vh-5rem)] items-center overflow-hidden pb-6 pt-1 sm:pt-3 lg:pb-10">
-          <div className="pointer-events-none absolute inset-0 z-0">
-            <div className="absolute inset-x-0 top-0 h-56 bg-[radial-gradient(circle_at_50%_0%,rgba(103,232,249,0.14),transparent_56%)]" />
-            <div
-              className="absolute left-1/2 top-[34%] h-[520px] w-[900px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl opacity-80"
-              style={{
-                background:
-                  'radial-gradient(circle, rgba(45,212,191,0.14) 0%, rgba(56,189,248,0.07) 38%, transparent 72%)',
-                WebkitMaskImage:
-                  'radial-gradient(ellipse at center, black 0%, black 48%, transparent 78%)',
-                maskImage:
-                  'radial-gradient(ellipse at center, black 0%, black 48%, transparent 78%)',
-              }}
-            />
-            <div
-              className="absolute left-1/2 top-[72%] h-[300px] w-[760px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl opacity-70"
-              style={{
-                background:
-                  'radial-gradient(circle, rgba(45,212,191,0.10) 0%, rgba(15,23,42,0.06) 45%, transparent 75%)',
-                WebkitMaskImage:
-                  'radial-gradient(ellipse at center, black 0%, black 50%, transparent 80%)',
-                maskImage:
-                  'radial-gradient(ellipse at center, black 0%, black 50%, transparent 80%)',
-              }}
-            />
-            <div
-              className="absolute left-[14%] top-[30%] h-52 w-52 rounded-full blur-[110px]"
-              style={{
-                background:
-                  'radial-gradient(circle, rgba(110,231,183,0.08) 0%, rgba(110,231,183,0.03) 45%, transparent 75%)',
-              }}
-            />
-            <div
-              className="absolute right-[12%] top-[56%] h-56 w-56 rounded-full blur-[120px]"
-              style={{
-                background:
-                  'radial-gradient(circle, rgba(125,211,252,0.08) 0%, rgba(125,211,252,0.03) 45%, transparent 78%)',
-              }}
-            />
-            <div className="absolute inset-x-0 bottom-0 h-36 bg-[linear-gradient(180deg,transparent,rgba(8,16,25,0.92))]" />
-          </div>
-          <div className="pointer-events-none absolute inset-0 z-10 select-none">
-            {heroFloatingCards.map((card, index) => (
-              <FloatingStatusCard
-                key={card.title}
-                label={card.label}
-                title={card.title}
-                body={card.body}
-                tone={card.tone as FloatingTone}
-                className={card.className}
-                delay={index * 0.18}
-                width={card.width}
-                opacity={card.opacity}
-                rotate={card.rotate}
-                duration={card.duration}
-              />
-            ))}
-            {heroFloatingCardsLg.map((card, index) => (
-              <FloatingStatusCard
-                key={card.title}
-                label={card.label}
-                title={card.title}
-                body={card.body}
-                tone={card.tone}
-                className={card.className}
-                delay={index * 0.14}
-                width={card.width}
-                opacity={card.opacity}
-                rotate={card.rotate}
-                duration={card.duration}
-              />
-            ))}
-          </div>
-
-          <div className="relative z-20 mx-auto flex w-full max-w-[820px] flex-col items-center px-6 text-center">
-            <Reveal>
-              <div className="relative">
-                <motion.div
-                  animate={{
-                    scale: [1, 1.06, 1],
-                    opacity: [0.28, 0.45, 0.28],
-                  }}
-                  transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut' }}
-                  className="pointer-events-none absolute left-1/2 top-16 z-0 h-48 w-48 -translate-x-1/2 rounded-full bg-emerald-400/16 blur-[90px]"
-                />
-                <div className="pointer-events-none absolute left-1/2 top-[-2.5rem] z-0 h-[28rem] w-[28rem] -translate-x-1/2 rounded-full border border-white/[0.05] opacity-60" />
-                <div className="pointer-events-none absolute left-1/2 top-[2.75rem] z-0 h-[38rem] w-[38rem] -translate-x-1/2 rounded-full border border-white/[0.035] opacity-50" />
-                <motion.div
-                  animate={reduceMotion ? { rotate: 0 } : { rotate: 360 }}
-                  transition={reduceMotion ? { duration: 0 } : { duration: 28, repeat: Infinity, ease: 'linear' }}
-                  className="pointer-events-none absolute left-1/2 top-10 z-0 hidden h-[22rem] w-[22rem] -translate-x-1/2 rounded-full border border-white/[0.05] lg:block"
-                >
-                  <div className="absolute left-1/2 top-0 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-300 shadow-[0_0_26px_rgba(110,231,183,0.9)]" />
-                  <div className="absolute bottom-0 left-12 h-2.5 w-2.5 translate-y-1/2 rounded-full bg-cyan-300 shadow-[0_0_22px_rgba(103,232,249,0.8)]" />
-                </motion.div>
-              </div>
-
-              <motion.div
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-                className="relative z-10 inline-flex items-center gap-2 rounded-full border border-emerald-500/18 bg-[linear-gradient(180deg,rgba(16,185,129,0.14),rgba(16,185,129,0.06))] px-3 py-1.5 text-xs font-semibold text-emerald-200 shadow-[0_18px_40px_-28px_rgba(16,185,129,0.55)]"
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                Premium worship team workspace
-              </motion.div>
-
-              <h1 className="relative z-10 mx-auto mt-5 max-w-5xl text-[clamp(3.2rem,9vw,6.2rem)] font-black leading-[0.9] tracking-[-0.08em]">
-                Worship planning,
-                <br />
-                with{' '}
-                <span className="bg-[linear-gradient(135deg,#ffffff_0%,#c7f9e8_48%,#7dd3fc_100%)] bg-clip-text text-transparent">
-                  finally composed.
-                </span>
+      {/* ── Hero ──────────────────────────────────────────────────── */}
+      <section style={{ padding: '72px 0 40px' }}>
+        <Wrap>
+          <div className="grid items-center gap-14 lg:gap-[56px]" style={{ gridTemplateColumns: 'min(100%, 1fr)', gridTemplateRows: 'auto auto' }}>
+            {/* copy — full width on mobile, then split */}
+            <div className="lg:hidden">
+              <Eyebrow>Worship team workspace</Eyebrow>
+              <h1 className="mt-4 font-black text-[#eef3f8] leading-[0.94] tracking-[-0.045em]" style={{ fontSize: 'clamp(44px, 10vw, 80px)' }}>
+                Worship planning,{' '}
+                <em className="not-italic" style={{ background: 'linear-gradient(180deg, #eef3f8 0%, #34d399 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+                  finally calm.
+                </em>
               </h1>
-
-              <p className="relative z-10 mx-auto mt-4 max-w-2xl text-base leading-7 text-white/56 sm:text-lg">
-                One calm workspace for worship teams.
+              <p className="mt-5 text-[16px] leading-[1.6] text-white/65 max-w-[520px]">
+                Schedules, setlists, attendance and announcements in one place. Built for the way worship teams actually plan a week.
               </p>
-
-              <div className="relative z-10 mt-4 flex flex-wrap justify-center gap-2.5">
-                {heroSignals.map(signal => {
-                  const Icon = signal.icon;
-                  return (
-                    <motion.div
-                      key={signal.label}
-                      whileHover={{ y: -3, scale: 1.01 }}
-                      className="inline-flex items-center gap-2 rounded-2xl border border-white/[0.08] bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))] px-3.5 py-2 text-sm font-medium text-white/78 shadow-[0_16px_30px_-24px_rgba(0,0,0,0.8),inset_0_1px_0_rgba(255,255,255,0.05)]"
-                    >
-                      <div className="rounded-xl bg-emerald-500/12 p-1.5 text-emerald-300">
-                        <Icon className="h-3.5 w-3.5" />
-                      </div>
-                      {signal.label}
-                    </motion.div>
-                  );
-                })}
+              <div className="flex flex-wrap items-center gap-3 mt-7">
+                <button onClick={() => navigate('/create-church')} className="h-[50px] px-6 rounded-full bg-emerald-400 text-[#07101a] text-sm font-bold hover:bg-emerald-300 transition-all hover:-translate-y-px flex items-center gap-2">
+                  Start 10-day trial <ArrowRight className="h-4 w-4" />
+                </button>
+                <button onClick={() => navigate('/login')} className="h-[50px] px-6 rounded-full border border-white/[0.12] text-sm font-semibold text-white/75 hover:text-white hover:bg-white/[0.05] transition-all hover:-translate-y-px">
+                  Sign in
+                </button>
               </div>
-
-              <div className="relative z-10 mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
-                <motion.button
-                  onClick={() => navigate('/create-church')}
-                  whileHover={{ y: -3, scale: 1.015 }}
-                  whileTap={{ scale: 0.985 }}
-                  className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-white px-6 text-sm font-semibold text-gray-950 shadow-[0_20px_52px_-24px_rgba(255,255,255,0.48)] transition-all hover:-translate-y-0.5 hover:bg-emerald-50 sm:text-base"
-                >
-                  Start 10-Day Trial
-                  <ArrowRight className="h-4 w-4" />
-                </motion.button>
-                <motion.button
-                  onClick={() => navigate('/login')}
-                  whileHover={{ y: -3 }}
-                  whileTap={{ scale: 0.985 }}
-                  className="inline-flex h-12 items-center justify-center rounded-full border border-white/[0.12] bg-white/[0.04] px-6 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:bg-white/[0.08] sm:text-base"
-                >
-                  Sign In
-                </motion.button>
-              </div>
-
-              <div className="relative z-10 mt-3.5 flex flex-wrap items-center justify-center gap-2 text-[11px] font-semibold uppercase tracking-[0.11em] text-white/31">
-                {chips.map((chip, index) => (
-                  <div key={chip} className="flex items-center gap-2">
-                    {index > 0 && <span className="h-1 w-1 rounded-full bg-white/18" />}
-                    <span>{chip}</span>
-                  </div>
+              <div className="flex flex-wrap items-center gap-5 mt-5">
+                {['No card required', '10-day trial', 'Cancel anytime'].map(m => (
+                  <span key={m} className="flex items-center gap-1.5 font-mono text-[11px] text-white/50">
+                    <span className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-400/20 text-emerald-400">
+                      <Check className="h-2.5 w-2.5" strokeWidth={3} />
+                    </span>
+                    {m}
+                  </span>
                 ))}
               </div>
-
-              <HeroPreviewPanel />
-
-              <div className="relative z-10 mt-8 flex w-full flex-col gap-3 lg:hidden">
-                <FloatingStatusCard
-                  label="Live"
-                  title="Sunday service ready"
-                  body="Setlist locked in"
-                  tone="emerald"
-                  className="relative left-auto top-auto right-auto bottom-auto mx-auto"
-                  compact
-                />
-                <FloatingStatusCard
-                  label="Team workspace"
-                  title="18 members active"
-                  body="3 serving teams"
-                  tone="violet"
-                  className="relative left-auto top-auto right-auto bottom-auto mx-auto"
-                  compact
-                />
-              </div>
-            </Reveal>
+            </div>
           </div>
-        </section>
 
-        <SectionDivider />
-
-        <section className="px-4 py-20 sm:px-6 lg:px-8 lg:py-24">
-          <div className="mx-auto max-w-[1120px]">
-            <div className="text-center">
-              <Reveal>
-                <SectionLabel>What Changes</SectionLabel>
-                <h2 className="mt-3 text-[clamp(2rem,5vw,3.3rem)] font-black leading-[0.96] tracking-[-0.06em]">
-                  The weekly ministry cadence
-                  <br />
-                  feels controlled again.
-                </h2>
-                <p className="mx-auto mt-4 max-w-2xl text-base leading-8 text-white/58">
-                  ServeSync helps worship teams move from scattered chats, forgotten updates, and manual tracking into one structured weekly rhythm.
-                </p>
-              </Reveal>
+          {/* desktop 2-col */}
+          <div className="hidden lg:grid items-center gap-[56px]" style={{ gridTemplateColumns: '1.05fr 0.95fr' }}>
+            {/* left copy */}
+            <div>
+              <Eyebrow>Worship team workspace</Eyebrow>
+              <h1 className="mt-4 font-black text-[#eef3f8] leading-[0.94] tracking-[-0.045em]" style={{ fontSize: 'clamp(48px, 7.6vw, 96px)' }}>
+                Worship<br />planning,<br />
+                <em className="not-italic" style={{ background: 'linear-gradient(180deg, #eef3f8 0%, #34d399 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+                  finally calm.
+                </em>
+              </h1>
+              <p className="mt-5 text-[17.5px] leading-[1.55] text-white/65 max-w-[520px]">
+                Schedules, setlists, attendance and announcements in one place. Built for the way worship teams actually plan a week.
+              </p>
+              <div className="flex items-center gap-3 mt-7">
+                <button onClick={() => navigate('/create-church')} className="h-[50px] px-6 rounded-full bg-emerald-400 text-[#07101a] text-sm font-bold hover:bg-emerald-300 transition-all hover:-translate-y-px flex items-center gap-2">
+                  Start 10-day trial <ArrowRight className="h-4 w-4" />
+                </button>
+                <button onClick={() => navigate('/login')} className="h-[50px] px-6 rounded-full border border-white/[0.12] text-sm font-semibold text-white/75 hover:text-white hover:bg-white/[0.05] transition-all hover:-translate-y-px">
+                  Sign in
+                </button>
+              </div>
+              <div className="flex items-center gap-5 mt-5">
+                {['No card required', '10-day trial', 'Cancel anytime'].map(m => (
+                  <span key={m} className="flex items-center gap-1.5 font-mono text-[11px] text-white/50">
+                    <span className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-400/20 text-emerald-400">
+                      <Check className="h-2.5 w-2.5" strokeWidth={3} />
+                    </span>
+                    {m}
+                  </span>
+                ))}
+              </div>
             </div>
 
-            <div className="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {featureCards.map(feature => {
-                const Icon = feature.icon;
-                return (
-                  <Reveal key={feature.title}>
-                    <motion.div whileHover={{ y: -8 }} transition={{ duration: 0.22 }}>
-                      <Surface className="relative overflow-hidden h-full p-6 text-left">
-                        <div className="absolute right-5 top-5 h-12 w-12 rounded-full bg-emerald-400/7 blur-2xl" />
-                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/12 text-emerald-300">
-                          <Icon className="h-5 w-5" />
+            {/* right mock */}
+            <div className="relative">
+              <div
+                className="rounded-[22px] border border-white/[0.09] overflow-visible"
+                style={{ background: '#0e1a26', boxShadow: '0 30px 80px -48px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.04)' }}
+              >
+                {/* chrome */}
+                <div className="flex items-center gap-3 px-4 py-3 border-b border-white/[0.07]">
+                  <div className="flex gap-1.5">
+                    {[0, 1, 2].map(i => <span key={i} className="h-2.5 w-2.5 rounded-full bg-white/20" />)}
+                  </div>
+                  <span className="font-mono text-[11px] text-white/40 bg-white/[0.06] px-2.5 py-0.5 rounded-full">
+                    grace-city / this week
+                  </span>
+                  <div className="ml-auto flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse-live" />
+                    <span className="font-mono text-[10px] font-semibold text-emerald-400">LIVE</span>
+                  </div>
+                </div>
+                {/* body */}
+                <div className="p-4 space-y-3">
+                  {/* service card */}
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.04] border border-white/[0.07]">
+                    <div className="shrink-0 rounded-lg bg-emerald-400/20 text-emerald-400 text-center px-2.5 py-1.5 min-w-[40px]">
+                      <div className="font-mono text-[9px] font-semibold">Sun</div>
+                      <div className="font-mono text-lg font-bold leading-none">12</div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold text-[#eef3f8] truncate">Sunday Morning Service</div>
+                      <div className="font-mono text-[10px] text-white/45 truncate">7:30 AM call · 9:00 service · 11:00 service</div>
+                    </div>
+                    <span className="shrink-0 font-mono text-[10px] font-semibold text-emerald-400 bg-emerald-400/15 px-2 py-0.5 rounded-full border border-emerald-400/25">
+                      Ready
+                    </span>
+                  </div>
+                  {/* 2-col panels */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* setlist */}
+                    <div className="rounded-xl bg-white/[0.03] border border-white/[0.07] p-3">
+                      <div className="font-mono text-[10px] text-white/40 mb-2.5">Setlist · 5 songs</div>
+                      {[['01','Goodness of God','A'],['02','Build My Life','E'],['03','Way Maker','D'],['04','King of Kings','D'],['05','Doxology','G']].map(([n, s, k]) => (
+                        <div key={n} className="flex items-center gap-1.5 py-[3px]">
+                          <span className="font-mono text-[9px] text-white/28 w-4 shrink-0">{n}</span>
+                          <span className="text-[11px] text-white/65 flex-1 truncate">{s}</span>
+                          <span className="font-mono text-[9px] text-emerald-400 bg-emerald-400/15 px-1 py-px rounded shrink-0">{k}</span>
                         </div>
-                        <h3 className="mt-6 text-xl font-bold tracking-tight">{feature.title}</h3>
-                        <p className="mt-3 text-sm leading-7 text-white/60">{feature.body}</p>
-                        <div className="mt-6 flex items-center gap-2">
-                          <div className="h-2 w-20 rounded-full bg-white/[0.06]">
-                            <div className="h-full w-4/5 rounded-full bg-[linear-gradient(90deg,rgba(16,185,129,0.88),rgba(103,232,249,0.75))]" />
+                      ))}
+                    </div>
+                    {/* roster */}
+                    <div className="rounded-xl bg-white/[0.03] border border-white/[0.07] p-3">
+                      <div className="font-mono text-[10px] text-white/40 mb-2.5">Team · 9 serving</div>
+                      <div className="flex flex-wrap gap-1 mb-2.5">
+                        {['MA','JR','PL','SD','KO'].map(av => (
+                          <div key={av} className="h-[26px] w-[26px] rounded-full bg-[#1e3a2e] border border-emerald-400/25 text-emerald-400 font-mono text-[9px] font-semibold flex items-center justify-center">
+                            {av}
                           </div>
-                          <div className="h-2 w-10 rounded-full bg-white/[0.05]" />
+                        ))}
+                        <div className="h-[26px] w-[26px] rounded-full bg-white/[0.08] border border-white/[0.10] text-white/45 font-mono text-[9px] flex items-center justify-center">+4</div>
+                      </div>
+                      <div className="text-[10px] text-white/40 leading-5">Leader · <b className="text-white/60">Maria A.</b></div>
+                      <div className="text-[10px] text-white/40 leading-5">Drums · <b className="text-emerald-400">Confirmed</b></div>
+                      <div className="text-[10px] text-white/40 leading-5">Keys · <b className="text-white/45">Awaiting</b></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* float 1 */}
+              <div
+                className="absolute -top-5 -left-6 z-10 flex items-center gap-2.5 rounded-2xl border border-white/[0.09] px-3.5 py-2.5 animate-bob"
+                style={{ background: '#0e1a26', backdropFilter: 'blur(12px)', boxShadow: '0 18px 48px -22px rgba(0,0,0,0.65)' }}
+              >
+                <div className="h-7 w-7 rounded-xl bg-emerald-400/15 text-emerald-400 flex items-center justify-center shrink-0">
+                  <BellRing className="h-3.5 w-3.5" />
+                </div>
+                <div>
+                  <div className="text-[11px] font-semibold text-[#eef3f8]">2 new replies</div>
+                  <div className="font-mono text-[10px] text-white/45">Setlist approved</div>
+                </div>
+              </div>
+
+              {/* float 2 */}
+              <div
+                className="absolute -bottom-5 -right-5 z-10 flex items-center gap-2.5 rounded-2xl border border-white/[0.09] px-3.5 py-2.5 animate-bob-delayed"
+                style={{ background: '#0e1a26', backdropFilter: 'blur(12px)', boxShadow: '0 18px 48px -22px rgba(0,0,0,0.65)' }}
+              >
+                <div className="h-7 w-7 rounded-xl bg-emerald-400/15 text-emerald-400 flex items-center justify-center shrink-0">
+                  <Users2 className="h-3.5 w-3.5" />
+                </div>
+                <div>
+                  <div className="text-[11px] font-semibold text-[#eef3f8]">18 active</div>
+                  <div className="font-mono text-[10px] text-white/45">92% attendance</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* mobile mock — shown below copy on small screens */}
+          <div className="lg:hidden mt-2 relative">
+            <div
+              className="rounded-[22px] border border-white/[0.09] overflow-hidden"
+              style={{ background: '#0e1a26', boxShadow: '0 30px 80px -48px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.04)' }}
+            >
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-white/[0.07]">
+                <div className="flex gap-1.5">
+                  {[0,1,2].map(i => <span key={i} className="h-2.5 w-2.5 rounded-full bg-white/20" />)}
+                </div>
+                <span className="font-mono text-[11px] text-white/40 bg-white/[0.06] px-2.5 py-0.5 rounded-full">
+                  grace-city / this week
+                </span>
+                <div className="ml-auto flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse-live" />
+                  <span className="font-mono text-[10px] font-semibold text-emerald-400">LIVE</span>
+                </div>
+              </div>
+              <div className="p-4 space-y-3">
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.04] border border-white/[0.07]">
+                  <div className="shrink-0 rounded-lg bg-emerald-400/20 text-emerald-400 text-center px-2.5 py-1.5 min-w-[40px]">
+                    <div className="font-mono text-[9px] font-semibold">Sun</div>
+                    <div className="font-mono text-lg font-bold leading-none">12</div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold text-[#eef3f8] truncate">Sunday Morning Service</div>
+                    <div className="font-mono text-[10px] text-white/45 truncate">7:30 AM · 9:00 · 11:00 service</div>
+                  </div>
+                  <span className="shrink-0 font-mono text-[10px] font-semibold text-emerald-400 bg-emerald-400/15 px-2 py-0.5 rounded-full border border-emerald-400/25">
+                    Ready
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-xl bg-white/[0.03] border border-white/[0.07] p-3">
+                    <div className="font-mono text-[10px] text-white/40 mb-2">Setlist · 5 songs</div>
+                    {[['01','Goodness of God','A'],['02','Build My Life','E'],['03','Way Maker','D']].map(([n,s,k]) => (
+                      <div key={n} className="flex items-center gap-1.5 py-[3px]">
+                        <span className="font-mono text-[9px] text-white/28 w-4 shrink-0">{n}</span>
+                        <span className="text-[11px] text-white/65 flex-1 truncate">{s}</span>
+                        <span className="font-mono text-[9px] text-emerald-400 bg-emerald-400/15 px-1 rounded shrink-0">{k}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="rounded-xl bg-white/[0.03] border border-white/[0.07] p-3">
+                    <div className="font-mono text-[10px] text-white/40 mb-2">Team · 9 serving</div>
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {['MA','JR','PL','SD'].map(av => (
+                        <div key={av} className="h-[24px] w-[24px] rounded-full bg-[#1e3a2e] border border-emerald-400/25 text-emerald-400 font-mono text-[8px] font-semibold flex items-center justify-center">
+                          {av}
                         </div>
-                      </Surface>
-                    </motion.div>
-                  </Reveal>
+                      ))}
+                    </div>
+                    <div className="text-[10px] text-white/40 leading-5">Drums · <b className="text-emerald-400">Confirmed</b></div>
+                    <div className="text-[10px] text-white/40 leading-5">Keys · <b className="text-white/45">Awaiting</b></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Wrap>
+      </section>
+
+      {/* ── Logo strip ─────────────────────────────────────────────── */}
+      <Wrap className="border-t border-white/[0.07] py-7">
+        <div className="flex flex-col sm:flex-row items-center gap-5 sm:gap-8">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-white/38 shrink-0">
+            Used by worship teams in 40+ churches
+          </span>
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-6">
+            {['Grace City', 'Hope Chapel', 'Bridgepoint', 'Mosaic Manila', 'New Life'].map(name => (
+              <span key={name} className="font-mono text-[12px] text-white/32">◦ {name}</span>
+            ))}
+          </div>
+        </div>
+      </Wrap>
+
+      {/* ── Features ───────────────────────────────────────────────── */}
+      <section id="features" style={{ padding: '110px 0' }}>
+        <Wrap>
+          <div className="text-center mb-12">
+            <Eyebrow>What changes</Eyebrow>
+            <h2 className="mt-4 font-bold text-[#eef3f8] leading-[1.02] tracking-[-0.035em]" style={{ fontSize: 'clamp(32px, 4.4vw, 56px)' }}>
+              The weekly cadence<br />feels controlled again.
+            </h2>
+            <p className="mt-4 text-[15px] leading-[1.6] text-white/60 max-w-[560px] mx-auto">
+              ServeSync replaces the scattered chats, forgotten updates, and manual tracking with one weekly rhythm your team can actually follow.
+            </p>
+          </div>
+
+          {/* hairline gap grid */}
+          <div className="rounded-[22px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.07)' }}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px">
+              {FEATURES.map(f => {
+                const Icon = f.icon;
+                return (
+                  <div
+                    key={f.title}
+                    className="relative bg-[#07101a] p-8 hover:bg-[#0e1a26] transition-colors duration-200 group"
+                  >
+                    <span className="absolute top-5 right-6 font-mono text-[11px] text-white/20">{f.n}</span>
+                    <div className="h-[38px] w-[38px] rounded-[10px] bg-[rgba(52,211,153,0.14)] text-emerald-400 flex items-center justify-center mb-5">
+                      <Icon className="h-[18px] w-[18px]" />
+                    </div>
+                    <h3 className="text-[17px] font-semibold text-[#eef3f8] mb-2">{f.title}</h3>
+                    <p className="text-[14px] leading-[1.6] text-white/55">{f.body}</p>
+                  </div>
                 );
               })}
             </div>
           </div>
-        </section>
+        </Wrap>
+      </section>
 
-        <SectionDivider />
+      {/* ── Walkthrough ─────────────────────────────────────────────── */}
+      <section id="walkthrough" style={{ padding: '110px 0' }}>
+        <Wrap>
+          <div className="text-center mb-16">
+            <Eyebrow>Inside the workspace</Eyebrow>
+            <h2 className="mt-4 font-bold text-[#eef3f8] leading-[1.02] tracking-[-0.035em]" style={{ fontSize: 'clamp(32px, 4.4vw, 56px)' }}>
+              Three workflows.<br />One quiet week.
+            </h2>
+            <p className="mt-4 text-[15px] leading-[1.6] text-white/60 max-w-[560px] mx-auto">
+              The parts of ministry that usually take three apps, four spreadsheets, and a group chat — in one place.
+            </p>
+          </div>
 
-        <section className="px-4 py-20 sm:px-6 lg:px-8 lg:py-24">
-          <div className="mx-auto max-w-[1120px]">
-            <Reveal>
-              <Surface className="relative overflow-hidden p-6 sm:p-8">
-                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_10%,rgba(16,185,129,0.10),transparent_32%)]" />
-                <div className="text-center">
-                  <SectionLabel>Pricing Structure</SectionLabel>
-                  <h2 className="mt-3 text-[clamp(2rem,5vw,3.5rem)] font-black leading-[0.96] tracking-[-0.06em]">
-                    Simple plans for growing
-                    <br />
-                    worship teams.
-                  </h2>
-                  <p className="mx-auto mt-4 max-w-2xl text-[15px] leading-7 text-white/58">
-                    Start free, then upgrade when your team needs more space.
-                  </p>
+          <div className="space-y-20">
+            {WALK.map(w => (
+              <div
+                key={w.label}
+                className={`grid items-center gap-12 lg:gap-16 ${w.flip ? 'lg:[grid-template-columns:1.05fr_1fr]' : 'lg:[grid-template-columns:1fr_1.05fr]'}`}
+              >
+                <div className={w.flip ? 'lg:order-2' : ''}>
+                  <Eyebrow>{w.label}</Eyebrow>
+                  <h3 className="mt-3 text-[20px] font-semibold text-[#eef3f8] leading-[1.3] tracking-[-0.02em]">{w.title}</h3>
+                  <p className="mt-3 text-[15px] leading-[1.65] text-white/60">{w.body}</p>
+                  <div className="mt-5 space-y-2.5">
+                    {w.checks.map(c => (
+                      <div key={c} className="flex items-center gap-2.5">
+                        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-400/20 text-emerald-400 shrink-0">
+                          <Check className="h-2.5 w-2.5" strokeWidth={3} />
+                        </span>
+                        <span className="font-mono text-[12px] text-white/60">{c}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
+                <div className={`aspect-[4/3] ${w.flip ? 'lg:order-1' : ''}`}>
+                  {w.visual}
+                </div>
+              </div>
+            ))}
+          </div>
 
-                <div className="mt-8 grid gap-4 lg:grid-cols-2 2xl:grid-cols-4">
-                  {pricingPlans.map(plan => (
-                    <motion.div
-                      key={plan.name}
-                      whileHover={{ y: -8 }}
-                      transition={{ duration: 0.22 }}
-                      className={`relative flex h-full flex-col overflow-hidden rounded-[32px] p-5 sm:p-6 ${
-                        plan.featured
-                          ? 'bg-[linear-gradient(180deg,rgba(9,40,34,0.96),rgba(9,24,22,0.96))] ring-1 ring-emerald-500/28 shadow-[0_34px_100px_-42px_rgba(16,185,129,0.22),inset_0_1px_0_rgba(255,255,255,0.06)]'
-                          : 'bg-[linear-gradient(180deg,rgba(18,27,36,0.96),rgba(11,17,24,0.96))] ring-1 ring-white/[0.07] shadow-[0_30px_90px_-48px_rgba(0,0,0,0.92),inset_0_1px_0_rgba(255,255,255,0.05)]'
-                      }`}
-                    >
-                      <div className="absolute inset-x-6 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.25),transparent)]" />
-                      {plan.featured && <div className="pointer-events-none absolute right-[-3rem] top-[-3rem] h-28 w-28 rounded-full bg-emerald-400/12 blur-3xl" />}
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <p className="text-xl font-bold tracking-tight">{plan.name}</p>
-                          <p className="mt-2 max-w-full text-[14px] leading-[1.5] text-white/58">{plan.description}</p>
-                        </div>
-                        {plan.featured && (
-                          <span className="shrink-0 rounded-full bg-emerald-400/14 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200 ring-1 ring-emerald-500/28">
-                            Popular
-                          </span>
-                        )}
-                      </div>
+          {/* photo strip */}
+          <div className="mt-20 grid gap-3" style={{ gridTemplateColumns: '1.4fr 1fr 1fr' }}>
+            {[
+              { tag: 'REAL PHOTO · WIDE', label: 'Worship team mid-rehearsal' },
+              { tag: 'REAL PHOTO', label: 'Leader briefing the band' },
+              { tag: 'REAL PHOTO', label: 'Sunday service — wide shot' },
+            ].map(p => (
+              <div
+                key={p.tag}
+                className="relative rounded-[18px] overflow-hidden aspect-[4/3] flex items-end p-4"
+                style={{ background: 'repeating-linear-gradient(135deg, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 1px, transparent 1px, transparent 12px), #0a1420' }}
+              >
+                <span className="absolute top-3 right-3 font-mono text-[9px] uppercase tracking-[0.14em] text-white/25 bg-white/[0.05] px-2 py-1 rounded-full">
+                  {p.tag}
+                </span>
+                <span className="font-mono text-[10px] text-white/35">{p.label}</span>
+              </div>
+            ))}
+          </div>
+        </Wrap>
+      </section>
 
-                      <div className="mt-6">
-                        <div className="flex items-end gap-2">
-                          <span className="text-5xl font-black tracking-[-0.07em]">{plan.price}</span>
-                          <span className="pb-1 text-sm font-semibold text-white/42">/ {plan.cadence}</span>
-                        </div>
-                        <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/38">
-                          {plan.members}
-                        </p>
-                      </div>
+      {/* ── How it works ────────────────────────────────────────────── */}
+      <section id="how" style={{ padding: '110px 0' }}>
+        <Wrap>
+          <div className="text-center mb-12">
+            <Eyebrow>How it works</Eyebrow>
+            <h2 className="mt-4 font-bold text-[#eef3f8] leading-[1.02] tracking-[-0.035em]" style={{ fontSize: 'clamp(32px, 4.4vw, 56px)' }}>
+              Set up in an afternoon.<br />Run by Sunday.
+            </h2>
+          </div>
 
-                      <div className="mt-6 flex-1 space-y-3">
-                        {plan.features.map(feature => (
-                          <div key={feature} className="flex items-start gap-3">
-                            <div className="mt-0.5 rounded-xl bg-emerald-500/12 p-1.5 text-emerald-300">
-                              <Check className="h-3.5 w-3.5" />
-                            </div>
-                            <p className="text-[14px] leading-[1.45] text-white/72">{feature}</p>
-                          </div>
-                        ))}
-                      </div>
+          <div className="rounded-[22px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.07)' }}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-px">
+              {STEPS.map(s => (
+                <div key={s.title} className="bg-[#07101a] hover:bg-[#0e1a26] transition-colors duration-200 p-8 flex flex-col">
+                  <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-400 mb-4">{s.n}</span>
+                  <h3 className="text-[18px] font-semibold text-[#eef3f8] leading-[1.3] mb-3">{s.title}</h3>
+                  <p className="text-[14px] leading-[1.65] text-white/55 flex-1">{s.body}</p>
+                  <div className="mt-6 h-px w-7 bg-emerald-400/60" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </Wrap>
+      </section>
 
-                      <div className="mt-auto border-t border-white/[0.08] pt-5">
-                        <button
-                          onClick={() => navigate('/create-church')}
-                          className={`inline-flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-semibold transition-all hover:-translate-y-0.5 ${
-                            plan.featured
-                              ? 'bg-white text-gray-950 shadow-[0_22px_54px_-24px_rgba(255,255,255,0.48)] hover:bg-emerald-50'
-                              : 'border border-white/[0.12] bg-white/[0.04] text-white hover:bg-white/[0.08]'
-                          }`}
-                        >
-                          {plan.cta}
-                          <ArrowRight className="h-4 w-4" />
-                        </button>
-                        <p className="mt-3 text-center text-[11px] text-white/38">
-                          {plan.price === '₱0' ? 'Start free and upgrade later' : '10-day free trial included'}
-                        </p>
-                      </div>
-                    </motion.div>
+      {/* ── Pricing ─────────────────────────────────────────────────── */}
+      <section id="pricing" style={{ padding: '110px 0' }}>
+        <Wrap>
+          <div className="text-center mb-12">
+            <Eyebrow>Pricing</Eyebrow>
+            <h2 className="mt-4 font-bold text-[#eef3f8] leading-[1.02] tracking-[-0.035em]" style={{ fontSize: 'clamp(32px, 4.4vw, 56px)' }}>
+              Honest plans.<br />Priced for ministries.
+            </h2>
+            <p className="mt-4 text-[15px] leading-[1.6] text-white/60">
+              Start free, upgrade when your team needs more space. All paid plans include a 10-day trial.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {PLANS.map(p => (
+              <div
+                key={p.name}
+                className="relative flex flex-col rounded-[18px] p-6 overflow-hidden"
+                style={p.feat ? {
+                  background: 'linear-gradient(180deg, rgba(9,40,34,0.96) 0%, rgba(9,24,22,0.96) 100%)',
+                  border: '1px solid rgba(52,211,153,0.30)',
+                  boxShadow: '0 34px 100px -42px rgba(52,211,153,0.18), inset 0 1px 0 rgba(255,255,255,0.06)',
+                } : {
+                  background: 'linear-gradient(180deg, rgba(14,26,38,0.96) 0%, rgba(10,20,32,0.96) 100%)',
+                  border: '1px solid rgba(255,255,255,0.07)',
+                  boxShadow: '0 30px 90px -48px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.04)',
+                }}
+              >
+                {p.feat && (
+                  <div className="pointer-events-none absolute inset-x-0 top-0 h-24" style={{ background: 'linear-gradient(180deg, rgba(52,211,153,0.12) 0%, transparent 100%)' }} />
+                )}
+                {p.feat && (
+                  <span className="absolute top-4 right-4 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-300 bg-emerald-400/15 px-2.5 py-1 rounded-full border border-emerald-400/25">
+                    Popular
+                  </span>
+                )}
+                <div className="font-mono text-[12px] font-semibold uppercase tracking-[0.12em] text-white/50 mb-1.5">{p.name}</div>
+                <div className="text-[13px] text-white/55 mb-5">{p.desc}</div>
+                <div className="flex items-end gap-1.5 mb-1">
+                  <span className="font-mono text-[44px] font-bold text-[#eef3f8] leading-none tracking-[-0.04em]">{p.price}</span>
+                  <span className="font-mono text-[13px] text-white/40 mb-1">/ month</span>
+                </div>
+                <div className="font-mono text-[11px] uppercase tracking-[0.12em] text-white/38 mb-6">{p.seats}</div>
+                <ul className="space-y-3 flex-1 mb-6">
+                  {p.features.map(f => (
+                    <li key={f} className="flex items-start gap-2.5">
+                      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-400/20 text-emerald-400 shrink-0 mt-px">
+                        <Check className="h-2.5 w-2.5" strokeWidth={3} />
+                      </span>
+                      <span className="text-[13px] text-white/65">{f}</span>
+                    </li>
                   ))}
+                </ul>
+                <button
+                  onClick={() => navigate('/create-church')}
+                  className={`w-full h-11 rounded-full text-[13px] font-semibold flex items-center justify-center gap-2 transition-all hover:-translate-y-px ${
+                    p.feat
+                      ? 'bg-emerald-400 text-[#07101a] hover:bg-emerald-300'
+                      : 'border border-white/[0.12] text-white/80 hover:text-white hover:bg-white/[0.06]'
+                  }`}
+                >
+                  {p.cta} <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+                <div className="font-mono text-[11px] text-white/35 text-center mt-3">
+                  {p.price === '₱0' ? 'Free forever' : '10-day trial included'}
                 </div>
-              </Surface>
-            </Reveal>
+              </div>
+            ))}
           </div>
-        </section>
+        </Wrap>
+      </section>
 
-        <SectionDivider />
-
-        <section className="px-4 pb-24 pt-20 sm:px-6 lg:px-8 lg:pb-28 lg:pt-24">
-          <div className="mx-auto max-w-[1120px]">
-            <Reveal>
-              <Surface className="relative overflow-hidden bg-[linear-gradient(135deg,rgba(16,26,36,0.98),rgba(8,17,24,0.98))] px-6 py-8 sm:px-8 sm:py-10 lg:px-12">
-                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(16,185,129,0.12),transparent_38%)]" />
-                <div className="flex flex-col items-center text-center">
-                  <div className="inline-flex items-center gap-2 rounded-full bg-white/[0.05] px-3 py-1.5 text-xs font-semibold text-white/82 ring-1 ring-white/[0.08]">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />
-                    Subscription-ready and ministry-safe
-                  </div>
-                  <h2 className="mt-5 text-[clamp(2.1rem,5vw,3.8rem)] font-black leading-[0.96] tracking-[-0.06em]">
-                    Ready to bring structure
-                    <br />
-                    to your worship team?
-                  </h2>
-                  <p className="mt-5 max-w-2xl text-base leading-8 text-white/60">
-                    Start with a 10-day trial and set up your church workspace in minutes.
-                  </p>
-
-                  <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                    <button
-                      onClick={() => navigate('/create-church')}
-                      className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-white px-6 text-sm font-semibold text-gray-950 shadow-[0_20px_52px_-24px_rgba(255,255,255,0.48)] transition-all hover:-translate-y-0.5 hover:bg-emerald-50 sm:text-base"
-                    >
-                      Start 10-Day Trial
-                      <ArrowRight className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => navigate('/login')}
-                      className="inline-flex h-12 items-center justify-center rounded-full border border-white/[0.12] bg-white/[0.04] px-6 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:bg-white/[0.08] sm:text-base"
-                    >
-                      Sign In
-                    </button>
-                  </div>
-
-                  <p className="mt-5 text-xs uppercase tracking-[0.16em] text-white/38">
-                    10-day trial included. Manual verification after trial.
-                  </p>
-                </div>
-              </Surface>
-            </Reveal>
-          </div>
-        </section>
-      </main>
-
-      <footer className="border-t border-white/[0.07] px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mx-auto flex max-w-[1120px] flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/[0.12] bg-white text-gray-950">
-              <Music2 className="h-4.5 w-4.5" />
+      {/* ── FAQ ──────────────────────────────────────────────────────── */}
+      <section id="faq" style={{ padding: '110px 0' }}>
+        <Wrap>
+          <div className="max-w-[760px] mx-auto border-t border-white/[0.07] pt-12">
+            <div className="text-center mb-10">
+              <Eyebrow>Questions</Eyebrow>
+              <h2 className="mt-4 font-bold text-[#eef3f8] leading-[1.02] tracking-[-0.035em]" style={{ fontSize: 'clamp(32px, 4.4vw, 56px)' }}>
+                Things worship leaders<br />usually ask first.
+              </h2>
             </div>
             <div>
-              <p className="text-sm font-bold tracking-tight">ServeSync</p>
-              <p className="text-xs uppercase tracking-[0.15em] text-white/38">Premium workflow for worship teams</p>
+              {FAQS.map((f, i) => (
+                <div key={f.q} className="border-b border-white/[0.07]">
+                  <button
+                    onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                    className="w-full flex items-center justify-between gap-4 py-[22px] text-left group"
+                  >
+                    <span className="text-[17px] font-medium text-[#eef3f8] group-hover:text-white transition-colors">{f.q}</span>
+                    <span
+                      className="h-6 w-6 rounded-full border border-white/[0.15] flex items-center justify-center shrink-0 transition-all duration-200"
+                      style={openFaq === i ? { background: 'rgba(52,211,153,0.14)', borderColor: 'rgba(52,211,153,0.30)', color: '#34d399', transform: 'rotate(45deg)' } : { color: 'rgba(238,243,248,0.55)' }}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                        <path d="M12 5v14M5 12h14" />
+                      </svg>
+                    </span>
+                  </button>
+                  {openFaq === i && (
+                    <p className="pb-6 text-[14.5px] leading-[1.7] text-white/60 max-w-[640px]">{f.a}</p>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
+        </Wrap>
+      </section>
 
-          <div className="flex flex-wrap items-center gap-4 text-sm text-white/58">
-            <button onClick={() => navigate('/login')} className="transition-colors hover:text-white">
-              Sign In
-            </button>
-            <button onClick={() => navigate('/create-church')} className="transition-colors hover:text-white">
-              Create Church
-            </button>
+      {/* ── Final CTA ─────────────────────────────────────────────── */}
+      <section style={{ paddingBottom: '80px' }}>
+        <Wrap>
+          <div
+            className="relative rounded-[28px] overflow-hidden px-8 py-16 text-center"
+            style={{
+              background: 'linear-gradient(180deg, rgba(14,26,38,0.98) 0%, rgba(7,16,26,0.98) 100%)',
+              border: '1px solid rgba(255,255,255,0.07)',
+              boxShadow: '0 30px 80px -48px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.04)',
+            }}
+          >
+            {/* radial accent wash */}
+            <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(ellipse 900px 400px at 50% 0%, rgba(52,211,153,0.14) 0%, transparent 60%)' }} />
+            {/* inner grid */}
+            <div
+              className="pointer-events-none absolute inset-0"
+              style={{
+                backgroundImage: 'linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)',
+                backgroundSize: '88px 88px',
+                WebkitMaskImage: 'radial-gradient(ellipse 80% 60% at 50% 50%, black 0%, transparent 100%)',
+                maskImage: 'radial-gradient(ellipse 80% 60% at 50% 50%, black 0%, transparent 100%)',
+              }}
+            />
+            <div className="relative z-10">
+              <Eyebrow>Bring structure to your worship team</Eyebrow>
+              <h2 className="mt-5 font-bold text-[#eef3f8] leading-[1.02] tracking-[-0.035em]" style={{ fontSize: 'clamp(36px, 5vw, 64px)' }}>
+                Ready for a quieter<br />Sunday morning?
+              </h2>
+              <p className="mt-5 text-[16px] leading-[1.6] text-white/60 max-w-[480px] mx-auto">
+                Set up your workspace, invite your team, plan your next service. Most worship leaders are ready by the end of the afternoon.
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-3 mt-8">
+                <button onClick={() => navigate('/create-church')} className="h-[50px] px-7 rounded-full bg-emerald-400 text-[#07101a] text-sm font-bold hover:bg-emerald-300 transition-all hover:-translate-y-px flex items-center gap-2">
+                  Start 10-day trial <ArrowRight className="h-4 w-4" />
+                </button>
+                <button onClick={() => navigate('/login')} className="h-[50px] px-7 rounded-full border border-white/[0.12] text-sm font-semibold text-white/75 hover:text-white hover:bg-white/[0.05] transition-all hover:-translate-y-px">
+                  Sign in
+                </button>
+              </div>
+              <div className="font-mono text-[11px] text-white/35 mt-5">No card required · cancel anytime</div>
+            </div>
           </div>
-        </div>
+        </Wrap>
+      </section>
+
+      {/* ── Footer ─────────────────────────────────────────────────── */}
+      <footer className="border-t border-white/[0.07]">
+        <Wrap className="py-8">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
+            <div className="flex items-center gap-3">
+              <div className="h-7 w-7 rounded-[7px] bg-white flex items-center justify-center shrink-0">
+                <Music2 className="h-3.5 w-3.5 text-[#07101a]" />
+              </div>
+              <div>
+                <div className="text-[14px] font-bold text-[#eef3f8]">ServeSync</div>
+                <div className="font-mono text-[10px] text-white/35">© 2026 · Worship team workspace</div>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-5 text-[13px] text-white/50">
+              <button onClick={() => navigate('/login')} className="hover:text-white transition-colors">Sign in</button>
+              <button onClick={() => navigate('/create-church')} className="hover:text-white transition-colors">Create church</button>
+              <a href="#" className="hover:text-white transition-colors">Privacy</a>
+              <a href="#" className="hover:text-white transition-colors">Terms</a>
+              <a href="mailto:hello@servesync.app" className="hover:text-white transition-colors">Contact</a>
+            </div>
+          </div>
+        </Wrap>
       </footer>
     </div>
   );

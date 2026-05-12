@@ -8,6 +8,7 @@ import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { InviteAccept } from './pages/InviteAccept';
 import { CreateChurch } from './pages/CreateChurch';
+import { Landing } from './pages/Landing';
 import { PlatformPortal } from './pages/PlatformPortal';
 import { Onboarding } from './pages/Onboarding';
 import { Dashboard } from './pages/Dashboard';
@@ -88,10 +89,10 @@ export default function App() {
               applying={applyingUpdate}
             />
             <Routes>
+              <Route path="/" element={<Landing />} />
               <Route path="/platform" element={<PlatformPortal />} />
               <Route element={<Layout />}>
-                <Route path="/" element={<Navigate to="/login" replace />} />
-                <Route path="/landing" element={<Navigate to="/login" replace />} />
+                <Route path="/landing" element={<Navigate to="/" replace />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/register" element={<Register />} />

@@ -274,6 +274,18 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
         <div className="flex items-center gap-1">
           <ThemeToggle />
           <NotificationBell />
+          <button
+            onClick={() => navigate('/profile')}
+            className="relative p-2 rounded-xl text-gray-500 dark:text-gray-400 hover:bg-black/[0.05] dark:hover:bg-white/[0.06] transition-all duration-200"
+          >
+            <Avatar
+              src={profile?.avatar_url}
+              firstName={profile?.first_name || '?'}
+              lastName={profile?.last_name}
+              size="sm"
+              className="!h-5 !w-5 !text-[9px] ring-1 ring-black/10 dark:ring-white/10"
+            />
+          </button>
         </div>
         </div>
       </div>

@@ -125,6 +125,47 @@ export function Dashboard() {
     return () => clearInterval(id);
   }, []);
 
+  const fetchIncomingSwaps = useCallback(async () => {
+    if (!user) return;
+    const { data: swapData } = await supabase
+      .from('user_availability')
+      .select(`
+        *,
+        requester:user_id(id, first_name, last_name, nickname, avatar_url),
+        requester_assignment:requester_assignment_id(*, events(*), roles(*)),
+        target_assignment:target_assignment_id(*, events(*), roles(*))
+      `)
+      .eq('target_id', user.id)
+      .eq('status', 'pending')
+      .is('target_response_at', null)
+      .order('created_at', { ascending: false });
+    setIncomingSwapRequests((swapData || []) as any[]);
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    
+    // Initial fetch
+    fetchIncomingSwaps();
+
+    // Subscribe to real-time changes for swap/sub requests targeting me
+    const channel = supabase
+      .channel('dashboard-swap-requests')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'user_availability',
+        filter: `target_id=eq.${user.id}`,
+      }, () => {
+        fetchIncomingSwaps();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, fetchIncomingSwaps]);
+
   useEffect(() => {
     if (!user) return;
     const today = getManilaTodayKey();
@@ -189,20 +230,6 @@ export function Dashboard() {
       setPendingLeaveCount(pendingLeaveRes.count || 0);
       const upcoming = assignments.filter(a => a.events && isAfter(parseISO(a.events.event_date), startOfToday()));
       setStats({ total: upcoming.length, confirmed: upcoming.filter(a => a.status === 'confirmed').length, pending: upcoming.filter(a => a.status === 'pending').length });
-      // Fetch incoming swap requests (where I am the target and need to respond)
-      const { data: swapData } = await supabase
-        .from('user_availability')
-        .select(`
-          *,
-          requester:user_id(id, first_name, last_name, nickname, avatar_url),
-          requester_assignment:requester_assignment_id(*, events(*), roles(*)),
-          target_assignment:target_assignment_id(*, events(*), roles(*))
-        `)
-        .eq('target_id', user.id)
-        .eq('status', 'pending')
-        .is('target_response_at', null)
-        .order('created_at', { ascending: false });
-      setIncomingSwapRequests((swapData || []) as any[]);
 
       setLoading(false);
     };

@@ -154,7 +154,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
   const sidebarManagementItems: NavItem[] = [
     { path: '/request-leave', label: 'Request Leave', icon: LeaveIcon },
     ...(isLeader || isOrgAdmin || canApproveLeave || canManageDiscipline
-      ? [{ path: isOrgAdmin && !isLeader ? '/leadership/church' : '/leadership/overview', label: isOrgAdmin && !isLeader ? 'Church' : 'Leadership', icon: ShieldNavIcon, badgeKey: 'pendingLeave' as const, badgeColor: 'amber' as const }]
+      ? [{ path: isOrgAdmin && !isLeader ? '/leadership/church' : '/leadership/overview', label: isOrgAdmin && !isLeader ? 'Church' : 'Leadership', icon: ShieldNavIcon, badgeKey: 'pendingLeave' as const, badgeColor: 'red' as const }]
       : []),
     ...(isPlatformOwner
       ? [{ path: '/platform', label: 'Platform', icon: ShieldNavIcon }]

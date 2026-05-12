@@ -405,6 +405,25 @@ export interface AnnouncementPin {
   pinned_at: string;
 }
 
+export interface SwapRequest {
+  id: string;
+  requester_id: string;
+  target_id: string;
+  requester_assignment_id: string;
+  target_assignment_id: string;
+  reason: string;
+  status: 'pending_target' | 'pending_leadership' | 'approved' | 'declined_by_target' | 'declined_by_leadership' | 'cancelled';
+  target_response_at: string | null;
+  leadership_response_at: string | null;
+  reviewed_by: string | null;
+  review_note: string | null;
+  created_at: string;
+  requester?: Profile;
+  target?: Profile;
+  requester_assignment?: EventAssignment & { events?: Event; roles?: Role };
+  target_assignment?: EventAssignment & { events?: Event; roles?: Role };
+}
+
 export interface SetlistCheckerSong {
   id: string;
   song_id: string | null;

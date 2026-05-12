@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { differenceInCalendarDays, format, isAfter, parseISO, startOfToday } from 'date-fns';
 import { motion } from 'framer-motion';
-import { Calendar, CheckCircle, Clock, Music, ChevronRight, Megaphone, Image as ImageIcon, UserX, Trash2, ArrowUpRight, LayoutDashboard, Users, ClipboardCheck, ListChecks, Shield } from 'lucide-react';
+import { Calendar, CheckCircle, Clock, Music, ChevronRight, Megaphone, Image as ImageIcon, UserX, Trash2, ArrowUpRight, LayoutDashboard, Users, ClipboardCheck, ListChecks, Shield, ArrowLeftRight, Check, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { DashboardSkeleton } from '../components/LoadingSpinner';
 import { formatTime12Hour } from '../lib/timeFormat';
 import { Modal } from '../components/Modal';
-import type { Event, EventAssignment, Setlist, Announcement, UserAvailability } from '../types';
+import type { Event, EventAssignment, Setlist, SetlistSong, Announcement, UserAvailability, SwapRequest } from '../types';
 
 const verses = [
   { text: 'Shout with joy to the Lord, all the earth!', ref: 'Psalm 100:1 NLT' },
@@ -111,6 +111,9 @@ export function Dashboard() {
   const [unavailableMembers, setUnavailableMembers] = useState<UserAvailability[]>([]);
   const [pendingLeaveCount, setPendingLeaveCount] = useState(0);
   const [stats, setStats] = useState({ total: 0, confirmed: 0, pending: 0 });
+  const [nextEventSetlistSongs, setNextEventSetlistSongs] = useState<SetlistSong[]>([]);
+  const [incomingSwapRequests, setIncomingSwapRequests] = useState<SwapRequest[]>([]);
+  const [respondingSwap, setRespondingSwap] = useState<string | null>(null);
   const [selectedUnavailability, setSelectedUnavailability] = useState<UserAvailability | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [now, setNow] = useState(new Date());
@@ -139,7 +142,20 @@ export function Dashboard() {
           : Promise.resolve({ count: 0 }),
       ]);
 
-      setUpcomingEvents(eventsRes.data || []);
+      const events = eventsRes.data || [];
+      setUpcomingEvents(events);
+
+      const nowForSetlist = new Date();
+      const nextEvtForSetlist = events.find(e => getManilaEventDateTime(e.event_date, e.start_time) >= nowForSetlist) ?? events[0];
+      if (nextEvtForSetlist?.id) {
+        const { data: sl } = await supabase
+          .from('setlists')
+          .select('id, setlist_songs(id, position, song_category, performed_key, songs(title, artist))')
+          .eq('event_id', nextEvtForSetlist.id)
+          .maybeSingle();
+        setNextEventSetlistSongs((sl?.setlist_songs as SetlistSong[] | undefined) || []);
+      }
+
       const assignments = (assignRes.data || []) as EventAssignment[];
       const upcomingAssignments = assignments.filter(a => a.events && isAfter(parseISO(a.events.event_date), startOfToday()));
       upcomingAssignments.sort((a, b) => parseISO(a.events!.event_date).getTime() - parseISO(b.events!.event_date).getTime());
@@ -173,10 +189,63 @@ export function Dashboard() {
       setPendingLeaveCount(pendingLeaveRes.count || 0);
       const upcoming = assignments.filter(a => a.events && isAfter(parseISO(a.events.event_date), startOfToday()));
       setStats({ total: upcoming.length, confirmed: upcoming.filter(a => a.status === 'confirmed').length, pending: upcoming.filter(a => a.status === 'pending').length });
+      // Fetch incoming swap requests (where I am the target and need to respond)
+      const { data: swapData } = await supabase
+        .from('swap_requests')
+        .select(`
+          *,
+          requester:requester_id(id, first_name, last_name, nickname, avatar_url),
+          requester_assignment:requester_assignment_id(*, events(*), roles(*)),
+          target_assignment:target_assignment_id(*, events(*), roles(*))
+        `)
+        .eq('target_id', user.id)
+        .eq('status', 'pending_target')
+        .order('created_at', { ascending: false });
+      setIncomingSwapRequests((swapData || []) as SwapRequest[]);
+
       setLoading(false);
     };
     load();
   }, [user, isLeader]);
+
+  const handleSwapResponse = async (req: SwapRequest, accepted: boolean) => {
+    if (!user) return;
+    setRespondingSwap(req.id);
+    try {
+      await supabase.from('swap_requests').update({
+        status: accepted ? 'pending_leadership' : 'declined_by_target',
+        target_response_at: new Date().toISOString(),
+      }).eq('id', req.id);
+
+      const targetName = profile?.nickname || `${profile?.first_name} ${profile?.last_name}`.trim();
+
+      if (accepted) {
+        // Notify requester that target accepted
+        await supabase.from('notifications').insert({
+          user_id: req.requester_id,
+          type: 'swap_request',
+          title: `${targetName} accepted your swap request`,
+          body: 'Your swap request is now pending leadership approval.',
+          data: { swap_request_id: req.id, url: '/my-assignments' },
+        });
+      } else {
+        // Notify requester that target declined
+        await supabase.from('notifications').insert({
+          user_id: req.requester_id,
+          type: 'swap_declined',
+          title: `${targetName} declined your swap request`,
+          body: 'Your schedule swap request was declined.',
+          data: { swap_request_id: req.id, url: '/my-assignments' },
+        });
+      }
+
+      setIncomingSwapRequests(prev => prev.filter(r => r.id !== req.id));
+    } catch {
+      // silently fail — user can try again
+    } finally {
+      setRespondingSwap(null);
+    }
+  };
 
   const handleConfirmDelete = async () => {
     if (!selectedUnavailability) return;
@@ -302,7 +371,80 @@ export function Dashboard() {
           </Card>
         </motion.section>
 
-        {/* ── 03 · Cinematic Next Service ── */}
+        {/* ── Incoming Swap Requests ── */}
+        {incomingSwapRequests.length > 0 && (
+          <motion.section variants={item}>
+            <div className="space-y-2">
+              {incomingSwapRequests.map(req => {
+                const requesterName = req.requester?.nickname || `${req.requester?.first_name} ${req.requester?.last_name}`.trim();
+                const isResponding = respondingSwap === req.id;
+                return (
+                  <div
+                    key={req.id}
+                    className="relative overflow-hidden rounded-3xl border border-indigo-200 dark:border-indigo-500/25 bg-white dark:bg-white/[0.025]"
+                    style={{ boxShadow: '0 4px 24px -8px rgba(99,102,241,0.2), 0 1px 2px rgba(15,23,42,0.04)' }}
+                  >
+                    <div className="absolute inset-0 pointer-events-none hidden dark:block" style={{ background: 'linear-gradient(135deg, rgba(49,46,129,0.25) 0%, transparent 60%)' }} />
+                    <div className="relative px-4 py-4 sm:px-5">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="h-6 w-6 rounded-lg flex items-center justify-center bg-indigo-100 dark:bg-indigo-500/20 shrink-0">
+                          <ArrowLeftRight className="h-3 w-3 text-indigo-600 dark:text-indigo-400" />
+                        </div>
+                        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-indigo-600 dark:text-indigo-400">Swap Request</p>
+                      </div>
+
+                      <p className="text-[14px] font-bold text-gray-900 dark:text-white mb-0.5" style={{ letterSpacing: '-0.02em' }}>
+                        {requesterName} wants to swap schedules
+                      </p>
+
+                      <div className="grid grid-cols-2 gap-2 my-3">
+                        <div className="rounded-xl bg-gray-50 dark:bg-white/[0.04] border border-gray-100 dark:border-white/[0.06] px-3 py-2.5">
+                          <p className="text-[9px] font-mono font-bold uppercase tracking-[0.15em] text-gray-400 dark:text-white/25 mb-1">They give up</p>
+                          <p className="text-[12px] font-bold text-gray-900 dark:text-white truncate leading-tight">{req.requester_assignment?.events?.title}</p>
+                          <p className="text-[10px] text-gray-500 dark:text-white/35 font-mono mt-0.5">
+                            {req.requester_assignment?.events?.event_date && format(parseISO(req.requester_assignment.events.event_date), 'MMM d')}
+                            {req.requester_assignment?.roles?.name && ` · ${req.requester_assignment.roles.name}`}
+                          </p>
+                        </div>
+                        <div className="rounded-xl bg-indigo-50 dark:bg-indigo-500/[0.08] border border-indigo-100 dark:border-indigo-500/20 px-3 py-2.5">
+                          <p className="text-[9px] font-mono font-bold uppercase tracking-[0.15em] text-indigo-500 dark:text-indigo-400 mb-1">Your assignment</p>
+                          <p className="text-[12px] font-bold text-gray-900 dark:text-white truncate leading-tight">{req.target_assignment?.events?.title}</p>
+                          <p className="text-[10px] text-gray-500 dark:text-white/35 font-mono mt-0.5">
+                            {req.target_assignment?.events?.event_date && format(parseISO(req.target_assignment.events.event_date), 'MMM d')}
+                            {req.target_assignment?.roles?.name && ` · ${req.target_assignment.roles.name}`}
+                          </p>
+                        </div>
+                      </div>
+
+                      <p className="text-[11px] text-gray-500 dark:text-white/40 italic mb-3 leading-relaxed">
+                        "{req.reason}"
+                      </p>
+
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleSwapResponse(req, false)}
+                          disabled={isResponding}
+                          className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-[12px] font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/[0.10] border border-red-200 dark:border-red-500/20 hover:bg-red-100 dark:hover:bg-red-500/[0.16] transition-colors disabled:opacity-50"
+                        >
+                          <X className="h-3.5 w-3.5" /> Decline
+                        </button>
+                        <button
+                          onClick={() => handleSwapResponse(req, true)}
+                          disabled={isResponding}
+                          className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-[12px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-500/[0.10] border border-emerald-200 dark:border-emerald-500/20 hover:bg-emerald-100 dark:hover:bg-emerald-500/[0.16] transition-colors disabled:opacity-50"
+                        >
+                          <Check className="h-3.5 w-3.5" /> Accept
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.section>
+        )}
+
+        {/* ── 03 · Your Next Service (compact gradient) ── */}
         {nextAssignment?.events && (
           <motion.section variants={item}>
             <SectionLabel index="03">Your Next Service</SectionLabel>
@@ -311,7 +453,7 @@ export function Dashboard() {
               className="group w-full text-left"
             >
               <div
-                className={`relative overflow-hidden rounded-3xl p-6 sm:p-8 transition-all duration-500 group-hover:-translate-y-1 border ${
+                className={`relative overflow-hidden rounded-3xl px-5 py-4 sm:px-6 transition-all duration-500 group-hover:-translate-y-0.5 border ${
                   nextAssignment.status === 'confirmed'
                     ? 'border-emerald-200 dark:border-emerald-500/22'
                     : 'border-amber-200 dark:border-amber-500/22'
@@ -325,79 +467,107 @@ export function Dashboard() {
                     : '0 28px 60px -24px rgba(245,158,11,0.5), 0 0 0 1px rgba(245,158,11,0.05), 0 1px 2px rgba(15,23,42,0.05)',
                 }}
               >
+                {/* Dark mode gradient overlay */}
                 <div className="absolute inset-0 hidden dark:block pointer-events-none" style={{
                   background: nextAssignment.status === 'confirmed'
                     ? 'linear-gradient(135deg, #073b2d 0%, #06261d 48%, #03150f 100%)'
                     : 'linear-gradient(135deg, #3a2508 0%, #231706 48%, #120b03 100%)',
                 }} />
-                <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full pointer-events-none transition-opacity duration-500"
+                {/* Radial glow */}
+                <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full pointer-events-none"
                   style={{
                     background: nextAssignment.status === 'confirmed'
                       ? 'radial-gradient(circle, rgba(34,197,94,0.18), transparent 70%)'
                       : 'radial-gradient(circle, rgba(245,158,11,0.2), transparent 70%)',
-                    filter: 'blur(20px)', opacity: 0.7,
+                    filter: 'blur(16px)', opacity: 0.7,
                   }}
                 />
-                <div className="absolute inset-0 pointer-events-none opacity-[0.05] dark:opacity-[0.04]" style={{
-                  backgroundImage: 'linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)',
-                  backgroundSize: '32px 32px',
-                }} />
 
-                <div className="relative flex items-start justify-between gap-4 mb-6">
-                  <div className="flex items-center gap-2">
-                    <span className={`h-1.5 w-1.5 rounded-full ${nextAssignment.status === 'confirmed' ? 'bg-emerald-400' : 'bg-amber-400'}`} style={{ boxShadow: '0 0 8px currentColor' }} />
-                    <p className={`text-[10px] font-mono uppercase tracking-[0.22em] ${
-                      nextAssignment.status === 'confirmed'
-                        ? 'text-emerald-700/70 dark:text-white/55'
-                        : 'text-amber-700/75 dark:text-white/55'
-                    }`}>
-                      {nextAssignment.status === 'confirmed' ? 'Confirmed' : 'Pending Confirmation'}
-                    </p>
-                  </div>
-                  <ChevronRight className="h-5 w-5 text-gray-400 dark:text-white/30 transition-all duration-300 group-hover:translate-x-1 group-hover:text-gray-600 dark:group-hover:text-white/60" />
-                </div>
-
-                <div className="relative flex items-end gap-5 sm:gap-7">
-                  <div className="shrink-0">
-                    <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-gray-500 dark:text-white/40">{format(parseISO(nextAssignment.events.event_date), 'EEEE')}</p>
-                    <p className="text-[68px] sm:text-[88px] font-black leading-[0.85] tracking-tighter mt-1 text-gray-950 dark:text-white" style={{
-                      letterSpacing: '-0.06em',
-                      textShadow: nextAssignment.status === 'confirmed'
-                        ? '0 0 40px rgba(34,197,94,0.25)'
-                        : '0 0 40px rgba(245,158,11,0.25)',
-                    }}>
-                      {format(parseISO(nextAssignment.events.event_date), 'd')}
-                    </p>
-                    <p className="text-[12px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-white/55 mt-1.5">{format(parseISO(nextAssignment.events.event_date), 'MMM yyyy')}</p>
-                  </div>
-
-                  <div className="flex-1 min-w-0 pb-2">
-                    <p className="text-[18px] sm:text-[22px] font-bold text-gray-950 dark:text-white leading-tight tracking-tight truncate" style={{ letterSpacing: '-0.025em' }}>
+                <div className="relative flex items-center gap-4">
+                  <DateChip date={nextAssignment.events.event_date} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${nextAssignment.status === 'confirmed' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                      <p className={`text-[10px] font-mono uppercase tracking-[0.18em] ${
+                        nextAssignment.status === 'confirmed' ? 'text-emerald-700/70 dark:text-white/50' : 'text-amber-700/75 dark:text-white/50'
+                      }`}>
+                        {nextAssignment.status === 'confirmed' ? 'Confirmed' : 'Pending Confirmation'}
+                      </p>
+                    </div>
+                    <p className="text-[15px] font-bold text-gray-950 dark:text-white truncate leading-tight" style={{ letterSpacing: '-0.02em' }}>
                       {(() => { const parts = (nextAssignment.events.title || '').split(' '); if (parts.length > 1) { parts[parts.length - 1] = parts[parts.length - 1][0].toUpperCase() + '.'; } return parts.join(' '); })()}
                     </p>
-                    {nextAssignment.events.start_time && (
-                      <p className="text-[12px] text-gray-500 dark:text-white/50 mt-1 font-mono">
-                        {formatTime12Hour(nextAssignment.events.start_time)}
-                      </p>
-                    )}
-                    <div className="flex items-center gap-1.5 flex-wrap mt-3">
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
                       {nextAssignment.roles?.name && (
-                        <span className="text-[10px] font-bold px-2 py-1 rounded-md text-gray-700 dark:text-white bg-white/70 dark:bg-white/[0.1] border border-black/[0.06] dark:border-white/[0.08]">
-                          {nextAssignment.roles.name}
-                        </span>
+                        <span className="text-[11px] text-gray-600 dark:text-white/45 font-mono">{nextAssignment.roles.name}</span>
                       )}
-                      <span className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md border ${
-                        nextAssignment.status === 'confirmed'
-                          ? 'bg-emerald-100/80 dark:bg-emerald-500/[0.14] border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
-                          : 'bg-amber-100/80 dark:bg-amber-500/[0.14] border-amber-200 dark:border-amber-500/30 text-amber-700 dark:text-amber-300'
-                      }`}>
-                        {nextAssignment.status === 'confirmed' ? <><CheckCircle className="h-2.5 w-2.5" /> Confirmed</> : <><Clock className="h-2.5 w-2.5" /> Pending</>}
-                      </span>
+                      {nextAssignment.events.start_time && (
+                        <>
+                          <span className="text-gray-300 dark:text-white/20">·</span>
+                          <span className="text-[11px] text-gray-600 dark:text-white/45 font-mono">{formatTime12Hour(nextAssignment.events.start_time)}</span>
+                        </>
+                      )}
                     </div>
                   </div>
+                  <ChevronRight className="h-4 w-4 text-gray-400 dark:text-white/30 group-hover:translate-x-0.5 group-hover:text-gray-600 dark:group-hover:text-white/60 transition-all shrink-0" />
                 </div>
               </div>
             </button>
+          </motion.section>
+        )}
+
+        {/* ── 03b · Next Service Setlist Preview ── */}
+        {nextEvent && (
+          <motion.section variants={item}>
+            <Card>
+              <button
+                onClick={() => navigate(`/events/${nextEvent.id}`)}
+                className="group flex items-center gap-3 px-5 py-3.5 w-full text-left border-b border-gray-100 dark:border-white/[0.06] hover:bg-gray-50 dark:hover:bg-white/[0.03] transition-colors rounded-t-3xl"
+              >
+                <div className="h-7 w-7 rounded-lg flex items-center justify-center bg-brand-50 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400 shrink-0">
+                  <Music className="h-[13px] w-[13px]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-white/30 block">Next Service Setlist</span>
+                  <span className="text-[12px] font-semibold text-gray-700 dark:text-white/60 truncate block leading-tight mt-0.5">
+                    {nextEvent.title} <span className="text-gray-400 dark:text-white/30">·</span> {format(parseISO(nextEvent.event_date), 'MMM d')}
+                  </span>
+                </div>
+                <ChevronRight className="h-4 w-4 text-gray-300 dark:text-white/20 group-hover:translate-x-0.5 group-hover:text-gray-500 dark:group-hover:text-white/40 transition-all shrink-0" />
+              </button>
+
+              {nextEventSetlistSongs.length === 0 ? (
+                <div className="px-5 py-10 text-center">
+                  <div className="h-10 w-10 rounded-2xl bg-gray-100 dark:bg-white/[0.05] flex items-center justify-center mx-auto mb-3">
+                    <Music className="h-5 w-5 text-gray-400 dark:text-white/25" />
+                  </div>
+                  <p className="text-[13px] font-medium text-gray-500 dark:text-white/40">Setlist not yet published</p>
+                  <p className="text-[11px] text-gray-400 dark:text-white/25 mt-1">Check back closer to the service date.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-100 dark:divide-white/[0.05]">
+                  {[...nextEventSetlistSongs]
+                    .sort((a, b) => a.position - b.position)
+                    .map((ss) => (
+                      <div key={ss.id} className="flex items-center gap-3.5 px-5 py-3">
+                        <span className="text-[11px] font-mono font-bold text-gray-300 dark:text-white/20 w-4 shrink-0 tabular-nums text-right">
+                          {ss.position}
+                        </span>
+                        <div className="w-px h-6 bg-gray-100 dark:bg-white/[0.06] shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[13px] font-semibold text-gray-900 dark:text-white truncate" style={{ letterSpacing: '-0.01em' }}>
+                            {ss.songs?.title}
+                          </p>
+                          <p className="text-[11px] text-gray-500 dark:text-white/35 font-mono mt-0.5">
+                            {ss.song_category && <span className="capitalize">{ss.song_category.replace(/_/g, ' ')}</span>}
+                            {ss.performed_key && <span> · {ss.performed_key}</span>}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </Card>
           </motion.section>
         )}
 
@@ -413,12 +583,15 @@ export function Dashboard() {
               </div>
               <div className="grid grid-cols-2 divide-x divide-y divide-gray-100 dark:divide-white/[0.05]">
                 {[
-                  { label: 'Overview',        icon: LayoutDashboard, path: '/leadership/overview',  badge: 0 },
-                  { label: 'Manage Team',     icon: Users,           path: '/leadership/team',       badge: 0 },
-                  { label: 'Leave Requests',  icon: ClipboardCheck,  path: '/leadership/leave',      badge: pendingLeaveCount },
-                  { label: 'Setlist Reviews', icon: ListChecks,      path: '/leadership/setlists',   badge: pendingSetlists.length },
-                  { label: 'Unavailable',     icon: UserX,           path: '/unavailable-members',   badge: unavailableMembers.length },
-                  ...(isProductionDirector ? [{ label: 'Discipline', icon: Shield, path: '/discipline', badge: 0 }] : []),
+                  { label: 'Overview',        icon: LayoutDashboard, path: '/leadership/overview',  badges: [] },
+                  { label: 'Manage Team',     icon: Users,           path: '/leadership/team',       badges: [] },
+                  { label: 'Leave Requests',  icon: ClipboardCheck,  path: '/leadership/leave',      badges: [{ count: pendingLeaveCount, variant: 'red' }] },
+                  { label: 'Setlist Reviews', icon: ListChecks,      path: '/leadership/setlists',   badges: [{ count: pendingSetlists.length, variant: 'red' }] },
+                  { label: 'Unavailable',     icon: UserX,           path: '/unavailable-members',   badges: [
+                    { count: pendingLeaveCount, variant: 'red' },
+                    { count: unavailableMembers.length, variant: 'amber' }
+                  ]},
+                  ...(isProductionDirector ? [{ label: 'Discipline', icon: Shield, path: '/discipline', badges: [] }] : []),
                 ].map((action, i, arr) => {
                   const Icon = action.icon;
                   const isLastOdd = arr.length % 2 !== 0 && i === arr.length - 1;
@@ -434,11 +607,20 @@ export function Dashboard() {
                       <span className="flex-1 text-[12px] font-semibold text-gray-800 dark:text-white/75 truncate" style={{ letterSpacing: '-0.01em' }}>
                         {action.label}
                       </span>
-                      {action.badge > 0 && (
-                        <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-400 dark:bg-amber-400/20 px-1 text-[9px] font-black text-amber-950 dark:text-amber-300 ring-1 ring-amber-300/50 dark:ring-amber-500/30 shrink-0">
-                          {action.badge > 9 ? '9+' : action.badge}
-                        </span>
-                      )}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {action.badges.map((badge, bi) => badge.count > 0 && (
+                          <span
+                            key={bi}
+                            className={`flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-black shrink-0 ring-1 ${
+                              badge.variant === 'red'
+                                ? 'bg-red-500 text-white ring-red-400/50 dark:bg-red-500/20 dark:text-red-400 dark:ring-red-500/30'
+                                : 'bg-amber-400 text-amber-950 ring-amber-300/50 dark:bg-amber-400/20 dark:text-amber-300 dark:ring-amber-500/30'
+                            }`}
+                          >
+                            {badge.count > 9 ? '9+' : badge.count}
+                          </span>
+                        ))}
+                      </div>
                       <ChevronRight className="h-3 w-3 text-gray-300 dark:text-white/20 group-hover:text-gray-500 dark:group-hover:text-white/40 transition-colors shrink-0" />
                     </button>
                   );

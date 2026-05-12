@@ -1,12 +1,11 @@
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import {
-  User, Users, Bell, LogOut, Shield, Library, Calendar, ClipboardCheck, ChevronRight, LockKeyhole,
+  Users, Bell, LogOut, Shield, Library, Calendar, ClipboardCheck, ChevronRight, LockKeyhole,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { ThemeToggle } from '../components/ThemeToggle';
 import { Avatar } from '../components/Avatar';
 import { AttendanceGuideModal } from '../components/AttendanceGuideModal';
 import { LeaveRequestModal } from '../components/LeaveRequestModal';
@@ -78,13 +77,12 @@ export function More() {
   };
 
   const menuItems = [
-    { icon: LockKeyhole, label: 'Platform Management', desc: 'Owner dashboard', path: '/platform', show: isPlatformOwner, action: null, badge: 0, color: '#0f172a', glow: 'rgba(15,23,42,0.24)' },
-    { icon: Library, label: 'Library', desc: 'Browse songs and setlists', path: '/library', show: true, action: null, badge: 0, color: '#16a34a', glow: 'rgba(22,163,74,0.3)' },
-    { icon: Calendar, label: 'Request Leave', desc: 'Submit unavailability', path: null, show: true, action: () => setShowRequestLeave(true), badge: 0, color: '#f59e0b', glow: 'rgba(245,158,11,0.3)' },
-    { icon: ClipboardCheck, label: 'Attendance Guide', desc: 'How tracking works', path: null, show: true, action: () => setShowAttendanceGuide(true), badge: 0, color: '#0ea5e9', glow: 'rgba(14,165,233,0.3)' },
-    { icon: User, label: 'Profile', desc: 'Edit your info & avatar', path: '/profile', show: true, action: null, badge: 0, color: '#8b5cf6', glow: 'rgba(139,92,246,0.3)' },
-    { icon: Bell, label: 'Notifications', desc: 'View all notifications', path: '/notifications', show: true, action: null, badge: 0, color: '#ec4899', glow: 'rgba(236,72,153,0.3)' },
-    { icon: Users, label: 'Leadership', desc: isOrgAdmin && !isLeader ? 'Church admin tools' : 'Team management tools', path: isOrgAdmin && !isLeader ? '/leadership/church' : '/leadership/overview', show: isLeader || isOrgAdmin, action: null, badge: unread.pendingLeave, color: '#f97316', glow: 'rgba(249,115,22,0.3)' },
+    { icon: LockKeyhole, label: 'Platform Management', desc: 'Owner dashboard',        path: '/platform',           show: isPlatformOwner,         action: null,                              badge: 0,                    color: '#6366f1' },
+    { icon: Library,     label: 'Library',             desc: 'Browse songs and setlists', path: '/library',          show: true,                    action: null,                              badge: 0,                    color: '#16a34a' },
+    { icon: Calendar,    label: 'Request Leave',        desc: 'Submit unavailability',  path: null,                  show: true,                    action: () => setShowRequestLeave(true),    badge: 0,                    color: '#f59e0b' },
+    { icon: ClipboardCheck, label: 'Attendance Guide',  desc: 'How tracking works',     path: null,                  show: true,                    action: () => setShowAttendanceGuide(true), badge: 0,                    color: '#0ea5e9' },
+    { icon: Bell,        label: 'Notifications',        desc: 'View all notifications', path: '/notifications',      show: true,                    action: null,                              badge: 0,                    color: '#ec4899' },
+    { icon: Users,       label: 'Leadership',           desc: isOrgAdmin && !isLeader ? 'Church admin tools' : 'Team management tools', path: isOrgAdmin && !isLeader ? '/leadership/church' : '/leadership/overview', show: isLeader || isOrgAdmin, action: null, badge: unread.pendingLeave, color: '#f97316' },
   ].filter(item => item.show);
 
   const displayName = profile?.nickname || `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim();
@@ -96,90 +94,88 @@ export function More() {
       <div className="max-w-lg mx-auto px-1 sm:px-2 pt-6 sm:pt-8 space-y-4 sm:space-y-5">
 
         {/* ── Profile Hero Card ─────────────────────────── */}
-        <motion.div
+        <motion.button
           initial={{ opacity: 0, y: 14, filter: 'blur(6px)' }}
           animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          className="relative rounded-3xl p-5 bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] overflow-hidden"
+          onClick={() => navigate('/profile')}
+          className="relative w-full rounded-3xl p-4 bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] overflow-hidden text-left hover:bg-gray-50 dark:hover:bg-white/[0.04] active:scale-[0.99] transition-all duration-150 group"
           style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 28px -16px rgba(15,23,42,0.12)' }}
         >
-          {/* Subtle top highlight */}
           <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.12] to-transparent" />
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <div className="relative shrink-0">
               <Avatar
                 src={profile?.avatar_url}
                 firstName={profile?.first_name || '?'}
                 lastName={profile?.last_name}
-                size="lg"
+                size="md"
                 className="rounded-2xl ring-2 ring-black/[0.06] dark:ring-white/[0.08]"
               />
               {isLeader && (
-                <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full flex items-center justify-center bg-emerald-500 ring-2 ring-white dark:ring-[#0d0d0f]">
-                  <Shield className="h-2.5 w-2.5 text-white" />
+                <div className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full flex items-center justify-center bg-emerald-500 ring-2 ring-white dark:ring-[#0d0d0f]">
+                  <Shield className="h-2 w-2 text-white" />
                 </div>
               )}
             </div>
 
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] font-mono font-medium uppercase tracking-[0.18em] text-gray-400 dark:text-white/35 mb-0.5">
+              <p className="text-[10px] font-mono font-medium uppercase tracking-[0.18em] text-gray-400 dark:text-white/35">
                 {isLeader ? 'Leader' : 'Member'}
               </p>
-              <h2 className="text-[18px] font-black text-gray-900 dark:text-white truncate leading-tight" style={{ letterSpacing: '-0.025em' }}>
+              <h2 className="text-[15px] font-black text-gray-900 dark:text-white truncate leading-tight" style={{ letterSpacing: '-0.02em' }}>
                 {displayName}
               </h2>
-              <p className="text-[12px] text-gray-500 dark:text-white/40 truncate mt-0.5 font-mono">{profile?.email}</p>
+              <p className="text-[11px] text-gray-500 dark:text-white/40 truncate font-mono">{profile?.email}</p>
             </div>
 
-            <div className="flex flex-col items-center gap-2.5 shrink-0">
-              <div className="hidden lg:block"><ThemeToggle /></div>
+            <div className="flex items-center gap-2 shrink-0">
+              <ChevronRight className="h-4 w-4 text-gray-300 dark:text-white/20 group-hover:text-gray-500 dark:group-hover:text-white/40 transition-colors" />
               <button
-                onClick={handleSignOut}
-                className="h-9 w-9 rounded-2xl flex items-center justify-center text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-500/[0.1] border border-red-200 dark:border-red-500/20 hover:bg-red-100 dark:hover:bg-red-500/[0.16] active:scale-95 transition-all"
+                onClick={e => { e.stopPropagation(); handleSignOut(); }}
+                className="h-8 w-8 rounded-xl flex items-center justify-center text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-500/[0.1] border border-red-200 dark:border-red-500/20 hover:bg-red-100 dark:hover:bg-red-500/[0.16] active:scale-95 transition-all"
                 title="Sign Out"
               >
-                <LogOut className="h-4 w-4" />
+                <LogOut className="h-3.5 w-3.5" />
               </button>
             </div>
           </div>
-        </motion.div>
+        </motion.button>
 
-        {/* ── Menu Grid ────────────────────────────────── */}
+        {/* ── Menu Grid 3×N ────────────────────────────── */}
         <motion.div
           variants={containerVariants}
           initial="hidden"
           animate="show"
-          className="grid grid-cols-2 gap-3"
+          className="grid grid-cols-3 gap-2"
         >
           {menuItems.map((item, index) => (
             <motion.button
               key={item.path || index}
               variants={itemVariants}
               onClick={() => item.action ? item.action() : navigate(item.path!)}
-              className="relative group p-4 text-left rounded-3xl bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] transition-all duration-200 hover:-translate-y-px active:scale-[0.97] overflow-hidden"
-              style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 4px 16px -8px rgba(15,23,42,0.08)' }}
+              className="relative group flex flex-col items-center gap-2 px-2 py-4 rounded-2xl bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] hover:bg-gray-50 dark:hover:bg-white/[0.04] hover:border-gray-300 dark:hover:border-white/[0.1] active:scale-[0.96] transition-all duration-150"
+              style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 4px 12px -8px rgba(15,23,42,0.08)' }}
             >
-              <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.05] dark:via-white/[0.08] to-transparent" />
-
-              <div className="flex flex-col gap-3">
-                <div className="relative flex items-center justify-center h-11 w-11 rounded-2xl shrink-0"
-                  style={{ background: `linear-gradient(145deg, ${item.color}22, ${item.color}11)`, border: `1px solid ${item.color}30` }}
-                >
-                  <item.icon className="h-5 w-5" style={{ color: item.color }} />
-                  {item.badge > 0 && (
-                    <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-amber-500 text-white text-[9px] font-black leading-none shadow-sm">
-                      {item.badge > 9 ? '9+' : item.badge}
-                    </span>
-                  )}
-                </div>
-                <div className="flex-1">
-                  <p className="text-[13px] font-bold text-gray-900 dark:text-white leading-tight" style={{ letterSpacing: '-0.02em' }}>{item.label}</p>
-                  <p className="text-[11px] text-gray-500 dark:text-white/40 leading-snug mt-0.5">{item.desc}</p>
-                </div>
+              <div
+                className="relative h-10 w-10 rounded-2xl flex items-center justify-center shrink-0"
+                style={{ background: `${item.color}18`, border: `1px solid ${item.color}28` }}
+              >
+                <item.icon className="h-[18px] w-[18px]" style={{ color: item.color }} />
+                {item.badge > 0 && (
+                  <span className={`absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-black ring-1 ring-white dark:ring-[#0d0d0f] ${
+                    item.badgeVariant === 'red'
+                      ? 'bg-red-500 text-white'
+                      : 'bg-amber-400 dark:bg-amber-400/90 text-amber-950'
+                  }`}>
+                    {item.badge > 9 ? '9+' : item.badge}
+                  </span>
+                )}
               </div>
-
-              <ChevronRight className="absolute right-3.5 bottom-4 h-3.5 w-3.5 text-gray-300 dark:text-white/20 transition-transform group-hover:translate-x-0.5" />
+              <p className="text-[11px] font-semibold text-gray-700 dark:text-white/75 text-center leading-tight" style={{ letterSpacing: '-0.01em' }}>
+                {item.label}
+              </p>
             </motion.button>
           ))}
         </motion.div>

@@ -19,6 +19,8 @@ import type { Event, EventAssignment, Setlist, SetlistSong, Song, ServiceFormat,
 import { inferServiceFormat, SERVICE_FORMAT_LABELS } from '../lib/setlistCheckerEngine';
 import { SetlistReport } from '../components/setlist-checker/SetlistReport';
 import { CheckingAnimation } from '../components/setlist-checker/CheckingAnimation';
+import { SwapRequestModal } from '../components/SwapRequestModal';
+import { ArrowLeftRight } from 'lucide-react';
 
 interface EventAttendance {
   id: string;
@@ -134,6 +136,7 @@ export function EventDetail() {
   const [eventConversationId, setEventConversationId] = useState<string | null | undefined>(undefined);
   const [showCreateChatModal, setShowCreateChatModal] = useState(false);
   const [creatingChat, setCreatingChat] = useState(false);
+  const [showSwapModal, setShowSwapModal] = useState(false);
 
 
   const fetchAll = useCallback(async () => {
@@ -1060,9 +1063,9 @@ const openLyricsModal = (ss: SetlistSong) => {
           <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.12] to-transparent" />
 
           <div className="relative px-5 sm:px-7 pt-6 pb-5">
-            {/* Event chat button */}
+            {/* Event chat + swap buttons */}
             {eventConversationId !== undefined && (
-              <div className="absolute top-4 right-4 sm:top-5 sm:right-5">
+              <div className="absolute top-4 right-4 sm:top-5 sm:right-5 flex flex-col items-end gap-2">
                 {eventConversationId ? (
                   <button
                     onClick={() => navigate(`/messages/${eventConversationId}`)}
@@ -1080,6 +1083,18 @@ const openLyricsModal = (ss: SetlistSong) => {
                   >
                     <MessageCircle className="h-4 w-4" />
                     <span className="hidden sm:inline">Create Chat</span>
+                  </button>
+                )}
+                {myAssignment && myAssignment.status !== 'declined' && (
+                  <button
+                    onClick={() => setShowSwapModal(true)}
+                    className="flex items-center gap-1.5 h-9 px-3 rounded-xl border border-indigo-300 dark:border-indigo-500/50 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 text-[12px] font-bold transition-colors active:scale-95"
+                    title={myAssignment.roles?.name === 'Song Leader' ? 'Request schedule swap' : 'Find a sub for your spot'}
+                  >
+                    <ArrowLeftRight className="h-4 w-4" />
+                    <span className="hidden sm:inline">
+                      {myAssignment.roles?.name === 'Song Leader' ? 'Request Swap' : 'Find a Sub'}
+                    </span>
                   </button>
                 )}
               </div>
@@ -2726,6 +2741,12 @@ const openLyricsModal = (ss: SetlistSong) => {
         </Modal>
 
       </motion.div>
+
+      <SwapRequestModal
+        open={showSwapModal}
+        onClose={() => setShowSwapModal(false)}
+        myAssignment={myAssignment ?? null}
+      />
     </div>
   );
 }

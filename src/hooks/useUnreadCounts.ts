@@ -7,12 +7,13 @@ interface UnreadCounts {
   announcements: number;
   events: number;
   pendingLeave: number;
+  pendingSwaps: number;
   messages: number;
 }
 
 export function useUnreadCounts() {
   const { user, isLeader, canApproveLeave } = useAuth();
-  const [counts, setCounts] = useState<UnreadCounts>({ announcements: 0, events: 0, pendingLeave: 0, messages: 0 });
+  const [counts, setCounts] = useState<UnreadCounts>({ announcements: 0, events: 0, pendingLeave: 0, pendingSwaps: 0, messages: 0 });
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const channelId = useRef(`nav-badge-updates-${Math.random().toString(36).slice(2)}`);
 
@@ -34,6 +35,12 @@ export function useUnreadCounts() {
       );
     }
 
+    if (isLeader) {
+      queries.push(
+        supabase.from('swap_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending_leadership').then(res => res)
+      );
+    }
+
     const results = await Promise.all(queries) as unknown[];
     const [announcementRes, viewsRes, pendingAssignRes, membershipsRes] = results as [
       { count: number | null },
@@ -47,6 +54,7 @@ export function useUnreadCounts() {
     const unreadAnnouncements = totalAnnouncements - viewedIds.size;
 
     const pendingLeaveRes = canSeePendingLeave ? (results[4] as { count: number | null }) : null;
+    const pendingSwapsRes = isLeader ? (results[canSeePendingLeave ? 5 : 4] as { count: number | null }) : null;
 
     // Count unread conversations (conversations with messages newer than last_read_at)
     const memberships = membershipsRes.data || [];
@@ -70,6 +78,7 @@ export function useUnreadCounts() {
       announcements: Math.max(0, unreadAnnouncements),
       events: pendingAssignRes.count || 0,
       pendingLeave: pendingLeaveRes?.count || 0,
+      pendingSwaps: pendingSwapsRes?.count || 0,
       messages: unreadMessages,
     });
   }, [user, canSeePendingLeave]);
@@ -97,6 +106,7 @@ export function useUnreadCounts() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'announcement_views', filter: `user_id=eq.${user.id}` }, debouncedFetch)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'event_assignments', filter: `user_id=eq.${user.id}` }, debouncedFetch)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'user_availability' }, debouncedFetch)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'swap_requests' }, debouncedFetch)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, debouncedFetch)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversation_members', filter: `user_id=eq.${user.id}` }, debouncedFetch)
       .subscribe();

@@ -4,7 +4,7 @@ import { format, parseISO } from 'date-fns';
 import {
   Bell, Check, CheckCheck, Trash2,
   Music, Megaphone, MessageCircle, PlayCircle, Users,
-  CalendarClock, ClipboardCheck, AlertTriangle, Clock
+  CalendarClock, ClipboardCheck, AlertTriangle, Clock, ArrowLeftRight
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -36,6 +36,12 @@ const typeIcons: Record<string, typeof Bell> = {
   proposal_reminder: CalendarClock,
   proposal_overdue_alert: AlertTriangle,
   leadership_member_action_reminder: AlertTriangle,
+  swap_request: ArrowLeftRight,
+  swap_approved: ArrowLeftRight,
+  swap_declined: ArrowLeftRight,
+  sub_request: ArrowLeftRight,
+  sub_approved: ArrowLeftRight,
+  sub_declined: ArrowLeftRight,
 };
 
 const typeColors: Record<string, string> = {
@@ -61,6 +67,12 @@ const typeColors: Record<string, string> = {
   proposal_reminder: 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400',
   proposal_overdue_alert: 'bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400',
   leadership_member_action_reminder: 'bg-fuchsia-50 dark:bg-fuchsia-900/30 text-fuchsia-600 dark:text-fuchsia-400',
+  swap_request: 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400',
+  swap_approved: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400',
+  swap_declined: 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400',
+  sub_request: 'bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400',
+  sub_approved: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400',
+  sub_declined: 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400',
 };
 
 export function Notifications() {

@@ -1,7 +1,7 @@
-export const APP_VERSION = '2026.05.11.27';
+export const APP_VERSION = '2026.05.12.29';
 export const APP_UPDATE_VERSION = APP_VERSION;
 export const APP_VERSION_LABEL = `v${APP_VERSION}`;
-export const APP_UPDATE_PUBLISHED_AT = '2026-05-11T19:00:00Z';
+export const APP_UPDATE_PUBLISHED_AT = '2026-05-12T08:00:00Z';
 
 export const APP_UPDATE_FEATURES = [
   'Chats now support @mentions, and mentioned users receive a dedicated mention notification with push delivery.',
@@ -44,4 +44,7 @@ export const APP_UPDATE_FIXES = [
   'Review notes and history are now hidden after a setlist is approved, keeping things tidy.',
   'Making any change to an approved setlist now automatically sends it back for re-approval.',
   'Read receipts now correctly show everyone who has seen a message, including yourself.',
+  'Filter tabs on My Assignments now match the app\'s pill button style instead of a segmented control.',
+  'The Your Next Service card on the Dashboard is now compact. A new Setlist Preview card below it shows the upcoming service\'s song list for everyone, even if you\'re not assigned.',
+  'You can now request a schedule swap with any team member. Both parties must agree before leadership reviews and approves or declines. Push notifications are sent at each step.',
 ];

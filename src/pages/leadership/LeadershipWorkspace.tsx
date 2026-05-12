@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Shield, LayoutDashboard, Users, CalendarCheck, AlertTriangle, ListMusic, Building2, CreditCard } from 'lucide-react';
+import { Shield, LayoutDashboard, Users, CalendarCheck, AlertTriangle, ListMusic, Building2, CreditCard, ArrowLeftRight } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUnreadCounts } from '../../hooks/useUnreadCounts';
 import { LeaderDashboard } from '../LeaderDashboard';
@@ -11,8 +11,9 @@ import { Discipline } from '../Discipline';
 import { SetlistDeadlines } from './SetlistDeadlines';
 import { OrganizationSettings } from './OrganizationSettings';
 import { OrganizationBilling } from './OrganizationBilling';
+import { SwapRequests } from '../SwapRequests';
 
-type Tab = 'overview' | 'team' | 'leave' | 'discipline' | 'setlists' | 'church' | 'billing';
+type Tab = 'overview' | 'team' | 'leave' | 'swaps' | 'discipline' | 'setlists' | 'church' | 'billing';
 
 const fadeUp = (delay = 0) => ({
   initial: { opacity: 0, y: 14 },
@@ -37,6 +38,7 @@ export function LeadershipWorkspace() {
     { id: 'overview', label: 'Overview', icon: LayoutDashboard, show: isLeader },
     { id: 'setlists', label: 'Setlists', icon: ListMusic, show: isLeader },
     { id: 'leave', label: 'Leave', icon: CalendarCheck, show: !!canApproveLeave },
+    { id: 'swaps', label: 'Swaps', icon: ArrowLeftRight, show: isLeader },
     { id: 'discipline', label: 'Conduct', icon: AlertTriangle, show: isLeader || !!canManageDiscipline },
     { id: 'team', label: 'Team', icon: Users, show: isLeader || isOrgAdmin },
     { id: 'church', label: 'Church', icon: Building2, show: isOrgAdmin },
@@ -135,8 +137,13 @@ export function LeadershipWorkspace() {
                   {t.label}
                 </span>
                 {t.id === 'leave' && unread.pendingLeave > 0 && (
-                  <span className="relative z-10 flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-amber-500 text-white text-[9px] font-bold leading-none" style={{ boxShadow: '0 0 8px rgba(245,158,11,0.5)' }}>
+                  <span className="relative z-10 flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold leading-none" style={{ boxShadow: '0 0 8px rgba(239,68,68,0.5)' }}>
                     {unread.pendingLeave > 9 ? '9+' : unread.pendingLeave}
+                  </span>
+                )}
+                {t.id === 'swaps' && unread.pendingSwaps > 0 && (
+                  <span className="relative z-10 flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold leading-none" style={{ boxShadow: '0 0 8px rgba(239,68,68,0.5)' }}>
+                    {unread.pendingSwaps > 9 ? '9+' : unread.pendingSwaps}
                   </span>
                 )}
               </button>
@@ -156,6 +163,7 @@ export function LeadershipWorkspace() {
             {activeTab === 'overview' && <OverviewWrapper />}
             {activeTab === 'team' && <TeamWrapper />}
             {activeTab === 'leave' && <LeaveWrapper />}
+            {activeTab === 'swaps' && <SwapRequests embedded />}
             {activeTab === 'discipline' && <DisciplineWrapper />}
             {activeTab === 'setlists' && <SetlistDeadlines />}
             {activeTab === 'church' && <OrganizationSettings />}

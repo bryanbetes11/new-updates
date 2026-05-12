@@ -71,7 +71,9 @@ export function SwapRequests({ embedded }: Props) {
               .eq('id', request.target_assignment_id)
           );
         }
-        await Promise.all(ops);
+        const results = await Promise.all(ops);
+        const firstError = results.find(r => r.error)?.error;
+        if (firstError) throw firstError;
       }
 
       await supabase.from('user_availability').update({

@@ -86,15 +86,17 @@ export function SwapRequests({ embedded }: Props) {
       const requesterName = request.requester?.nickname || `${request.requester?.first_name} ${request.requester?.last_name}`.trim();
       const targetName = request.target?.nickname || `${request.target?.first_name} ${request.target?.last_name}`.trim();
       const noteSnippet = reviewNote.trim() ? ` Note: ${reviewNote.trim()}` : '';
+      const isSub = request.request_type === 'sub';
+      const typeLabel = isSub ? 'sub' : 'swap';
 
       const notifications = approved
         ? [
-            { user_id: request.user_id, type: 'swap_approved', title: 'Schedule swap approved', body: `Your swap with ${targetName} was approved by leadership.`, data: { url: '/my-assignments', swap_request_id: request.id } },
-            { user_id: request.target_id, type: 'swap_approved', title: 'Schedule swap approved', body: `Your swap with ${requesterName} was approved by leadership.`, data: { url: '/my-assignments', swap_request_id: request.id } },
+            { user_id: request.user_id, type: isSub ? 'sub_approved' : 'swap_approved', title: `Schedule ${typeLabel} approved`, body: `Your ${typeLabel} with ${targetName} was approved by leadership.`, data: { url: '/my-assignments', swap_request_id: request.id } },
+            { user_id: request.target_id, type: isSub ? 'sub_approved' : 'swap_approved', title: `Schedule ${typeLabel} approved`, body: `Your ${typeLabel} with ${requesterName} was approved by leadership.`, data: { url: '/my-assignments', swap_request_id: request.id } },
           ]
         : [
-            { user_id: request.user_id, type: 'swap_declined', title: 'Schedule swap declined', body: `Your swap request with ${targetName} was not approved.${noteSnippet}`, data: { url: '/my-assignments', swap_request_id: request.id } },
-            { user_id: request.target_id, type: 'swap_declined', title: 'Schedule swap declined', body: `The swap request between you and ${requesterName} was not approved.${noteSnippet}`, data: { url: '/my-assignments', swap_request_id: request.id } },
+            { user_id: request.user_id, type: isSub ? 'sub_declined' : 'swap_declined', title: `Schedule ${typeLabel} declined`, body: `Your ${typeLabel} request with ${targetName} was not approved.${noteSnippet}`, data: { url: '/my-assignments', swap_request_id: request.id } },
+            { user_id: request.target_id, type: isSub ? 'sub_declined' : 'swap_declined', title: `Schedule ${typeLabel} declined`, body: `The ${typeLabel} request between you and ${requesterName} was not approved.${noteSnippet}`, data: { url: '/my-assignments', swap_request_id: request.id } },
           ];
 
       await supabase.from('notifications').insert(notifications);

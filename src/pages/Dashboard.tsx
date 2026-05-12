@@ -237,7 +237,7 @@ export function Dashboard() {
   }, [user, isLeader]);
 
   const handleSwapResponse = async (req: any, accepted: boolean) => {
-    if (!user) return;
+    if (!user || !profile?.org_id) return;
     setRespondingSwap(req.id);
     try {
       await supabase.from('user_availability').update({
@@ -248,14 +248,51 @@ export function Dashboard() {
       const targetName = profile?.nickname || `${profile?.first_name} ${profile?.last_name}`.trim();
 
       if (accepted) {
-        // Notify requester that target accepted
-        await supabase.from('notifications').insert({
+        // 1. Notify requester that target accepted
+        const requesterNotif = supabase.from('notifications').insert({
           user_id: req.user_id,
-          type: 'swap_request',
-          title: `${targetName} accepted your swap request`,
-          body: 'Your swap request is now pending leadership approval.',
+          type: req.request_type === 'sub' ? 'sub_approved' : 'swap_approved',
+          title: `${targetName} accepted your ${req.request_type === 'sub' ? 'sub' : 'swap'} request`,
+          body: `Your ${req.request_type === 'sub' ? 'sub' : 'swap'} request is now pending leadership approval.`,
           data: { swap_request_id: req.id, url: '/my-assignments' },
         });
+
+        // 2. Notify leaders that a swap needs approval
+        // Get user IDs of everyone with a leadership role or who is an org admin
+        const [leadershipRes, adminsRes] = await Promise.all([
+          supabase
+            .from('user_roles')
+            .select('user_id, roles!inner(is_leadership)')
+            .eq('org_id', profile.org_id)
+            .eq('roles.is_leadership', true),
+          supabase
+            .from('profiles')
+            .select('id')
+            .eq('org_id', profile.org_id)
+            .eq('is_org_admin', true)
+        ]);
+        
+        const leaderIds = new Set([
+          ...(leadershipRes.data || []).map(r => r.user_id),
+          ...(adminsRes.data || []).map(p => p.id)
+        ]);
+
+        const leaderNotifs = Array.from(leaderIds)
+          .filter(id => id !== user.id) // Don't notify self
+          .map(id => ({
+            user_id: id,
+            type: req.request_type === 'sub' ? 'sub_request' : 'swap_request',
+            title: req.request_type === 'sub' ? 'New sub request for review' : 'New swap request for review',
+            body: `${targetName} agreed to ${req.request_type === 'sub' ? 'sub' : 'swap'} with ${req.requester?.nickname || req.requester?.first_name}. Needs your approval.`,
+            data: { url: '/leadership/overview', swap_request_id: req.id }
+          }));
+
+        const ops = [requesterNotif];
+        if (leaderNotifs.length > 0) {
+          ops.push(supabase.from('notifications').insert(leaderNotifs));
+        }
+
+        await Promise.all(ops);
       } else {
         // Notify requester that target declined
         await supabase.from('notifications').insert({

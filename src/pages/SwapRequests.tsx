@@ -25,18 +25,19 @@ export function SwapRequests({ embedded }: Props) {
 
   const fetchRequests = async () => {
     const { data } = await supabase
-      .from('swap_requests')
+      .from('user_availability')
       .select(`
         *,
-        requester:requester_id(id, first_name, last_name, nickname, avatar_url),
+        requester:user_id(id, first_name, last_name, nickname, avatar_url),
         target:target_id(id, first_name, last_name, nickname, avatar_url),
         requester_assignment:requester_assignment_id(*, events(*), roles(*)),
         target_assignment:target_assignment_id(*, events(*), roles(*))
       `)
-      .eq('status', 'pending_leadership')
+      .in('request_type', ['sub', 'swap'])
+      .eq('status', 'pending')
       .order('created_at', { ascending: true });
 
-    setRequests((data || []) as SwapRequest[]);
+    setRequests((data || []) as any[]);
     setLoading(false);
   };
 
@@ -45,7 +46,7 @@ export function SwapRequests({ embedded }: Props) {
 
     const channel = supabase
       .channel('swap-requests-leadership')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'swap_requests' }, fetchRequests)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_availability' }, fetchRequests)
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -58,21 +59,26 @@ export function SwapRequests({ embedded }: Props) {
       const { request, approved } = reviewModal;
 
       if (approved) {
-        await Promise.all([
+        const ops = [
           supabase.from('event_assignments')
             .update({ user_id: request.target_id, status: 'confirmed' })
-            .eq('id', request.requester_assignment_id),
-          supabase.from('event_assignments')
-            .update({ user_id: request.requester_id, status: 'confirmed' })
-            .eq('id', request.target_assignment_id),
-        ]);
+            .eq('id', request.requester_assignment_id)
+        ];
+        if (request.request_type === 'swap') {
+          ops.push(
+            supabase.from('event_assignments')
+              .update({ user_id: request.user_id, status: 'confirmed' })
+              .eq('id', request.target_assignment_id)
+          );
+        }
+        await Promise.all(ops);
       }
 
-      await supabase.from('swap_requests').update({
-        status: approved ? 'approved' : 'declined_by_leadership',
-        reviewed_by: user.id,
-        review_note: reviewNote.trim() || null,
-        leadership_response_at: new Date().toISOString(),
+      await supabase.from('user_availability').update({
+        status: approved ? 'approved' : 'rejected',
+        approved_by: user.id,
+        approval_notes: reviewNote.trim() || null,
+        reviewed_at: new Date().toISOString(),
       }).eq('id', request.id);
 
       const requesterName = request.requester?.nickname || `${request.requester?.first_name} ${request.requester?.last_name}`.trim();
@@ -81,11 +87,11 @@ export function SwapRequests({ embedded }: Props) {
 
       const notifications = approved
         ? [
-            { user_id: request.requester_id, type: 'swap_approved', title: 'Schedule swap approved', body: `Your swap with ${targetName} was approved by leadership.`, data: { url: '/my-assignments', swap_request_id: request.id } },
+            { user_id: request.user_id, type: 'swap_approved', title: 'Schedule swap approved', body: `Your swap with ${targetName} was approved by leadership.`, data: { url: '/my-assignments', swap_request_id: request.id } },
             { user_id: request.target_id, type: 'swap_approved', title: 'Schedule swap approved', body: `Your swap with ${requesterName} was approved by leadership.`, data: { url: '/my-assignments', swap_request_id: request.id } },
           ]
         : [
-            { user_id: request.requester_id, type: 'swap_declined', title: 'Schedule swap declined', body: `Your swap request with ${targetName} was not approved.${noteSnippet}`, data: { url: '/my-assignments', swap_request_id: request.id } },
+            { user_id: request.user_id, type: 'swap_declined', title: 'Schedule swap declined', body: `Your swap request with ${targetName} was not approved.${noteSnippet}`, data: { url: '/my-assignments', swap_request_id: request.id } },
             { user_id: request.target_id, type: 'swap_declined', title: 'Schedule swap declined', body: `The swap request between you and ${requesterName} was not approved.${noteSnippet}`, data: { url: '/my-assignments', swap_request_id: request.id } },
           ];
 

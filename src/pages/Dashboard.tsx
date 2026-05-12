@@ -138,7 +138,7 @@ export function Dashboard() {
         supabase.from('announcements').select('*, profiles!announcements_created_by_fkey(first_name, last_name)').order('created_at', { ascending: false }).limit(3),
         supabase.from('user_availability').select('*, profiles!user_availability_user_id_fkey(first_name, last_name, nickname, avatar_url)').eq('status', 'approved').or(`unavailable_date.gte.${today},end_date.gte.${today}`).order('created_at', { ascending: true }),
         isLeader
-          ? supabase.from('user_availability').select('id', { count: 'exact', head: true }).eq('status', 'pending')
+          ? supabase.from('user_availability').select('id', { count: 'exact', head: true }).eq('status', 'pending').eq('request_type', 'leave')
           : Promise.resolve({ count: 0 }),
       ]);
 
@@ -191,29 +191,30 @@ export function Dashboard() {
       setStats({ total: upcoming.length, confirmed: upcoming.filter(a => a.status === 'confirmed').length, pending: upcoming.filter(a => a.status === 'pending').length });
       // Fetch incoming swap requests (where I am the target and need to respond)
       const { data: swapData } = await supabase
-        .from('swap_requests')
+        .from('user_availability')
         .select(`
           *,
-          requester:requester_id(id, first_name, last_name, nickname, avatar_url),
+          requester:user_id(id, first_name, last_name, nickname, avatar_url),
           requester_assignment:requester_assignment_id(*, events(*), roles(*)),
           target_assignment:target_assignment_id(*, events(*), roles(*))
         `)
         .eq('target_id', user.id)
-        .eq('status', 'pending_target')
+        .eq('status', 'pending')
+        .is('target_response_at', null)
         .order('created_at', { ascending: false });
-      setIncomingSwapRequests((swapData || []) as SwapRequest[]);
+      setIncomingSwapRequests((swapData || []) as any[]);
 
       setLoading(false);
     };
     load();
   }, [user, isLeader]);
 
-  const handleSwapResponse = async (req: SwapRequest, accepted: boolean) => {
+  const handleSwapResponse = async (req: any, accepted: boolean) => {
     if (!user) return;
     setRespondingSwap(req.id);
     try {
-      await supabase.from('swap_requests').update({
-        status: accepted ? 'pending_leadership' : 'declined_by_target',
+      await supabase.from('user_availability').update({
+        status: accepted ? 'pending' : 'rejected',
         target_response_at: new Date().toISOString(),
       }).eq('id', req.id);
 
@@ -222,7 +223,7 @@ export function Dashboard() {
       if (accepted) {
         // Notify requester that target accepted
         await supabase.from('notifications').insert({
-          user_id: req.requester_id,
+          user_id: req.user_id,
           type: 'swap_request',
           title: `${targetName} accepted your swap request`,
           body: 'Your swap request is now pending leadership approval.',
@@ -231,7 +232,7 @@ export function Dashboard() {
       } else {
         // Notify requester that target declined
         await supabase.from('notifications').insert({
-          user_id: req.requester_id,
+          user_id: req.user_id,
           type: 'swap_declined',
           title: `${targetName} declined your swap request`,
           body: 'Your schedule swap request was declined.',

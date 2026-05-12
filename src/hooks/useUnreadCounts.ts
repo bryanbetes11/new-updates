@@ -31,13 +31,18 @@ export function useUnreadCounts() {
 
     if (canSeePendingLeave) {
       queries.push(
-        supabase.from('user_availability').select('id', { count: 'exact', head: true }).eq('status', 'pending').then(res => res)
+        supabase.from('user_availability').select('id', { count: 'exact', head: true }).eq('status', 'pending').eq('request_type', 'leave').then(res => res)
       );
     }
 
     if (isLeader) {
       queries.push(
-        supabase.from('swap_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending_leadership').then(res => res)
+        supabase.from('user_availability')
+          .select('id', { count: 'exact', head: true })
+          .in('request_type', ['sub', 'swap'])
+          .eq('status', 'pending')
+          .not('target_response_at', 'is', null)
+          .then(res => res)
       );
     }
 

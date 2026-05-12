@@ -339,7 +339,16 @@ export interface UserAvailability {
   leave_type: 'single' | 'range';
   start_date: string | null;
   end_date: string | null;
+  target_id?: string | null;
+  requester_assignment_id?: string | null;
+  target_assignment_id?: string | null;
+  request_type?: 'leave' | 'sub' | 'swap';
+  target_response_at?: string | null;
+  review_note?: string | null;
   profiles?: Profile;
+  target?: Profile;
+  requester_assignment?: EventAssignment & { events?: Event; roles?: Role };
+  target_assignment?: EventAssignment & { events?: Event; roles?: Role };
 }
 
 export interface EventAttendance {

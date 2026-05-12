@@ -182,14 +182,17 @@ export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
     setSubmitting(true);
     try {
       const { data: sr, error } = await supabase
-        .from('swap_requests')
+        .from('user_availability')
         .insert({
-          requester_id: user.id,
+          user_id: user.id,
           target_id: selectedMember.id,
           requester_assignment_id: myAssignment.id,
           target_assignment_id: isSub ? null : selectedTarget!.id,
           reason: reason.trim(),
-          status: 'pending_target',
+          status: 'pending',
+          request_type: isSub ? 'sub' : 'swap',
+          leave_type: 'single',
+          unavailable_date: myAssignment.events?.event_date,
         })
         .select()
         .single();

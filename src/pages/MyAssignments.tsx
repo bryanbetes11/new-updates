@@ -48,17 +48,18 @@ export function MyAssignments() {
       setAssignments(list);
 
       const { data: swapData } = await supabase
-        .from('swap_requests')
+        .from('user_availability')
         .select(`
           *,
           target:target_id(id, first_name, last_name, nickname, avatar_url),
           requester_assignment:requester_assignment_id(*, events(*), roles(*)),
           target_assignment:target_assignment_id(*, events(*), roles(*))
         `)
-        .eq('requester_id', user.id)
-        .not('status', 'in', '("approved","cancelled")')
+        .eq('user_id', user.id)
+        .neq('request_type', 'leave')
+        .not('status', 'in', '("approved","withdrawn")')
         .order('created_at', { ascending: false });
-      setSentSwapRequests((swapData || []) as SwapRequest[]);
+      setSentSwapRequests((swapData || []) as any[]);
 
       setLoading(false);
     };
@@ -81,7 +82,7 @@ export function MyAssignments() {
 
   const handleCancelSwap = async (swapId: string) => {
     setCancellingSwap(swapId);
-    await supabase.from('swap_requests').update({ status: 'cancelled' }).eq('id', swapId);
+    await supabase.from('user_availability').update({ status: 'withdrawn' }).eq('id', swapId);
     setSentSwapRequests(prev => prev.filter(r => r.id !== swapId));
     setCancellingSwap(null);
   };
@@ -273,14 +274,15 @@ export function MyAssignments() {
               <div className="divide-y divide-gray-100 dark:divide-white/[0.05] bg-white dark:bg-white/[0.025]">
                 {sentSwapRequests.map(req => {
                   const targetName = req.target?.nickname || `${req.target?.first_name} ${req.target?.last_name}`.trim();
+                  const isTargetResponded = !!req.target_response_at;
                   const statusConfig: Record<string, { label: string; dot: string; bg: string; text: string; ring: string }> = {
-                    pending_target:      { label: 'Awaiting Response', dot: '#a78bfa', bg: 'bg-violet-950/60', text: 'text-violet-400', ring: 'ring-violet-700/40' },
-                    pending_leadership:  { label: 'Pending Approval',  dot: '#f59e0b', bg: 'bg-amber-950/60',  text: 'text-amber-400',  ring: 'ring-amber-700/40'  },
-                    declined_by_target:  { label: 'Declined',          dot: '#ef4444', bg: 'bg-red-950/60',    text: 'text-red-400',    ring: 'ring-red-700/40'    },
-                    declined_by_leadership: { label: 'Not Approved',   dot: '#ef4444', bg: 'bg-red-950/60',    text: 'text-red-400',    ring: 'ring-red-700/40'    },
+                    pending:      isTargetResponded 
+                                    ? { label: 'Pending Approval',  dot: '#f59e0b', bg: 'bg-amber-950/60',  text: 'text-amber-400',  ring: 'ring-amber-700/40'  }
+                                    : { label: 'Awaiting Response', dot: '#a78bfa', bg: 'bg-violet-950/60', text: 'text-violet-400', ring: 'ring-violet-700/40' },
+                    rejected:     { label: 'Declined',          dot: '#ef4444', bg: 'bg-red-950/60',    text: 'text-red-400',    ring: 'ring-red-700/40'    },
                   };
                   const cfg = statusConfig[req.status];
-                  const canCancel = req.status === 'pending_target';
+                  const canCancel = req.status === 'pending';
                   return (
                     <div key={req.id} className="flex items-center gap-4 px-5 py-4">
                       {/* Icon */}

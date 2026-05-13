@@ -3064,7 +3064,9 @@ function useMessagesKeyboardInset(active: boolean) {
     document.documentElement.style.overflow = 'hidden';
 
     const setInset = () => {
-      const composerFocused = document.activeElement instanceof HTMLTextAreaElement;
+      const composerFocused =
+        document.activeElement instanceof HTMLTextAreaElement ||
+        (document.activeElement instanceof HTMLElement && document.activeElement.dataset.chatComposer === 'true');
       const viewport = window.visualViewport;
       const rawInset = composerFocused && viewport
         ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)

@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { differenceInCalendarDays, format, isAfter, parseISO, startOfToday } from 'date-fns';
 import { motion } from 'framer-motion';
-import { Calendar, CheckCircle, Clock, Music, ChevronRight, Megaphone, Image as ImageIcon, UserX, Trash2, ArrowUpRight, LayoutDashboard, Users, ClipboardCheck, ListChecks, Shield, ArrowLeftRight, Check, X } from 'lucide-react';
+import { Calendar, CheckCircle, Clock, Music, ChevronRight, Megaphone, Image as ImageIcon, UserX, Trash2, ArrowUpRight, LayoutDashboard, Users, ClipboardCheck, ListChecks, Shield, ArrowLeftRight, Check, X, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { DashboardSkeleton } from '../components/LoadingSpinner';
@@ -138,8 +138,64 @@ export function Dashboard() {
   const [selectedUnavailability, setSelectedUnavailability] = useState<UserAvailability | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [now, setNow] = useState(new Date());
+  const [pullRefreshDistance, setPullRefreshDistance] = useState(0);
+  const [isRefreshingApp, setIsRefreshingApp] = useState(false);
 
   const todayVerse = verses[new Date().getDay() % verses.length];
+
+  useEffect(() => {
+    document.body.classList.add('allow-native-pull-refresh');
+    return () => document.body.classList.remove('allow-native-pull-refresh');
+  }, []);
+
+  useEffect(() => {
+    let startY = 0;
+    let tracking = false;
+    const triggerDistance = 108;
+
+    const isMobile = () => window.matchMedia('(max-width: 1023px)').matches;
+
+    const handleTouchStart = (event: TouchEvent) => {
+      if (!isMobile() || window.scrollY > 0 || event.touches.length !== 1) return;
+      startY = event.touches[0].clientY;
+      tracking = true;
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      if (!tracking) return;
+      const distance = event.touches[0].clientY - startY;
+      if (distance <= 0 || window.scrollY > 0) {
+        setPullRefreshDistance(0);
+        return;
+      }
+      setPullRefreshDistance(Math.min(distance, 132));
+    };
+
+    const handleTouchEnd = () => {
+      if (!tracking) return;
+      tracking = false;
+      setPullRefreshDistance(current => {
+        if (current >= triggerDistance) {
+          setIsRefreshingApp(true);
+          window.setTimeout(() => window.location.reload(), 80);
+          return triggerDistance;
+        }
+        return 0;
+      });
+    };
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    window.addEventListener('touchend', handleTouchEnd);
+    window.addEventListener('touchcancel', handleTouchEnd);
+
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+      window.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, []);
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 30_000);
@@ -407,6 +463,19 @@ export function Dashboard() {
 
   return (
     <div className="page-container page-bottom-pad relative">
+      <motion.div
+        className="pointer-events-none fixed left-1/2 top-[calc(env(safe-area-inset-top)+0.85rem)] z-[60] flex -translate-x-1/2 items-center gap-2 rounded-full border border-emerald-200/70 bg-white/88 px-3 py-2 text-[12px] font-bold text-emerald-700 shadow-[0_18px_45px_-24px_rgba(6,95,70,0.65)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#111013]/88 dark:text-emerald-300 lg:hidden"
+        initial={false}
+        animate={{
+          opacity: pullRefreshDistance > 18 || isRefreshingApp ? 1 : 0,
+          y: pullRefreshDistance > 18 || isRefreshingApp ? 0 : -10,
+          scale: pullRefreshDistance >= 108 || isRefreshingApp ? 1 : 0.96,
+        }}
+        transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <RefreshCw className={`h-3.5 w-3.5 ${isRefreshingApp ? 'animate-spin' : ''}`} />
+        <span>{isRefreshingApp ? 'Refreshing...' : pullRefreshDistance >= 108 ? 'Release to refresh' : 'Pull to refresh'}</span>
+      </motion.div>
       <motion.div
         variants={container}
         initial="initial"

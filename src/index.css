@@ -43,6 +43,10 @@
     overscroll-behavior-y: none;
   }
 
+  body.allow-native-pull-refresh {
+    overscroll-behavior-y: auto;
+  }
+
   ::selection {
     @apply bg-brand-200 dark:bg-brand-800;
   }

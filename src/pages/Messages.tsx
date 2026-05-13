@@ -3044,9 +3044,19 @@ function useMessagesKeyboardInset(active: boolean) {
     document.documentElement.style.overflow = 'hidden';
 
     const setInset = () => {
+      const composerFocused =
+        document.activeElement instanceof HTMLTextAreaElement ||
+        (document.activeElement instanceof HTMLElement && document.activeElement.dataset.chatComposer === 'true');
       const viewport = window.visualViewport;
-      const viewportHeight = viewport?.height || window.innerHeight;
-      document.documentElement.style.setProperty('--messages-viewport-height', `${Math.round(viewportHeight)}px`);
+      const keyboardInset = viewport
+        ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
+        : 0;
+      const keyboardOpen = composerFocused && keyboardInset > 160;
+      if (keyboardOpen && viewport) {
+        document.documentElement.style.setProperty('--messages-viewport-height', `${Math.round(viewport.height)}px`);
+      } else {
+        document.documentElement.style.setProperty('--messages-viewport-height', '100dvh');
+      }
       document.documentElement.style.setProperty('--messages-keyboard-inset', '0px');
       window.scrollTo(0, 0);
       window.dispatchEvent(new Event('messages-keyboard-inset-change'));

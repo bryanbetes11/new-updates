@@ -85,7 +85,7 @@ export function Layout() {
           width: '100%',
         }}
         transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-        className={`overflow-x-hidden ${isMessagesPage ? 'box-border flex flex-col h-[100dvh] overflow-hidden lg:fixed lg:inset-0 lg:pt-24' : ''}`}
+        className={`overflow-x-hidden ${isMessagesPage ? 'box-border flex flex-col min-h-[100dvh] overflow-hidden lg:fixed lg:inset-0 lg:h-[100dvh] lg:pt-24' : ''}`}
       >
         {isMessagesPage ? (
           <div className="flex flex-col flex-1 min-h-0 h-full">

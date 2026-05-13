@@ -663,7 +663,7 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
     <div
       className="relative z-30 w-full shrink-0 border-t border-gray-100 bg-white dark:border-white/[0.06] dark:bg-[#111013]"
       style={{
-        paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)',
+        paddingBottom: 'clamp(8px, env(safe-area-inset-bottom, 0px), 14px)',
       }}
     >
       <AnimatePresence>

@@ -3052,10 +3052,11 @@ function useMessagesKeyboardInset(active: boolean) {
         ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
         : 0;
       const keyboardOpen = composerFocused && keyboardInset > 160;
+      document.documentElement.classList.toggle('messages-keyboard-open', keyboardOpen);
       if (keyboardOpen && viewport) {
         document.documentElement.style.setProperty('--messages-viewport-height', `${Math.round(viewport.height)}px`);
       } else {
-        document.documentElement.style.setProperty('--messages-viewport-height', '100dvh');
+        document.documentElement.style.removeProperty('--messages-viewport-height');
       }
       document.documentElement.style.setProperty('--messages-keyboard-inset', '0px');
       window.scrollTo(0, 0);
@@ -3077,6 +3078,7 @@ function useMessagesKeyboardInset(active: boolean) {
       window.removeEventListener('focusout', setInset);
       document.documentElement.style.removeProperty('--messages-keyboard-inset');
       document.documentElement.style.removeProperty('--messages-viewport-height');
+      document.documentElement.classList.remove('messages-keyboard-open');
       document.body.style.overflow = previousBodyOverflow;
       document.body.style.position = previousBodyPosition;
       document.body.style.top = previousBodyTop;

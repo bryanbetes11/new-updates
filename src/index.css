@@ -314,10 +314,16 @@
 
   .mobile-chat-pane {
     position: fixed;
-    height: 100svh;
-    height: 100dvh;
-    height: var(--messages-viewport-height, 100dvh);
+    inset: 0;
+    min-height: 100svh;
+    height: auto;
     overflow: hidden;
+  }
+
+  .messages-keyboard-open .mobile-chat-pane {
+    bottom: auto;
+    min-height: 0;
+    height: var(--messages-viewport-height, 100dvh);
   }
 
   @keyframes slideSheet {

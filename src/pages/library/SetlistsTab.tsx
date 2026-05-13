@@ -43,8 +43,21 @@ interface ImportRow {
 
 const RULE_DAYS = 90;
 
+const sanitizeSongTitle = (title: string): string => {
+  return title
+    .replace(/(Bro\.?|Sis\.?|Brother|Sister)\s*/gi, '')
+    .replace(/\bSTand\b/g, 'Stand')
+    .replace(/\bKatapaTan\b/g, 'Katapatan')
+    .replace(/\bKatapan\b/g, 'Katapatan')
+    .replace(/\bItaTanghal\b/g, 'Itatanghal')
+    .replace(/\bIStand\b/g, 'I Stand')
+    .replace(/\bIn Awe\b/g, 'in Awe')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
 const normalizeSongTitle = (title: string): string => {
-  return title.replace(/,/g, '').trim().toLowerCase();
+  return sanitizeSongTitle(title).replace(/,/g, '').trim().toLowerCase();
 };
 
 type SortKey = 'date_desc' | 'date_asc' | 'songs_desc';
@@ -183,7 +196,7 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
     const usages: SongUsage[] = songs.map(song => {
       const lastUsed = usageMap[song.id] || null;
       const daysSince = lastUsed ? differenceInDays(new Date(), parseISO(lastUsed)) : null;
-      return { ...song, last_used_date: lastUsed, days_since: daysSince, is_safe: daysSince === null || daysSince >= RULE_DAYS };
+      return { ...song, title: sanitizeSongTitle(song.title), last_used_date: lastUsed, days_since: daysSince, is_safe: daysSince === null || daysSince >= RULE_DAYS };
     });
 
     usages.sort((a, b) => {
@@ -371,14 +384,15 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
 
         for (let i = 0; i < group.songs.length; i++) {
           const song = group.songs[i];
-          const normalizedTitle = normalizeSongTitle(song.song_title);
+          const cleanSongTitle = sanitizeSongTitle(song.song_title);
+          const normalizedTitle = normalizeSongTitle(cleanSongTitle);
           const { data: allSongs } = await supabase.from('songs').select('id, title');
           const existingSong = allSongs?.find(s => normalizeSongTitle(s.title) === normalizedTitle);
           let songId: string;
           if (existingSong) {
             songId = existingSong.id;
           } else {
-            const { data: newSong, error: songError } = await supabase.from('songs').insert({ title: song.song_title.trim(), artist: song.artist.trim(), song_key: song.song_key.trim(), created_by: user.id }).select('id').maybeSingle();
+            const { data: newSong, error: songError } = await supabase.from('songs').insert({ title: cleanSongTitle, artist: song.artist.trim(), song_key: song.song_key.trim(), created_by: user.id }).select('id').maybeSingle();
             if (songError || !newSong) { songsDone++; setImportProgress({ songsDone, eventsDone, totalSongs, totalEvents }); continue; }
             songId = newSong.id;
           }

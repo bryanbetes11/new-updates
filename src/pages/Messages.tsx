@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
 import {
   ArrowLeft, Send, ImageIcon, X, Pin, CornerUpLeft, Camera,
   MessageCircle, Plus, Search, Trash2, MoreHorizontal, ChevronRight, Check,
@@ -130,13 +130,15 @@ function formatMentionToken(token: string): string {
 }
 
 function humanizeMentions(text: string): string {
-  return text.replace(/@([^\s@]+_[^\s@]+)/g, (_match, handle: string) => `@${formatMentionToken(handle)}`);
+  return text
+    .replace(/@everyone\b/gi, '@everyone')
+    .replace(/@([^\s@]+_[^\s@]+)/g, (_match, handle: string) => `@${formatMentionToken(handle)}`);
 }
 
 function renderMessageText(text: string, isMe: boolean) {
-  const parts = text.split(/(@[^\s@]+_[^\s@]+)/g);
+  const parts = text.split(/(@everyone\b|@[^\s@]+_[^\s@]+)/gi);
   return parts.map((part, index) => {
-    if (!part.match(/^@[^\s@]+_[^\s@]+$/)) {
+    if (!part.match(/^(@everyone\b|@[^\s@]+_[^\s@]+)$/i)) {
       return <span key={`${part}-${index}`}>{part}</span>;
     }
 
@@ -149,7 +151,7 @@ function renderMessageText(text: string, isMe: boolean) {
             : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
         }`}
       >
-        {formatMentionToken(part)}
+        {part.toLowerCase() === '@everyone' ? '@everyone' : formatMentionToken(part)}
       </span>
     );
   });
@@ -206,6 +208,7 @@ function formatTypingUsers(users: Array<{ name: string }>): string {
 const QUICK_EMOJIS = ['❤️', '👍', '😂', '😮', '😢', '🙏'];
 const mobilePanelTransition = { type: 'spring' as const, stiffness: 380, damping: 36, mass: 0.88 };
 const mobilePanelShadow = '0 24px 70px -34px rgba(15, 23, 42, 0.65)';
+const REPLY_DRAG_THRESHOLD = 56;
 
 // ─── Emoji Picker ────────────────────────────────────────────────────────────
 
@@ -524,7 +527,17 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
   replyPreview: string | null;
   onCancelReply: () => void;
   onTyping: (isTyping: boolean) => void;
-  mentionProfiles: Array<{ id: string; first_name: string; last_name: string; avatar_url: string | null; gender: string | null }>;
+  mentionProfiles: Array<{
+    id: string;
+    first_name: string;
+    last_name: string;
+    avatar_url: string | null;
+    gender: string | null;
+    mentionHandle?: string;
+    mentionLabel?: string;
+    mentionDescription?: string;
+    mentionType?: 'person' | 'everyone';
+  }>;
 }) {
   const [text, setText] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -739,7 +752,7 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
               onInput={handleEditableInput}
               onFocus={() => window.dispatchEvent(new Event('messages-composer-focus'))}
               onPointerDown={focusEditableComposerWithoutPageScroll}
-              className={`chat-editable-input flex-1 px-3.5 py-2 text-[16px] bg-transparent text-gray-900 dark:text-white outline-none leading-relaxed overflow-y-auto whitespace-pre-wrap break-words ${text.trim() ? '' : 'is-empty'}`}
+              className={`chat-editable-input flex-1 px-3.5 py-2 text-[15px] bg-transparent text-gray-900 dark:text-white outline-none leading-relaxed overflow-y-auto whitespace-pre-wrap break-words ${text.trim() ? '' : 'is-empty'}`}
               style={{ maxHeight: '132px', minHeight: '40px' }}
             />
           ) : (
@@ -753,7 +766,7 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
               placeholder="Message…"
               rows={1}
               style={{ resize: 'none', maxHeight: '132px' }}
-              className="flex-1 px-3.5 py-2 text-[16px] sm:text-[14px] bg-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/25 outline-none leading-relaxed overflow-y-auto"
+              className="flex-1 px-3.5 py-2 text-[15px] sm:text-[14px] bg-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/25 outline-none leading-relaxed overflow-y-auto"
             />
           )}
         </div>
@@ -1707,7 +1720,7 @@ function ReactionDetailsSheet({
           className="w-full max-w-md overflow-hidden rounded-t-[28px] border border-black/[0.06] bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#1c1b1f] sm:rounded-[28px]"
           style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
         >
-          <div className="flex items-center justify-between border-b border-black/[0.06] px-5 py-4 dark:border-white/[0.07]">
+          <div className="flex items-center justify-between border-b border-black/[0.06] px-5 py-3.5 dark:border-white/[0.07]">
             <div>
               <h3 className="text-[15px] font-extrabold text-gray-950 dark:text-white">Reactions</h3>
               <p className="mt-0.5 text-[12px] text-gray-400 dark:text-white/35">
@@ -1724,7 +1737,7 @@ function ReactionDetailsSheet({
             </div>
           </div>
 
-          <div className="max-h-[52dvh] overflow-y-auto py-2">
+          <div className="min-h-[13.5rem] max-h-[52dvh] overflow-y-auto py-1.5">
             {reactions.map((reaction, index) => {
               const member = getMember(reaction.user_id);
               const isMine = reaction.user_id === myUserId;
@@ -1743,7 +1756,7 @@ function ReactionDetailsSheet({
                   key={`${reaction.user_id}-${reaction.emoji}-${index}`}
                   onClick={removeMine}
                   disabled={!isMine}
-                  className={`flex w-full items-center gap-3 px-5 py-3 text-left transition-colors ${
+                  className={`flex w-full items-center gap-2.5 px-5 py-2 text-left transition-colors ${
                     isMine ? 'hover:bg-emerald-50 active:bg-emerald-100 dark:hover:bg-emerald-500/[0.08] dark:active:bg-emerald-500/[0.12]' : 'cursor-default'
                   }`}
                 >
@@ -1760,7 +1773,7 @@ function ReactionDetailsSheet({
                     )}
                   </div>
                   <span
-                    className={`flex h-10 min-w-10 items-center justify-center rounded-full px-3 text-[20px] transition-all ${
+                    className={`flex h-9 min-w-9 items-center justify-center rounded-full px-2.5 text-[19px] transition-all ${
                       isMine
                         ? 'bg-emerald-50 ring-1 ring-emerald-200 active:scale-95 dark:bg-emerald-500/[0.12] dark:ring-emerald-400/25'
                         : 'bg-gray-100 dark:bg-white/[0.07]'
@@ -1774,6 +1787,86 @@ function ReactionDetailsSheet({
             })}
           </div>
         </motion.div>
+    </motion.div>
+  );
+}
+
+function SeenDetailsSheet({
+  message,
+  seers,
+  members,
+  myUserId,
+  onClose,
+}: {
+  message: Message;
+  seers: Array<{ userId: string; readAt: string }>;
+  members: Conversation['members'];
+  myUserId: string;
+  onClose: () => void;
+}) {
+  const getMember = (userId: string) => members.find(member => member.user_id === userId);
+  const sortedSeers = [...seers].sort((a, b) => new Date(b.readAt).getTime() - new Date(a.readAt).getTime());
+
+  const formatSeenDateTime = (iso: string) => {
+    const date = new Date(iso);
+    return `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })} at ${formatMsgTime(iso)}`;
+  };
+
+  return (
+    <motion.div
+      className="fixed inset-0 z-[160] flex items-end justify-center bg-black/20 px-0 sm:items-center sm:px-4 dark:bg-black/45"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ y: 38, opacity: 0.96, scale: 0.98 }}
+        animate={{ y: 0, opacity: 1, scale: 1 }}
+        exit={{ y: 30, opacity: 0, scale: 0.98 }}
+        transition={mobilePanelTransition}
+        onClick={event => event.stopPropagation()}
+        className="w-full max-w-md overflow-hidden rounded-t-[28px] border border-black/[0.06] bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#1c1b1f] sm:rounded-[28px]"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      >
+        <div className="flex items-center justify-between border-b border-black/[0.06] px-5 py-3.5 dark:border-white/[0.07]">
+          <div>
+            <h3 className="text-[15px] font-extrabold text-gray-950 dark:text-white">Seen by</h3>
+            <p className="mt-0.5 text-[12px] text-gray-400 dark:text-white/35">
+              {sortedSeers.length} {sortedSeers.length === 1 ? 'person' : 'people'}
+            </p>
+          </div>
+          <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-bold text-gray-500 dark:bg-white/[0.07] dark:text-white/50">
+            {formatMsgTime(message.created_at)}
+          </span>
+        </div>
+
+        <div className="min-h-[13.5rem] max-h-[52dvh] overflow-y-auto py-1.5">
+          {sortedSeers.map(seer => {
+            const member = getMember(seer.userId);
+            const isMe = seer.userId === myUserId;
+            const displayName = isMe ? 'You' : getFullName(member?.profile, 'Unknown member');
+
+            return (
+              <div key={seer.userId} className="flex w-full items-center gap-2.5 px-5 py-2.5">
+                <Avatar
+                  src={member?.profile?.avatar_url ?? undefined}
+                  firstName={member?.profile?.first_name || (isMe ? 'Y' : '?')}
+                  lastName={member?.profile?.last_name ?? undefined}
+                  size="sm"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[14px] font-bold text-gray-900 dark:text-white">{displayName}</p>
+                  <p className="mt-0.5 text-[11px] font-medium text-gray-400 dark:text-white/35">
+                    Seen {formatSeenDateTime(seer.readAt)}
+                  </p>
+                </div>
+                <Check className="h-4 w-4 text-emerald-500" />
+              </div>
+            );
+          })}
+        </div>
+      </motion.div>
     </motion.div>
   );
 }
@@ -2108,10 +2201,12 @@ function ChatWindow({
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [previewFile, setPreviewFile] = useState<{ url: string; name: string } | null>(null);
   const [reactionDetailsMessageId, setReactionDetailsMessageId] = useState<string | null>(null);
+  const [seenDetailsMessageId, setSeenDetailsMessageId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const msgLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draggedMessageId = useRef<string | null>(null);
   const atBottomRef = useRef(true);
   const forceStickToLatestRef = useRef(false);
   const typingThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2128,7 +2223,19 @@ function ChatWindow({
 
   const convName = getConvName(conv, myUserId);
   const mentionProfiles = useMemo(
-    () => conv.members
+    () => [
+      {
+        id: '__everyone',
+        first_name: 'everyone',
+        last_name: '',
+        avatar_url: null,
+        gender: null,
+        mentionHandle: 'everyone',
+        mentionLabel: 'Everyone',
+        mentionDescription: `Mention all ${Math.max(conv.members.length - 1, 0)} other ${conv.members.length - 1 === 1 ? 'member' : 'members'} in this chat`,
+        mentionType: 'everyone' as const,
+      },
+      ...conv.members
       .filter(member => member.user_id !== myUserId && member.profile?.first_name && member.profile?.last_name)
       .map(member => ({
         id: member.user_id,
@@ -2137,10 +2244,47 @@ function ChatWindow({
         avatar_url: member.profile?.avatar_url || null,
         gender: null,
       })),
+    ],
     [conv.members, myUserId]
   );
 
   const avatarName = getConversationAvatarName(conv, myUserId);
+
+  const clearMessageLongPress = useCallback(() => {
+    if (!msgLongPressTimer.current) return;
+    clearTimeout(msgLongPressTimer.current);
+    msgLongPressTimer.current = null;
+  }, []);
+
+  const startReplyToMessage = useCallback((msg: Message) => {
+    setReplyTo({ id: msg.id, preview: `${getSenderName(msg.sender)}: ${replyPreviewContent(msg.content)}` });
+    setActiveMsg(null);
+    setEmojiMsgId(null);
+    setTappedMsgId(null);
+  }, []);
+
+  const handleReplyDragStart = useCallback((messageId: string) => {
+    draggedMessageId.current = messageId;
+    clearMessageLongPress();
+    setActiveMsg(null);
+    setEmojiMsgId(null);
+  }, [clearMessageLongPress]);
+
+  const handleReplyDragEnd = useCallback((msg: Message, isMe: boolean, info: PanInfo) => {
+    const shouldReply = isMe
+      ? info.offset.x <= -REPLY_DRAG_THRESHOLD
+      : info.offset.x >= REPLY_DRAG_THRESHOLD;
+
+    if (shouldReply) {
+      startReplyToMessage(msg);
+    }
+
+    window.setTimeout(() => {
+      if (draggedMessageId.current === msg.id) {
+        draggedMessageId.current = null;
+      }
+    }, 0);
+  }, [startReplyToMessage]);
 
   useEffect(() => {
     let stopped = false;
@@ -2318,14 +2462,27 @@ function ChatWindow({
   // Which message has seen avatars to display below it
   const seenByMessage = useMemo(() => {
     const msgToSeers: Record<string, { userId: string; readAt: string }[]> = {};
+    const readTimesByMember = new Map(memberReadTimes.map(member => [member.user_id, member.last_read_at]));
     for (const [memberId, msgId] of Object.entries(seenMap)) {
-      const readAt = memberReadTimes.find(m => m.user_id === memberId)?.last_read_at;
+      const readAt = readTimesByMember.get(memberId);
       if (!readAt) continue;
       if (!msgToSeers[msgId]) msgToSeers[msgId] = [];
       msgToSeers[msgId].push({ userId: memberId, readAt });
     }
+    for (const message of messages) {
+      for (const reaction of message.reactions) {
+        if (reaction.user_id === message.sender_id) continue;
+        if (seenMap[reaction.user_id]) continue;
+        if (!msgToSeers[message.id]) msgToSeers[message.id] = [];
+        if (msgToSeers[message.id].some(seer => seer.userId === reaction.user_id)) continue;
+        msgToSeers[message.id].push({
+          userId: reaction.user_id,
+          readAt: message.created_at,
+        });
+      }
+    }
     return msgToSeers;
-  }, [memberReadTimes, seenMap]);
+  }, [memberReadTimes, messages, seenMap]);
 
   const pinnedMessages = messages.filter(m => m.is_pinned);
   const [showPinned, setShowPinned] = useState(false);
@@ -2333,6 +2490,19 @@ function ChatWindow({
   const reactionDetailsMessage = reactionDetailsMessageId
     ? messages.find(message => message.id === reactionDetailsMessageId) ?? null
     : null;
+  const seenDetailsMessage = seenDetailsMessageId
+    ? messages.find(message => message.id === seenDetailsMessageId) ?? null
+    : null;
+  const seenDetailsSeers = seenDetailsMessage
+    ? (seenByMessage[seenDetailsMessage.id] || []).filter(seer => seer.userId !== seenDetailsMessage.sender_id)
+    : [];
+
+  useEffect(() => {
+    if (!seenDetailsMessageId) return;
+    if (!seenDetailsMessage || seenDetailsSeers.length === 0) {
+      setSeenDetailsMessageId(null);
+    }
+  }, [seenDetailsMessage, seenDetailsMessageId, seenDetailsSeers.length]);
 
   // Group messages: same sender within 5 min = grouped
   const grouped = useMemo(() => {
@@ -2447,7 +2617,7 @@ function ChatWindow({
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-4 space-y-0.5"
+        className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-4 space-y-0.5 sm:px-4"
         style={{ paddingBottom: '0.75rem' }}
       >
         {loading && (
@@ -2564,8 +2734,24 @@ function ChatWindow({
                     )}
 
                     {/* Message bubble */}
-                    <div
-                      onClick={e => { e.stopPropagation(); setTappedMsgId(prev => prev === msg.id ? null : msg.id); }}
+                    <motion.div
+                      drag="x"
+                      dragDirectionLock
+                      dragSnapToOrigin
+                      dragMomentum={false}
+                      dragElastic={0.16}
+                      dragConstraints={isMe ? { left: -76, right: 0 } : { left: 0, right: 76 }}
+                      whileDrag={{ scale: 0.985 }}
+                      onDragStart={() => handleReplyDragStart(msg.id)}
+                      onDragEnd={(_, info) => handleReplyDragEnd(msg, isMe, info)}
+                      onClick={e => {
+                        e.stopPropagation();
+                        if (draggedMessageId.current === msg.id) {
+                          draggedMessageId.current = null;
+                          return;
+                        }
+                        setTappedMsgId(prev => prev === msg.id ? null : msg.id);
+                      }}
                       onPointerDown={e => {
                         if (e.pointerType !== 'touch') return;
                         msgLongPressTimer.current = setTimeout(() => {
@@ -2574,9 +2760,9 @@ function ChatWindow({
                           setTappedMsgId(null);
                         }, 500);
                       }}
-                      onPointerUp={() => { if (msgLongPressTimer.current) { clearTimeout(msgLongPressTimer.current); msgLongPressTimer.current = null; } }}
-                      onPointerLeave={() => { if (msgLongPressTimer.current) { clearTimeout(msgLongPressTimer.current); msgLongPressTimer.current = null; } }}
-                      onPointerCancel={() => { if (msgLongPressTimer.current) { clearTimeout(msgLongPressTimer.current); msgLongPressTimer.current = null; } }}
+                      onPointerUp={clearMessageLongPress}
+                      onPointerLeave={clearMessageLongPress}
+                      onPointerCancel={clearMessageLongPress}
                       onContextMenu={e => e.preventDefault()}
                       className={`relative leading-relaxed cursor-default select-none ${
                         msg.reactions.length > 0 ? 'mb-5' : ''
@@ -2668,7 +2854,7 @@ function ChatWindow({
                           })}
                         </div>
                       )}
-                    </div>
+                    </motion.div>
 
                     {/* Hover actions (other side) */}
                     {!isMe && (
@@ -2733,7 +2919,7 @@ function ChatWindow({
                         onClick={e => e.stopPropagation()}
                       >
                         <button
-                          onClick={() => { setReplyTo({ id: msg.id, preview: `${getSenderName(msg.sender)}: ${replyPreviewContent(msg.content)}` }); setActiveMsg(null); }}
+                          onClick={() => startReplyToMessage(msg)}
                           className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[13px] text-gray-700 dark:text-white/70 hover:bg-gray-50 dark:hover:bg-white/[0.05] transition-colors"
                         >
                           <CornerUpLeft className="h-3.5 w-3.5" /> Reply
@@ -2774,8 +2960,16 @@ function ChatWindow({
 
               {/* Seen receipts — shown under my messages for all, and under others' messages in group chats */}
               {displaySeers.length > 0 && (isMe || isGroupChat) && (
-                <div className={`flex items-center gap-1 mt-1 ${isMe ? 'justify-end mr-1' : 'ml-9'}`}>
-                  {displaySeers.slice(0, 3).map(seer => {
+                <button
+                  type="button"
+                  onClick={event => {
+                    event.stopPropagation();
+                    setSeenDetailsMessageId(msg.id);
+                  }}
+                  className={`flex items-center gap-1.5 mt-2 rounded-full transition-opacity active:opacity-70 ${isMe ? 'ml-auto mr-1.5 justify-end' : 'ml-8 justify-start'}`}
+                  aria-label={`Show seen details for ${displaySeers.length} ${displaySeers.length === 1 ? 'person' : 'people'}`}
+                >
+                  {displaySeers.map(seer => {
                     const member = conv.members.find(m => m.user_id === seer.userId);
                     const label = seer.userId === myUserId
                       ? `You at ${formatMsgTime(seer.readAt)}`
@@ -2786,8 +2980,8 @@ function ChatWindow({
                           src={member?.profile?.avatar_url ?? undefined}
                           firstName={member?.profile?.first_name || '?'}
                           lastName={member?.profile?.last_name ?? undefined}
-                          size="xs"
-                          className="scale-75 origin-center ring-1 ring-white dark:ring-[#111013]"
+                          size="xxs"
+                          className="ring-1 ring-white dark:ring-[#111013]"
                         />
                       </div>
                     );
@@ -2795,7 +2989,7 @@ function ChatWindow({
                   {isMe && !isGroupChat && latestSeenAt && (
                     <span className="text-[10px] font-medium text-gray-400 dark:text-white/25 self-center">{`Seen ${formatMsgTime(latestSeenAt)}`}</span>
                   )}
-                </div>
+                </button>
               )}
               </>
               )}
@@ -2931,6 +3125,18 @@ function ChatWindow({
             myUserId={myUserId}
             onClose={() => setReactionDetailsMessageId(null)}
             onToggleReaction={toggleReaction}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {seenDetailsMessage && seenDetailsSeers.length > 0 && (
+          <SeenDetailsSheet
+            message={seenDetailsMessage}
+            seers={seenDetailsSeers}
+            members={conv.members}
+            myUserId={myUserId}
+            onClose={() => setSeenDetailsMessageId(null)}
           />
         )}
       </AnimatePresence>
@@ -3184,7 +3390,7 @@ export function Messages() {
   }, [isDesktop, selectedConvId]);
 
   return (
-    <div className="relative flex h-full min-h-0 w-full overflow-hidden bg-[#f5f5f7] dark:bg-[#0d0d0f] lg:p-4">
+    <div className="relative flex h-full min-h-0 w-full overflow-hidden bg-white dark:bg-[#111013] lg:bg-[#f5f5f7] lg:dark:bg-[#0d0d0f] lg:p-4">
       <div className="contents lg:relative lg:flex lg:h-full lg:flex-1 lg:min-h-0 lg:overflow-hidden lg:rounded-[2rem] lg:border lg:border-black/[0.06] lg:bg-white lg:shadow-[0_24px_80px_-52px_rgba(15,23,42,0.85)] lg:ring-1 lg:ring-white/70 dark:lg:border-white/[0.07] dark:lg:bg-[#111013] dark:lg:ring-white/[0.04]">
         <div className="pointer-events-none absolute inset-x-10 top-0 z-10 hidden h-px bg-gradient-to-r from-transparent via-white/90 to-transparent dark:via-white/[0.12] lg:block" />
         <div className="pointer-events-none absolute -left-24 -top-24 hidden h-64 w-64 rounded-full bg-emerald-200/20 blur-3xl dark:bg-emerald-500/10 lg:block" />
@@ -3196,7 +3402,7 @@ export function Messages() {
         <motion.div
           key="conversation-list"
           className={`relative z-[1] flex min-h-0 flex-col bg-white dark:bg-[#111013] lg:border-r lg:border-gray-100 dark:lg:border-white/[0.06] lg:bg-white/96 dark:lg:bg-[#111013]/96 ${
-            isDesktop ? 'h-full w-[320px] min-w-[320px] shrink-0 relative' : 'fixed inset-y-0 left-0 z-10 w-[100dvw] max-w-none will-change-transform'
+            isDesktop ? 'h-full w-[320px] min-w-[320px] shrink-0 relative' : 'fixed inset-0 z-10 h-[100svh] h-[100dvh] w-[100dvw] max-w-none will-change-transform'
           }`}
           initial={isDesktop ? false : { x: 0, opacity: 1 }}
           animate={isDesktop ? undefined : { x: 0, opacity: 1 }}
@@ -3229,7 +3435,7 @@ export function Messages() {
         </div>
 
         {/* Conversations */}
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2 space-y-0.5" style={{ paddingBottom: 'calc(64px + env(safe-area-inset-bottom) + 1rem)' }}>
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain bg-white px-2 space-y-0.5 dark:bg-[#111013]" style={{ paddingBottom: 'calc(64px + env(safe-area-inset-bottom) + 1rem)' }}>
           {convsLoading && (
             <div className="flex justify-center py-8">
               <span className="h-5 w-5 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />

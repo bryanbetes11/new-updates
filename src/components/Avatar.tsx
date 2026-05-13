@@ -2,11 +2,12 @@ interface AvatarProps {
   src?: string | null;
   firstName: string;
   lastName?: string | null;
-  size?: 'xs' | 'sm' | 'md' | 'lg';
+  size?: 'xxs' | 'xs' | 'sm' | 'md' | 'lg';
   className?: string;
 }
 
 const sizeClasses = {
+  xxs: 'h-4 w-4 text-[8px]',
   xs: 'h-6 w-6 text-[10px]',
   sm: 'h-8 w-8 text-xs',
   md: 'h-10 w-10 text-sm',

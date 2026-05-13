@@ -9,6 +9,10 @@ interface Profile {
   last_name: string;
   avatar_url: string | null;
   gender: string | null;
+  mentionHandle?: string;
+  mentionLabel?: string;
+  mentionDescription?: string;
+  mentionType?: 'person' | 'everyone';
 }
 
 interface MentionTextareaProps {
@@ -131,8 +135,14 @@ export function MentionTextarea({
 
   const filtered = profiles.filter(p => {
     if (!query) return true;
-    const full = `${p.first_name} ${p.last_name}`.toLowerCase();
-    return full.includes(query.toLowerCase());
+    const search = [
+      p.first_name,
+      p.last_name,
+      p.mentionHandle,
+      p.mentionLabel,
+      p.mentionDescription,
+    ].filter(Boolean).join(' ').toLowerCase();
+    return search.includes(query.toLowerCase());
   }).slice(0, 6);
 
   const computeDropdownPosition = useCallback(() => {
@@ -209,7 +219,7 @@ export function MentionTextarea({
     const cursor = ref.current?.selectionStart ?? value.length;
     const before = value.slice(0, mentionStart);
     const after = value.slice(cursor);
-    const mentionHandle = `${profile.first_name} ${profile.last_name}`
+    const mentionHandle = profile.mentionHandle ?? `${profile.first_name} ${profile.last_name}`
       .trim()
       .replace(/\s+/g, '_');
     const mention = `@${mentionHandle}`;
@@ -302,12 +312,23 @@ export function MentionTextarea({
                     : 'hover:bg-gray-50 dark:hover:bg-white/[0.04]'
                 }`}
               >
-                <Avatar src={p.avatar_url} firstName={p.first_name} lastName={p.last_name} size="sm" />
+                {p.mentionType === 'everyone' ? (
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-[12px] font-black text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/10">
+                    @
+                  </span>
+                ) : (
+                  <Avatar src={p.avatar_url} firstName={p.first_name} lastName={p.last_name} size="sm" />
+                )}
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-                    {getPrefix(p.gender)}{p.first_name} {p.last_name}
+                    {p.mentionLabel ?? `${getPrefix(p.gender)}${p.first_name} ${p.last_name}`}
                   </p>
-                  <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate">@{p.first_name}_{p.last_name}</p>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate">
+                    @{p.mentionHandle ?? `${p.first_name}_${p.last_name}`}
+                  </p>
+                  {p.mentionDescription && (
+                    <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate">{p.mentionDescription}</p>
+                  )}
                 </div>
               </button>
             ))}

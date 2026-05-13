@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useLayoutEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { format, parseISO, differenceInDays, startOfDay, subWeeks, previousSunday, addDays, subDays } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
@@ -137,6 +137,28 @@ export function EventDetail() {
   const [showCreateChatModal, setShowCreateChatModal] = useState(false);
   const [creatingChat, setCreatingChat] = useState(false);
   const [showSwapModal, setShowSwapModal] = useState(false);
+
+  const resetEventDetailScroll = useCallback(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    document.scrollingElement?.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+  }, []);
+
+  useLayoutEffect(() => {
+    resetEventDetailScroll();
+  }, [id, resetEventDetailScroll]);
+
+  useEffect(() => {
+    if (loading) return;
+    resetEventDetailScroll();
+    const frame = requestAnimationFrame(resetEventDetailScroll);
+    const timer = window.setTimeout(resetEventDetailScroll, 80);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, [loading, id, resetEventDetailScroll]);
 
 
   const fetchAll = useCallback(async () => {
@@ -933,9 +955,9 @@ const openLyricsModal = (ss: SetlistSong) => {
   const confirmedCount = assignments.filter(a => a.status === 'confirmed').length;
   const songLeaderAssignment = assignments.find(a => a.roles?.name === 'Song Leader');
   const songLeaderName = songLeaderAssignment?.profiles
-    ? `${songLeaderAssignment.profiles.first_name} ${songLeaderAssignment.profiles.last_name}`.trim()
+    ? songLeaderAssignment.profiles.first_name
     : members.find(m => m.id === event.song_leader_id)
-      ? `${members.find(m => m.id === event.song_leader_id)!.first_name} ${members.find(m => m.id === event.song_leader_id)!.last_name}`.trim()
+      ? members.find(m => m.id === event.song_leader_id)!.first_name
       : '';
   const isSongLeader = assignments.some(a => a.user_id === user?.id && a.roles?.name === 'Song Leader');
   const userIsSongLeaderRole = userRoles.some(ur => ur.roles?.name === 'Song Leader');

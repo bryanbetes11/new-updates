@@ -298,6 +298,16 @@
     animation: nav-icon-pop 0.3s var(--ease-spring);
   }
 
+  .chat-editable-input.is-empty::before {
+    content: attr(data-placeholder);
+    color: rgb(156 163 175);
+    pointer-events: none;
+  }
+
+  .dark .chat-editable-input.is-empty::before {
+    color: rgba(255, 255, 255, 0.25);
+  }
+
   @keyframes slideSheet {
     0% { transform: translateY(100%); opacity: 0.7; }
     100% { transform: translateY(0); opacity: 1; }

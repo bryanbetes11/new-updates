@@ -671,8 +671,8 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
             boxShadow: useDockedMobileNav ? '0 -18px 42px -34px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.08)' : undefined,
           }}
         >
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-14 bg-gradient-to-b from-white/30 to-transparent dark:from-white/[0.045]" />
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-white/40 to-transparent dark:from-black/24" />
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-14 bg-gradient-to-b from-white/30 to-transparent dark:hidden" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-white/40 to-transparent dark:hidden" />
           <div className={`relative flex ${useDockedMobileNav ? 'justify-stretch px-0' : 'justify-center px-8'}`}>
             <nav
               className={`pointer-events-auto relative flex ${useDockedMobileNav ? 'w-full items-start overflow-visible px-2 pt-2' : 'w-full max-w-[480px] items-center overflow-hidden p-1.5 rounded-full'}`}
@@ -715,12 +715,6 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
                           boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.02)',
                         }}
                         transition={{ type: 'spring', stiffness: 500, damping: 42 }}
-                      />
-                    )}
-                    {useDockedMobileNav && active && (
-                      <span
-                        className="absolute left-1/2 top-1 h-[3px] w-8 -translate-x-1/2 rounded-full bg-brand-600 dark:bg-brand-400"
-                        style={{ boxShadow: '0 0 10px rgba(16,185,129,0.28)' }}
                       />
                     )}
                     <div className="relative">

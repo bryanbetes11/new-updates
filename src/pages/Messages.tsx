@@ -535,11 +535,13 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
   const fileRef = useRef<HTMLInputElement>(null);
   const attachRef = useRef<HTMLInputElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
+  const editableRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [useEditableComposer, setUseEditableComposer] = useState(false);
   const { user } = useAuth();
 
   const resizeComposer = useCallback(() => {
-    const el = textRef.current;
+    const el = textRef.current || editableRef.current;
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, 132)}px`;
@@ -553,6 +555,15 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
     requestAnimationFrame(resizeComposer);
   };
 
+  const placeCaretAtEnd = useCallback((el: HTMLElement) => {
+    const range = document.createRange();
+    const selection = window.getSelection();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  }, []);
+
   const focusComposerWithoutPageScroll = (e: React.PointerEvent<HTMLTextAreaElement>) => {
     if (e.pointerType !== 'touch') return;
     e.preventDefault();
@@ -562,6 +573,23 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
     el.focus({ preventScroll: true });
     const end = el.value.length;
     el.setSelectionRange(end, end);
+  };
+
+  const focusEditableComposerWithoutPageScroll = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType !== 'touch') return;
+    e.preventDefault();
+    const el = editableRef.current;
+    if (!el) return;
+    window.dispatchEvent(new Event('messages-composer-focus'));
+    el.focus({ preventScroll: true });
+    placeCaretAtEnd(el);
+  };
+
+  const handleEditableInput = (e: React.FormEvent<HTMLDivElement>) => {
+    const value = e.currentTarget.innerText.replace(/\n$/, '');
+    setText(value);
+    resizeComposer();
+    onTyping(value.trim().length > 0);
   };
 
   useEffect(() => {
@@ -584,6 +612,26 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
   useEffect(() => {
     return () => onTyping(false);
   }, [onTyping]);
+
+  useEffect(() => {
+    const isAppleTouch =
+      /iP(hone|od|ad)/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const mq = window.matchMedia('(max-width: 1023px)');
+    const update = () => setUseEditableComposer(isAppleTouch && mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+
+  useEffect(() => {
+    const el = editableRef.current;
+    if (!el || document.activeElement === el) return;
+    if (el.innerText !== text) {
+      el.innerText = text;
+    }
+    requestAnimationFrame(resizeComposer);
+  }, [resizeComposer, text, useEditableComposer]);
 
   const handleImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -699,18 +747,35 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
           </AnimatePresence>
         </div>
         <div className="flex-1 min-h-[36px] max-h-[140px] flex items-end rounded-2xl bg-gray-100 dark:bg-white/[0.06] border border-gray-200/80 dark:border-white/[0.06] overflow-hidden">
-          <MentionTextarea
-            textareaRef={textRef}
-            value={text}
-            profiles={mentionProfiles}
-            onChange={(value) => { setText(value); resizeComposer(); onTyping(value.trim().length > 0); }}
-            onFocus={() => window.dispatchEvent(new Event('messages-composer-focus'))}
-            onPointerDown={focusComposerWithoutPageScroll}
-            placeholder="Message…"
-            rows={1}
-            style={{ resize: 'none', maxHeight: '132px' }}
-            className="flex-1 px-3.5 py-2 text-[16px] sm:text-[14px] bg-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/25 outline-none leading-relaxed overflow-y-auto"
-          />
+          {useEditableComposer ? (
+            <div
+              ref={editableRef}
+              contentEditable
+              role="textbox"
+              aria-label="Message"
+              data-placeholder="Message..."
+              data-chat-composer="true"
+              suppressContentEditableWarning
+              onInput={handleEditableInput}
+              onFocus={() => window.dispatchEvent(new Event('messages-composer-focus'))}
+              onPointerDown={focusEditableComposerWithoutPageScroll}
+              className={`chat-editable-input flex-1 px-3.5 py-2 text-[16px] bg-transparent text-gray-900 dark:text-white outline-none leading-relaxed overflow-y-auto whitespace-pre-wrap break-words ${text.trim() ? '' : 'is-empty'}`}
+              style={{ maxHeight: '132px', minHeight: '40px' }}
+            />
+          ) : (
+            <MentionTextarea
+              textareaRef={textRef}
+              value={text}
+              profiles={mentionProfiles}
+              onChange={(value) => { setText(value); resizeComposer(); onTyping(value.trim().length > 0); }}
+              onFocus={() => window.dispatchEvent(new Event('messages-composer-focus'))}
+              onPointerDown={focusComposerWithoutPageScroll}
+              placeholder="Message…"
+              rows={1}
+              style={{ resize: 'none', maxHeight: '132px' }}
+              className="flex-1 px-3.5 py-2 text-[16px] sm:text-[14px] bg-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/25 outline-none leading-relaxed overflow-y-auto"
+            />
+          )}
         </div>
 
         {/* Send / Quick action toggle */}
@@ -2145,7 +2210,9 @@ function ChatWindow({
 
   useEffect(() => {
     const keepLatestVisible = (force = false) => {
-      const composerFocused = document.activeElement instanceof HTMLTextAreaElement;
+      const composerFocused =
+        document.activeElement instanceof HTMLTextAreaElement ||
+        (document.activeElement instanceof HTMLElement && document.activeElement.dataset.chatComposer === 'true');
       if (!force && !composerFocused && !atBottomRef.current && !forceStickToLatestRef.current) return;
       const scrollToLatest = () => {
         if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -3002,7 +3069,10 @@ function useMessagesKeyboardInset(active: boolean) {
       const rawInset = composerFocused && viewport
         ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
         : 0;
-      const inset = rawInset > 80 ? rawInset : 0;
+      // iOS can report a small visualViewport delta from browser chrome/home
+      // indicator even after the keyboard is closed. Only treat larger deltas
+      // as the actual keyboard so the composer does not float above a blank bar.
+      const inset = rawInset > 160 ? rawInset : 0;
       document.documentElement.style.setProperty('--messages-keyboard-inset', `${Math.round(inset)}px`);
       window.scrollTo(0, 0);
       window.dispatchEvent(new Event('messages-keyboard-inset-change'));

@@ -531,7 +531,6 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [quickEmoji, setQuickEmoji] = useState(() => localStorage.getItem('msg-quick-action') || '👍');
   const [showQuickPicker, setShowQuickPicker] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const attachRef = useRef<HTMLInputElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
@@ -591,23 +590,6 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
     resizeComposer();
     onTyping(value.trim().length > 0);
   };
-
-  useEffect(() => {
-    const el = rootRef.current;
-    if (!el) return;
-
-    const setHeight = () => {
-      document.documentElement.style.setProperty('--messages-composer-height', `${Math.ceil(el.getBoundingClientRect().height)}px`);
-    };
-
-    setHeight();
-    const observer = new ResizeObserver(setHeight);
-    observer.observe(el);
-    return () => {
-      observer.disconnect();
-      document.documentElement.style.removeProperty('--messages-composer-height');
-    };
-  }, []);
 
   useEffect(() => {
     return () => onTyping(false);
@@ -679,11 +661,9 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
 
   return (
     <div
-      ref={rootRef}
-      className="fixed inset-x-0 bottom-0 z-30 shrink-0 border-t border-gray-100 dark:border-white/[0.06] bg-white dark:bg-[#111013] lg:relative lg:inset-auto lg:z-auto lg:w-full"
+      className="relative z-30 w-full shrink-0 border-t border-gray-100 bg-white dark:border-white/[0.06] dark:bg-[#111013]"
       style={{
-        bottom: 'var(--messages-keyboard-inset, 0px)',
-        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)',
       }}
     >
       <AnimatePresence>
@@ -2468,7 +2448,7 @@ function ChatWindow({
         ref={scrollRef}
         onScroll={handleScroll}
         className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-4 space-y-0.5"
-        style={{ paddingBottom: 'calc(var(--messages-composer-height, 64px) + var(--messages-keyboard-inset, 0px) + 0.75rem)' }}
+        style={{ paddingBottom: '0.75rem' }}
       >
         {loading && (
           <div className="flex justify-center pt-8">
@@ -3064,18 +3044,10 @@ function useMessagesKeyboardInset(active: boolean) {
     document.documentElement.style.overflow = 'hidden';
 
     const setInset = () => {
-      const composerFocused =
-        document.activeElement instanceof HTMLTextAreaElement ||
-        (document.activeElement instanceof HTMLElement && document.activeElement.dataset.chatComposer === 'true');
       const viewport = window.visualViewport;
-      const rawInset = composerFocused && viewport
-        ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
-        : 0;
-      // iOS can report a small visualViewport delta from browser chrome/home
-      // indicator even after the keyboard is closed. Only treat larger deltas
-      // as the actual keyboard so the composer does not float above a blank bar.
-      const inset = rawInset > 160 ? rawInset : 0;
-      document.documentElement.style.setProperty('--messages-keyboard-inset', `${Math.round(inset)}px`);
+      const viewportHeight = viewport?.height || window.innerHeight;
+      document.documentElement.style.setProperty('--messages-viewport-height', `${Math.round(viewportHeight)}px`);
+      document.documentElement.style.setProperty('--messages-keyboard-inset', '0px');
       window.scrollTo(0, 0);
       window.dispatchEvent(new Event('messages-keyboard-inset-change'));
     };
@@ -3094,6 +3066,7 @@ function useMessagesKeyboardInset(active: boolean) {
       window.removeEventListener('focusin', setInset);
       window.removeEventListener('focusout', setInset);
       document.documentElement.style.removeProperty('--messages-keyboard-inset');
+      document.documentElement.style.removeProperty('--messages-viewport-height');
       document.body.style.overflow = previousBodyOverflow;
       document.body.style.position = previousBodyPosition;
       document.body.style.top = previousBodyTop;
@@ -3278,7 +3251,7 @@ export function Messages() {
         {showChatPane && (
         <motion.div
           key="chat-pane"
-          className={`relative z-[1] flex min-h-0 flex-col ${isDesktop ? 'h-full flex-1 min-w-0' : 'fixed inset-y-0 left-0 z-20 h-[100dvh] min-h-[100dvh] w-[100dvw] max-w-none will-change-transform'}`}
+          className={`relative z-[1] flex min-h-0 flex-col ${isDesktop ? 'h-full flex-1 min-w-0' : 'mobile-chat-pane left-0 top-0 z-20 w-[100dvw] max-w-none will-change-transform'}`}
           initial={isDesktop ? false : { x: '100%', opacity: 0.96, borderTopLeftRadius: 30, borderBottomLeftRadius: 30, boxShadow: mobilePanelShadow }}
           animate={isDesktop ? undefined : { x: 0, opacity: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, boxShadow: mobilePanelShadow }}
           exit={isDesktop ? undefined : { x: '100%', opacity: 0.96, borderTopLeftRadius: 30, borderBottomLeftRadius: 30, boxShadow: mobilePanelShadow }}

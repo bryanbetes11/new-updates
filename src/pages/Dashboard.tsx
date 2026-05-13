@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { differenceInCalendarDays, format, isAfter, parseISO, startOfToday } from 'date-fns';
 import { motion } from 'framer-motion';
@@ -463,19 +464,22 @@ export function Dashboard() {
 
   return (
     <div className="page-container page-bottom-pad relative">
-      <motion.div
-        className="pointer-events-none fixed left-1/2 top-[calc(env(safe-area-inset-top)+0.85rem)] z-[60] flex -translate-x-1/2 items-center gap-2 rounded-full border border-emerald-200/70 bg-white/88 px-3 py-2 text-[12px] font-bold text-emerald-700 shadow-[0_18px_45px_-24px_rgba(6,95,70,0.65)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#111013]/88 dark:text-emerald-300 lg:hidden"
-        initial={false}
-        animate={{
-          opacity: pullRefreshDistance > 18 || isRefreshingApp ? 1 : 0,
-          y: pullRefreshDistance > 18 || isRefreshingApp ? 0 : -10,
-          scale: pullRefreshDistance >= 108 || isRefreshingApp ? 1 : 0.96,
-        }}
-        transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-      >
-        <RefreshCw className={`h-3.5 w-3.5 ${isRefreshingApp ? 'animate-spin' : ''}`} />
-        <span>{isRefreshingApp ? 'Refreshing...' : pullRefreshDistance >= 108 ? 'Release to refresh' : 'Pull to refresh'}</span>
-      </motion.div>
+      {createPortal(
+        <motion.div
+          className="pointer-events-none fixed left-1/2 top-[calc(3.5rem+env(safe-area-inset-top)+0.85rem)] z-[9999] flex -translate-x-1/2 items-center gap-2 rounded-full border border-emerald-200/70 bg-white/88 px-3 py-2 text-[12px] font-bold text-emerald-700 shadow-[0_18px_45px_-24px_rgba(6,95,70,0.65)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#111013]/88 dark:text-emerald-300 lg:hidden"
+          initial={false}
+          animate={{
+            opacity: pullRefreshDistance > 18 || isRefreshingApp ? 1 : 0,
+            y: pullRefreshDistance > 18 || isRefreshingApp ? 0 : -10,
+            scale: pullRefreshDistance >= 108 || isRefreshingApp ? 1 : 0.96,
+          }}
+          transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${isRefreshingApp ? 'animate-spin' : ''}`} />
+          <span>{isRefreshingApp ? 'Refreshing...' : pullRefreshDistance >= 108 ? 'Release to refresh' : 'Pull to refresh'}</span>
+        </motion.div>,
+        document.body
+      )}
       <motion.div
         variants={container}
         initial="initial"

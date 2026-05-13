@@ -312,6 +312,14 @@
     color: rgba(255, 255, 255, 0.25);
   }
 
+  .mobile-chat-pane {
+    position: fixed;
+    height: 100svh;
+    height: 100dvh;
+    height: var(--messages-viewport-height, 100dvh);
+    overflow: hidden;
+  }
+
   @keyframes slideSheet {
     0% { transform: translateY(100%); opacity: 0.7; }
     100% { transform: translateY(0); opacity: 1; }

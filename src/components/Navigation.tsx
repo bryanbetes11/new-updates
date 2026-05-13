@@ -33,7 +33,7 @@ const mobileNavItems: NavItem[] = [
   { path: '/dashboard', label: 'Home', icon: HomeIcon, exact: true },
   { path: '/events', label: 'Events', icon: CalendarIcon, badgeKey: 'events', badgeColor: 'red' },
   { path: '/announcements', label: 'News', icon: NewsIcon, badgeKey: 'announcements', badgeColor: 'blue' },
-  { path: '/messages', label: 'Messages', icon: MessageIcon, badgeKey: 'messages', badgeColor: 'red' },
+  { path: '/messages', label: 'Chat', icon: MessageIcon, badgeKey: 'messages', badgeColor: 'red' },
   { path: '/more', label: 'More', icon: MoreIcon, badgeKey: 'pendingLeave', badgeColor: 'amber' },
 ];
 
@@ -42,7 +42,7 @@ const sidebarMainItems: NavItem[] = [
   { path: '/events', label: 'Events', icon: CalendarIcon, badgeKey: 'events', badgeColor: 'red' },
   { path: '/announcements', label: 'News', icon: NewsIcon, badgeKey: 'announcements', badgeColor: 'blue' },
   { path: '/library', label: 'Library', icon: MediaIcon },
-  { path: '/messages', label: 'Messages', icon: MessageIcon, badgeKey: 'messages', badgeColor: 'red' },
+  { path: '/messages', label: 'Chat', icon: MessageIcon, badgeKey: 'messages', badgeColor: 'red' },
 ];
 
 function MobileBadge({ count, color }: { count: number; color?: 'red' | 'blue' | 'amber' }) {
@@ -152,14 +152,15 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
   };
 
   const sidebarManagementItems: NavItem[] = [
-    { path: '/request-leave', label: 'Request Leave', icon: LeaveIcon },
+    { path: '/request-leave', label: 'Leave', icon: LeaveIcon },
     ...(isLeader || isOrgAdmin || canApproveLeave || canManageDiscipline
-      ? [{ path: isOrgAdmin && !isLeader ? '/leadership/church' : '/leadership/overview', label: isOrgAdmin && !isLeader ? 'Church' : 'Leadership', icon: ShieldNavIcon, badgeKey: 'pendingLeave' as const, badgeColor: 'red' as const }]
+      ? [{ path: isOrgAdmin && !isLeader ? '/leadership/church' : '/leadership/overview', label: isOrgAdmin && !isLeader ? 'Church' : 'Leader', icon: ShieldNavIcon, badgeKey: 'pendingLeave' as const, badgeColor: 'red' as const }]
       : []),
     ...(isPlatformOwner
       ? [{ path: '/platform', label: 'Platform', icon: ShieldNavIcon }]
       : []),
   ];
+  const desktopTabItems = [...sidebarMainItems, ...sidebarManagementItems];
 
   const displayName = profile?.nickname || profile?.first_name || '';
   const fullName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim();
@@ -246,21 +247,156 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
     );
   };
 
+  const renderDesktopTab = (item: NavItem) => {
+    const active = isActive(item);
+    const Icon = item.icon;
+    const badge = getBadgeCount(item);
+
+    return (
+      <button
+        key={item.path}
+        onClick={() => handleNav(item.path)}
+        className={`group relative flex h-11 items-center gap-2 rounded-full px-4 text-[13px] font-bold transition-all duration-300 ${
+          active
+            ? 'text-gray-950 dark:text-white'
+            : 'text-gray-500 hover:text-gray-950 dark:text-white/52 dark:hover:text-white'
+        }`}
+      >
+        {active && (
+          <motion.div
+            layoutId="desktopTabActive"
+            className="absolute inset-0 rounded-full border border-white/70 bg-gray-100/95 shadow-[0_16px_38px_-24px_rgba(15,23,42,0.32),inset_0_1px_0_rgba(255,255,255,0.82),inset_0_-1px_0_rgba(15,23,42,0.08)] dark:border-white/[0.12] dark:bg-white/[0.14] dark:shadow-[0_16px_38px_-24px_rgba(0,0,0,0.65),inset_0_1px_0_rgba(255,255,255,0.16),inset_0_-1px_0_rgba(0,0,0,0.22)]"
+            transition={{ type: 'spring', stiffness: 520, damping: 42, mass: 0.8 }}
+          />
+        )}
+        <span className="absolute inset-0 rounded-full bg-white/55 opacity-0 transition-opacity duration-300 group-hover:opacity-100 dark:bg-white/[0.055]" />
+        <Icon
+          active={active}
+          className={`relative h-[17px] w-[17px] shrink-0 transition-all duration-300 ${
+            active ? 'scale-110 text-gray-900 dark:text-white' : 'group-hover:scale-110'
+          }`}
+          style={{ width: '17px', height: '17px', strokeWidth: 2 }}
+        />
+        <span className="relative whitespace-nowrap tracking-[-0.01em]">{item.label}</span>
+        {badge > 0 && (
+          <span className={`relative flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-black leading-none text-white shadow-sm ${
+            item.badgeColor === 'blue' ? 'bg-blue-500' : item.badgeColor === 'amber' ? 'bg-amber-500' : 'bg-red-500'
+          }`}>
+            {badge > 9 ? '9+' : badge}
+          </span>
+        )}
+      </button>
+    );
+  };
+
   return (
     <>
+      {/* ── Desktop premium tab bar ── */}
+      <motion.header
+        initial={{ opacity: 0, y: -18, filter: 'blur(8px)' }}
+        animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+        transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+        className="fixed left-0 right-0 top-0 z-[100] hidden px-5 pt-4 lg:block"
+      >
+        <div className="pointer-events-none absolute inset-x-8 top-2 -z-10 h-24 rounded-[2rem] bg-emerald-300/10 blur-2xl dark:bg-emerald-950/18" />
+        <div
+          className="relative mx-auto flex h-[4.6rem] max-w-[118rem] items-center gap-4 overflow-hidden rounded-[1.7rem] border border-white/40 px-4 backdrop-blur-[55px] backdrop-saturate-[1.9] dark:border-white/[0.10]"
+          style={{
+            background: 'color-mix(in srgb, var(--sidebar-bg) 90%, transparent)',
+            boxShadow: [
+              '0 14px 34px -30px rgba(0,0,0,0.55)',
+              '0 8px 32px rgba(0,0,0,0.08)',
+              'inset 0 1px 0 rgba(255,255,255,0.42)',
+              'inset 0 -1px 0 rgba(255,255,255,0.08)',
+              'inset 0 0 46px 20px rgba(255,255,255,0.16)',
+            ].join(', '),
+            WebkitBackdropFilter: 'blur(55px) saturate(190%) contrast(108%)',
+            backdropFilter: 'blur(55px) saturate(190%) contrast(108%)',
+          }}
+        >
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/80 to-transparent" />
+          <div className="pointer-events-none absolute bottom-0 left-0 top-0 w-px bg-gradient-to-b from-white/80 via-transparent to-white/30" />
+          <div className="pointer-events-none absolute inset-0 bg-white/28 dark:bg-black/20" />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(16,185,129,0.10),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.44),rgba(255,255,255,0.18)_52%,rgba(255,255,255,0.08))] dark:bg-[radial-gradient(circle_at_18%_20%,rgba(16,185,129,0.14),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.035)_52%,rgba(255,255,255,0.015))]" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-white/52 to-transparent dark:from-black/24" />
+          <div className="pointer-events-none absolute right-24 top-0 h-full w-28 skew-x-[-18deg] bg-white/[0.09] blur-sm dark:bg-white/[0.035]" />
+          <button
+            onClick={() => handleNav('/dashboard')}
+            className="group relative flex min-w-[13.5rem] items-center gap-3 rounded-2xl px-2 py-2 text-left transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.04]"
+          >
+            <div
+              className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-[1rem] overflow-hidden"
+              style={{ background: 'linear-gradient(145deg, #111c15 0%, #06100b 100%)', boxShadow: '0 14px 28px -18px rgba(0,0,0,0.85)' }}
+            >
+              <div className="absolute inset-0 bg-emerald-400/10 opacity-0 transition-opacity group-hover:opacity-100" />
+              <Music2 className="relative text-emerald-300" style={{ width: '18px', height: '18px' }} />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-[14px] font-black leading-tight tracking-[-0.035em] text-gray-950 dark:text-white">ServeSync</p>
+              <p className="truncate text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-white/30">Team Management</p>
+            </div>
+          </button>
+
+          <nav className="relative flex min-w-0 flex-1 items-center justify-center">
+            <div
+              className="relative flex max-w-full items-center gap-1 overflow-x-auto rounded-full border border-white/35 p-1.5 backdrop-blur-[50px] dark:border-white/[0.10] scrollbar-none"
+              style={{
+                background: 'color-mix(in srgb, var(--nav-bg) 84%, transparent)',
+                boxShadow: '0 18px 42px -28px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.30), inset 0 -1px 0 rgba(255,255,255,0.08), inset 0 -12px 26px rgba(255,255,255,0.035)',
+                WebkitBackdropFilter: 'blur(50px) saturate(200%) contrast(108%)',
+                backdropFilter: 'blur(50px) saturate(200%) contrast(108%)',
+              }}
+            >
+              <span className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-white/70 to-transparent" />
+              {desktopTabItems.map(renderDesktopTab)}
+            </div>
+          </nav>
+
+          <div className="relative flex min-w-[13.5rem] items-center justify-end gap-1.5">
+            <ThemeToggle />
+            <NotificationBell />
+            <button
+              onClick={() => navigate('/profile')}
+              className="group ml-1 flex items-center gap-2 rounded-full border border-black/[0.05] bg-white/70 py-1.5 pl-1.5 pr-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:bg-white dark:border-white/[0.07] dark:bg-white/[0.045] dark:hover:bg-white/[0.075]"
+            >
+              <Avatar
+                src={profile?.avatar_url}
+                firstName={profile?.first_name || '?'}
+                lastName={profile?.last_name}
+                size="sm"
+                className="ring-1 ring-black/10 dark:ring-white/10"
+              />
+              <span className="max-w-[7rem] truncate text-[12px] font-black text-gray-800 dark:text-white/78">
+                {displayName || fullName || 'Profile'}
+              </span>
+            </button>
+            <button
+              onClick={signOut}
+              className="flex h-10 w-10 items-center justify-center rounded-full text-gray-400 transition-all hover:-translate-y-0.5 hover:bg-red-50 hover:text-red-500 dark:text-white/35 dark:hover:bg-red-500/10 dark:hover:text-red-300"
+              aria-label="Sign out"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </motion.header>
+
       {/* ── Mobile top bar ── */}
       <div
-        className={`fixed top-0 left-0 right-0 z-30 flex items-end justify-between px-4 lg:hidden ${hideMobileAll ? 'hidden' : ''}`}
+        className={`fixed top-0 left-0 right-0 z-30 flex items-end justify-between overflow-hidden px-4 lg:hidden ${hideMobileAll ? 'hidden' : ''}`}
         style={{
-          background: 'var(--sidebar-bg)',
-          WebkitBackdropFilter: 'blur(20px)',
-          backdropFilter: 'blur(20px)',
+          background: 'color-mix(in srgb, var(--sidebar-bg) 78%, transparent)',
+          WebkitBackdropFilter: 'blur(30px) saturate(190%) contrast(108%)',
+          backdropFilter: 'blur(30px) saturate(190%) contrast(108%)',
           borderBottom: '1px solid var(--sidebar-border)',
+          boxShadow: '0 14px 34px -30px rgba(0,0,0,0.55), inset 0 -1px 0 rgba(255,255,255,0.06)',
           paddingTop: 'env(safe-area-inset-top)',
           height: 'calc(3.5rem + env(safe-area-inset-top))',
         }}
       >
-        <div className="flex items-center justify-between w-full h-14 pb-0">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(16,185,129,0.12),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.32),rgba(255,255,255,0.08)_52%,rgba(255,255,255,0))] dark:bg-[radial-gradient(circle_at_18%_20%,rgba(16,185,129,0.15),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.025)_52%,rgba(255,255,255,0))]" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-white/38 to-transparent dark:from-black/18" />
+        <div className="relative flex items-center justify-between w-full h-14 pb-0">
         <div className="flex items-center gap-2">
           <div
             className="h-7 w-7 rounded-[22%] flex items-center justify-center shrink-0"
@@ -371,11 +507,11 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
         )}
       </AnimatePresence>
 
-      {/* ── Desktop sidebar ── */}
+      {/* ── Legacy desktop sidebar, replaced by desktop tab bar ── */}
       <motion.aside
         animate={{ width: sidebarWidth }}
         transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-        className="hidden lg:flex fixed left-0 top-0 h-screen z-40 flex-col p-3"
+        className="hidden fixed left-0 top-0 h-screen z-40 flex-col p-3"
         style={{ overflow: 'visible' }}
       >
         {/* Inner card */}
@@ -524,32 +660,40 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
       {/* ── Mobile bottom nav ── */}
       {!hideMobile && !hideMobileAll && (
         <div
-          className={`fixed bottom-0 left-0 right-0 z-50 lg:hidden ${useDockedMobileNav ? 'pointer-events-auto' : 'pointer-events-none'}`}
+          className={`fixed bottom-0 left-0 right-0 z-50 overflow-hidden lg:hidden ${useDockedMobileNav ? 'pointer-events-auto' : 'pointer-events-none'}`}
           style={{
             paddingBottom: useDockedMobileNav ? '0px' : 'max(0px, calc(env(safe-area-inset-bottom) - 6px))',
             paddingTop: useDockedMobileNav ? '0px' : '6px',
-            background: useDockedMobileNav ? 'var(--sidebar-bg)' : undefined,
-            WebkitBackdropFilter: useDockedMobileNav ? 'blur(28px) saturate(180%)' : undefined,
-            backdropFilter: useDockedMobileNav ? 'blur(28px) saturate(180%)' : undefined,
+            background: useDockedMobileNav ? 'color-mix(in srgb, var(--sidebar-bg) 82%, transparent)' : undefined,
+            WebkitBackdropFilter: useDockedMobileNav ? 'blur(34px) saturate(200%) contrast(108%)' : undefined,
+            backdropFilter: useDockedMobileNav ? 'blur(34px) saturate(200%) contrast(108%)' : undefined,
             borderTop: useDockedMobileNav ? '1px solid var(--sidebar-border)' : undefined,
-            boxShadow: useDockedMobileNav ? '0 -10px 26px -24px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.04)' : undefined,
+            boxShadow: useDockedMobileNav ? '0 -18px 42px -34px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.08)' : undefined,
           }}
         >
-          <div className={`flex ${useDockedMobileNav ? 'justify-stretch px-0' : 'justify-center px-8'}`}>
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-14 bg-gradient-to-b from-white/30 to-transparent dark:from-white/[0.045]" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-white/40 to-transparent dark:from-black/24" />
+          <div className={`relative flex ${useDockedMobileNav ? 'justify-stretch px-0' : 'justify-center px-8'}`}>
             <nav
               className={`pointer-events-auto relative flex ${useDockedMobileNav ? 'w-full items-start overflow-visible px-2 pt-2' : 'w-full max-w-[480px] items-center overflow-hidden p-1.5 rounded-full'}`}
               style={{
                 height: useDockedMobileNav ? 'calc(64px + env(safe-area-inset-bottom))' : undefined,
-                background: useDockedMobileNav ? 'var(--sidebar-bg)' : 'var(--nav-bg)',
-                WebkitBackdropFilter: useDockedMobileNav ? undefined : 'blur(28px) saturate(180%)',
-                backdropFilter: useDockedMobileNav ? undefined : 'blur(28px) saturate(180%)',
+                background: useDockedMobileNav ? 'transparent' : 'color-mix(in srgb, var(--nav-bg) 84%, transparent)',
+                WebkitBackdropFilter: useDockedMobileNav ? undefined : 'blur(34px) saturate(200%) contrast(108%)',
+                backdropFilter: useDockedMobileNav ? undefined : 'blur(34px) saturate(200%) contrast(108%)',
                 border: useDockedMobileNav ? undefined : '1px solid var(--nav-border)',
                 boxShadow: useDockedMobileNav
                   ? 'none'
-                  : '0 12px 36px -8px rgba(0,0,0,0.22), 0 2px 8px -2px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.06)',
+                  : '0 18px 42px -12px rgba(0,0,0,0.26), 0 2px 10px -4px rgba(0,0,0,0.16), inset 0 1px 0 rgba(255,255,255,0.12), inset 0 -12px 26px rgba(255,255,255,0.035)',
                 paddingBottom: useDockedMobileNav ? 'env(safe-area-inset-bottom)' : undefined,
               }}
             >
+              {!useDockedMobileNav && (
+                <>
+                  <span className="pointer-events-none absolute inset-0 rounded-full bg-[radial-gradient(circle_at_20%_10%,rgba(255,255,255,0.55),transparent_34%),linear-gradient(135deg,rgba(255,255,255,0.28),rgba(255,255,255,0.04))] dark:bg-[radial-gradient(circle_at_20%_10%,rgba(255,255,255,0.11),transparent_34%),linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.015))]" />
+                  <span className="pointer-events-none absolute inset-x-3 top-0 h-px bg-gradient-to-r from-transparent via-white/75 to-transparent dark:via-white/20" />
+                </>
+              )}
 
               {mobileNavItems.map((item) => {
                 const active = isActive(item);

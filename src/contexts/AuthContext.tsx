@@ -31,6 +31,46 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+const AUTH_CONTEXT_REQUEST_TIMEOUT_MS = 10000;
+
+async function withAuthTimeout<T>(request: PromiseLike<T>, fallback: T, label: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<T>((resolve) => {
+    timeoutId = setTimeout(() => {
+      console.warn(`[Auth] ${label} timed out; continuing with fallback state.`);
+      resolve(fallback);
+    }, AUTH_CONTEXT_REQUEST_TIMEOUT_MS);
+  });
+
+  try {
+    return await Promise.race([Promise.resolve(request), timeout]);
+  } catch (error) {
+    console.error(`[Auth] ${label} failed:`, error);
+    return fallback;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+function isInvalidRefreshTokenError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const message = 'message' in error && typeof error.message === 'string' ? error.message : '';
+  return message.includes('Invalid Refresh Token') || message.includes('Refresh Token Not Found');
+}
+
+async function clearStoredAuthSession() {
+  if (typeof window !== 'undefined') {
+    Object.keys(window.localStorage)
+      .filter(key => key.startsWith('sb-') && key.endsWith('-auth-token'))
+      .forEach(key => window.localStorage.removeItem(key));
+  }
+
+  try {
+    await supabase.auth.signOut({ scope: 'local' });
+  } catch (error) {
+    console.warn('[Auth] Failed to clear local Supabase session:', error);
+  }
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -41,12 +81,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const clearUserContext = () => {
+    setSession(null);
+    setUser(null);
+    setProfile(null);
+    setOrganization(null);
+    setUserRoles([]);
+  };
+
   const fetchProfile = async (userId: string) => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
+    const { data, error } = await withAuthTimeout(
+      supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle(),
+      { data: null, error: null },
+      'Profile request',
+    );
+    if (error) console.error('[Auth] Profile request error:', error);
     setProfile(data);
     return data;
   };
@@ -57,28 +110,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return null;
     }
 
-    const { data } = await supabase
-      .from('organizations')
-      .select('*')
-      .eq('id', orgId)
-      .maybeSingle();
+    const { data, error } = await withAuthTimeout(
+      supabase
+        .from('organizations')
+        .select('*')
+        .eq('id', orgId)
+        .maybeSingle(),
+      { data: null, error: null },
+      'Organization request',
+    );
+    if (error) console.error('[Auth] Organization request error:', error);
     setOrganization(data);
     return data;
   };
 
   const fetchUserRoles = async (userId: string) => {
-    const { data } = await supabase
-      .from('user_roles')
-      .select('*, roles(*)')
-      .eq('user_id', userId);
+    const { data, error } = await withAuthTimeout(
+      supabase
+        .from('user_roles')
+        .select('*, roles(*)')
+        .eq('user_id', userId),
+      { data: [], error: null },
+      'User roles request',
+    );
+    if (error) console.error('[Auth] User roles request error:', error);
     setUserRoles(data || []);
   };
 
   const fetchRoles = async () => {
-    const { data } = await supabase
-      .from('roles')
-      .select('*')
-      .order('sort_order');
+    const { data, error } = await withAuthTimeout(
+      supabase
+        .from('roles')
+        .select('*')
+        .order('sort_order'),
+      { data: [], error: null },
+      'Roles request',
+    );
+    if (error) console.error('[Auth] Roles request error:', error);
     setRoles(data || []);
   };
 
@@ -99,20 +167,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s);
-      setUser(s?.user ?? null);
-      if (s?.user) {
-        hydrateUserContext(s.user.id).finally(() => setLoading(false));
-      } else {
-        fetchRoles().finally(() => {
-          setOrganization(null);
+    withAuthTimeout(
+      supabase.auth.getSession(),
+      { data: { session: null }, error: null },
+      'Stored session restore',
+    )
+      .then(async ({ data: { session: s }, error }) => {
+        if (error) {
+          if (isInvalidRefreshTokenError(error)) {
+            console.warn('[Auth] Stored session refresh token is invalid; clearing local auth state.');
+            await clearStoredAuthSession();
+          } else {
+            console.error('[Auth] Failed to restore session:', error);
+          }
+          clearUserContext();
+          await fetchRoles();
           setLoading(false);
-        });
-      }
-    });
+          return;
+        }
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+        setSession(s);
+        setUser(s?.user ?? null);
+        if (s?.user) {
+          hydrateUserContext(s.user.id).finally(() => setLoading(false));
+        } else {
+          fetchRoles().finally(() => {
+            setOrganization(null);
+            setLoading(false);
+          });
+        }
+      })
+      .catch(async error => {
+        if (isInvalidRefreshTokenError(error)) {
+          console.warn('[Auth] Stored session refresh token is invalid; clearing local auth state.');
+          await clearStoredAuthSession();
+        } else {
+          console.error('[Auth] Failed to restore session:', error);
+        }
+        clearUserContext();
+        fetchRoles().finally(() => setLoading(false));
+      });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === 'INITIAL_SESSION') {
+        return;
+      }
+
+      if (event === 'TOKEN_REFRESHED') {
+        setSession(s);
+        setUser(s?.user ?? null);
+        return;
+      }
+
       setLoading(true);
       setSession(s);
       setUser(s?.user ?? null);

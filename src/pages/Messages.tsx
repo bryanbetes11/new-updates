@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useParams, useNavigate, useNavigationType } from 'react-router-dom';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Send, ImageIcon, X, Pin, CornerUpLeft, Camera,
@@ -12,7 +12,7 @@ import { formatTime12Hour } from '../lib/timeFormat';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useConversations, type Conversation } from '../hooks/useConversations';
-import { useMessages } from '../hooks/useMessages';
+import { useMessages, type Message } from '../hooks/useMessages';
 import { supabase } from '../lib/supabase';
 import { Avatar } from '../components/Avatar';
 import { Modal } from '../components/Modal';
@@ -196,7 +196,16 @@ function replyPreviewContent(content: string): string {
   return humanizeMentions(parsed.text);
 }
 
+function formatTypingUsers(users: Array<{ name: string }>): string {
+  if (users.length === 0) return '';
+  if (users.length === 1) return `${users[0].name} is typing`;
+  if (users.length === 2) return `${users[0].name} and ${users[1].name} are typing`;
+  return `${users[0].name} and ${users.length - 1} others are typing`;
+}
+
 const QUICK_EMOJIS = ['❤️', '👍', '😂', '😮', '😢', '🙏'];
+const mobilePanelTransition = { type: 'spring' as const, stiffness: 380, damping: 36, mass: 0.88 };
+const mobilePanelShadow = '0 24px 70px -34px rgba(15, 23, 42, 0.65)';
 
 // ─── Emoji Picker ────────────────────────────────────────────────────────────
 
@@ -514,7 +523,7 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
   replyTo: string | null;
   replyPreview: string | null;
   onCancelReply: () => void;
-  onTyping: () => void;
+  onTyping: (isTyping: boolean) => void;
   mentionProfiles: Array<{ id: string; first_name: string; last_name: string; avatar_url: string | null; gender: string | null }>;
 }) {
   const [text, setText] = useState('');
@@ -538,6 +547,7 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
 
   const handleSend = () => {
     if (!text.trim()) return;
+    onTyping(false);
     onSend(text);
     setText('');
     requestAnimationFrame(resizeComposer);
@@ -570,6 +580,10 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
       document.documentElement.style.removeProperty('--messages-composer-height');
     };
   }, []);
+
+  useEffect(() => {
+    return () => onTyping(false);
+  }, [onTyping]);
 
   const handleImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -689,7 +703,7 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
             textareaRef={textRef}
             value={text}
             profiles={mentionProfiles}
-            onChange={(value) => { setText(value); resizeComposer(); onTyping(); }}
+            onChange={(value) => { setText(value); resizeComposer(); onTyping(value.trim().length > 0); }}
             onFocus={() => window.dispatchEvent(new Event('messages-composer-focus'))}
             onPointerDown={focusComposerWithoutPageScroll}
             placeholder="Message…"
@@ -1041,7 +1055,7 @@ function ConvInfoPanel({
   return (
     <div className="flex flex-col h-full bg-[#f5f5f7] dark:bg-[#0d0d0f]">
       {/* Header */}
-      <div className="shrink-0 flex items-center gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+12px)] bg-white dark:bg-[#111013] border-b border-gray-100 dark:border-white/[0.06]">
+      <div className="relative z-20 shrink-0 flex items-center gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+12px)] bg-white dark:bg-[#111013] border-b border-gray-100 dark:border-white/[0.06] lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96 lg:pt-4">
         <button
           onClick={() => {
             if (infoView !== 'main') {
@@ -1059,7 +1073,7 @@ function ConvInfoPanel({
         </h2>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
         {infoView === 'media' && (
           <div className="mx-4 mt-4 mb-6 rounded-2xl bg-white dark:bg-[#111013] border border-gray-100 dark:border-white/[0.06] overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-white/[0.06]">
@@ -1609,6 +1623,116 @@ function ConvInfoPanel({
   );
 }
 
+function ReactionDetailsSheet({
+  message,
+  members,
+  myUserId,
+  onClose,
+  onToggleReaction,
+}: {
+  message: Message;
+  members: Conversation['members'];
+  myUserId: string;
+  onClose: () => void;
+  onToggleReaction: (messageId: string, emoji: string) => void | Promise<void>;
+}) {
+  const reactions = message.reactions;
+
+  const reactionCounts = reactions.reduce((acc, reaction) => {
+    acc[reaction.emoji] = (acc[reaction.emoji] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const getMember = (userId: string) => members.find(member => member.user_id === userId);
+
+  return (
+    <motion.div
+        className="fixed inset-0 z-[160] flex items-end justify-center bg-black/20 px-0 sm:items-center sm:px-4 dark:bg-black/45"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ y: 38, opacity: 0.96, scale: 0.98 }}
+          animate={{ y: 0, opacity: 1, scale: 1 }}
+          exit={{ y: 30, opacity: 0, scale: 0.98 }}
+          transition={mobilePanelTransition}
+          onClick={event => event.stopPropagation()}
+          className="w-full max-w-md overflow-hidden rounded-t-[28px] border border-black/[0.06] bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#1c1b1f] sm:rounded-[28px]"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        >
+          <div className="flex items-center justify-between border-b border-black/[0.06] px-5 py-4 dark:border-white/[0.07]">
+            <div>
+              <h3 className="text-[15px] font-extrabold text-gray-950 dark:text-white">Reactions</h3>
+              <p className="mt-0.5 text-[12px] text-gray-400 dark:text-white/35">
+                {reactions.length} {reactions.length === 1 ? 'reaction' : 'reactions'}
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {Object.entries(reactionCounts).map(([emoji, count]) => (
+                <span key={emoji} className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-[12px] font-bold text-gray-700 dark:bg-white/[0.07] dark:text-white/80">
+                  <span>{emoji}</span>
+                  <span>{count}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="max-h-[52dvh] overflow-y-auto py-2">
+            {reactions.map((reaction, index) => {
+              const member = getMember(reaction.user_id);
+              const isMine = reaction.user_id === myUserId;
+              const displayName = isMine ? 'You' : getFullName(member?.profile, 'Unknown member');
+              const avatarProfile = member?.profile;
+
+              const removeMine = async () => {
+                if (!isMine) return;
+                await onToggleReaction(message.id, reaction.emoji);
+                onClose();
+              };
+
+              return (
+                <button
+                  type="button"
+                  key={`${reaction.user_id}-${reaction.emoji}-${index}`}
+                  onClick={removeMine}
+                  disabled={!isMine}
+                  className={`flex w-full items-center gap-3 px-5 py-3 text-left transition-colors ${
+                    isMine ? 'hover:bg-emerald-50 active:bg-emerald-100 dark:hover:bg-emerald-500/[0.08] dark:active:bg-emerald-500/[0.12]' : 'cursor-default'
+                  }`}
+                >
+                  <Avatar
+                    src={avatarProfile?.avatar_url ?? undefined}
+                    firstName={avatarProfile?.first_name || (isMine ? 'Y' : '?')}
+                    lastName={avatarProfile?.last_name ?? undefined}
+                    size="sm"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[14px] font-bold text-gray-900 dark:text-white">{displayName}</p>
+                    {isMine && (
+                      <p className="mt-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-300">Tap to remove your reaction</p>
+                    )}
+                  </div>
+                  <span
+                    className={`flex h-10 min-w-10 items-center justify-center rounded-full px-3 text-[20px] transition-all ${
+                      isMine
+                        ? 'bg-emerald-50 ring-1 ring-emerald-200 active:scale-95 dark:bg-emerald-500/[0.12] dark:ring-emerald-400/25'
+                        : 'bg-gray-100 dark:bg-white/[0.07]'
+                    }`}
+                    aria-hidden="true"
+                  >
+                    {reaction.emoji}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </motion.div>
+    </motion.div>
+  );
+}
+
 // ─── Chat Window ─────────────────────────────────────────────────────────────
 
 type EventDiscussionDetails = {
@@ -1740,7 +1864,7 @@ function EventDetailPanel({ eventId, onClose, onViewFullEvent }: {
     <div className="flex flex-col h-full bg-gray-50 dark:bg-[#0d0d0f]">
       {/* Header — padded below the status bar on iOS/Android */}
       <div
-        className="flex items-center justify-between gap-3 px-4 pb-3 bg-white dark:bg-[#111013] border-b border-gray-200/60 dark:border-white/[0.06] shrink-0"
+        className="relative z-20 flex items-center justify-between gap-3 px-4 pb-3 bg-white dark:bg-[#111013] border-b border-gray-200/60 dark:border-white/[0.06] shrink-0 lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96"
         style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 12px)' }}
       >
         <button
@@ -1765,7 +1889,7 @@ function EventDetailPanel({ eventId, onClose, onViewFullEvent }: {
           <div className="h-6 w-6 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin" />
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
           <div className="max-w-2xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-6 space-y-4">
 
             {/* Hero card */}
@@ -1938,6 +2062,7 @@ function ChatWindow({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [previewFile, setPreviewFile] = useState<{ url: string; name: string } | null>(null);
+  const [reactionDetailsMessageId, setReactionDetailsMessageId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -1945,6 +2070,8 @@ function ChatWindow({
   const atBottomRef = useRef(true);
   const forceStickToLatestRef = useRef(false);
   const typingThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const typingStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isTypingRef = useRef(false);
   const navigate = useNavigate();
 
   const { profile } = useAuth();
@@ -1952,6 +2079,7 @@ function ChatWindow({
     messages, loading, typingUsers, memberReadTimes,
     sendMessage, sendTyping, pinMessage, deleteMessage, toggleReaction,
   } = useMessages(conv.id);
+  const typingLabel = formatTypingUsers(typingUsers);
 
   const convName = getConvName(conv, myUserId);
   const mentionProfiles = useMemo(
@@ -2010,7 +2138,8 @@ function ChatWindow({
 
   useEffect(() => {
     if (atBottomRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      const el = scrollRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
     }
   }, [messages]);
 
@@ -2020,7 +2149,6 @@ function ChatWindow({
       if (!force && !composerFocused && !atBottomRef.current && !forceStickToLatestRef.current) return;
       const scrollToLatest = () => {
         if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        messagesEndRef.current?.scrollIntoView({ block: 'end' });
       };
       requestAnimationFrame(() => {
         scrollToLatest();
@@ -2052,17 +2180,54 @@ function ChatWindow({
     return () => document.removeEventListener('click', handler);
   }, [activeMsg, emojiMsgId, tappedMsgId]);
 
-  const handleTyping = useCallback(() => {
-    if (typingThrottleRef.current) return;
+  const stopTyping = useCallback(() => {
+    if (typingStopRef.current) {
+      clearTimeout(typingStopRef.current);
+      typingStopRef.current = null;
+    }
+    if (typingThrottleRef.current) {
+      clearTimeout(typingThrottleRef.current);
+      typingThrottleRef.current = null;
+    }
+    if (!isTypingRef.current) return;
     const name = getFullName(profile, 'Someone');
-    sendTyping(name);
-    typingThrottleRef.current = setTimeout(() => { typingThrottleRef.current = null; }, 2000);
+    sendTyping(name, false);
+    isTypingRef.current = false;
   }, [sendTyping, profile]);
 
+  const handleTyping = useCallback((isTyping: boolean) => {
+    if (!isTyping) {
+      stopTyping();
+      return;
+    }
+
+    if (typingStopRef.current) clearTimeout(typingStopRef.current);
+    typingStopRef.current = setTimeout(stopTyping, 2500);
+
+    if (typingThrottleRef.current) return;
+    const name = getFullName(profile, 'Someone');
+    sendTyping(name, true);
+    isTypingRef.current = true;
+    typingThrottleRef.current = setTimeout(() => { typingThrottleRef.current = null; }, 1400);
+  }, [sendTyping, profile, stopTyping]);
+
+  useEffect(() => {
+    return () => stopTyping();
+  }, [stopTyping]);
+
+  useEffect(() => {
+    if (!reactionDetailsMessageId) return;
+    const message = messages.find(item => item.id === reactionDetailsMessageId);
+    if (!message || message.reactions.length === 0) {
+      setReactionDetailsMessageId(null);
+    }
+  }, [messages, reactionDetailsMessageId]);
+
   const handleSend = useCallback(async (text: string) => {
+    stopTyping();
     await sendMessage(text, replyTo?.id);
     setReplyTo(null);
-  }, [sendMessage, replyTo]);
+  }, [sendMessage, replyTo, stopTyping]);
 
   const handleConfirmDelete = useCallback(async () => {
     setConfirmingDelete(true);
@@ -2075,8 +2240,12 @@ function ChatWindow({
     setShowInfo(false);
     setTimeout(() => {
       const el = messageRefs.current[id];
-      if (!el) return;
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const scroller = scrollRef.current;
+      if (!el || !scroller) return;
+      scroller.scrollTo({
+        top: Math.max(0, el.offsetTop - scroller.clientHeight / 2 + el.clientHeight / 2),
+        behavior: 'smooth',
+      });
       el.style.transition = 'background-color 0.4s ease';
       el.style.backgroundColor = 'rgba(16,185,129,0.12)';
       setTimeout(() => { el.style.backgroundColor = ''; }, 1600);
@@ -2114,6 +2283,9 @@ function ChatWindow({
   const pinnedMessages = messages.filter(m => m.is_pinned);
   const [showPinned, setShowPinned] = useState(false);
   const latestPinnedMessage = pinnedMessages[pinnedMessages.length - 1] ?? null;
+  const reactionDetailsMessage = reactionDetailsMessageId
+    ? messages.find(message => message.id === reactionDetailsMessageId) ?? null
+    : null;
 
   // Group messages: same sender within 5 min = grouped
   const grouped = useMemo(() => {
@@ -2131,102 +2303,104 @@ function ChatWindow({
   const isGroupChat = conv.type === 'group' || conv.type === 'event';
 
   return (
-    <div className="relative flex flex-col h-full min-h-0 bg-white dark:bg-[#111013]">
-      {/* Header */}
-      <div className="shrink-0 flex items-center gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+12px)] border-b border-gray-100 dark:border-white/[0.06] bg-white dark:bg-[#111013]">
-        <button
-          onClick={onBack}
-          className="lg:hidden shrink-0 h-8 w-8 flex items-center justify-center rounded-full text-gray-500 dark:text-white/40 hover:bg-gray-100 dark:hover:bg-white/[0.07] transition-colors"
-        >
-          <ArrowLeft className="h-4.5 w-4.5" style={{ width: '18px', height: '18px' }} />
-        </button>
-        <Avatar
-          src={getConversationAvatarSrc(conv, myUserId)}
-          firstName={avatarName.firstName}
-          lastName={avatarName.lastName}
-          size="sm"
-        />
-        <button
-          onClick={() => setShowInfo(true)}
-          className="flex-1 min-w-0 text-left group"
-        >
-          <div className="flex items-center gap-1">
-            <p className="text-[14px] font-bold text-gray-900 dark:text-white truncate leading-tight group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{convName}</p>
-            <ChevronRight className="h-3.5 w-3.5 text-gray-300 dark:text-white/20 group-hover:text-emerald-500 transition-colors shrink-0" />
-          </div>
-          {typingUsers.length > 0 ? (
-            <p className="text-[11px] text-emerald-500 dark:text-emerald-400 leading-tight">
-              {typingUsers.map(u => u.name).join(', ')} {typingUsers.length === 1 ? 'is' : 'are'} typing…
-            </p>
-          ) : (
-            <p className="text-[11px] text-gray-400 dark:text-white/30 leading-tight">
-              {conv.members.length} {conv.members.length === 1 ? 'member' : 'members'}
-            </p>
-          )}
-        </button>
-      </div>
-
-      {latestPinnedMessage && (
-        <button
-          onClick={() => setShowPinned(v => !v)}
-          className="shrink-0 flex items-center gap-3 px-4 py-2.5 border-b border-amber-100 dark:border-amber-500/[0.1] bg-amber-50/80 dark:bg-amber-500/[0.08] text-left hover:bg-amber-100/80 dark:hover:bg-amber-500/[0.12] transition-colors"
-        >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-500/[0.18] dark:text-amber-300">
-            <Pin className="h-3.5 w-3.5" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-[10px] font-bold uppercase tracking-[0.12em] text-amber-700 dark:text-amber-300">Pinned Message</span>
-            <span className="mt-0.5 block truncate text-[12px] text-amber-900/80 dark:text-amber-100/80">
-              {(() => {
-                const c = parseContent(latestPinnedMessage.content);
-                return c.type === 'image'
-                  ? `${getSenderName(latestPinnedMessage.sender)}: Photo`
-                  : c.type === 'file'
-                    ? `${getSenderName(latestPinnedMessage.sender)}: ${c.name}`
-                    : c.type === 'delete_request'
-                      ? `${getSenderName(latestPinnedMessage.sender)}: Delete chat request`
-                      : `${getSenderName(latestPinnedMessage.sender)}: ${c.text}`;
-              })()}
-            </span>
-          </span>
-          <span className="shrink-0 rounded-full bg-amber-100 px-2 py-1 text-[10px] font-semibold text-amber-700 dark:bg-amber-500/[0.18] dark:text-amber-300">
-            {pinnedMessages.length}
-          </span>
-        </button>
-      )}
-
-      {conv.type === 'event' && conv.event_id && (
-        <EventDiscussionCard eventId={conv.event_id} onOpen={() => setShowEventDetail(true)} />
-      )}
-
-      {/* Pinned messages panel */}
-      <AnimatePresence>
-        {showPinned && pinnedMessages.length > 0 && (
-          <motion.div
-            initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }}
-            className="overflow-hidden shrink-0 border-b border-amber-100 dark:border-amber-500/[0.1] bg-amber-50 dark:bg-amber-500/[0.05]"
+    <div className="relative flex flex-col h-full min-h-0 overflow-hidden bg-white dark:bg-[#111013]">
+      <div className="relative z-20 shrink-0 bg-white dark:bg-[#111013] lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+12px)] border-b border-gray-100 dark:border-white/[0.06] lg:pt-4">
+          <button
+            onClick={onBack}
+            className="lg:hidden shrink-0 h-8 w-8 flex items-center justify-center rounded-full text-gray-500 dark:text-white/40 hover:bg-gray-100 dark:hover:bg-white/[0.07] transition-colors"
           >
-            <div className="px-4 py-3 space-y-2 max-h-40 overflow-y-auto">
-              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-amber-600 dark:text-amber-400 mb-1">Pinned Messages</p>
-              {pinnedMessages.map(m => {
-                const c = parseContent(m.content);
-                return (
-                  <p key={m.id} className="text-[12px] text-amber-800 dark:text-amber-300/80 leading-snug">
-                    <span className="font-semibold">{getSenderName(m.sender)}: </span>
-                    {c.type === 'image' ? '📷 Photo' : c.type === 'file' ? `📎 ${c.name}` : c.type === 'delete_request' ? 'Delete chat request' : c.text}
-                  </p>
-                );
-              })}
+            <ArrowLeft className="h-4.5 w-4.5" style={{ width: '18px', height: '18px' }} />
+          </button>
+          <Avatar
+            src={getConversationAvatarSrc(conv, myUserId)}
+            firstName={avatarName.firstName}
+            lastName={avatarName.lastName}
+            size="sm"
+          />
+          <button
+            onClick={() => setShowInfo(true)}
+            className="flex-1 min-w-0 text-left group"
+          >
+            <div className="flex items-center gap-1">
+              <p className="text-[14px] font-bold text-gray-900 dark:text-white truncate leading-tight group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{convName}</p>
+              <ChevronRight className="h-3.5 w-3.5 text-gray-300 dark:text-white/20 group-hover:text-emerald-500 transition-colors shrink-0" />
             </div>
-          </motion.div>
+            {typingUsers.length > 0 ? (
+              <p className="text-[11px] text-emerald-500 dark:text-emerald-400 leading-tight">
+                {typingLabel}...
+              </p>
+            ) : (
+              <p className="text-[11px] text-gray-400 dark:text-white/30 leading-tight">
+                {conv.members.length} {conv.members.length === 1 ? 'member' : 'members'}
+              </p>
+            )}
+          </button>
+        </div>
+
+        {latestPinnedMessage && (
+          <button
+            onClick={() => setShowPinned(v => !v)}
+            className="flex items-center gap-3 px-4 py-2.5 border-b border-amber-100 dark:border-amber-500/[0.1] bg-amber-50/80 dark:bg-amber-500/[0.08] text-left hover:bg-amber-100/80 dark:hover:bg-amber-500/[0.12] transition-colors"
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-500/[0.18] dark:text-amber-300">
+              <Pin className="h-3.5 w-3.5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[10px] font-bold uppercase tracking-[0.12em] text-amber-700 dark:text-amber-300">Pinned Message</span>
+              <span className="mt-0.5 block truncate text-[12px] text-amber-900/80 dark:text-amber-100/80">
+                {(() => {
+                  const c = parseContent(latestPinnedMessage.content);
+                  return c.type === 'image'
+                    ? `${getSenderName(latestPinnedMessage.sender)}: Photo`
+                    : c.type === 'file'
+                      ? `${getSenderName(latestPinnedMessage.sender)}: ${c.name}`
+                      : c.type === 'delete_request'
+                        ? `${getSenderName(latestPinnedMessage.sender)}: Delete chat request`
+                        : `${getSenderName(latestPinnedMessage.sender)}: ${c.text}`;
+                })()}
+              </span>
+            </span>
+            <span className="shrink-0 rounded-full bg-amber-100 px-2 py-1 text-[10px] font-semibold text-amber-700 dark:bg-amber-500/[0.18] dark:text-amber-300">
+              {pinnedMessages.length}
+            </span>
+          </button>
         )}
-      </AnimatePresence>
+
+        {conv.type === 'event' && conv.event_id && (
+          <EventDiscussionCard eventId={conv.event_id} onOpen={() => setShowEventDetail(true)} />
+        )}
+
+        {/* Pinned messages panel */}
+        <AnimatePresence>
+          {showPinned && pinnedMessages.length > 0 && (
+            <motion.div
+              initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }}
+              className="overflow-hidden border-b border-amber-100 dark:border-amber-500/[0.1] bg-amber-50 dark:bg-amber-500/[0.05]"
+            >
+              <div className="px-4 py-3 space-y-2 max-h-40 overflow-y-auto">
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-amber-600 dark:text-amber-400 mb-1">Pinned Messages</p>
+                {pinnedMessages.map(m => {
+                  const c = parseContent(m.content);
+                  return (
+                    <p key={m.id} className="text-[12px] text-amber-800 dark:text-amber-300/80 leading-snug">
+                      <span className="font-semibold">{getSenderName(m.sender)}: </span>
+                      {c.type === 'image' ? '📷 Photo' : c.type === 'file' ? `📎 ${c.name}` : c.type === 'delete_request' ? 'Delete chat request' : c.text}
+                    </p>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       {/* Messages */}
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-4 py-4 space-y-0.5"
+        className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-4 space-y-0.5"
         style={{ paddingBottom: 'calc(var(--messages-composer-height, 64px) + var(--messages-keyboard-inset, 0px) + 0.75rem)' }}
       >
         {loading && (
@@ -2429,12 +2603,18 @@ function ChatWindow({
                             return (
                               <button
                                 key={emoji}
-                                onClick={() => toggleReaction(msg.id, emoji)}
-                                className={`flex items-center gap-0.5 text-[13px] transition-transform active:scale-90 ${!iMineReacted ? 'opacity-70' : ''}`}
+                                onPointerDown={event => event.stopPropagation()}
+                                onClick={event => {
+                                  event.stopPropagation();
+                                  setTappedMsgId(null);
+                                  setReactionDetailsMessageId(msg.id);
+                                }}
+                                className={`flex min-h-6 items-center gap-0.5 rounded-full px-1 text-[13px] transition-transform active:scale-90 ${!iMineReacted ? 'opacity-70' : ''}`}
+                                aria-label={`Show ${count} ${emoji} ${count === 1 ? 'reaction' : 'reactions'}`}
                               >
                                 {emoji}
                                 {count > 1 && (
-                                  <span className="text-[10px] font-semibold text-gray-500 dark:text-white/50 ml-0.5">{count}</span>
+                                  <span className="ml-0.5 text-[10px] font-semibold text-gray-500 dark:text-white/50">{count}</span>
                                 )}
                               </button>
                             );
@@ -2582,17 +2762,23 @@ function ChatWindow({
             <motion.div
               initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }}
               className="flex items-end gap-2 mt-3"
+              aria-live="polite"
             >
               <div className="w-7 shrink-0" />
-              <div className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl rounded-bl-md bg-white dark:bg-white/[0.07] border border-gray-100 dark:border-white/[0.06]">
-                {[0, 1, 2].map(i => (
-                  <motion.span
-                    key={i}
-                    animate={{ y: [0, -4, 0] }}
-                    transition={{ repeat: Infinity, duration: 0.8, delay: i * 0.15 }}
-                    className="h-2 w-2 rounded-full bg-gray-400 dark:bg-white/30"
-                  />
-                ))}
+              <div>
+                <p className="mb-1 ml-1 text-[11px] font-medium text-emerald-500 dark:text-emerald-400">
+                  {typingLabel}...
+                </p>
+                <div className="flex w-fit items-center gap-1.5 px-3.5 py-2.5 rounded-2xl rounded-bl-md bg-gray-100 dark:bg-white/[0.07] border border-gray-200/80 dark:border-white/[0.06]">
+                  {[0, 1, 2].map(i => (
+                    <motion.span
+                      key={i}
+                      animate={{ y: [0, -4, 0] }}
+                      transition={{ repeat: Infinity, duration: 0.8, delay: i * 0.15 }}
+                      className="h-2 w-2 rounded-full bg-emerald-500/70 dark:bg-emerald-300/70"
+                    />
+                  ))}
+                </div>
               </div>
             </motion.div>
           )}
@@ -2690,16 +2876,28 @@ function ChatWindow({
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {reactionDetailsMessage && (
+          <ReactionDetailsSheet
+            message={reactionDetailsMessage}
+            members={conv.members}
+            myUserId={myUserId}
+            onClose={() => setReactionDetailsMessageId(null)}
+            onToggleReaction={toggleReaction}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Event detail slide-over — sits above info panel */}
       <div className="absolute inset-0 z-30 overflow-hidden pointer-events-none">
         <AnimatePresence>
           {showEventDetail && conv.event_id && (
             <motion.div
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', stiffness: 400, damping: 38 }}
-              className="absolute inset-0 pointer-events-auto"
+              initial={{ x: '100%', opacity: 0.96, borderTopLeftRadius: 30, borderBottomLeftRadius: 30, boxShadow: mobilePanelShadow }}
+              animate={{ x: 0, opacity: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, boxShadow: mobilePanelShadow }}
+              exit={{ x: '100%', opacity: 0.96, borderTopLeftRadius: 30, borderBottomLeftRadius: 30, boxShadow: mobilePanelShadow }}
+              transition={mobilePanelTransition}
+              className="absolute inset-0 pointer-events-auto overflow-hidden bg-white will-change-transform dark:bg-[#111013] lg:rounded-none lg:shadow-none"
             >
               <EventDetailPanel
                 eventId={conv.event_id}
@@ -2716,11 +2914,11 @@ function ChatWindow({
         <AnimatePresence>
           {showInfo && (
             <motion.div
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', stiffness: 400, damping: 38 }}
-              className="absolute inset-0 pointer-events-auto"
+              initial={{ x: '100%', opacity: 0.96, borderTopLeftRadius: 30, borderBottomLeftRadius: 30, boxShadow: mobilePanelShadow }}
+              animate={{ x: 0, opacity: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, boxShadow: mobilePanelShadow }}
+              exit={{ x: '100%', opacity: 0.96, borderTopLeftRadius: 30, borderBottomLeftRadius: 30, boxShadow: mobilePanelShadow }}
+              transition={mobilePanelTransition}
+              className="absolute inset-0 pointer-events-auto overflow-hidden bg-white will-change-transform dark:bg-[#111013] lg:rounded-none lg:shadow-none"
             >
               <ConvInfoPanel
                 conv={conv}
@@ -2769,13 +2967,17 @@ function EmptyState({ onNew, className = '' }: { onNew: () => void; className?: 
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
 function useIsDesktop() {
-  const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 1024);
+  const getIsDesktop = () => window.matchMedia('(min-width: 1024px)').matches;
+  const [isDesktop, setIsDesktop] = useState(getIsDesktop);
+
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 1024px)');
     const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    setIsDesktop(mq.matches);
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
   }, []);
+
   return isDesktop;
 }
 
@@ -2833,14 +3035,12 @@ function useMessagesKeyboardInset(active: boolean) {
 export function Messages() {
   const { conversationId: paramConvId } = useParams<{ conversationId?: string }>();
   const navigate = useNavigate();
-  const navigationType = useNavigationType();
   const { user } = useAuth();
 
   const isDesktop = useIsDesktop();
   const [selectedConvId, setSelectedConvId] = useState<string | null>(paramConvId ?? null);
   const [search, setSearch] = useState('');
   const [newMsgOpen, setNewMsgOpen] = useState(false);
-  const [mobileShowChat, setMobileShowChat] = useState(Boolean(paramConvId));
 
   const {
     conversations,
@@ -2857,7 +3057,7 @@ export function Messages() {
     updateGroupConversationPhoto,
     discardEmptyConversation,
   } = useConversations();
-  useMessagesKeyboardInset(!isDesktop && mobileShowChat);
+  useMessagesKeyboardInset(!isDesktop && Boolean(selectedConvId));
 
   const myUserId = user?.id ?? '';
 
@@ -2871,27 +3071,23 @@ export function Messages() {
 
   const selectedConv = conversations.find(c => c.id === selectedConvId) ?? null;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (paramConvId) {
       setSelectedConvId(paramConvId);
-      setMobileShowChat(true);
       return;
     }
     setSelectedConvId(null);
-    setMobileShowChat(false);
   }, [paramConvId]);
 
   useEffect(() => {
     if (!selectedConvId || convsLoading) return;
     if (conversations.some(c => c.id === selectedConvId)) return;
-    setMobileShowChat(false);
     setSelectedConvId(null);
     navigate('/messages', { replace: true });
   }, [conversations, convsLoading, navigate, selectedConvId]);
 
   const selectConversation = (id: string) => {
     setSelectedConvId(id);
-    setMobileShowChat(true);
     navigate(`/messages/${id}`);
   };
 
@@ -2900,7 +3096,6 @@ export function Messages() {
     if (selected && !selected.last_message) {
       await discardEmptyConversation(selected.id);
     }
-    setMobileShowChat(false);
     setSelectedConvId(null);
     navigate('/messages', { replace: true });
   };
@@ -2920,25 +3115,42 @@ export function Messages() {
     if (id) selectConversation(id);
   };
 
-  const slideTransition = { type: 'spring' as const, stiffness: 320, damping: 30, mass: 0.85 };
-  const routeTransition = !isDesktop && navigationType === 'POP' ? { duration: 0 } : slideTransition;
+  const mobileChatIsOpen = Boolean(selectedConvId);
+  const showConversationList = isDesktop || !mobileChatIsOpen;
+  const showChatPane = isDesktop || mobileChatIsOpen;
+
+  useLayoutEffect(() => {
+    if (!isDesktop) return;
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, [isDesktop, selectedConvId]);
 
   return (
-    <div className="relative flex h-full min-h-0 bg-[#f5f5f7] dark:bg-[#0d0d0f] overflow-hidden">
+    <div className="relative flex h-full min-h-0 w-full overflow-hidden bg-[#f5f5f7] dark:bg-[#0d0d0f] lg:p-4">
+      <div className="contents lg:relative lg:flex lg:h-full lg:flex-1 lg:min-h-0 lg:overflow-hidden lg:rounded-[2rem] lg:border lg:border-black/[0.06] lg:bg-white lg:shadow-[0_24px_80px_-52px_rgba(15,23,42,0.85)] lg:ring-1 lg:ring-white/70 dark:lg:border-white/[0.07] dark:lg:bg-[#111013] dark:lg:ring-white/[0.04]">
+        <div className="pointer-events-none absolute inset-x-10 top-0 z-10 hidden h-px bg-gradient-to-r from-transparent via-white/90 to-transparent dark:via-white/[0.12] lg:block" />
+        <div className="pointer-events-none absolute -left-24 -top-24 hidden h-64 w-64 rounded-full bg-emerald-200/20 blur-3xl dark:bg-emerald-500/10 lg:block" />
+        <div className="pointer-events-none absolute -right-24 -bottom-24 hidden h-72 w-72 rounded-full bg-lime-200/18 blur-3xl dark:bg-emerald-500/5 lg:block" />
 
       {/* ── Left: Conversation list ── */}
-      <motion.div
-        className={`flex flex-col bg-white dark:bg-[#111013] border-r border-gray-100 dark:border-white/[0.06] ${
-          isDesktop ? 'w-[320px] min-w-[320px] shrink-0 relative' : 'absolute inset-0 z-10'
-        }`}
-        animate={!isDesktop ? { x: mobileShowChat ? '-100%' : '0%' } : undefined}
-        transition={routeTransition}
-      >
+      <AnimatePresence initial={false}>
+        {showConversationList && (
+        <motion.div
+          key="conversation-list"
+          className={`relative z-[1] flex min-h-0 flex-col bg-white dark:bg-[#111013] lg:border-r lg:border-gray-100 dark:lg:border-white/[0.06] lg:bg-white/96 dark:lg:bg-[#111013]/96 ${
+            isDesktop ? 'h-full w-[320px] min-w-[320px] shrink-0 relative' : 'fixed inset-y-0 left-0 z-10 w-[100dvw] max-w-none will-change-transform'
+          }`}
+          initial={isDesktop ? false : { x: 0, opacity: 1 }}
+          animate={isDesktop ? undefined : { x: 0, opacity: 1 }}
+          exit={isDesktop ? undefined : { x: 0, opacity: 1 }}
+          transition={isDesktop ? undefined : mobilePanelTransition}
+        >
         {/* Mobile top bar spacer */}
         <div className="lg:hidden shrink-0" style={{ height: 'calc(3.5rem + env(safe-area-inset-top))' }} />
 
         {/* List header */}
-        <div className="shrink-0 px-4 pt-4 pb-3">
+        <div className="relative z-20 shrink-0 px-4 pt-4 pb-3 lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96">
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-[20px] font-bold text-gray-900 dark:text-white tracking-[-0.02em]">Messages</h1>
             <button
@@ -2960,7 +3172,7 @@ export function Messages() {
         </div>
 
         {/* Conversations */}
-        <div className="flex-1 overflow-y-auto px-2 space-y-0.5" style={{ paddingBottom: 'calc(64px + env(safe-area-inset-bottom) + 1rem)' }}>
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2 space-y-0.5" style={{ paddingBottom: 'calc(64px + env(safe-area-inset-bottom) + 1rem)' }}>
           {convsLoading && (
             <div className="flex justify-center py-8">
               <span className="h-5 w-5 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
@@ -2985,24 +3197,48 @@ export function Messages() {
             />
           ))}
         </div>
-      </motion.div>
+        </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Right: Chat window ── */}
-      <motion.div
-        className={`flex flex-col ${isDesktop ? 'flex-1 min-w-0' : 'fixed inset-0 z-20 h-[100dvh] min-h-[100dvh]'}`}
-        animate={!isDesktop ? { x: mobileShowChat ? '0%' : '100%' } : undefined}
-        transition={routeTransition}
-      >
-        <AnimatePresence mode="wait" initial={false}>
+      <AnimatePresence initial={false}>
+        {showChatPane && (
+        <motion.div
+          key="chat-pane"
+          className={`relative z-[1] flex min-h-0 flex-col ${isDesktop ? 'h-full flex-1 min-w-0' : 'fixed inset-y-0 left-0 z-20 h-[100dvh] min-h-[100dvh] w-[100dvw] max-w-none will-change-transform'}`}
+          initial={isDesktop ? false : { x: '100%', opacity: 0.96, borderTopLeftRadius: 30, borderBottomLeftRadius: 30, boxShadow: mobilePanelShadow }}
+          animate={isDesktop ? undefined : { x: 0, opacity: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, boxShadow: mobilePanelShadow }}
+          exit={isDesktop ? undefined : { x: '100%', opacity: 0.96, borderTopLeftRadius: 30, borderBottomLeftRadius: 30, boxShadow: mobilePanelShadow }}
+          transition={isDesktop ? undefined : mobilePanelTransition}
+          style={isDesktop ? undefined : { overflow: 'hidden' }}
+        >
+        <AnimatePresence mode={isDesktop ? 'wait' : 'sync'} initial={false}>
           {selectedConv ? (
-            <motion.div
-              key={selectedConv.id}
-              initial={{ opacity: 0, x: isDesktop ? 20 : 0 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: isDesktop ? -20 : 0 }}
-              transition={{ duration: 0.22, ease: 'easeOut' }}
-              className="flex flex-col h-full min-h-0"
-            >
+            isDesktop ? (
+              <motion.div
+                key={selectedConv.id}
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.22, ease: 'easeOut' }}
+                className="flex flex-col h-full min-h-0"
+              >
+                <ChatWindow
+                  conv={selectedConv}
+                  myUserId={myUserId}
+                  onBack={handleBack}
+                  onConvUpdate={refresh}
+                  onRequestDelete={requestDeleteConversation}
+                  onConfirmDelete={confirmDeleteConversation}
+                  onDeleteAsCreator={deleteConversationAsCreator}
+                  onRenameGroup={renameGroupConversation}
+                  onAddMembers={addGroupConversationMembers}
+                  onUpdateGroupPhoto={updateGroupConversationPhoto}
+                />
+              </motion.div>
+            ) : (
+              <div key={selectedConv.id} className="flex flex-col h-full min-h-0">
               <ChatWindow
                 conv={selectedConv}
                 myUserId={myUserId}
@@ -3015,7 +3251,8 @@ export function Messages() {
                 onAddMembers={addGroupConversationMembers}
                 onUpdateGroupPhoto={updateGroupConversationPhoto}
               />
-            </motion.div>
+              </div>
+            )
           ) : selectedConvId && convsLoading ? (
             <motion.div
               key="loading"
@@ -3040,7 +3277,10 @@ export function Messages() {
             <div className="hidden" />
           )}
         </AnimatePresence>
-      </motion.div>
+        </motion.div>
+        )}
+      </AnimatePresence>
+      </div>
 
       <NewMessageModal
         open={newMsgOpen}

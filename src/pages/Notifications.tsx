@@ -11,6 +11,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { NotificationsSkeleton } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
+import { withRequestTimeout } from '../lib/requestTimeout';
 import type { Notification } from '../types';
 
 const typeIcons: Record<string, typeof Bell> = {
@@ -83,16 +84,28 @@ export function Notifications() {
   const [loading, setLoading] = useState(true);
 
   const fetchNotifications = async () => {
-    if (!user) return;
-    const { data } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('user_id', user.id)
-      .neq('type', 'message')
-      .order('created_at', { ascending: false })
-      .limit(50);
-    setNotifications(data || []);
-    setLoading(false);
+    if (!user) {
+      setNotifications([]);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const { data } = await withRequestTimeout(
+        supabase
+          .from('notifications')
+          .select('*')
+          .eq('user_id', user.id)
+          .neq('type', 'message')
+          .order('created_at', { ascending: false })
+          .limit(50),
+        { data: [], error: null },
+        'Notifications list',
+      );
+      setNotifications(data || []);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {

@@ -34,6 +34,12 @@ export interface TypingUser {
   name: string;
 }
 
+interface TypingPayload {
+  user_id: string;
+  name: string;
+  is_typing?: boolean;
+}
+
 export interface MemberReadTime {
   user_id: string;
   last_read_at: string | null;
@@ -41,6 +47,20 @@ export interface MemberReadTime {
 
 function getFullName(profile: { first_name: string | null; last_name: string | null } | null | undefined): string {
   return `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || 'Unknown';
+}
+
+function isTypingPayload(payload: unknown): payload is TypingPayload {
+  if (!payload || typeof payload !== 'object') return false;
+  const value = payload as Record<string, unknown>;
+  return typeof value.user_id === 'string' && typeof value.name === 'string';
+}
+
+function getPayloadSenderId(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const value = payload as { new?: unknown };
+  if (!value.new || typeof value.new !== 'object') return null;
+  const row = value.new as Record<string, unknown>;
+  return typeof row.sender_id === 'string' ? row.sender_id : null;
 }
 
 export function useMessages(conversationId: string | null) {
@@ -132,11 +152,22 @@ export function useMessages(conversationId: string | null) {
     if (channelRef.current) supabase.removeChannel(channelRef.current);
 
     const channel = supabase
-      .channel(`msgs-${conversationId}-${user.id}`)
+      .channel(`msgs-${conversationId}`)
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'messages',
         filter: `conversation_id=eq.${conversationId}`,
-      }, () => { fetchMessages(); markRead(); })
+      }, (payload) => {
+        const senderId = getPayloadSenderId(payload);
+        if (senderId) {
+          setTypingUsers(prev => prev.filter(u => u.user_id !== senderId));
+          if (typingTimeouts.current[senderId]) {
+            clearTimeout(typingTimeouts.current[senderId]);
+            delete typingTimeouts.current[senderId];
+          }
+        }
+        fetchMessages();
+        markRead();
+      })
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'message_reactions',
       }, fetchMessages)
@@ -145,11 +176,20 @@ export function useMessages(conversationId: string | null) {
         filter: `conversation_id=eq.${conversationId}`,
       }, fetchMemberReadTimes)
       .on('broadcast', { event: 'typing' }, ({ payload }) => {
+        if (!isTypingPayload(payload)) return;
         if (payload.user_id === user.id) return;
+        if (payload.is_typing === false) {
+          setTypingUsers(prev => prev.filter(u => u.user_id !== payload.user_id));
+          if (typingTimeouts.current[payload.user_id]) {
+            clearTimeout(typingTimeouts.current[payload.user_id]);
+            delete typingTimeouts.current[payload.user_id];
+          }
+          return;
+        }
         setTypingUsers(prev => {
           const exists = prev.find(u => u.user_id === payload.user_id);
           if (!exists) return [...prev, { user_id: payload.user_id, name: payload.name }];
-          return prev;
+          return prev.map(u => u.user_id === payload.user_id ? { ...u, name: payload.name } : u);
         });
         if (typingTimeouts.current[payload.user_id]) clearTimeout(typingTimeouts.current[payload.user_id]);
         typingTimeouts.current[payload.user_id] = setTimeout(() => {
@@ -164,12 +204,18 @@ export function useMessages(conversationId: string | null) {
       supabase.removeChannel(channel);
       channelRef.current = null;
       Object.values(typingTimeouts.current).forEach(clearTimeout);
+      typingTimeouts.current = {};
+      setTypingUsers([]);
     };
   }, [conversationId, user, fetchMessages, fetchMemberReadTimes, markRead]);
 
-  const sendTyping = useCallback((name: string) => {
+  const sendTyping = useCallback((name: string, isTyping = true) => {
     if (!channelRef.current || !user) return;
-    channelRef.current.send({ type: 'broadcast', event: 'typing', payload: { user_id: user.id, name } });
+    channelRef.current.send({
+      type: 'broadcast',
+      event: 'typing',
+      payload: { user_id: user.id, name, is_typing: isTyping },
+    });
   }, [user]);
 
   const sendMessage = useCallback(async (content: string, replyTo?: string) => {

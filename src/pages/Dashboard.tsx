@@ -33,6 +33,26 @@ const item = {
 };
 
 const MANILA_TIMEZONE = 'Asia/Manila';
+const DASHBOARD_REQUEST_TIMEOUT_MS = 8000;
+
+async function withDashboardTimeout<T>(request: PromiseLike<T>, fallback: T, label: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<T>((resolve) => {
+    timeoutId = setTimeout(() => {
+      console.warn(`[Dashboard] ${label} timed out; rendering with fallback data.`);
+      resolve(fallback);
+    }, DASHBOARD_REQUEST_TIMEOUT_MS);
+  });
+
+  try {
+    return await Promise.race([Promise.resolve(request), timeout]);
+  } catch (error) {
+    console.error(`[Dashboard] ${label} failed:`, error);
+    return fallback;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
 
 function getManilaTodayKey(date = new Date()) {
   return new Intl.DateTimeFormat('en-CA', {
@@ -52,15 +72,16 @@ function getManilaEventDateTime(eventDate: string, timeValue: string | null | un
 function Card({ children, className = '', interactive = false }: { children: React.ReactNode; className?: string; interactive?: boolean }) {
   return (
     <div
-      className={`group relative overflow-hidden rounded-3xl bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] transition-all duration-300 ${
-        interactive ? 'hover:-translate-y-0.5 hover:border-gray-300 dark:hover:border-white/[0.1]' : ''
+      className={`group relative overflow-hidden rounded-[1.75rem] border border-gray-200/80 bg-white transition-all duration-300 dark:border-white/[0.07] dark:bg-white/[0.028] ${
+        interactive ? 'hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-[0_28px_70px_-48px_rgba(15,23,42,0.75)] dark:hover:border-emerald-500/20' : ''
       } ${className}`}
       style={{
-        boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 28px -16px rgba(15,23,42,0.12)',
+        boxShadow: '0 18px 55px -42px rgba(15,23,42,0.65), 0 1px 2px rgba(15,23,42,0.04)',
       }}
     >
       {/* Inner top-edge highlight — luminous in dark, faint in light */}
-      <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.12] to-transparent" />
+      <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/90 to-transparent dark:via-white/[0.09]" />
+      <div className="pointer-events-none absolute -right-20 -top-24 h-44 w-44 rounded-full bg-emerald-200/0 blur-3xl transition-colors duration-300 group-hover:bg-emerald-200/30 dark:group-hover:bg-emerald-500/10" />
       {children}
     </div>
   );
@@ -170,68 +191,107 @@ export function Dashboard() {
     if (!user) return;
     const today = getManilaTodayKey();
     const load = async () => {
-      const [eventsRes, assignRes, setlistsRes, announcementsRes, unavailableRes, pendingLeaveRes] = await Promise.all([
-        supabase.from('events').select('*').gte('event_date', today).order('event_date').limit(5),
-        supabase.from('event_assignments').select('*, events(*), roles(*)').eq('user_id', user.id).order('created_at', { ascending: false }),
-        isLeader
-          ? supabase.from('setlists').select('*, events(title, event_date)').eq('status', 'pending_review').order('created_at', { ascending: false })
-          : Promise.resolve({ data: [] }),
-        supabase.from('announcements').select('*, profiles!announcements_created_by_fkey(first_name, last_name)').order('created_at', { ascending: false }).limit(3),
-        supabase.from('user_availability').select('*, profiles!user_availability_user_id_fkey(first_name, last_name, nickname, avatar_url)').eq('status', 'approved').or(`unavailable_date.gte.${today},end_date.gte.${today}`).order('created_at', { ascending: true }),
-        isLeader
-          ? supabase.from('user_availability').select('id', { count: 'exact', head: true }).eq('status', 'pending').eq('request_type', 'leave')
-          : Promise.resolve({ count: 0 }),
-      ]);
+      setLoading(true);
 
-      const events = eventsRes.data || [];
-      setUpcomingEvents(events);
+      try {
+        const emptyList = { data: [] };
+        const [eventsRes, assignRes, setlistsRes, announcementsRes, unavailableRes, pendingLeaveRes] = await Promise.all([
+          withDashboardTimeout(
+            supabase.from('events').select('*').gte('event_date', today).order('event_date').limit(5),
+            emptyList,
+            'Upcoming events',
+          ),
+          withDashboardTimeout(
+            supabase.from('event_assignments').select('*, events(*), roles(*)').eq('user_id', user.id).order('created_at', { ascending: false }),
+            emptyList,
+            'My assignments',
+          ),
+          isLeader
+            ? withDashboardTimeout(
+                supabase.from('setlists').select('*, events(title, event_date)').eq('status', 'pending_review').order('created_at', { ascending: false }),
+                emptyList,
+                'Pending setlists',
+              )
+            : Promise.resolve(emptyList),
+          withDashboardTimeout(
+            supabase.from('announcements').select('*, profiles!announcements_created_by_fkey(first_name, last_name)').order('created_at', { ascending: false }).limit(3),
+            emptyList,
+            'Recent announcements',
+          ),
+          withDashboardTimeout(
+            supabase.from('user_availability').select('*, profiles!user_availability_user_id_fkey(first_name, last_name, nickname, avatar_url)').eq('status', 'approved').or(`unavailable_date.gte.${today},end_date.gte.${today}`).order('created_at', { ascending: true }),
+            emptyList,
+            'Unavailable members',
+          ),
+          isLeader
+            ? withDashboardTimeout(
+                supabase.from('user_availability').select('id', { count: 'exact', head: true }).eq('status', 'pending').eq('request_type', 'leave'),
+                { count: 0 },
+                'Pending leave count',
+              )
+            : Promise.resolve({ count: 0 }),
+        ]);
 
-      const nowForSetlist = new Date();
-      const nextEvtForSetlist = events.find(e => getManilaEventDateTime(e.event_date, e.start_time) >= nowForSetlist) ?? events[0];
-      if (nextEvtForSetlist?.id) {
-        const { data: sl } = await supabase
-          .from('setlists')
-          .select('id, setlist_songs(id, position, song_category, performed_key, songs(title, artist))')
-          .eq('event_id', nextEvtForSetlist.id)
-          .maybeSingle();
-        setNextEventSetlistSongs((sl?.setlist_songs as SetlistSong[] | undefined) || []);
+        const events = eventsRes.data || [];
+        setUpcomingEvents(events);
+
+        const nowForSetlist = new Date();
+        const nextEvtForSetlist = events.find(e => getManilaEventDateTime(e.event_date, e.start_time) >= nowForSetlist) ?? events[0];
+        if (nextEvtForSetlist?.id) {
+          const { data: sl } = await withDashboardTimeout(
+            supabase
+              .from('setlists')
+              .select('id, setlist_songs(id, position, song_category, performed_key, songs(title, artist))')
+              .eq('event_id', nextEvtForSetlist.id)
+              .maybeSingle(),
+            { data: null },
+            'Next service setlist',
+          );
+          setNextEventSetlistSongs((sl?.setlist_songs as SetlistSong[] | undefined) || []);
+        } else {
+          setNextEventSetlistSongs([]);
+        }
+
+        const assignments = (assignRes.data || []) as EventAssignment[];
+        const upcomingAssignments = assignments.filter(a => a.events && isAfter(parseISO(a.events.event_date), startOfToday()));
+        upcomingAssignments.sort((a, b) => parseISO(a.events!.event_date).getTime() - parseISO(b.events!.event_date).getTime());
+        setMyAssignments(upcomingAssignments);
+        const nextEventIds = [...new Set(upcomingAssignments.map(a => a.event_id))].slice(0, 5);
+        if (nextEventIds.length > 0) {
+          const { data: songLeaderAssignments } = await withDashboardTimeout(
+            supabase
+              .from('event_assignments')
+              .select('event_id, profiles(first_name, last_name, gender), roles(name)')
+              .in('event_id', nextEventIds),
+            emptyList,
+            'Song leader assignments',
+          );
+          const leaders: Record<string, string> = {};
+          (songLeaderAssignments || []).forEach((assignment: any) => {
+            if (assignment.roles?.name !== 'Song Leader' || leaders[assignment.event_id]) return;
+            const firstName = assignment.profiles?.first_name || '';
+            const lastName = assignment.profiles?.last_name || '';
+            const gender = assignment.profiles?.gender || '';
+            const prefix = gender === 'male' ? 'Bro.' : gender === 'female' ? 'Sis.' : '';
+            const lastInitial = lastName ? lastName[0].toUpperCase() + '.' : '';
+            const name = prefix
+              ? `${prefix} ${firstName} ${lastInitial}`.trim()
+              : `${firstName} ${lastInitial}`.trim();
+            if (name) leaders[assignment.event_id] = name;
+          });
+          setSongLeaderByEvent(leaders);
+        } else {
+          setSongLeaderByEvent({});
+        }
+        setPendingSetlists((setlistsRes.data || []) as Setlist[]);
+        setRecentAnnouncements((announcementsRes.data || []) as Announcement[]);
+        setUnavailableMembers((unavailableRes.data || []) as UserAvailability[]);
+        setPendingLeaveCount(pendingLeaveRes.count || 0);
+        const upcoming = assignments.filter(a => a.events && isAfter(parseISO(a.events.event_date), startOfToday()));
+        setStats({ total: upcoming.length, confirmed: upcoming.filter(a => a.status === 'confirmed').length, pending: upcoming.filter(a => a.status === 'pending').length });
+      } finally {
+        setLoading(false);
       }
-
-      const assignments = (assignRes.data || []) as EventAssignment[];
-      const upcomingAssignments = assignments.filter(a => a.events && isAfter(parseISO(a.events.event_date), startOfToday()));
-      upcomingAssignments.sort((a, b) => parseISO(a.events!.event_date).getTime() - parseISO(b.events!.event_date).getTime());
-      setMyAssignments(upcomingAssignments);
-      const nextEventIds = [...new Set(upcomingAssignments.map(a => a.event_id))].slice(0, 5);
-      if (nextEventIds.length > 0) {
-        const { data: songLeaderAssignments } = await supabase
-          .from('event_assignments')
-          .select('event_id, profiles(first_name, last_name, gender), roles(name)')
-          .in('event_id', nextEventIds);
-        const leaders: Record<string, string> = {};
-        (songLeaderAssignments || []).forEach((assignment: any) => {
-          if (assignment.roles?.name !== 'Song Leader' || leaders[assignment.event_id]) return;
-          const firstName = assignment.profiles?.first_name || '';
-          const lastName = assignment.profiles?.last_name || '';
-          const gender = assignment.profiles?.gender || '';
-          const prefix = gender === 'male' ? 'Bro.' : gender === 'female' ? 'Sis.' : '';
-          const lastInitial = lastName ? lastName[0].toUpperCase() + '.' : '';
-          const name = prefix
-            ? `${prefix} ${firstName} ${lastInitial}`.trim()
-            : `${firstName} ${lastInitial}`.trim();
-          if (name) leaders[assignment.event_id] = name;
-        });
-        setSongLeaderByEvent(leaders);
-      } else {
-        setSongLeaderByEvent({});
-      }
-      setPendingSetlists((setlistsRes.data || []) as Setlist[]);
-      setRecentAnnouncements((announcementsRes.data || []) as Announcement[]);
-      setUnavailableMembers((unavailableRes.data || []) as UserAvailability[]);
-      setPendingLeaveCount(pendingLeaveRes.count || 0);
-      const upcoming = assignments.filter(a => a.events && isAfter(parseISO(a.events.event_date), startOfToday()));
-      setStats({ total: upcoming.length, confirmed: upcoming.filter(a => a.status === 'confirmed').length, pending: upcoming.filter(a => a.status === 'pending').length });
-
-      setLoading(false);
     };
     load();
   }, [user, isLeader]);
@@ -335,6 +395,15 @@ export function Dashboard() {
     : null;
   const nextAssignment = myAssignments[0];
   const nextSongLeader = nextAssignment ? songLeaderByEvent[nextAssignment.event_id] : '';
+  const serviceTime = nextEvent?.start_time ? formatTime12Hour(nextEvent.start_time) : null;
+  const [serviceHour = 'Ready', servicePeriod = ''] = serviceTime?.split(' ') ?? [];
+  const heroPulse = incomingSwapRequests.length > 0
+    ? { label: 'Requests', value: incomingSwapRequests.length.toString(), caption: 'waiting' }
+    : stats.pending > 0
+      ? { label: 'Needs reply', value: stats.pending.toString(), caption: 'pending' }
+      : serviceTime
+        ? { label: 'Service', value: serviceHour, caption: `${servicePeriod} today`.trim() }
+        : { label: 'No service', value: 'Clear', caption: 'scheduled' };
 
   return (
     <div className="page-container page-bottom-pad relative">
@@ -345,75 +414,84 @@ export function Dashboard() {
         className="max-w-2xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto pt-7 sm:pt-10 pb-4 px-4 sm:px-6 lg:px-8 space-y-5 sm:space-y-6"
       >
 
-        {/* ── 01 · Editorial Hero ── */}
-        <motion.section variants={item} className="pb-2">
-          <div className="flex items-start justify-between gap-4 sm:block">
-            {/* Copy */}
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2.5 mb-4">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-500 dark:bg-emerald-400 opacity-70 animate-ping" />
-                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500 dark:bg-emerald-400" />
-                </span>
-                <p className="text-[10px] font-mono font-medium uppercase tracking-[0.22em] text-gray-500 dark:text-white/45">
-                  {format(now, 'EEE, MMM d')} <span className="text-gray-300 dark:text-white/20 mx-1.5">·</span> {format(now, 'h:mm a')}
-                </p>
-              </div>
+        {/* ── 01 · Home Command Center ── */}
+        <motion.section
+          variants={item}
+          className="relative overflow-hidden rounded-[2rem] border border-emerald-200/70 bg-[radial-gradient(circle_at_18%_20%,rgba(52,211,153,0.24),transparent_34%),linear-gradient(135deg,#f0fdf4_0%,#ffffff_48%,#f8fafc_100%)] p-5 shadow-[0_24px_80px_-46px_rgba(6,95,70,0.72)] dark:border-white/[0.08] dark:bg-[radial-gradient(circle_at_16%_18%,rgba(16,185,129,0.18),transparent_34%),linear-gradient(135deg,#071c14_0%,#0d1110_46%,#070807_100%)] sm:p-6"
+        >
+          <div className="pointer-events-none absolute -right-20 -top-24 h-56 w-56 rounded-full bg-emerald-300/25 blur-3xl dark:bg-emerald-500/10" />
+          <div className="pointer-events-none absolute -bottom-24 left-1/3 h-48 w-48 rounded-full bg-lime-200/30 blur-3xl dark:bg-lime-500/10" />
+          <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/90 to-transparent dark:via-white/[0.09]" />
+          <button
+            onClick={() => navigate(heroPulse.label === 'Requests' ? '/my-assignments' : heroPulse.label === 'Needs reply' ? '/my-assignments?status=pending' : '/events')}
+            className="absolute right-5 top-[2.65rem] z-10 hidden w-[calc((100%-4rem)/3)] rounded-2xl border border-white/70 bg-white/58 px-3 py-2.5 text-center shadow-[0_14px_38px_-28px_rgba(6,95,70,0.8)] backdrop-blur-xl transition-all hover:-translate-y-0.5 hover:bg-white/80 active:scale-[0.98] dark:border-white/[0.08] dark:bg-white/[0.055] min-[390px]:block lg:hidden"
+          >
+            <p className="text-[8px] font-black uppercase tracking-[0.18em] text-emerald-700/55 dark:text-emerald-300/45">{heroPulse.label}</p>
+            <p className="mt-1 truncate text-[1.35rem] font-black leading-none text-gray-950 dark:text-white" style={{ letterSpacing: '-0.055em' }}>{heroPulse.value}</p>
+            <p className="mt-1 truncate text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400 dark:text-white/32">{heroPulse.caption}</p>
+          </button>
 
-              <p className="text-[14px] font-light text-gray-500 dark:text-white/45 mb-1 tracking-tight">{greeting},</p>
-              <h1
-                className="text-[2.6rem] sm:text-[3.4rem] lg:text-[4rem] font-black leading-[0.98] tracking-tighter text-gray-900"
-                style={{ letterSpacing: '-0.045em' }}
-              >
-                <span className="dark:hidden">{displayName}.</span>
-                <span
-                  className="hidden dark:inline"
-                  style={{
-                    background: 'linear-gradient(180deg, #ffffff 0%, rgba(255,255,255,0.55) 100%)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    backgroundClip: 'text',
-                  }}
+          <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="flex items-start">
+              <div className="min-w-0 min-[390px]:pr-24 lg:pr-0">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-70 animate-ping dark:bg-emerald-400" />
+                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
+                  </span>
+                  <p className="text-[10px] font-mono font-black uppercase tracking-[0.32em] text-emerald-700/75 dark:text-emerald-300/70">
+                    {format(now, 'EEE, MMM d')} <span className="mx-1.5 text-emerald-700/25 dark:text-white/20">·</span> {format(now, 'h:mm a')}
+                  </p>
+                </div>
+
+                <p className="mt-3 text-sm font-semibold text-gray-500 dark:text-white/45">{greeting},</p>
+                <h1
+                  className="mt-1 text-[2.35rem] font-black leading-none text-gray-950 dark:text-white sm:text-[3.15rem] lg:text-[3.65rem]"
+                  style={{ letterSpacing: '-0.065em' }}
                 >
                   {displayName}.
-                </span>
-              </h1>
-
-              {daysUntilNext !== null && (
-                <p className="text-[13px] sm:text-[14px] text-gray-500 dark:text-white/40 mt-4 font-light max-w-md leading-relaxed">
-                  {daysUntilNext === 0 ? (
-                    <>Service is <span className="text-emerald-600 dark:text-emerald-300 font-medium">today</span>. {nextEvent?.start_time && `Starts ${formatTime12Hour(nextEvent.start_time)}.`}</>
-                  ) : daysUntilNext === 1 ? (
-                    <>Next service is <span className="text-emerald-600 dark:text-emerald-300 font-medium">tomorrow</span>.</>
-                  ) : (
-                    <>Next service in <span className="text-gray-900 dark:text-white/70 font-medium">{daysUntilNext} days</span>.</>
-                  )}
-                </p>
-              )}
+                </h1>
+              </div>
             </div>
 
-            {/* Stat pills — stacked on mobile (right column), row below on sm+ */}
-            <div className="flex flex-col gap-2 shrink-0 sm:flex-row sm:flex-wrap sm:items-center sm:mt-8">
+            <div className="grid grid-cols-3 gap-2 sm:min-w-[23rem]">
               {[
-                { label: 'Upcoming', value: stats.total, dot: 'rgba(107,114,128,0.7)', dotDark: 'rgba(255,255,255,0.45)', status: 'all' },
-                { label: 'Confirmed', value: stats.confirmed, dot: '#22c55e', dotDark: '#22c55e', status: 'confirmed' },
-                { label: 'Pending', value: stats.pending, dot: stats.pending > 0 ? '#f59e0b' : 'rgba(156,163,175,0.6)', dotDark: stats.pending > 0 ? '#f59e0b' : 'rgba(255,255,255,0.25)', status: 'pending' },
-              ].map(s => (
+                { label: 'Upcoming', value: stats.total, status: 'all' },
+                { label: 'Confirmed', value: stats.confirmed, status: 'confirmed' },
+                { label: 'Pending', value: stats.pending, status: 'pending' },
+              ].map(stat => (
                 <button
-                  key={s.label}
-                  onClick={() => navigate(`/my-assignments?status=${s.status}`)}
-                  className="group flex items-center justify-between gap-2.5 pl-3 pr-2.5 h-9 w-full sm:w-auto rounded-full transition-all duration-200 hover:scale-[1.03] hover:border-black/[0.12] dark:hover:border-white/[0.14] active:scale-[0.97] bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-md"
+                  key={stat.label}
+                  onClick={() => navigate(`/my-assignments?status=${stat.status}`)}
+                  className="rounded-2xl border border-white/70 bg-white/65 px-3 py-3 text-center shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:bg-white/90 active:scale-[0.98] dark:border-white/[0.08] dark:bg-white/[0.05] dark:hover:bg-white/[0.075]"
                 >
-                  <div className="flex items-center gap-2.5">
-                    <span className="h-1.5 w-1.5 rounded-full dark:hidden shrink-0" style={{ background: s.dot, boxShadow: `0 0 8px ${s.dot}` }} />
-                    <span className="h-1.5 w-1.5 rounded-full hidden dark:block shrink-0" style={{ background: s.dotDark, boxShadow: `0 0 8px ${s.dotDark}` }} />
-                    <span className="text-[14px] font-bold tabular-nums text-gray-900 dark:text-white" style={{ letterSpacing: '-0.02em' }}>{s.value}</span>
-                    <span className="text-[11px] font-medium text-gray-500 dark:text-white/45 tracking-tight">{s.label}</span>
-                  </div>
-                  <ChevronRight className="h-3.5 w-3.5 text-gray-400 dark:text-white/25 group-hover:text-gray-600 dark:group-hover:text-white/50 transition-colors shrink-0" />
+                  <p className="text-lg font-black leading-none text-gray-950 dark:text-white">{stat.value}</p>
+                  <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400 dark:text-white/32">{stat.label}</p>
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="relative mt-5 grid gap-3 border-t border-emerald-900/[0.07] pt-4 dark:border-white/[0.11] md:grid-cols-[1fr_auto] md:items-center">
+            <div className="min-w-0">
+              {nextEvent ? (
+                <>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700/70 dark:text-emerald-300/80">On deck</p>
+                  <p className="mt-1 truncate text-sm font-extrabold text-gray-800 dark:text-white">
+                    {nextEvent.title} <span className="font-mono text-xs font-semibold text-gray-400 dark:text-emerald-100/55">· {format(parseISO(nextEvent.event_date), 'MMM d')}</span>
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm font-semibold text-gray-500 dark:text-white/70">No upcoming service is scheduled yet.</p>
+              )}
+            </div>
+            <button
+              onClick={() => navigate('/events')}
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full px-5 text-[12px] font-black text-white shadow-[0_12px_28px_-16px_rgba(6,95,70,0.9)] transition-all active:scale-[0.97]"
+              style={{ background: 'linear-gradient(135deg, #10b981, #047857)' }}
+            >
+              Open calendar <ArrowUpRight className="h-3.5 w-3.5" />
+            </button>
           </div>
         </motion.section>
 

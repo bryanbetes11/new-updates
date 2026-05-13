@@ -6,23 +6,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { BillingStatusBanner } from './BillingStatusBanner';
 
-function useIsDesktop() {
-  const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 1024);
-  useEffect(() => {
-    const mq = window.matchMedia('(min-width: 1024px)');
-    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
-  return isDesktop;
-}
-
 export function Layout() {
   const { user } = useAuth();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const isDesktop = useIsDesktop();
 
   const staticHideNav = ['/', '/login', '/register', '/onboarding', '/reset-password', '/create-church'].includes(location.pathname)
     || /^\/invite\/[^/]+$/.test(location.pathname);
@@ -30,9 +18,6 @@ export function Layout() {
   const isMessagesPage = location.pathname.startsWith('/messages');
   const isMessagesConversation = /^\/messages\/[^/]+$/.test(location.pathname);
   const hideNavMobile = staticHideNav || isAnnouncementDetail;
-
-  const sidebarWidth = collapsed ? 72 : 256;
-  const applyOffset = isDesktop && user && !staticHideNav;
 
   useEffect(() => {
     if (!user?.id) return;
@@ -96,18 +81,18 @@ export function Layout() {
 
       <motion.main
         animate={{
-          marginLeft: applyOffset ? sidebarWidth : 0,
-          width: applyOffset ? `calc(100% - ${sidebarWidth}px)` : '100%',
+          marginLeft: 0,
+          width: '100%',
         }}
         transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-        className={`overflow-x-hidden ${isMessagesPage ? 'flex flex-col h-screen' : ''}`}
+        className={`overflow-x-hidden ${isMessagesPage ? 'box-border flex flex-col h-[100dvh] overflow-hidden lg:fixed lg:inset-0 lg:pt-24' : ''}`}
       >
         {isMessagesPage ? (
           <div className="flex flex-col flex-1 min-h-0 h-full">
             <Outlet />
           </div>
         ) : (
-          <div className={staticHideNav ? '' : 'px-4 sm:px-6 lg:px-8 mobile-layout-padding'}>
+          <div className={staticHideNav ? '' : 'px-4 sm:px-6 lg:px-8 mobile-layout-padding lg:pt-24'}>
             {!staticHideNav && (
               <div className="max-w-7xl mx-auto pt-4 sm:pt-5">
                 <BillingStatusBanner />

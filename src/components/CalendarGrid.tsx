@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval,
   format, isSameMonth, isToday, addMonths, subMonths, parseISO, differenceInDays
@@ -26,14 +26,24 @@ interface CalendarGridProps {
   setlistStatusMap?: Record<string, string>;
   setlistInfoMap?: Record<string, SetlistInfo>;
   onEventClick: (eventId: string) => void;
-  onCreateEvent?: () => void;
+  onCreateEvent?: (date?: string) => void;
   onEventDateChange?: (eventId: string, newDate: string) => void;
 }
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const CALENDAR_MONTH_STORAGE_KEY = 'eventsCalendarMonth';
+
+function getInitialCalendarMonth() {
+  const storedMonth = localStorage.getItem(CALENDAR_MONTH_STORAGE_KEY);
+  if (storedMonth && /^\d{4}-\d{2}$/.test(storedMonth)) {
+    const parsedMonth = parseISO(`${storedMonth}-01`);
+    if (!Number.isNaN(parsedMonth.getTime())) return parsedMonth;
+  }
+  return new Date();
+}
 
 export function CalendarGrid({ events, calendarEntries, songLeaderMap, setlistStatusMap, setlistInfoMap, onEventClick, onCreateEvent, onEventDateChange }: CalendarGridProps) {
-  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [currentMonth, setCurrentMonth] = useState(getInitialCalendarMonth);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
 
   const monthStart = startOfMonth(currentMonth);
@@ -51,6 +61,10 @@ export function CalendarGrid({ events, calendarEntries, songLeaderMap, setlistSt
     const dateStr = format(day, 'yyyy-MM-dd');
     return calendarEntries.filter(e => e.date === dateStr);
   };
+
+  useEffect(() => {
+    localStorage.setItem(CALENDAR_MONTH_STORAGE_KEY, format(currentMonth, 'yyyy-MM'));
+  }, [currentMonth]);
 
   const handleDragStart = useCallback((e: React.DragEvent, eventId: string) => {
     e.dataTransfer.setData('text/plain', eventId);
@@ -125,7 +139,7 @@ export function CalendarGrid({ events, calendarEntries, songLeaderMap, setlistSt
                 onCreateEvent && inMonth ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-[#222124]' : ''
               } ${isDragOver ? 'ring-2 ring-inset ring-brand-400 bg-brand-50/50 dark:bg-brand-900/20' : ''}`}
               onClick={() => {
-                if (onCreateEvent && inMonth && dayEvents.length === 0) onCreateEvent();
+                if (onCreateEvent && inMonth) onCreateEvent(dateStr);
               }}
               onDragOver={onEventDateChange ? (e) => handleDragOver(e, dateStr) : undefined}
               onDragLeave={onEventDateChange ? handleDragLeave : undefined}

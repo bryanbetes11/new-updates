@@ -76,48 +76,94 @@ export function RequestLeave() {
     approved: availability.filter(a => a.status === 'approved').length,
     total: availability.length,
   };
+  const latestRequest = availability[0];
+  const nextApproved = availability
+    .filter(a => a.status === 'approved')
+    .filter(a => (a.leave_type === 'single' ? a.unavailable_date : a.start_date))
+    .sort((a, b) => String(a.leave_type === 'single' ? a.unavailable_date : a.start_date).localeCompare(String(b.leave_type === 'single' ? b.unavailable_date : b.start_date)))[0];
 
   return (
-    <div className="page-container page-bottom-pad">
+    <div className="page-container page-bottom-pad overflow-hidden">
       <div className="max-w-2xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 space-y-5 sm:space-y-6">
 
-        {/* ── Header ───────────────────────────────────── */}
-        <motion.div
+        {/* ── Availability Command Center ──────────────── */}
+        <motion.section
           initial={{ opacity: 0, y: 14, filter: 'blur(6px)' }}
           animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          className="flex items-start justify-between gap-3"
+          className="relative overflow-hidden rounded-[2rem] border border-amber-200/70 bg-[radial-gradient(circle_at_18%_20%,rgba(251,191,36,0.28),transparent_34%),linear-gradient(135deg,#fffaf0_0%,#ffffff_48%,#f8fafc_100%)] p-5 shadow-[0_24px_80px_-46px_rgba(146,64,14,0.65)] dark:border-white/[0.08] dark:bg-[radial-gradient(circle_at_16%_18%,rgba(245,158,11,0.18),transparent_34%),linear-gradient(135deg,#1c1307_0%,#10100d_46%,#070807_100%)] sm:p-6"
         >
-          <div className="flex items-center gap-3.5">
-            <div className="relative shrink-0">
-              <div
-                className="absolute inset-0 rounded-2xl"
-                style={{ background: 'radial-gradient(circle, rgba(245,158,11,0.35), transparent 70%)', filter: 'blur(10px)', transform: 'scale(1.5)' }}
-              />
-              <div
-                className="relative h-11 w-11 rounded-2xl flex items-center justify-center"
-                style={{ background: 'linear-gradient(145deg, #f59e0b, #d97706)', boxShadow: '0 4px 14px rgba(245,158,11,0.35)' }}
-              >
-                <ClipboardCheck className="h-5 w-5 text-white" />
+          <div className="pointer-events-none absolute -right-20 -top-24 h-56 w-56 rounded-full bg-amber-300/25 blur-3xl dark:bg-amber-500/10" />
+          <div className="pointer-events-none absolute -bottom-24 left-1/3 h-48 w-48 rounded-full bg-orange-200/30 blur-3xl dark:bg-orange-500/10" />
+          <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/90 to-transparent dark:via-white/[0.09]" />
+
+          <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full rounded-full bg-amber-500 opacity-70 animate-ping dark:bg-amber-400" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-400" />
+                </span>
+                <p className="text-[10px] font-mono font-black uppercase tracking-[0.32em] text-amber-700/75 dark:text-amber-300/70">
+                  Availability <span className="mx-1.5 text-amber-700/25 dark:text-white/20">·</span> Leave planning
+                </p>
               </div>
-            </div>
-            <div>
-              <p className="text-[10px] font-mono font-medium uppercase tracking-[0.22em] text-amber-600 dark:text-amber-400/80 mb-0.5">
-                Availability
-              </p>
-              <h1 className="text-[1.5rem] sm:text-[1.75rem] font-black text-gray-900 dark:text-white leading-tight" style={{ letterSpacing: '-0.03em' }}>
-                Request Leave.
+              <h1
+                className="mt-3 text-[2.35rem] font-black leading-none text-gray-950 dark:text-white sm:text-[3.15rem] lg:text-[3.65rem]"
+                style={{ letterSpacing: '-0.065em' }}
+              >
+                Leave.
               </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600 dark:text-white/52">
+                Let leaders know when you are unavailable so schedules stay clean before assignments go out.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 sm:min-w-[23rem]">
+              {[
+                { label: 'Total', value: counts.total },
+                { label: 'Pending', value: counts.pending },
+                { label: 'Approved', value: counts.approved },
+              ].map(stat => (
+                <div key={stat.label} className="rounded-2xl border border-white/70 bg-white/65 px-3 py-3 text-center shadow-sm backdrop-blur dark:border-white/[0.08] dark:bg-white/[0.05]">
+                  <p className="text-lg font-black leading-none text-gray-950 dark:text-white">{stat.value}</p>
+                  <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400 dark:text-white/32">{stat.label}</p>
+                </div>
+              ))}
             </div>
           </div>
-          <button
-            onClick={() => setShowModal(true)}
-            className="inline-flex items-center gap-1.5 px-4 h-9 rounded-full text-[12px] font-semibold text-white shrink-0 transition-all active:scale-[0.97]"
-            style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)', boxShadow: '0 4px 14px rgba(245,158,11,0.35)' }}
-          >
-            <Plus className="h-3.5 w-3.5" /> New Request
-          </button>
-        </motion.div>
+
+          <div className="relative mt-5 grid gap-3 border-t border-amber-900/[0.07] pt-4 dark:border-white/[0.07] md:grid-cols-[1fr_auto] md:items-center">
+            <div className="min-w-0">
+              {nextApproved ? (
+                <>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700/70 dark:text-amber-300/80">Next approved leave</p>
+                  <p className="mt-1 truncate text-sm font-extrabold text-gray-800 dark:text-white">
+                    {format(parseISO((nextApproved.leave_type === 'single' ? nextApproved.unavailable_date : nextApproved.start_date)!), 'MMM d, yyyy')}
+                    <span className="font-mono text-xs font-semibold text-gray-400 dark:text-amber-100/55"> · Leaders can plan around it</span>
+                  </p>
+                </>
+              ) : latestRequest ? (
+                <>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700/70 dark:text-amber-300/80">Latest request</p>
+                  <p className="mt-1 truncate text-sm font-extrabold text-gray-800 dark:text-white">
+                    {STATUS_TONE[latestRequest.status]?.label || 'Pending'}
+                    <span className="font-mono text-xs font-semibold text-gray-400 dark:text-amber-100/55"> · {latestRequest.reason || 'No reason added'}</span>
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm font-semibold text-gray-500 dark:text-white/70">No leave requests yet.</p>
+              )}
+            </div>
+            <button
+              onClick={() => setShowModal(true)}
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full px-5 text-[12px] font-black text-white shadow-[0_12px_28px_-16px_rgba(180,83,9,0.9)] transition-all active:scale-[0.97]"
+              style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}
+            >
+              <Plus className="h-3.5 w-3.5" /> New request
+            </button>
+          </div>
+        </motion.section>
 
         {/* ── Stats pills ───────────────────────────── */}
         {availability.length > 0 && (
@@ -125,23 +171,25 @@ export function RequestLeave() {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.05, ease: [0.16, 1, 0.3, 1] }}
-            className="flex flex-wrap gap-2"
+            className="rounded-[1.6rem] border border-black/[0.05] bg-white/75 p-2 shadow-[0_16px_44px_-34px_rgba(15,23,42,0.65)] backdrop-blur-xl dark:border-white/[0.07] dark:bg-white/[0.035]"
           >
-            {[
-              { label: 'Total',    value: counts.total,    dot: 'rgba(107,114,128,0.7)', dotDark: 'rgba(255,255,255,0.45)' },
-              { label: 'Pending',  value: counts.pending,  dot: counts.pending > 0 ? '#f59e0b' : 'rgba(156,163,175,0.6)', dotDark: counts.pending > 0 ? '#f59e0b' : 'rgba(255,255,255,0.25)' },
-              { label: 'Approved', value: counts.approved, dot: '#22c55e', dotDark: '#22c55e' },
-            ].map(s => (
-              <div
-                key={s.label}
-                className="flex items-center gap-2.5 pl-3 pr-4 h-9 rounded-full bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-md"
-              >
-                <span className="h-1.5 w-1.5 rounded-full dark:hidden" style={{ background: s.dot, boxShadow: `0 0 8px ${s.dot}` }} />
-                <span className="h-1.5 w-1.5 rounded-full hidden dark:block" style={{ background: s.dotDark, boxShadow: `0 0 8px ${s.dotDark}` }} />
-                <span className="text-[14px] font-bold tabular-nums text-gray-900 dark:text-white" style={{ letterSpacing: '-0.02em' }}>{s.value}</span>
-                <span className="text-[11px] font-medium text-gray-500 dark:text-white/45 tracking-tight">{s.label}</span>
-              </div>
-            ))}
+            <div className="flex flex-wrap gap-2">
+              {[
+                { label: 'Total',    value: counts.total,    dot: 'rgba(107,114,128,0.7)', dotDark: 'rgba(255,255,255,0.45)' },
+                { label: 'Pending',  value: counts.pending,  dot: counts.pending > 0 ? '#f59e0b' : 'rgba(156,163,175,0.6)', dotDark: counts.pending > 0 ? '#f59e0b' : 'rgba(255,255,255,0.25)' },
+                { label: 'Approved', value: counts.approved, dot: '#22c55e', dotDark: '#22c55e' },
+              ].map(s => (
+                <div
+                  key={s.label}
+                  className="flex h-10 flex-1 min-w-[9rem] items-center justify-center gap-2.5 rounded-[1.15rem] bg-gray-50/90 px-3 dark:bg-black/20"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full dark:hidden" style={{ background: s.dot, boxShadow: `0 0 8px ${s.dot}` }} />
+                  <span className="h-1.5 w-1.5 rounded-full hidden dark:block" style={{ background: s.dotDark, boxShadow: `0 0 8px ${s.dotDark}` }} />
+                  <span className="text-[14px] font-bold tabular-nums text-gray-900 dark:text-white" style={{ letterSpacing: '-0.02em' }}>{s.value}</span>
+                  <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-gray-500 dark:text-white/45">{s.label}</span>
+                </div>
+              ))}
+            </div>
           </motion.div>
         )}
 

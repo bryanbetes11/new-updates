@@ -7,7 +7,7 @@ function askClientVisibility(client) {
     channel.port1.onmessage = event => {
       clearTimeout(timeout);
       const payload = event.data || {};
-      resolve(Boolean(payload.visible));
+      resolve({ visible: Boolean(payload.visible), path: payload.path || '' });
     };
 
     try {
@@ -26,7 +26,11 @@ async function hasVisibleAppClient() {
   }
 
   const replies = await Promise.all(windowClients.map(client => askClientVisibility(client)));
-  return replies.some(Boolean);
+  return replies.some(reply => {
+    if (typeof reply === 'boolean') return reply;
+    if (!reply || typeof reply !== 'object') return false;
+    return Boolean(reply.visible);
+  });
 }
 
 self.addEventListener('push', function(event) {

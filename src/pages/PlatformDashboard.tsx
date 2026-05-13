@@ -440,7 +440,7 @@ export function PlatformDashboard() {
   ];
 
   return (
-    <div className="page-container page-bottom-pad">
+    <div className="page-container page-bottom-pad overflow-hidden">
       <motion.div
         variants={container}
         initial="initial"
@@ -449,15 +449,29 @@ export function PlatformDashboard() {
       >
         <motion.section
           variants={item}
-          className={`${surfaceCardClass} p-5 sm:p-6 overflow-hidden`}
-          style={surfaceCardStyle}
+          className="relative overflow-hidden rounded-[2rem] border border-emerald-200/70 bg-[radial-gradient(circle_at_18%_20%,rgba(52,211,153,0.22),transparent_34%),linear-gradient(135deg,#f0fdf4_0%,#ffffff_48%,#f8fafc_100%)] p-5 shadow-[0_24px_80px_-46px_rgba(6,95,70,0.72)] dark:border-white/[0.08] dark:bg-[radial-gradient(circle_at_16%_18%,rgba(16,185,129,0.16),transparent_34%),linear-gradient(135deg,#071c14_0%,#0d1110_46%,#070807_100%)] sm:p-6"
         >
-          <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.12] to-transparent" />
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="pointer-events-none absolute -right-20 -top-24 h-56 w-56 rounded-full bg-emerald-300/25 blur-3xl dark:bg-emerald-500/10" />
+          <div className="pointer-events-none absolute -bottom-24 left-1/3 h-48 w-48 rounded-full bg-sky-200/30 blur-3xl dark:bg-sky-500/10" />
+          <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/90 to-transparent dark:via-white/[0.09]" />
+          <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="min-w-0">
-              <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-300 mb-2">Platform Owner</p>
-              <h1 className="text-[2rem] sm:text-[2.5rem] font-black text-gray-900 dark:text-white tracking-tight leading-none">Platform Dashboard</h1>
-              <p className="text-sm text-gray-500 dark:text-white/45 mt-3 max-w-2xl leading-relaxed">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-70 animate-ping dark:bg-emerald-400" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
+                </span>
+                <p className="text-[10px] font-mono font-black uppercase tracking-[0.32em] text-emerald-700/75 dark:text-emerald-300/70">
+                  Platform owner <span className="mx-1.5 text-emerald-700/25 dark:text-white/20">·</span> Control plane
+                </p>
+              </div>
+              <h1
+                className="mt-3 text-[2.35rem] font-black leading-none text-gray-950 dark:text-white sm:text-[3.15rem] lg:text-[3.65rem]"
+                style={{ letterSpacing: '-0.065em' }}
+              >
+                Platform.
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600 dark:text-white/52">
                 Cross-church visibility, church management, and onboarding oversight. Preview tenants are included below only to help you judge the layout before more real churches exist.
               </p>
             </div>
@@ -484,6 +498,19 @@ export function PlatformDashboard() {
                 <span className="font-semibold">Owner-only:</span> preview churches never touch the real database.
               </div>
             </div>
+          </div>
+
+          <div className="relative mt-5 grid gap-2 border-t border-emerald-900/[0.07] pt-4 dark:border-white/[0.11] sm:grid-cols-3">
+            {[
+              { label: 'Churches', value: metrics?.total_churches ?? 0 },
+              { label: 'Active subs', value: metrics?.active_subscriptions ?? 0 },
+              { label: 'Payments', value: pendingSubmissions.length },
+            ].map(stat => (
+              <div key={stat.label} className="rounded-2xl border border-white/70 bg-white/65 px-3 py-3 text-center shadow-sm backdrop-blur dark:border-white/[0.08] dark:bg-white/[0.05]">
+                <p className="text-lg font-black leading-none text-gray-950 dark:text-white">{stat.value}</p>
+                <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400 dark:text-white/32">{stat.label}</p>
+              </div>
+            ))}
           </div>
         </motion.section>
 

@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { CONVERSATIONS_REFRESH_EVENT } from '../lib/realtimeSignals';
+import { withRequestTimeout } from '../lib/requestTimeout';
 
 export interface ConversationMember {
   user_id: string;
@@ -42,112 +43,146 @@ export function useConversations() {
   const [loading, setLoading] = useState(true);
 
   const fetchConversations = useCallback(async () => {
-    if (!user) return;
-
-    const { data: myMemberships } = await supabase
-      .from('conversation_members')
-      .select('conversation_id, last_read_at')
-      .eq('user_id', user.id);
-
-    if (!myMemberships?.length) {
+    if (!user) {
       setConversations([]);
       setLoading(false);
       return;
     }
 
-    const convIds = myMemberships.map(m => m.conversation_id);
-    const [convResWithPhoto, membersRes] = await Promise.all([
-      supabase
-        .from('conversations')
-        .select('id, type, name, photo_url, event_id, created_by, created_at, updated_at')
-        .in('id', convIds)
-        .order('updated_at', { ascending: false }),
-      supabase
-        .from('conversation_members')
-        .select('conversation_id, user_id, last_read_at')
-        .in('conversation_id', convIds),
-    ]);
+    try {
+      const { data: myMemberships } = await withRequestTimeout(
+        supabase
+          .from('conversation_members')
+          .select('conversation_id, last_read_at')
+          .eq('user_id', user.id),
+        { data: [], error: null },
+        'Conversation memberships',
+      );
 
-    let convRows = convResWithPhoto.data;
-    if (convResWithPhoto.error) {
-      const { data: fallbackRows, error: fallbackError } = await supabase
-        .from('conversations')
-        .select('id, type, name, event_id, created_by, created_at, updated_at')
-        .in('id', convIds)
-        .order('updated_at', { ascending: false });
-
-      if (fallbackError) {
+      if (!myMemberships?.length) {
         setConversations([]);
-        setLoading(false);
         return;
       }
 
-      convRows = (fallbackRows || []).map(row => ({ ...row, photo_url: null }));
+      const convIds = myMemberships.map(m => m.conversation_id);
+      const [convResWithPhoto, membersRes] = await Promise.all([
+        withRequestTimeout(
+          supabase
+            .from('conversations')
+            .select('id, type, name, photo_url, event_id, created_by, created_at, updated_at')
+            .in('id', convIds)
+            .order('updated_at', { ascending: false }),
+          { data: [], error: null },
+          'Conversations list',
+        ),
+        withRequestTimeout(
+          supabase
+            .from('conversation_members')
+            .select('conversation_id, user_id, last_read_at')
+            .in('conversation_id', convIds),
+          { data: [], error: null },
+          'Conversation members list',
+        ),
+      ]);
+
+      let convRows = convResWithPhoto.data;
+      if (convResWithPhoto.error) {
+        const { data: fallbackRows, error: fallbackError } = await withRequestTimeout(
+          supabase
+            .from('conversations')
+            .select('id, type, name, event_id, created_by, created_at, updated_at')
+            .in('id', convIds)
+            .order('updated_at', { ascending: false }),
+          { data: [], error: null },
+          'Conversations fallback list',
+        );
+
+        if (fallbackError) {
+          setConversations([]);
+          return;
+        }
+
+        convRows = (fallbackRows || []).map(row => ({ ...row, photo_url: null }));
+      }
+
+      const memberUserIds = [...new Set((membersRes.data || []).map(m => m.user_id))];
+      const { data: profilesData } = memberUserIds.length
+        ? await withRequestTimeout(
+            supabase
+              .from('profiles')
+              .select('id, first_name, last_name, nickname, avatar_url')
+              .in('id', memberUserIds),
+            { data: [], error: null },
+            'Conversation profile list',
+          )
+        : { data: [] };
+      const profileMap: Record<string, ConversationMember['profile']> = Object.fromEntries(
+        (profilesData || []).map(p => [p.id, p])
+      );
+
+      const membersByConv = (membersRes.data || []).reduce((acc, m) => {
+        if (!acc[m.conversation_id]) acc[m.conversation_id] = [];
+        acc[m.conversation_id].push({
+          user_id: m.user_id,
+          last_read_at: m.last_read_at,
+          profile: profileMap[m.user_id] ?? null,
+        });
+        return acc;
+      }, {} as Record<string, ConversationMember[]>);
+
+      const [lastMsgResults, unreadResults] = await Promise.all([
+        Promise.all(convIds.map(async (cid) => {
+          const { data } = await withRequestTimeout(
+            supabase
+              .from('messages')
+              .select('id, content, sender_id, created_at')
+              .eq('conversation_id', cid)
+              .is('deleted_at', null)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle(),
+            { data: null, error: null },
+            'Conversation last message',
+          );
+          return { cid, msg: data as LastMessage | null };
+        })),
+        Promise.all(myMemberships.map(async (m) => {
+          let q = supabase
+            .from('messages')
+            .select('id', { count: 'exact', head: true })
+            .eq('conversation_id', m.conversation_id)
+            .neq('sender_id', user.id)
+            .is('deleted_at', null);
+          if (m.last_read_at) q = q.gt('created_at', m.last_read_at);
+          const { count } = await withRequestTimeout(q, { count: 0, error: null }, 'Conversation unread count');
+          return { cid: m.conversation_id, count: count || 0 };
+        })),
+      ]);
+
+      const lastMsgMap = Object.fromEntries(lastMsgResults.map(({ cid, msg }) => [cid, msg]));
+      const unreadMap = Object.fromEntries(unreadResults.map(({ cid, count }) => [cid, count]));
+
+      const result: Conversation[] = (convRows || []).map((c) => ({
+        id: c.id,
+        type: c.type as 'personal' | 'group' | 'event',
+        name: c.name,
+        photo_url: c.photo_url ?? null,
+        event_id: c.event_id,
+        created_by: c.created_by,
+        created_at: c.created_at,
+        updated_at: c.updated_at,
+        members: membersByConv[c.id] || [],
+        last_message: lastMsgMap[c.id] || null,
+        unread_count: unreadMap[c.id] || 0,
+      }));
+
+      setConversations(result);
+    } catch (error) {
+      console.error('Fetch conversations error:', error);
+      setConversations([]);
+    } finally {
+      setLoading(false);
     }
-
-    const memberUserIds = [...new Set((membersRes.data || []).map(m => m.user_id))];
-    const { data: profilesData } = await supabase
-      .from('profiles')
-      .select('id, first_name, last_name, nickname, avatar_url')
-      .in('id', memberUserIds);
-    const profileMap: Record<string, ConversationMember['profile']> = Object.fromEntries(
-      (profilesData || []).map(p => [p.id, p])
-    );
-
-    const membersByConv = (membersRes.data || []).reduce((acc, m) => {
-      if (!acc[m.conversation_id]) acc[m.conversation_id] = [];
-      acc[m.conversation_id].push({
-        user_id: m.user_id,
-        last_read_at: m.last_read_at,
-        profile: profileMap[m.user_id] ?? null,
-      });
-      return acc;
-    }, {} as Record<string, ConversationMember[]>);
-
-    const [lastMsgResults, unreadResults] = await Promise.all([
-      Promise.all(convIds.map(async (cid) => {
-        const { data } = await supabase
-          .from('messages')
-          .select('id, content, sender_id, created_at')
-          .eq('conversation_id', cid)
-          .is('deleted_at', null)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        return { cid, msg: data as LastMessage | null };
-      })),
-      Promise.all(myMemberships.map(async (m) => {
-        let q = supabase
-          .from('messages')
-          .select('id', { count: 'exact', head: true })
-          .eq('conversation_id', m.conversation_id)
-          .neq('sender_id', user.id)
-          .is('deleted_at', null);
-        if (m.last_read_at) q = q.gt('created_at', m.last_read_at);
-        const { count } = await q;
-        return { cid: m.conversation_id, count: count || 0 };
-      })),
-    ]);
-
-    const lastMsgMap = Object.fromEntries(lastMsgResults.map(({ cid, msg }) => [cid, msg]));
-    const unreadMap = Object.fromEntries(unreadResults.map(({ cid, count }) => [cid, count]));
-
-    const result: Conversation[] = (convRows || []).map((c) => ({
-      id: c.id,
-      type: c.type as 'personal' | 'group' | 'event',
-      name: c.name,
-      photo_url: c.photo_url ?? null,
-      event_id: c.event_id,
-      created_by: c.created_by,
-      created_at: c.created_at,
-      updated_at: c.updated_at,
-      members: membersByConv[c.id] || [],
-      last_message: lastMsgMap[c.id] || null,
-      unread_count: unreadMap[c.id] || 0,
-    }));
-
-    setConversations(result);
-    setLoading(false);
   }, [user]);
 
   useEffect(() => {

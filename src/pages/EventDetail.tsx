@@ -176,9 +176,11 @@ export function EventDetail() {
     if (serviceModeIndex === null) return;
     const previousOverflow = document.body.style.overflow;
     const previousOverscroll = document.body.style.overscrollBehavior;
+    document.body.classList.add('service-mode-active');
     document.body.style.overflow = 'hidden';
     document.body.style.overscrollBehavior = 'none';
     return () => {
+      document.body.classList.remove('service-mode-active');
       document.body.style.overflow = previousOverflow;
       document.body.style.overscrollBehavior = previousOverscroll;
     };
@@ -2726,6 +2728,34 @@ const openLyricsModal = (ss: SetlistSong) => {
                           onSave={(text) => handleSaveChart(serviceModeSong.song_id, text)}
                         />
                       </motion.div>
+                      {!serviceChartEditing && (
+                        <div
+                          className="relative z-20 shrink-0 border-t border-black/[0.06] bg-white/95 px-4 py-3 shadow-[0_-18px_45px_-34px_rgba(15,23,42,0.45)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#0c0f0d]/95"
+                          style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 12px)' }}
+                        >
+                          <div className="mx-auto grid max-w-md grid-cols-[1fr_auto_1fr] items-center gap-2">
+                            <button
+                              onClick={goToPreviousServiceSong}
+                              disabled={isFirstServiceSong}
+                              className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-black/[0.07] bg-white/80 px-4 text-sm font-black text-gray-700 shadow-sm transition active:scale-[0.97] disabled:opacity-35 disabled:active:scale-100 dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/70"
+                            >
+                              <ChevronLeft className="h-4 w-4" />
+                              Prev
+                            </button>
+                            <span className="rounded-full bg-gray-100 px-3 py-1 text-[11px] font-black text-gray-500 dark:bg-white/[0.07] dark:text-white/45">
+                              {(serviceModeIndex ?? 0) + 1}/{serviceModeSongs.length}
+                            </span>
+                            <button
+                              onClick={goToNextServiceSong}
+                              disabled={isLastServiceSong}
+                              className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-black text-white shadow-lg shadow-emerald-600/20 transition active:scale-[0.97] disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none disabled:active:scale-100 dark:disabled:bg-white/[0.07] dark:disabled:text-white/30"
+                            >
+                              Next
+                              <ChevronRight className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </motion.div>
                   )}
                 </AnimatePresence>

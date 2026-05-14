@@ -660,6 +660,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
       {/* ── Mobile bottom nav ── */}
       {!hideMobile && !hideMobileAll && (
         <div
+          data-mobile-nav="true"
           className={`fixed bottom-0 left-0 right-0 z-50 overflow-hidden lg:hidden ${useDockedMobileNav ? 'pointer-events-auto' : 'pointer-events-none'}`}
           style={{
             paddingBottom: useDockedMobileNav ? '0px' : 'max(0px, calc(env(safe-area-inset-bottom) - 6px))',

@@ -47,6 +47,10 @@
     overscroll-behavior-y: auto;
   }
 
+  body.service-mode-active [data-mobile-nav="true"] {
+    display: none !important;
+  }
+
   ::selection {
     @apply bg-brand-200 dark:bg-brand-800;
   }

@@ -2583,7 +2583,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                 animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
                 exit={{ opacity: 0, scale: 0.985, y: 18, filter: 'blur(10px)' }}
                 transition={{ duration: 0.58, ease: [0.22, 1, 0.36, 1] }}
-                className="fixed inset-0 z-[2147483647] flex h-[100svh] h-[100dvh] w-screen flex-col overflow-hidden bg-white text-gray-950 dark:bg-[#0c0f0d] dark:text-white"
+                className="fixed inset-0 isolate z-[2147483647] flex h-[100svh] h-[100dvh] w-screen flex-col overflow-hidden bg-white text-gray-950 dark:bg-[#0c0f0d] dark:text-white"
                 onPointerDown={(event) => {
                   serviceSwipeStart.current = { x: event.clientX, y: event.clientY };
                 }}
@@ -2615,7 +2615,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: -14, scale: 1.015 }}
                       transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-                      className="relative z-10 flex min-h-0 flex-1 items-center justify-center px-6 text-center"
+                      className="absolute inset-0 z-20 flex items-center justify-center bg-white px-6 text-center dark:bg-[#0c0f0d]"
                     >
                       <div className="relative max-w-sm">
                         <motion.div
@@ -2654,7 +2654,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                   ) : (
                     <motion.div
                       key="service-mode-chart"
-                      className="relative z-10 flex min-h-0 flex-1 flex-col"
+                      className="relative z-10 flex min-h-0 flex-1 flex-col bg-white dark:bg-[#0c0f0d]"
                       initial={{ opacity: 0, y: 24 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 18 }}
@@ -2692,7 +2692,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                         animate={{ y: 0, opacity: 1 }}
                         exit={{ y: 24, opacity: 0 }}
                         transition={{ duration: 0.62, delay: 0.04, ease: [0.22, 1, 0.36, 1] }}
-                        className="relative z-10 min-h-0 flex-1 overflow-hidden"
+                        className="relative z-10 min-h-0 flex-1 overflow-hidden bg-white dark:bg-[#0c0f0d]"
                       >
                         {!serviceChartEditing && (
                           <>
@@ -2730,25 +2730,25 @@ const openLyricsModal = (ss: SetlistSong) => {
                       </motion.div>
                       {!serviceChartEditing && (
                         <div
-                          className="relative z-20 shrink-0 border-t border-black/[0.06] bg-white/95 px-4 py-3 shadow-[0_-18px_45px_-34px_rgba(15,23,42,0.45)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#0c0f0d]/95"
-                          style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 12px)' }}
+                          className="relative z-30 shrink-0 border-t border-black/[0.06] bg-white px-4 pt-3 shadow-[0_-20px_50px_-36px_rgba(15,23,42,0.55)] dark:border-white/[0.08] dark:bg-[#0c0f0d]"
+                          style={{ paddingBottom: 'calc(max(env(safe-area-inset-bottom), 12px) + 12px)' }}
                         >
-                          <div className="mx-auto grid max-w-md grid-cols-[1fr_auto_1fr] items-center gap-2">
+                          <div className="mx-auto grid max-w-md grid-cols-[1fr_56px_1fr] items-center gap-2">
                             <button
                               onClick={goToPreviousServiceSong}
                               disabled={isFirstServiceSong}
-                              className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-black/[0.07] bg-white/80 px-4 text-sm font-black text-gray-700 shadow-sm transition active:scale-[0.97] disabled:opacity-35 disabled:active:scale-100 dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/70"
+                              className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-black/[0.07] bg-gray-100 px-4 text-sm font-black text-gray-700 shadow-sm transition active:scale-[0.97] disabled:opacity-35 disabled:active:scale-100 dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/70"
                             >
                               <ChevronLeft className="h-4 w-4" />
                               Prev
                             </button>
-                            <span className="rounded-full bg-gray-100 px-3 py-1 text-[11px] font-black text-gray-500 dark:bg-white/[0.07] dark:text-white/45">
+                            <span className="inline-flex h-11 items-center justify-center rounded-full bg-gray-100 px-2 text-[11px] font-black text-gray-500 dark:bg-white/[0.07] dark:text-white/45">
                               {(serviceModeIndex ?? 0) + 1}/{serviceModeSongs.length}
                             </span>
                             <button
                               onClick={goToNextServiceSong}
                               disabled={isLastServiceSong}
-                              className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-black text-white shadow-lg shadow-emerald-600/20 transition active:scale-[0.97] disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none disabled:active:scale-100 dark:disabled:bg-white/[0.07] dark:disabled:text-white/30"
+                              className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-black text-white shadow-lg shadow-emerald-600/25 transition active:scale-[0.97] disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none disabled:active:scale-100 dark:disabled:bg-white/[0.07] dark:disabled:text-white/30"
                             >
                               Next
                               <ChevronRight className="h-4 w-4" />

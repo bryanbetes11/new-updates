@@ -1,7 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { motion } from 'framer-motion';
-import JSZip from 'jszip';
 import {
   Music, Upload, CheckCircle, AlertTriangle, Calendar, Search,
   ChevronDown, Trash2, Square, CheckSquare, X,
@@ -350,11 +349,7 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
 
       for (const file of Array.from(files)) {
         if (file.name.toLowerCase().endsWith('.zip')) {
-          const zip = await JSZip.loadAsync(file);
-          const entries = Object.values(zip.files).filter(entry => !entry.dir && entry.name.toLowerCase().endsWith('.cho'));
-          for (const entry of entries) {
-            chartFiles.push({ name: entry.name, text: await entry.async('string') });
-          }
+          toast('info', 'For Bolt publishing, upload exported .cho files directly instead of a .zip backup.');
         } else if (file.name.toLowerCase().endsWith('.cho')) {
           chartFiles.push({ name: file.name, text: await readFileAsText(file) });
         }
@@ -1064,7 +1059,7 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
       >
         <span className="flex items-center gap-1.5"><BarChart2 className="h-3 w-3" /> Song Results</span>
       </SectionLabel>
-      <input ref={chartFileRef} type="file" accept=".cho,.zip" multiple className="hidden" onChange={e => handleChartUpload(e.target.files)} />
+      <input ref={chartFileRef} type="file" accept=".cho" multiple className="hidden" onChange={e => handleChartUpload(e.target.files)} />
 
       {/* ── Stats strip ── */}
       <motion.div

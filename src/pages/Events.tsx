@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { format, parseISO, startOfDay, subWeeks, previousSunday, addDays, subDays, differenceInDays, eachDayOfInterval } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -435,6 +435,7 @@ export function Events() {
   const { user, isLeader, roles } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
   const isDesktop = useIsDesktop();
   const [tabDir, setTabDir] = useState<'left' | 'right'>('left');
   const [events, setEvents] = useState<Event[]>([]);
@@ -517,6 +518,29 @@ export function Events() {
   };
 
   useEffect(() => { fetchEvents(); }, []);
+  useEffect(() => {
+    const state = location.state as { deletedEventId?: string; refreshEventsAt?: number } | null;
+    if (!state?.deletedEventId && !state?.refreshEventsAt) return;
+
+    const deletedEventId = state.deletedEventId;
+    if (deletedEventId) {
+      setEvents(prev => prev.filter(event => event.id !== deletedEventId));
+      setSundayServices(prev => prev.filter(event => event.id !== deletedEventId));
+      setSongLeaderMap(prev => {
+        const next = { ...prev };
+        delete next[deletedEventId];
+        return next;
+      });
+      setSetlistInfoMap(prev => {
+        const next = { ...prev };
+        delete next[deletedEventId];
+        return next;
+      });
+    }
+
+    fetchEvents();
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.key]);
   useEffect(() => { localStorage.setItem('eventsViewMode', viewMode); }, [viewMode]);
   useEffect(() => { localStorage.setItem('eventsActiveTab', activeTab); }, [activeTab]);
 
@@ -619,10 +643,18 @@ export function Events() {
         event_type: draft.event_type, description: draft.description || null, created_by: user.id,
         proposal_due_date: calculateProposalDueDate(draft.event_date, draft.event_type),
         song_leader_id: draft.song_leader_id || null, linked_event_id: draft.linked_event_id || null,
-      }).select('id').maybeSingle();
+      }).select('*').maybeSingle();
       if (error || !newEvent) { toast('error', 'Failed to create event'); setCreating(false); return; }
 
+      const newEventRecord = newEvent as Event;
       closeCreateEvent();
+      setEvents(prev => [newEventRecord, ...prev.filter(event => event.id !== newEventRecord.id)]);
+      if (newEventRecord.event_type === 'Sunday Service' && parseISO(newEventRecord.event_date) >= today) {
+        setSundayServices(prev => [newEventRecord, ...prev.filter(event => event.id !== newEventRecord.id)]);
+      }
+      if (draft.song_leader_id) {
+        setSongLeaderMap(prev => ({ ...prev, [newEventRecord.id]: title }));
+      }
       setCreating(false);
       toast('success', 'Event created');
       eventWasCreated = true;
@@ -632,7 +664,7 @@ export function Events() {
         const slRole = roles.find(r => r.name === 'Song Leader');
         if (slRole) validAssignments.push({ user_id: draft.song_leader_id, role_id: slRole.id });
       }
-      if (validAssignments.length > 0) await supabase.from('event_assignments').insert(validAssignments.map(a => ({ event_id: newEvent.id, user_id: a.user_id, role_id: a.role_id })));
+      if (validAssignments.length > 0) await supabase.from('event_assignments').insert(validAssignments.map(a => ({ event_id: newEventRecord.id, user_id: a.user_id, role_id: a.role_id })));
 
       if (draft.event_type === 'Rehearsals' && draft.linked_event_id && validAssignments.length > 0) {
         const { data: existing } = await supabase.from('event_assignments').select('user_id, role_id').eq('event_id', draft.linked_event_id);

@@ -897,8 +897,10 @@ export function EventDetail() {
     if (error) { toast('error', 'Failed to delete event'); return; }
     setShowDeleteEvent(false);
     toast('success', 'Event deleted');
-    setIsLeaving(true);
-    setTimeout(() => navigate('/events'), 300);
+    navigate('/events', {
+      replace: true,
+      state: { deletedEventId: id, refreshEventsAt: Date.now() },
+    });
   };
 
 

@@ -1,7 +1,7 @@
-export const APP_VERSION = '2026.05.14.2';
+export const APP_VERSION = '2026.05.15.1';
 export const APP_UPDATE_VERSION = APP_VERSION;
 export const APP_VERSION_LABEL = `v${APP_VERSION}`;
-export const APP_UPDATE_PUBLISHED_AT = '2026-05-14T16:02:12Z';
+export const APP_UPDATE_PUBLISHED_AT = '2026-05-14T16:08:02Z';
 
 export const APP_UPDATE_FEATURES = [
   'Chats now support @mentions, and mentioned users receive a dedicated mention notification with push delivery.',
@@ -25,6 +25,7 @@ export const APP_UPDATE_FEATURES = [
 ];
 
 export const APP_UPDATE_FIXES = [
+  'Events now update immediately after creating or deleting, including calendar/list state and leaving a deleted event page right away.',
   'Create Event and Delete Event dialogs now dismiss immediately after the successful action instead of leaving the sheet on screen.',
   'Activity Log now refreshes while open and when returning to the app, so new create/delete activity appears without getting stuck on a stale load state.',
   'Chat push delivery now refreshes the service worker cleanly while keeping lockscreen notifications limited to when ServeSync is not visibly open.',

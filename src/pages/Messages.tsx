@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
 import {
@@ -672,12 +673,19 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
     if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; }
   };
 
-  return (
+  const isDesktop = useIsDesktop();
+  const composerBar = (
     <div
-      className="relative z-30 w-full shrink-0 border-t border-gray-100 bg-white dark:border-white/[0.06] dark:bg-[#111013]"
-      style={{
-        paddingBottom: 'clamp(8px, env(safe-area-inset-bottom, 0px), 14px)',
-      }}
+      className={`${isDesktop ? 'relative' : 'mobile-chat-composer fixed inset-x-0 bottom-0'} w-full shrink-0 border-t border-gray-100 bg-white dark:border-white/[0.06] dark:bg-[#111013]`}
+      style={isDesktop
+        ? { paddingBottom: '8px' }
+        : {
+          bottom: 'calc(var(--messages-keyboard-inset, 0px) + 42px - env(safe-area-inset-bottom, 0px))',
+          paddingBottom: '8px',
+          zIndex: 2147483647,
+          isolation: 'isolate',
+          transform: 'translateZ(0)',
+        }}
     >
       <AnimatePresence>
         {replyTo && replyPreview && (
@@ -697,7 +705,7 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
           </motion.div>
         )}
       </AnimatePresence>
-      <div className="flex items-end gap-2 px-3 py-2.5">
+      <div className="relative z-[1] flex items-end gap-2 px-3 py-2.5">
         {/* + attach button */}
         <div className="relative shrink-0">
           <button
@@ -848,6 +856,12 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
       </div>
     </div>
   );
+
+  if (!isDesktop && typeof document !== 'undefined') {
+    return createPortal(composerBar, document.body);
+  }
+
+  return composerBar;
 }
 
 // ─── Conversation Info Panel ─────────────────────────────────────────────────
@@ -2617,8 +2631,7 @@ function ChatWindow({
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-4 space-y-0.5 sm:px-4"
-        style={{ paddingBottom: '0.75rem' }}
+        className="messages-scroll-area flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 pt-4 space-y-0.5 sm:px-4"
       >
         {loading && (
           <div className="flex justify-center pt-8">
@@ -3237,34 +3250,34 @@ function useIsDesktop() {
 function useMessagesKeyboardInset(active: boolean) {
   useEffect(() => {
     if (!active) return;
-    const scrollY = window.scrollY;
     const previousBodyOverflow = document.body.style.overflow;
-    const previousBodyPosition = document.body.style.position;
-    const previousBodyTop = document.body.style.top;
-    const previousBodyWidth = document.body.style.width;
     const previousHtmlOverflow = document.documentElement.style.overflow;
+    document.documentElement.classList.add('messages-chat-active');
+    document.body.classList.add('messages-chat-active');
     document.body.style.overflow = 'hidden';
-    document.body.style.position = 'fixed';
-    document.body.style.top = `-${scrollY}px`;
-    document.body.style.width = '100%';
     document.documentElement.style.overflow = 'hidden';
+    let restingViewportHeight = Math.max(window.innerHeight, window.visualViewport?.height || 0);
 
     const setInset = () => {
       const composerFocused =
         document.activeElement instanceof HTMLTextAreaElement ||
         (document.activeElement instanceof HTMLElement && document.activeElement.dataset.chatComposer === 'true');
       const viewport = window.visualViewport;
-      const keyboardInset = viewport
-        ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
+      const rawKeyboardInset = viewport
+        ? Math.max(0, restingViewportHeight - viewport.height - viewport.offsetTop)
         : 0;
-      const keyboardOpen = composerFocused && keyboardInset > 160;
+      if (!composerFocused || rawKeyboardInset < 80) {
+        restingViewportHeight = Math.max(restingViewportHeight, window.innerHeight, viewport?.height || 0);
+      }
+      const keyboardOpen = composerFocused && rawKeyboardInset > 120;
+      const keyboardInset = keyboardOpen ? rawKeyboardInset : 0;
       document.documentElement.classList.toggle('messages-keyboard-open', keyboardOpen);
       if (keyboardOpen && viewport) {
         document.documentElement.style.setProperty('--messages-viewport-height', `${Math.round(viewport.height)}px`);
       } else {
         document.documentElement.style.removeProperty('--messages-viewport-height');
       }
-      document.documentElement.style.setProperty('--messages-keyboard-inset', '0px');
+      document.documentElement.style.setProperty('--messages-keyboard-inset', `${Math.round(keyboardInset)}px`);
       window.scrollTo(0, 0);
       window.dispatchEvent(new Event('messages-keyboard-inset-change'));
     };
@@ -3285,12 +3298,10 @@ function useMessagesKeyboardInset(active: boolean) {
       document.documentElement.style.removeProperty('--messages-keyboard-inset');
       document.documentElement.style.removeProperty('--messages-viewport-height');
       document.documentElement.classList.remove('messages-keyboard-open');
+      document.documentElement.classList.remove('messages-chat-active');
+      document.body.classList.remove('messages-chat-active');
       document.body.style.overflow = previousBodyOverflow;
-      document.body.style.position = previousBodyPosition;
-      document.body.style.top = previousBodyTop;
-      document.body.style.width = previousBodyWidth;
       document.documentElement.style.overflow = previousHtmlOverflow;
-      window.scrollTo(0, scrollY);
     };
   }, [active]);
 }
@@ -3474,7 +3485,7 @@ export function Messages() {
           animate={isDesktop ? undefined : { x: 0, opacity: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, boxShadow: mobilePanelShadow }}
           exit={isDesktop ? undefined : { x: '100%', opacity: 0.96, borderTopLeftRadius: 30, borderBottomLeftRadius: 30, boxShadow: mobilePanelShadow }}
           transition={isDesktop ? undefined : mobilePanelTransition}
-          style={isDesktop ? undefined : { overflow: 'hidden' }}
+          style={isDesktop ? undefined : { overflow: 'visible', zIndex: 2147483000 }}
         >
         <AnimatePresence mode={isDesktop ? 'wait' : 'sync'} initial={false}>
           {selectedConv ? (

@@ -798,7 +798,7 @@ export function SongChartViewer({
           </div>
         </div>
       ) : (
-        <div className={`min-h-0 flex-1 overflow-y-auto ${fullBleed ? 'px-5 py-6 sm:px-10 sm:py-8' : 'px-5 py-5'}`}>
+        <div className={`min-h-0 flex-1 overflow-y-auto ${fullBleed ? 'px-5 pt-6 sm:px-10 sm:pt-8' : 'px-5 py-5'}`}>
           <div className="mx-auto max-w-3xl space-y-4">
             {noteError && (
               <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">

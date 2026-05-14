@@ -1198,6 +1198,13 @@ const openLyricsModal = (ss: SetlistSong) => {
       window.clearTimeout(serviceModeEnterTimer.current);
       serviceModeEnterTimer.current = null;
     }
+    const root = document.documentElement;
+    root.classList.remove('service-mode-active');
+    document.body.classList.remove('service-mode-active');
+    root.style.overflow = '';
+    root.style.overscrollBehavior = '';
+    document.body.style.overflow = '';
+    document.body.style.overscrollBehavior = '';
     setServiceChartEditing(false);
     setServiceModeEntering(false);
     setServiceModeIndex(null);
@@ -2649,16 +2656,13 @@ const openLyricsModal = (ss: SetlistSong) => {
           )}
         </Modal>
 
-        {typeof document !== 'undefined' && createPortal(
-          <AnimatePresence>
-            {serviceModeSong?.songs && (
+        {typeof document !== 'undefined' && serviceModeSong?.songs && createPortal(
               <motion.div
                 key="service-mode-overlay"
                 initial={{ opacity: 0, scale: 0.985, y: 18, filter: 'blur(10px)' }}
                 animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
-                exit={{ opacity: 0, scale: 0.985, y: 18, filter: 'blur(10px)' }}
                 transition={{ duration: 0.58, ease: [0.22, 1, 0.36, 1] }}
-                className="fixed inset-0 isolate z-[2147483647] flex w-screen flex-col overflow-hidden bg-white text-gray-950 dark:bg-[#0c0f0d] dark:text-white"
+                className="service-mode-overlay fixed inset-0 isolate z-[2147483000] flex w-screen flex-col overflow-visible bg-white text-gray-950 dark:bg-[#0c0f0d] dark:text-white"
                 onPointerDown={(event) => {
                   serviceSwipeStart.current = { x: event.clientX, y: event.clientY };
                 }}
@@ -2802,38 +2806,46 @@ const openLyricsModal = (ss: SetlistSong) => {
                           onEditingChange={setServiceChartEditing}
                           onSave={(text) => handleSaveChart(serviceModeSong.song_id, text)}
                         />
-                        {!serviceChartEditing && (
-                          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-white via-white/95 to-transparent px-4 pb-3 pt-8 dark:from-[#0c0f0d] dark:via-[#0c0f0d]/95">
-                            <div className="mx-auto grid max-w-md grid-cols-[1fr_56px_1fr] items-center gap-2">
-                              <button
-                                onClick={goToPreviousServiceSong}
-                                disabled={isFirstServiceSong}
-                                className="pointer-events-auto inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-black/[0.07] bg-gray-100 px-4 text-sm font-black text-gray-700 shadow-sm transition active:scale-[0.97] disabled:opacity-35 disabled:active:scale-100 dark:border-white/[0.08] dark:bg-white/[0.08] dark:text-white/70"
-                              >
-                                <ChevronLeft className="h-4 w-4" />
-                                Prev
-                              </button>
-                              <span className="inline-flex h-11 items-center justify-center rounded-full bg-gray-100 px-2 text-[11px] font-black text-gray-500 dark:bg-white/[0.08] dark:text-white/45">
-                                {(serviceModeIndex ?? 0) + 1}/{serviceModeSongs.length}
-                              </span>
-                              <button
-                                onClick={goToNextServiceSong}
-                                disabled={isLastServiceSong}
-                                className="pointer-events-auto inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-black text-white shadow-lg shadow-emerald-600/25 transition active:scale-[0.97] disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none disabled:active:scale-100 dark:disabled:bg-white/[0.07] dark:disabled:text-white/30"
-                              >
-                                Next
-                                <ChevronRight className="h-4 w-4" />
-                              </button>
-                            </div>
-                          </div>
-                        )}
                       </motion.div>
                     </motion.div>
                   )}
                 </AnimatePresence>
-              </motion.div>
-            )}
-          </AnimatePresence>,
+              </motion.div>,
+          document.body
+        )}
+
+        {typeof document !== 'undefined' && serviceModeSong?.songs && !serviceModeEntering && !serviceChartEditing && createPortal(
+          <div
+            className="service-bottom-controls pointer-events-none fixed inset-x-0 bottom-0 px-7 py-2.5"
+            style={{
+              bottom: '4px',
+              zIndex: 2147483647,
+              isolation: 'isolate',
+              transform: 'translateZ(0)',
+            }}
+          >
+            <div className="relative z-[1] mx-auto grid max-w-[22.5rem] grid-cols-[1fr_56px_1fr] items-center gap-2">
+              <button
+                onClick={goToPreviousServiceSong}
+                disabled={isFirstServiceSong}
+                className="pointer-events-auto inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-black/[0.07] bg-gray-100 px-4 text-sm font-black text-gray-700 shadow-sm transition active:scale-[0.97] disabled:opacity-35 disabled:active:scale-100 dark:border-white/[0.08] dark:bg-white/[0.08] dark:text-white/70"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Prev
+              </button>
+              <span className="inline-flex h-11 items-center justify-center rounded-full bg-gray-100 px-2 text-[11px] font-black text-gray-500 dark:bg-white/[0.08] dark:text-white/45">
+                {(serviceModeIndex ?? 0) + 1}/{serviceModeSongs.length}
+              </span>
+              <button
+                onClick={goToNextServiceSong}
+                disabled={isLastServiceSong}
+                className="pointer-events-auto inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-black text-white shadow-lg shadow-emerald-600/25 transition active:scale-[0.97] disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none disabled:active:scale-100 dark:disabled:bg-white/[0.07] dark:disabled:text-white/30"
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>,
           document.body
         )}
 

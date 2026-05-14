@@ -2730,8 +2730,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                       </motion.div>
                       {!serviceChartEditing && (
                         <div
-                          className="relative z-30 shrink-0 border-t border-black/[0.06] bg-white px-4 pt-3 shadow-[0_-20px_50px_-36px_rgba(15,23,42,0.55)] dark:border-white/[0.08] dark:bg-[#0c0f0d]"
-                          style={{ paddingBottom: 'calc(max(env(safe-area-inset-bottom), 12px) + 12px)' }}
+                          className="relative z-30 shrink-0 border-t border-black/[0.06] bg-white px-4 py-3 shadow-[0_-20px_50px_-36px_rgba(15,23,42,0.55)] dark:border-white/[0.08] dark:bg-[#0c0f0d]"
                         >
                           <div className="mx-auto grid max-w-md grid-cols-[1fr_56px_1fr] items-center gap-2">
                             <button

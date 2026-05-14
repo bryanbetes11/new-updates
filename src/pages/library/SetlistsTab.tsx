@@ -1,10 +1,11 @@
 import { useEffect, useState, useRef } from 'react';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { motion } from 'framer-motion';
+import JSZip from 'jszip';
 import {
   Music, Upload, CheckCircle, AlertTriangle, Calendar, Search,
   ChevronDown, Trash2, Square, CheckSquare, X,
-  ListMusic, Clock, Music2, ArrowUpDown, BarChart2, ArrowRight,
+  ListMusic, Clock, Music2, ArrowUpDown, BarChart2, ArrowRight, FileMusic,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -12,13 +13,16 @@ import { useToast } from '../../contexts/ToastContext';
 import { Modal } from '../../components/Modal';
 import { EmptyState } from '../../components/EmptyState';
 import { Avatar } from '../../components/Avatar';
+import { SongChartViewer } from '../../components/SongChartViewer';
+import { parseChordProMetadata } from '../../lib/chordPro';
+import { withSaveTimeout } from '../../lib/saveTimeout';
 
 interface SetlistWithEvent {
   id: string;
   status: string;
   event_id: string;
   events?: { title: string; event_date: string; event_type: string };
-  setlist_songs?: { id: string; position: number; song_id: string; performed_key: string; songs?: { id: string; title: string; artist: string; song_key: string } }[];
+  setlist_songs?: { id: string; position: number; song_id: string; performed_key: string; songs?: { id: string; title: string; artist: string; song_key: string; chordpro_text?: string | null } }[];
 }
 
 interface SongUsage {
@@ -26,6 +30,7 @@ interface SongUsage {
   title: string;
   artist: string;
   song_key: string;
+  chordpro_text?: string | null;
   last_used_date: string | null;
   days_since: number | null;
   is_safe: boolean;
@@ -148,16 +153,20 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
   const [selectMode, setSelectMode] = useState(false);
   const [selectModeSongs, setSelectModeSongs] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'all' | 'safe' | 'not_ready' | 'never_used'>('all');
+  const [selectedChartSong, setSelectedChartSong] = useState<SongUsage | null>(null);
+  const [chartSaving, setChartSaving] = useState(false);
+  const [chartImporting, setChartImporting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const chartFileRef = useRef<HTMLInputElement>(null);
 
   const fetchData = async () => {
     const [setlistRes, songsRes, songLeadersRes] = await Promise.all([
       supabase
         .from('setlists')
-        .select('id, status, event_id, events(title, event_date, event_type), setlist_songs(id, position, song_id, performed_key, songs(id, title, artist, song_key))')
+        .select('id, status, event_id, events(title, event_date, event_type), setlist_songs(id, position, song_id, performed_key, songs(id, title, artist, song_key, chordpro_text))')
         .eq('status', 'approved')
         .order('created_at', { ascending: false }),
-      supabase.from('songs').select('id, title, artist, song_key').order('title'),
+      supabase.from('songs').select('id, title, artist, song_key, chordpro_text').order('title'),
       supabase.from('event_assignments').select('event_id, profiles(first_name, last_name, nickname, gender, avatar_url), roles!inner(name)').eq('roles.name', 'Song Leader'),
     ]);
 
@@ -323,6 +332,122 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
     };
     reader.readAsArrayBuffer(file);
     if (fileRef.current) fileRef.current.value = '';
+  };
+
+  const readFileAsText = (file: File): Promise<string> => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('Failed to read file'));
+    reader.readAsText(file);
+  });
+
+  const handleChartUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0 || !user) return;
+    setChartImporting(true);
+
+    try {
+      const chartFiles: Array<{ name: string; text: string }> = [];
+
+      for (const file of Array.from(files)) {
+        if (file.name.toLowerCase().endsWith('.zip')) {
+          const zip = await JSZip.loadAsync(file);
+          const entries = Object.values(zip.files).filter(entry => !entry.dir && entry.name.toLowerCase().endsWith('.cho'));
+          for (const entry of entries) {
+            chartFiles.push({ name: entry.name, text: await entry.async('string') });
+          }
+        } else if (file.name.toLowerCase().endsWith('.cho')) {
+          chartFiles.push({ name: file.name, text: await readFileAsText(file) });
+        }
+      }
+
+      if (chartFiles.length === 0) {
+        toast('error', 'No .cho song charts found in that file');
+        return;
+      }
+
+      const { data: existingSongs, error: existingError } = await supabase
+        .from('songs')
+        .select('id, title, artist, song_key');
+      if (existingError) throw existingError;
+
+      let createdCount = 0;
+      let updatedCount = 0;
+      const existingByTitle = new Map((existingSongs || []).map(song => [normalizeSongTitle(song.title), song]));
+
+      for (const chartFile of chartFiles) {
+        const metadata = parseChordProMetadata(chartFile.text);
+        const fallbackName = chartFile.name.replace(/\.cho$/i, '').split('/').pop() || 'Untitled Song';
+        const title = sanitizeSongTitle(metadata.title || fallbackName);
+        const artist = metadata.artist || '';
+        const songKey = metadata.key || '';
+        const existing = existingByTitle.get(normalizeSongTitle(title));
+
+        if (existing) {
+          const { error } = await supabase
+            .from('songs')
+            .update({
+              artist: existing.artist || artist,
+              song_key: existing.song_key || songKey,
+              chordpro_text: chartFile.text,
+            })
+            .eq('id', existing.id);
+          if (error) throw error;
+          updatedCount += 1;
+        } else {
+          const { data: inserted, error } = await supabase
+            .from('songs')
+            .insert({
+              title,
+              artist,
+              song_key: songKey,
+              chordpro_text: chartFile.text,
+              created_by: user.id,
+            })
+            .select('id, title, artist, song_key')
+            .maybeSingle();
+          if (error) throw error;
+          if (inserted) existingByTitle.set(normalizeSongTitle(title), inserted);
+          createdCount += 1;
+        }
+      }
+
+      toast('success', `Imported ${chartFiles.length} charts (${createdCount} new, ${updatedCount} updated)`);
+      await fetchData();
+    } catch (error: any) {
+      console.error('Failed to import song charts:', error);
+      toast('error', error?.message || 'Failed to import song charts');
+    } finally {
+      setChartImporting(false);
+      if (chartFileRef.current) chartFileRef.current.value = '';
+    }
+  };
+
+  const handleSaveChart = async (text: string) => {
+    if (!selectedChartSong) return;
+    setChartSaving(true);
+    try {
+      const { error } = await withSaveTimeout(
+        supabase
+          .from('songs')
+          .update({ chordpro_text: text })
+          .eq('id', selectedChartSong.id)
+      );
+
+      if (error) {
+        console.error('Failed to save chart:', error);
+        toast('error', error.message || 'Failed to save chart');
+        return;
+      }
+
+      toast('success', 'Song chart saved');
+      setSelectedChartSong(prev => prev ? { ...prev, chordpro_text: text } : prev);
+      setSongUsages(prev => prev.map(song => song.id === selectedChartSong.id ? { ...song, chordpro_text: text } : song));
+    } catch (error: any) {
+      console.error('Failed to save chart:', error);
+      toast('error', error?.message || 'Failed to save chart');
+    } finally {
+      setChartSaving(false);
+    }
   };
 
   const handleImport = async () => {
@@ -910,24 +1035,36 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
       <SectionLabel
         index="01"
         action={
-          <button
-            type="button"
-            onClick={() => {
-              setShowSongResults(false);
-              setActiveFilter('all');
-              setSearch('');
-              setSelectedSongs(new Set());
-              setSelectModeSongs(false);
-            }}
-            className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-semibold text-white transition-all active:scale-[0.97]"
-            style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', boxShadow: '0 3px 10px rgba(22,163,74,0.3)' }}
-          >
-            Back to setlists
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => chartFileRef.current?.click()}
+              disabled={chartImporting}
+              className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 transition-all active:scale-[0.97] disabled:opacity-60 dark:bg-emerald-500/[0.12] dark:text-emerald-300 dark:border-emerald-500/20"
+            >
+              <FileMusic className="h-3.5 w-3.5" />
+              {chartImporting ? 'Importing...' : 'Import .cho'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowSongResults(false);
+                setActiveFilter('all');
+                setSearch('');
+                setSelectedSongs(new Set());
+                setSelectModeSongs(false);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-semibold text-white transition-all active:scale-[0.97]"
+              style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', boxShadow: '0 3px 10px rgba(22,163,74,0.3)' }}
+            >
+              Back to setlists
+            </button>
+          </div>
         }
       >
         <span className="flex items-center gap-1.5"><BarChart2 className="h-3 w-3" /> Song Results</span>
       </SectionLabel>
+      <input ref={chartFileRef} type="file" accept=".cho,.zip" multiple className="hidden" onChange={e => handleChartUpload(e.target.files)} />
 
       {/* ── Stats strip ── */}
       <motion.div
@@ -1105,6 +1242,18 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
                     )}
                   </div>
                   {song.artist && <p className="text-[11px] text-gray-400 dark:text-white/30 truncate mt-0.5">{song.artist}</p>}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedChartSong(song)}
+                    className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold transition-colors ${
+                      song.chordpro_text
+                        ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/80 hover:bg-emerald-100 dark:bg-emerald-500/[0.12] dark:text-emerald-300 dark:ring-emerald-500/20'
+                        : 'bg-gray-100 text-gray-500 ring-1 ring-gray-200/80 hover:bg-gray-200/70 dark:bg-white/[0.05] dark:text-white/40 dark:ring-white/[0.07]'
+                    }`}
+                  >
+                    <FileMusic className="h-3 w-3" />
+                    {song.chordpro_text ? 'Open chart' : 'Add chart'}
+                  </button>
                   <p className="text-[10px] font-mono text-gray-400 dark:text-white/25 mt-0.5 sm:hidden tracking-wide">
                     {song.last_used_date ? format(parseISO(song.last_used_date), 'MMM d, yyyy') : 'Never used'}
                   </p>
@@ -1159,6 +1308,28 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
             </button>
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        open={selectedChartSong !== null}
+        onClose={() => setSelectedChartSong(null)}
+        title="Song Chart"
+        size="lg"
+        hideHeader
+      >
+        {selectedChartSong && (
+          <SongChartViewer
+            songId={selectedChartSong.id}
+            title={selectedChartSong.title}
+            artist={selectedChartSong.artist}
+            songKey={selectedChartSong.song_key}
+            chordproText={selectedChartSong.chordpro_text}
+            editable
+            saving={chartSaving}
+            onClose={() => setSelectedChartSong(null)}
+            onSave={handleSaveChart}
+          />
+        )}
       </Modal>
     </div>
   );

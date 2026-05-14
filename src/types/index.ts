@@ -220,6 +220,7 @@ export interface Song {
   key_notes: string;
   youtube_url: string;
   lyrics?: string | null;
+  chordpro_text?: string | null;
   created_by: string;
   created_at: string;
 }

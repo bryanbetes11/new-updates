@@ -1,12 +1,14 @@
-import { useEffect, useLayoutEffect, useState, useCallback } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { format, parseISO, differenceInDays, startOfDay, subWeeks, previousSunday, addDays, subDays } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Calendar, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronRight, LayoutPanelLeft, ListMusic, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronLeft, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, Moon, Sun } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { Modal } from '../components/Modal';
 import { Select } from '../components/Select';
 import { PageLoader } from '../components/LoadingSpinner';
@@ -14,6 +16,8 @@ import { RoleBadge } from '../components/RoleBadge';
 import { formatTime12Hour } from '../lib/timeFormat';
 import { Avatar } from '../components/Avatar';
 import { dispatchBadgeCountsRefresh } from '../lib/realtimeSignals';
+import { SongChartViewer } from '../components/SongChartViewer';
+import { withSaveTimeout } from '../lib/saveTimeout';
 
 import type { Event, EventAssignment, Setlist, SetlistSong, Song, ServiceFormat, SetlistCheckReport } from '../types';
 import { inferServiceFormat, SERVICE_FORMAT_LABELS } from '../lib/setlistCheckerEngine';
@@ -54,6 +58,7 @@ export function EventDetail() {
 
   const { user, roles, userRoles, isLeader, isProductionDirector } = useAuth();
   const { toast } = useToast();
+  const { theme, toggle: toggleTheme } = useTheme();
 
   const isMissingSetlistSubmissionTableError = useCallback((message?: string | null) => {
     if (!message) return false;
@@ -112,6 +117,11 @@ export function EventDetail() {
   const [checkReport, setCheckReport] = useState<SetlistCheckReport | null>(null);
   const [serviceTheme, setServiceTheme] = useState('');
   const [lyricsModalSong, setLyricsModalSong] = useState<SetlistSong | null>(null);
+  const [chartModalSong, setChartModalSong] = useState<SetlistSong | null>(null);
+  const [serviceModeIndex, setServiceModeIndex] = useState<number | null>(null);
+  const [serviceChartEditing, setServiceChartEditing] = useState(false);
+  const [serviceModeEntering, setServiceModeEntering] = useState(false);
+  const [chartSaving, setChartSaving] = useState(false);
   const [lyricsInput, setLyricsInput] = useState('');
   const [savingLyrics, setSavingLyrics] = useState(false);
   const [fetchingLyrics, setFetchingLyrics] = useState(false);
@@ -128,8 +138,8 @@ export function EventDetail() {
   }>>([]);
   const [countdownParts, setCountdownParts] = useState<{ hours: number; minutes: number; seconds: number }>({ hours: 0, minutes: 0, seconds: 0 });
   const [serviceFormat, setServiceFormat] = useState<ServiceFormat | null>(null);
-  const [setlistTab, setSetlistTab] = useState<'songs' | 'notes'>('songs');
   const [isReordering, setIsReordering] = useState(false);
+  const [setlistEditMode, setSetlistEditMode] = useState(false);
   const [reorderSongs, setReorderSongs] = useState<SetlistSong[]>([]);
   const [savingOrder, setSavingOrder] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -137,6 +147,8 @@ export function EventDetail() {
   const [showCreateChatModal, setShowCreateChatModal] = useState(false);
   const [creatingChat, setCreatingChat] = useState(false);
   const [showSwapModal, setShowSwapModal] = useState(false);
+  const serviceSwipeStart = useRef<{ x: number; y: number } | null>(null);
+  const serviceModeEnterTimer = useRef<number | null>(null);
 
   const resetEventDetailScroll = useCallback(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
@@ -160,13 +172,50 @@ export function EventDetail() {
     };
   }, [loading, id, resetEventDetailScroll]);
 
+  useEffect(() => {
+    if (serviceModeIndex === null) return;
+    const previousOverflow = document.body.style.overflow;
+    const previousOverscroll = document.body.style.overscrollBehavior;
+    document.body.style.overflow = 'hidden';
+    document.body.style.overscrollBehavior = 'none';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.body.style.overscrollBehavior = previousOverscroll;
+    };
+  }, [serviceModeIndex]);
+
+  useEffect(() => {
+    if (serviceModeIndex === null) {
+      if (serviceModeEnterTimer.current) {
+        window.clearTimeout(serviceModeEnterTimer.current);
+        serviceModeEnterTimer.current = null;
+      }
+      setServiceChartEditing(false);
+      setServiceModeEntering(false);
+    }
+  }, [serviceModeIndex]);
+
+  useEffect(() => {
+    if (setlist?.status !== 'approved') {
+      setSetlistEditMode(false);
+    }
+  }, [setlist?.status]);
+
+  useEffect(() => {
+    return () => {
+      if (serviceModeEnterTimer.current) {
+        window.clearTimeout(serviceModeEnterTimer.current);
+      }
+    };
+  }, []);
+
 
   const fetchAll = useCallback(async () => {
     if (!id) return;
     try {
       const [eventRes, assignRes, membersRes, memberRolesRes, setlistRes, songsRes, allSetlistsRes, sundayServicesRes, convRes] = await Promise.all([
         supabase.from('events').select('*').eq('id', id).maybeSingle(),
-        supabase.from('event_assignments').select('*, profiles(first_name, last_name, avatar_url), roles(name)').eq('event_id', id),
+        supabase.from('event_assignments').select('*, profiles(first_name, last_name, gender, avatar_url), roles(name)').eq('event_id', id),
         supabase.from('profiles').select('id, first_name, last_name'),
         supabase.from('user_roles').select('user_id, role_id'),
         supabase.from('setlists').select('*, setlist_songs(*, songs(*))').eq('event_id', id).maybeSingle(),
@@ -818,6 +867,39 @@ const openLyricsModal = (ss: SetlistSong) => {
     setLyricsModalSong(null);
   };
 
+  const handleSaveChart = async (songId: string, text: string) => {
+    setChartSaving(true);
+    try {
+      const { error } = await withSaveTimeout(
+        supabase.from('songs').update({ chordpro_text: text }).eq('id', songId)
+      );
+
+      if (error) {
+        console.error('Failed to save chart:', error);
+        toast('error', error.message || 'Failed to save chart');
+        return;
+      }
+
+      setSetlistSongs(prev => prev.map(s =>
+        s.song_id === songId
+          ? { ...s, songs: s.songs ? { ...s.songs, chordpro_text: text } : s.songs }
+          : s
+      ));
+      setLinkedSetlistSongs(prev => prev.map(s =>
+        s.song_id === songId
+          ? { ...s, songs: s.songs ? { ...s.songs, chordpro_text: text } : s.songs }
+          : s
+      ));
+      setChartModalSong(prev => prev?.song_id === songId ? { ...prev, songs: prev.songs ? { ...prev.songs, chordpro_text: text } : prev.songs } : prev);
+      toast('success', 'Song chart saved');
+    } catch (error: any) {
+      console.error('Failed to save chart:', error);
+      toast('error', error?.message || 'Failed to save chart');
+    } finally {
+      setChartSaving(false);
+    }
+  };
+
   const calculateProposalDueDate = (eventDate: string, eventType: string): string | null => {
     if (!eventDate) return null;
     const date = parseISO(eventDate);
@@ -920,7 +1002,7 @@ const openLyricsModal = (ss: SetlistSong) => {
           .maybeSingle();
 
         const prefix = profileData?.gender === 'male' ? 'Bro.' : profileData?.gender === 'female' ? 'Sis.' : '';
-        return prefix ? `${prefix} ${songLeader.first_name} ${songLeader.last_name}` : `${songLeader.first_name} ${songLeader.last_name}`;
+        return prefix ? `${prefix} ${songLeader.first_name}` : songLeader.first_name;
       }
     }
     return eventType;
@@ -954,11 +1036,18 @@ const openLyricsModal = (ss: SetlistSong) => {
   const myAssignment = assignments.find(a => a.user_id === user?.id);
   const confirmedCount = assignments.filter(a => a.status === 'confirmed').length;
   const songLeaderAssignment = assignments.find(a => a.roles?.name === 'Song Leader');
+  const getShortLeaderName = (profile?: { first_name?: string; last_name?: string; gender?: string } | null) => {
+    if (!profile?.first_name) return '';
+    const prefix = profile.gender === 'male' ? 'Bro.' : profile.gender === 'female' ? 'Sis.' : '';
+    return prefix ? `${prefix} ${profile.first_name}` : profile.first_name;
+  };
+  const shortenPrefixedTitle = (title: string) => title.replace(/^(Bro\.|Sis\.)\s+([^\s]+).*$/i, (_match, prefix, firstName) => `${prefix} ${firstName}`);
   const songLeaderName = songLeaderAssignment?.profiles
-    ? songLeaderAssignment.profiles.first_name
+    ? getShortLeaderName(songLeaderAssignment.profiles)
     : members.find(m => m.id === event.song_leader_id)
       ? members.find(m => m.id === event.song_leader_id)!.first_name
       : '';
+  const eventDisplayTitle = songLeaderName || shortenPrefixedTitle(event.title);
   const isSongLeader = assignments.some(a => a.user_id === user?.id && a.roles?.name === 'Song Leader');
   const userIsSongLeaderRole = userRoles.some(ur => ur.roles?.name === 'Song Leader');
   const canManageSetlist = isLeader || isSongLeader || userIsSongLeaderRole;
@@ -1000,6 +1089,8 @@ const openLyricsModal = (ss: SetlistSong) => {
   const heroHasApprovedSetlist = setlist?.status === 'approved';
   const heroIsOverdue = heroDaysUntilDue !== null && heroDaysUntilDue < 0 && !heroHasApprovedSetlist && !heroIsPast;
   const heroIsDueSoon = heroDaysUntilDue !== null && heroDaysUntilDue >= 0 && heroDaysUntilDue <= 3 && !heroHasApprovedSetlist && !heroIsPast;
+  const isApprovedSetlist = setlist?.status === 'approved';
+  const showSetlistEditControls = !isApprovedSetlist || setlistEditMode;
   const showLinkedSetlistReference = !setlist && event.event_type === 'Rehearsals' && !!event.linked_event_id && !!linkedSetlist;
   const linkedSetlistStatus = linkedSetlist?.status || 'draft';
   let linkedServiceDateLabel = '';
@@ -1014,6 +1105,51 @@ const openLyricsModal = (ss: SetlistSong) => {
     .filter((song): song is SetlistSong => !!song && typeof song === 'object')
     .slice()
     .sort((a, b) => (a.position || 0) - (b.position || 0));
+  const orderedSetlistSongs = setlistSongs
+    .filter((song): song is SetlistSong => !!song && typeof song === 'object')
+    .slice()
+    .sort((a, b) => (a.position || 0) - (b.position || 0));
+  const serviceModeSongs = orderedSetlistSongs.length > 0 ? orderedSetlistSongs : linkedReferenceSongs;
+  const serviceModeSong = serviceModeIndex === null ? null : serviceModeSongs[serviceModeIndex] || null;
+  const serviceModeSourceLabel = orderedSetlistSongs.length > 0
+    ? event.title
+    : linkedServiceEvent?.title || 'linked Sunday Service';
+  const serviceModeLabel = event.event_type === 'Rehearsals' ? 'Rehearsal Mode' : 'Service Mode';
+  const serviceModeLoadingTitle = event.event_type === 'Rehearsals' ? 'Preparing rehearsal flow.' : 'Preparing your setlist.';
+  const isFirstServiceSong = (serviceModeIndex ?? 0) === 0;
+  const isLastServiceSong = (serviceModeIndex ?? 0) === serviceModeSongs.length - 1;
+  const openServiceMode = (index = 0) => {
+    if (serviceModeSongs.length === 0) return;
+    if (serviceModeEnterTimer.current) {
+      window.clearTimeout(serviceModeEnterTimer.current);
+    }
+    setServiceChartEditing(false);
+    setServiceModeEntering(true);
+    setServiceModeIndex(Math.min(Math.max(index, 0), serviceModeSongs.length - 1));
+    serviceModeEnterTimer.current = window.setTimeout(() => {
+      setServiceModeEntering(false);
+      serviceModeEnterTimer.current = null;
+    }, 8500);
+  };
+  const goToPreviousServiceSong = () => {
+    setServiceChartEditing(false);
+    setServiceModeIndex(index => Math.max(0, (index ?? 0) - 1));
+  };
+  const goToNextServiceSong = () => {
+    setServiceChartEditing(false);
+    setServiceModeIndex(index => Math.min(serviceModeSongs.length - 1, (index ?? 0) + 1));
+  };
+  const handleServiceSwipeEnd = (x: number, y: number) => {
+    const start = serviceSwipeStart.current;
+    serviceSwipeStart.current = null;
+    if (!start) return;
+    const deltaX = x - start.x;
+    const deltaY = y - start.y;
+    if (serviceChartEditing || serviceModeEntering) return;
+    if (Math.abs(deltaX) < 70 || Math.abs(deltaX) < Math.abs(deltaY) * 1.15) return;
+    if (deltaX < 0 && !isLastServiceSong) goToNextServiceSong();
+    if (deltaX > 0 && !isFirstServiceSong) goToPreviousServiceSong();
+  };
 
   const heroChipGradient = heroIsPast
     ? null
@@ -1149,7 +1285,7 @@ const openLyricsModal = (ss: SetlistSong) => {
 
                 {/* Title */}
                 <h1 className="text-[1.5rem] sm:text-[1.75rem] font-black text-gray-900 dark:text-white leading-[1.1]" style={{ letterSpacing: '-0.03em' }}>
-                  {event.title}
+                  {eventDisplayTitle}
                 </h1>
 
                 {/* Type badge */}
@@ -1160,7 +1296,7 @@ const openLyricsModal = (ss: SetlistSong) => {
             </div>
 
             {/* Meta row */}
-            <div className="mt-5 pt-5 border-t border-black/[0.05] dark:border-white/[0.05] grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="mt-4 pt-4 border-t border-black/[0.05] dark:border-white/[0.05] grid grid-cols-2 gap-2.5 sm:gap-3">
               {[
                 {
                   icon: Calendar,
@@ -1191,20 +1327,20 @@ const openLyricsModal = (ss: SetlistSong) => {
               ].map(item => {
                 const Icon = item.icon;
                 return (
-                  <div key={item.label} className="flex items-center gap-3 rounded-2xl bg-white/65 dark:bg-white/[0.035] border border-black/[0.06] dark:border-white/[0.07] px-3.5 py-3.5 min-w-0">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-white/45">
-                      <Icon className="h-4 w-4" />
+                  <div key={item.label} className="flex items-center gap-2 rounded-2xl bg-white/65 dark:bg-white/[0.035] border border-black/[0.06] dark:border-white/[0.07] px-2.5 py-2.5 sm:gap-3 sm:px-3.5 sm:py-3 min-w-0">
+                    <span className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-white/45">
+                      <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                     </span>
                     <span className="min-w-0">
-                      <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400 dark:text-white/30">{item.label}</span>
-                      <span className="block text-[14px] sm:text-[15px] font-black text-gray-900 dark:text-white truncate leading-tight mt-0.5">{item.value}</span>
-                      <span className="block text-[11px] text-gray-500 dark:text-white/45 truncate mt-0.5">{item.detail}</span>
+                      <span className="block text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.14em] sm:tracking-[0.16em] text-gray-400 dark:text-white/30 truncate">{item.label}</span>
+                      <span className="block text-[12px] sm:text-[15px] font-black text-gray-900 dark:text-white truncate leading-tight mt-0.5">{item.value}</span>
+                      <span className="block text-[10px] sm:text-[11px] text-gray-500 dark:text-white/45 truncate mt-0.5">{item.detail}</span>
                     </span>
                   </div>
                 );
               })}
               {event.proposal_due_date && (
-                <div className="flex items-center gap-2 sm:col-span-2">
+                <div className="flex items-center gap-2 col-span-2">
                   <AlertCircle className={`h-3.5 w-3.5 shrink-0 ${heroIsOverdue ? 'text-red-500' : heroIsDueSoon ? 'text-amber-500' : 'text-gray-400 dark:text-white/30'}`} />
                   <span className={`text-[11px] font-mono ${heroIsOverdue ? 'text-red-600 dark:text-red-400' : heroIsDueSoon ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500 dark:text-white/45'}`}>
                     <span className="font-bold uppercase tracking-wide">Due:</span> {formatInTimeZone(parseISO(event.proposal_due_date), 'Asia/Manila', "MMM d, yyyy 'at' h:mm a")}
@@ -1212,7 +1348,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                 </div>
               )}
               {event.description && (
-                <p className="sm:col-span-2 text-[12px] text-gray-600 dark:text-white/55 leading-relaxed">{event.description}</p>
+                <p className="col-span-2 text-[12px] text-gray-600 dark:text-white/55 leading-relaxed">{event.description}</p>
               )}
             </div>
 
@@ -1460,61 +1596,6 @@ const openLyricsModal = (ss: SetlistSong) => {
           );
         })()}
 
-        <div className="card animate-slide-up" style={{ animationDelay: '115ms' }}>
-          <div className="px-5 py-4">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                <Users className="h-4 w-4 text-brand-600 dark:text-brand-400" /> Team Members
-              </h2>
-              <span className="text-xs text-gray-500 dark:text-gray-400">{confirmedCount}/{assignments.length} confirmed</span>
-            </div>
-            {assignments.length === 0 ? (
-              <p className="py-4 text-center text-sm text-gray-400">No team members assigned yet</p>
-            ) : (
-              <div className="space-y-3">
-                {[...assignments]
-                  .sort((a, b) => {
-                    const aIsSongLeader = a.roles?.name === 'Song Leader';
-                    const bIsSongLeader = b.roles?.name === 'Song Leader';
-                    if (aIsSongLeader && !bIsSongLeader) return -1;
-                    if (!aIsSongLeader && bIsSongLeader) return 1;
-                    return 0;
-                  })
-                  .map(a => {
-                    const isSongLeaderRole = a.roles?.name === 'Song Leader';
-                    return (
-                      <div key={a.id}>
-                        <div className={`flex items-center gap-3 ${isSongLeaderRole ? 'p-3 rounded-lg bg-gradient-to-r from-brand-50 to-blue-50 dark:from-brand-900/20 dark:to-blue-900/20 border border-brand-200 dark:border-brand-800' : ''}`}>
-                          <Avatar
-                            src={a.profiles?.avatar_url}
-                            firstName={a.profiles?.first_name || '?'}
-                            lastName={a.profiles?.last_name}
-                            size="sm"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-gray-900 dark:text-white">{a.profiles?.first_name} {a.profiles?.last_name}</p>
-                            {a.roles && <RoleBadge role={a.roles} size="sm" />}
-                          </div>
-                          <span className={`badge ${a.status === 'confirmed' ? 'badge-green' : a.status === 'declined' ? 'badge-red' : 'badge-yellow'}`}>{a.status}</span>
-                          {isLeader && (
-                            <button onClick={() => handleRemoveAssignment(a.id)} className="p-1 text-gray-400 hover:text-red-500 transition-colors">
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          )}
-                        </div>
-                        {a.status === 'declined' && a.decline_reason && (
-                          <div className="ml-12 mt-1.5 px-3 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/10 text-xs text-red-600 dark:text-red-400">
-                            Reason: {a.decline_reason}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-              </div>
-            )}
-          </div>
-        </div>
-
         {setlist && setlist.status === 'revision_requested' && (
           <div className="card p-4 bg-amber-50 dark:bg-amber-900/20 ring-amber-200 dark:ring-amber-800 animate-slide-up" style={{ animationDelay: '100ms' }}>
             <div className="flex items-start gap-3">
@@ -1560,12 +1641,25 @@ const openLyricsModal = (ss: SetlistSong) => {
                     {linkedServiceDateLabel ? ` · ${linkedServiceDateLabel}` : ''}
                   </p>
                 </div>
-                <button
-                  onClick={() => navigate(`/events/${event.linked_event_id}`)}
-                  className="btn-secondary text-xs shrink-0"
-                >
-                  Open Main Event <ChevronRight className="h-3.5 w-3.5" />
-                </button>
+                <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto">
+                  {linkedReferenceSongs.length > 0 && (
+                    <button
+                      onClick={() => openServiceMode(0)}
+                      className="group relative inline-flex h-11 min-w-0 flex-1 items-center justify-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-700 px-4 text-sm font-black text-white shadow-xl shadow-emerald-600/25 transition hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-emerald-600/30 active:scale-[0.98] sm:flex-none"
+                      title={`Open ${serviceModeLabel}`}
+                    >
+                      <span className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.3),transparent)] animate-[shimmer_2.4s_infinite]" />
+                      <FileText className="relative h-4 w-4 transition group-hover:scale-110" />
+                      <span className="relative whitespace-nowrap">{serviceModeLabel}</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => navigate(`/events/${event.linked_event_id}`)}
+                    className="inline-flex h-11 w-[7rem] shrink-0 items-center justify-center gap-2 rounded-2xl border border-black/[0.06] bg-white/75 px-3 text-sm font-black text-gray-700 shadow-sm transition hover:bg-white hover:-translate-y-0.5 dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/70 dark:hover:bg-white/[0.1]"
+                  >
+                    Event <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
 
               {linkedReferenceSongs.length === 0 ? (
@@ -1703,9 +1797,32 @@ const openLyricsModal = (ss: SetlistSong) => {
                     <Music className="h-4 w-4 text-brand-600 dark:text-brand-400 shrink-0" />
                     <h2 className="text-base font-semibold text-gray-900 dark:text-white">Setlist</h2>
                     <span className={statusColors[setlist.status] || 'badge-blue'}>{statusLabels[setlist.status] || setlist.status}</span>
+                    {isApprovedSetlist && (canManageSetlist || canEditSetlist) && (
+                      <button
+                        onClick={() => setSetlistEditMode(value => !value)}
+                        className={`ml-auto inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-black transition ${
+                          setlistEditMode
+                            ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-950'
+                            : 'bg-gray-100 text-gray-600 dark:bg-white/[0.08] dark:text-white/65'
+                        }`}
+                      >
+                        <Edit className="h-3.5 w-3.5" /> {setlistEditMode ? 'Done' : 'Edit'}
+                      </button>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
-                    {canManageSetlist && (
+                    {setlistSongs.length > 0 && (
+                      <button
+                        onClick={() => openServiceMode(0)}
+                        className="relative inline-flex flex-1 items-center justify-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-700 px-4 py-3 text-sm font-black text-white shadow-xl shadow-emerald-600/25 transition active:scale-[0.98]"
+                        title={`Open ${serviceModeLabel}`}
+                      >
+                        <span className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.28),transparent)] animate-[shimmer_2.4s_infinite]" />
+                        <FileText className="relative h-4 w-4" />
+                        <span className="relative">{serviceModeLabel}</span>
+                      </button>
+                    )}
+                    {canManageSetlist && showSetlistEditControls && (
                       <select
                         value={serviceFormat || 'sunday_full'}
                         onChange={e => handleServiceFormatChange(e.target.value as ServiceFormat)}
@@ -1717,7 +1834,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                         ))}
                       </select>
                     )}
-                    {(canManageSetlist || canEditSetlist) && setlistSongs.length > 1 && !isReordering && (
+                    {showSetlistEditControls && (canManageSetlist || canEditSetlist) && setlistSongs.length > 1 && !isReordering && (
                       <button
                         onClick={enterReorderMode}
                         className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-500 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 shrink-0"
@@ -1736,7 +1853,30 @@ const openLyricsModal = (ss: SetlistSong) => {
                     <span className={statusColors[setlist.status] || 'badge-blue'}>{statusLabels[setlist.status] || setlist.status}</span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    {(canManageSetlist || canEditSetlist) && setlistSongs.length > 1 && !isReordering && (
+                    {setlistSongs.length > 0 && (
+                      <button
+                        onClick={() => openServiceMode(0)}
+                        className="group relative inline-flex items-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-700 px-5 py-3 text-sm font-black text-white shadow-xl shadow-emerald-600/25 transition hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-emerald-600/30"
+                        title={`Open ${serviceModeLabel}`}
+                      >
+                        <span className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.3),transparent)] animate-[shimmer_2.4s_infinite]" />
+                        <FileText className="relative h-4 w-4 transition group-hover:scale-110" />
+                        <span className="relative">{serviceModeLabel}</span>
+                      </button>
+                    )}
+                    {isApprovedSetlist && (canManageSetlist || canEditSetlist) && (
+                      <button
+                        onClick={() => setSetlistEditMode(value => !value)}
+                        className={`inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-black transition ${
+                          setlistEditMode
+                            ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-950'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-white/[0.08] dark:text-white/65 dark:hover:bg-white/[0.12]'
+                        }`}
+                      >
+                        <Edit className="h-3.5 w-3.5" /> {setlistEditMode ? 'Done' : 'Edit'}
+                      </button>
+                    )}
+                    {showSetlistEditControls && (canManageSetlist || canEditSetlist) && setlistSongs.length > 1 && !isReordering && (
                       <button
                         onClick={enterReorderMode}
                         className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-500 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors px-2 py-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
@@ -1745,7 +1885,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                         <GripVertical className="h-3.5 w-3.5" /> Reorder
                       </button>
                     )}
-                    {canManageSetlist && (
+                    {canManageSetlist && showSetlistEditControls && (
                       <select
                         value={serviceFormat || 'sunday_full'}
                         onChange={e => handleServiceFormatChange(e.target.value as ServiceFormat)}
@@ -1761,25 +1901,8 @@ const openLyricsModal = (ss: SetlistSong) => {
                 </div>
               </div>
 
-              <div className="flex border-b border-gray-100 dark:border-gray-800 lg:hidden">
-                {(['songs', 'notes'] as const).map(tab => (
-                  <button
-                    key={tab}
-                    onClick={() => setSetlistTab(tab)}
-                    className={`flex-1 py-2.5 text-xs font-medium capitalize transition-colors ${
-                      setlistTab === tab
-                        ? 'text-brand-600 dark:text-brand-400 border-b-2 border-brand-600 dark:border-brand-400 bg-brand-50/50 dark:bg-brand-900/10'
-                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                    }`}
-                  >
-                    {tab === 'songs' ? <ListMusic className="h-3.5 w-3.5 inline mr-1" /> : <LayoutPanelLeft className="h-3.5 w-3.5 inline mr-1" />}
-                    {tab}
-                  </button>
-                ))}
-              </div>
-
               <div>
-                <div className={setlistTab !== 'songs' ? 'hidden' : ''}>
+                <div>
                   {isReordering ? (
                     <div>
                       <div className="px-4 py-2.5 bg-brand-50 dark:bg-brand-900/20 border-b border-brand-100 dark:border-brand-800 flex items-center justify-between">
@@ -1860,12 +1983,12 @@ const openLyricsModal = (ss: SetlistSong) => {
                                 </div>
                                 <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{ss.songs?.artist}</p>
                               </div>
-                              {ss.youtube_url && (
+                              {showSetlistEditControls && ss.youtube_url && (
                                 <a href={ss.youtube_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 transition-colors shrink-0">
                                   <Music className="h-3 w-3" /> Video
                                 </a>
                               )}
-                              {usage ? (
+                              {showSetlistEditControls && (usage ? (
                                 <span className={`inline-flex items-center gap-1 text-xs font-medium shrink-0 ${isSafe ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                                   {isSafe ? <CheckCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
                                   {usage.days}d
@@ -1874,8 +1997,8 @@ const openLyricsModal = (ss: SetlistSong) => {
                                 <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-400 shrink-0">
                                   <CheckCircle className="h-4 w-4" /> New
                                 </span>
-                              )}
-                              <button
+                              ))}
+                              {showSetlistEditControls && <button
                                 onClick={() => openLyricsModal(ss)}
                                 title={ss.songs?.lyrics ? 'Edit lyrics' : 'Add lyrics'}
                                 className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold transition-colors shrink-0 ${
@@ -1886,13 +2009,25 @@ const openLyricsModal = (ss: SetlistSong) => {
                               >
                                 <FileText className="h-4 w-4" />
                                 <span>{ss.songs?.lyrics ? 'Edit Lyrics' : 'Add Lyrics'}</span>
-                              </button>
-                              {canEditSetlist && (
+                              </button>}
+                              {showSetlistEditControls && <button
+                                onClick={() => setChartModalSong(ss)}
+                                title={ss.songs?.chordpro_text ? 'Open chart' : 'Add chart'}
+                                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold transition-colors shrink-0 ${
+                                  ss.songs?.chordpro_text
+                                    ? 'bg-emerald-50 text-emerald-600 hover:text-emerald-700 ring-1 ring-emerald-200/70 dark:bg-emerald-950/60 dark:text-emerald-400 dark:hover:text-emerald-300 dark:ring-emerald-700/40'
+                                    : 'bg-gray-50 text-gray-500 hover:text-gray-700 ring-1 ring-gray-200/70 dark:bg-white/[0.04] dark:text-white/45 dark:hover:text-white/70 dark:ring-white/[0.07]'
+                                }`}
+                              >
+                                <Music className="h-4 w-4" />
+                                <span>{ss.songs?.chordpro_text ? 'Chart' : 'Add Chart'}</span>
+                              </button>}
+                              {showSetlistEditControls && canEditSetlist && (
                                 <button onClick={() => openEditSong(ss)} className="p-1 text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">
                                   <Edit className="h-4 w-4" />
                                 </button>
                               )}
-                              {(canManageSetlist && !['approved', 'pending_review'].includes(setlist.status)) || (canEditSetlist) ? (
+                              {showSetlistEditControls && ((canManageSetlist && !['approved', 'pending_review'].includes(setlist.status)) || (canEditSetlist)) ? (
                                 <button onClick={() => handleRemoveSongFromSetlist(ss.id)} className="p-1 text-gray-400 hover:text-red-500 transition-colors">
                                   <Trash2 className="h-4 w-4" />
                                 </button>
@@ -1914,7 +2049,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                   )}
                                 </div>
                                 <div className="flex items-center gap-0.5 shrink-0">
-                                  <button
+                                  {showSetlistEditControls && <button
                                     onClick={() => openLyricsModal(ss)}
                                     title={ss.songs?.lyrics ? 'Edit lyrics' : 'Add lyrics'}
                                     className={`inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-[10px] font-semibold transition-colors ${
@@ -1925,13 +2060,25 @@ const openLyricsModal = (ss: SetlistSong) => {
                                   >
                                     <FileText className="h-3.5 w-3.5" />
                                     <span>{ss.songs?.lyrics ? 'Edit Lyrics' : 'Add Lyrics'}</span>
-                                  </button>
-                                  {canEditSetlist && (
+                                  </button>}
+                                  {showSetlistEditControls && <button
+                                    onClick={() => setChartModalSong(ss)}
+                                    title={ss.songs?.chordpro_text ? 'Open chart' : 'Add chart'}
+                                    className={`inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-[10px] font-semibold transition-colors ${
+                                      ss.songs?.chordpro_text
+                                        ? 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200/70 dark:bg-emerald-950/60 dark:text-emerald-400 dark:ring-emerald-700/40'
+                                        : 'bg-gray-50 text-gray-500 ring-1 ring-gray-200/70 dark:bg-white/[0.04] dark:text-white/45 dark:ring-white/[0.07]'
+                                    }`}
+                                  >
+                                    <Music className="h-3.5 w-3.5" />
+                                    <span>{ss.songs?.chordpro_text ? 'Chart' : 'Chart'}</span>
+                                  </button>}
+                                  {showSetlistEditControls && canEditSetlist && (
                                     <button onClick={() => openEditSong(ss)} className="p-1.5 text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">
                                       <Edit className="h-3.5 w-3.5" />
                                     </button>
                                   )}
-                                  {(canManageSetlist && !['approved', 'pending_review'].includes(setlist.status)) || (canEditSetlist) ? (
+                                  {showSetlistEditControls && ((canManageSetlist && !['approved', 'pending_review'].includes(setlist.status)) || (canEditSetlist)) ? (
                                     <button onClick={() => handleRemoveSongFromSetlist(ss.id)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors">
                                       <Trash2 className="h-3.5 w-3.5" />
                                     </button>
@@ -1950,7 +2097,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                   </span>
                                 )}
                                 {ss.song_category && <span className="badge-blue text-[10px]">{ss.song_category}</span>}
-                                {usage ? (
+                                {showSetlistEditControls && (usage ? (
                                   <span className={`inline-flex items-center gap-0.5 text-[10px] font-medium ${isSafe ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                                     {isSafe ? <CheckCircle className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
                                     {usage.days}d
@@ -1959,8 +2106,8 @@ const openLyricsModal = (ss: SetlistSong) => {
                                   <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-gray-400">
                                     <CheckCircle className="h-3 w-3" /> New
                                   </span>
-                                )}
-                                {ss.youtube_url && (
+                                ))}
+                                {showSetlistEditControls && ss.youtube_url && (
                                   <a href={ss.youtube_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 transition-colors">
                                     <Music className="h-2.5 w-2.5" /> Video
                                   </a>
@@ -1977,7 +2124,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                     <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-2.5">{statusDescriptions[setlist.status]}</p>
                     <div className="flex flex-wrap gap-2">
                       {/* Song editing — creator/editor when not finalized */}
-                      {(canManageSetlist && !['approved', 'rejected'].includes(setlist.status)) || (canEditSetlist && setlist.status === 'approved') ? (
+                      {showSetlistEditControls && ((canManageSetlist && !['approved', 'rejected'].includes(setlist.status)) || (canEditSetlist && setlist.status === 'approved')) ? (
                         <>
                           <button onClick={() => setShowSetlist(true)} className="btn-secondary text-xs">
                             <Plus className="h-3.5 w-3.5" /> Add Song
@@ -2040,28 +2187,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                   )}
                 </div>
 
-                {setlistTab === 'notes' && (
-                  <div className="px-5 py-4 border-t border-gray-100 dark:border-gray-800">
-                    {(setlist.review_note || setlist.approval_notes) && setlist.status !== 'approved' ? (
-                      <div className={`rounded-xl p-4 ${
-                        setlist.status === 'revision_requested' ? 'bg-amber-50 dark:bg-amber-900/20'
-                        : setlist.status === 'rejected' ? 'bg-red-50 dark:bg-red-900/20'
-                        : 'bg-gray-50 dark:bg-gray-800/50'
-                      }`}>
-                        <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                          {setlist.status === 'revision_requested' ? 'Revision Notes'
-                          : setlist.status === 'rejected' ? 'Rejection Reason'
-                          : 'Notes'}
-                        </p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">{setlist.review_note || setlist.approval_notes}</p>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-gray-400 text-center py-4">No notes yet</p>
-                    )}
-                  </div>
-                )}
-
-                {(canSubmitSetlist || canManageSetlist) && setlistSongs.length > 0 && (
+                {showSetlistEditControls && (canSubmitSetlist || canManageSetlist) && setlistSongs.length > 0 && (
                   <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800 space-y-2">
                     {hasMissingLyrics && (
                       <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12px] leading-relaxed text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
@@ -2106,6 +2232,61 @@ const openLyricsModal = (ss: SetlistSong) => {
           </div>
         </div>
         )}
+
+        <div className="card animate-slide-up" style={{ animationDelay: '150ms' }}>
+          <div className="px-5 py-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <Users className="h-4 w-4 text-brand-600 dark:text-brand-400" /> Team Members
+              </h2>
+              <span className="text-xs text-gray-500 dark:text-gray-400">{confirmedCount}/{assignments.length} confirmed</span>
+            </div>
+            {assignments.length === 0 ? (
+              <p className="py-4 text-center text-sm text-gray-400">No team members assigned yet</p>
+            ) : (
+              <div className="space-y-3">
+                {[...assignments]
+                  .sort((a, b) => {
+                    const aIsSongLeader = a.roles?.name === 'Song Leader';
+                    const bIsSongLeader = b.roles?.name === 'Song Leader';
+                    if (aIsSongLeader && !bIsSongLeader) return -1;
+                    if (!aIsSongLeader && bIsSongLeader) return 1;
+                    return 0;
+                  })
+                  .map(a => {
+                    const isSongLeaderRole = a.roles?.name === 'Song Leader';
+                    return (
+                      <div key={a.id}>
+                        <div className={`flex items-center gap-3 ${isSongLeaderRole ? 'p-3 rounded-lg bg-gradient-to-r from-brand-50 to-blue-50 dark:from-brand-900/20 dark:to-blue-900/20 border border-brand-200 dark:border-brand-800' : ''}`}>
+                          <Avatar
+                            src={a.profiles?.avatar_url}
+                            firstName={a.profiles?.first_name || '?'}
+                            lastName={a.profiles?.last_name}
+                            size="sm"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">{a.profiles?.first_name} {a.profiles?.last_name}</p>
+                            {a.roles && <RoleBadge role={a.roles} size="sm" />}
+                          </div>
+                          <span className={`badge ${a.status === 'confirmed' ? 'badge-green' : a.status === 'declined' ? 'badge-red' : 'badge-yellow'}`}>{a.status}</span>
+                          {isLeader && (
+                            <button onClick={() => handleRemoveAssignment(a.id)} className="p-1 text-gray-400 hover:text-red-500 transition-colors">
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                        {a.status === 'declined' && a.decline_reason && (
+                          <div className="ml-12 mt-1.5 px-3 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/10 text-xs text-red-600 dark:text-red-400">
+                            Reason: {a.decline_reason}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </div>
+        </div>
 
         <Modal open={showAssign} onClose={() => setShowAssign(false)} title="Assign Team Member">
           <div className="space-y-4">
@@ -2368,6 +2549,191 @@ const openLyricsModal = (ss: SetlistSong) => {
             </div>
           </div>
         </Modal>
+
+        <Modal
+          open={!!chartModalSong}
+          onClose={() => setChartModalSong(null)}
+          title="Song Chart"
+          size="lg"
+          hideHeader
+        >
+          {chartModalSong?.songs && (
+            <SongChartViewer
+              songId={chartModalSong.song_id}
+              title={chartModalSong.songs.title}
+              artist={chartModalSong.songs.artist}
+              songKey={chartModalSong.performed_key || chartModalSong.songs.song_key}
+              chordproText={chartModalSong.songs.chordpro_text}
+              editable={canManageSetlist || canEditSetlist}
+              saving={chartSaving}
+              onClose={() => setChartModalSong(null)}
+              onSave={(text) => handleSaveChart(chartModalSong.song_id, text)}
+            />
+          )}
+        </Modal>
+
+        {typeof document !== 'undefined' && createPortal(
+          <AnimatePresence>
+            {serviceModeSong?.songs && (
+              <motion.div
+                key="service-mode-overlay"
+                initial={{ opacity: 0, scale: 0.985, y: 18, filter: 'blur(10px)' }}
+                animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
+                exit={{ opacity: 0, scale: 0.985, y: 18, filter: 'blur(10px)' }}
+                transition={{ duration: 0.58, ease: [0.22, 1, 0.36, 1] }}
+                className="fixed inset-0 z-[2147483647] flex h-[100svh] h-[100dvh] w-screen flex-col overflow-hidden bg-white text-gray-950 dark:bg-[#0c0f0d] dark:text-white"
+                onPointerDown={(event) => {
+                  serviceSwipeStart.current = { x: event.clientX, y: event.clientY };
+                }}
+                onPointerUp={(event) => handleServiceSwipeEnd(event.clientX, event.clientY)}
+                onPointerCancel={() => {
+                  serviceSwipeStart.current = null;
+                }}
+              >
+                <motion.div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 z-0 opacity-70"
+                  initial={{ opacity: 0 }}
+                  animate={{
+                    opacity: [0.25, 0.75, 0.35],
+                    backgroundPosition: ['0% 0%', '100% 35%', '0% 0%'],
+                  }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 5, ease: 'easeInOut' }}
+                  style={{
+                    backgroundImage: 'radial-gradient(circle at 18% 8%, rgba(16,185,129,0.18), transparent 28%), radial-gradient(circle at 78% 18%, rgba(52,211,153,0.12), transparent 30%), linear-gradient(135deg, rgba(16,185,129,0.06), transparent 42%, rgba(16,185,129,0.08))',
+                    backgroundSize: '140% 140%',
+                  }}
+                />
+                <AnimatePresence mode="wait">
+                  {serviceModeEntering ? (
+                    <motion.div
+                      key="service-mode-entering"
+                      initial={{ opacity: 0, y: 18, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -14, scale: 1.015 }}
+                      transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                      className="relative z-10 flex min-h-0 flex-1 items-center justify-center px-6 text-center"
+                    >
+                      <div className="relative max-w-sm">
+                        <motion.div
+                          aria-hidden="true"
+                          className="absolute inset-0 -z-10 rounded-full bg-emerald-400/20 blur-3xl"
+                          animate={{ scale: [0.8, 1.25, 0.95], opacity: [0.25, 0.6, 0.3] }}
+                          transition={{ duration: 1.8, ease: 'easeInOut' }}
+                        />
+                        <motion.div
+                          className="mx-auto flex h-24 w-24 items-center justify-center rounded-[2rem] bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-2xl shadow-emerald-600/30"
+                          animate={{ y: [0, -8, 0], rotate: [0, -2, 2, 0] }}
+                          transition={{ duration: 1.8, ease: 'easeInOut' }}
+                        >
+                          <Music className="h-10 w-10" />
+                        </motion.div>
+                        <p className="mt-6 text-[10px] font-black uppercase tracking-[0.28em] text-emerald-700 dark:text-emerald-300">
+                          Entering {serviceModeLabel}
+                        </p>
+                        <h2 className="mt-2 text-3xl font-black tracking-[-0.05em] text-gray-950 dark:text-white">
+                          {serviceModeLoadingTitle}
+                        </h2>
+                        <p className="mx-auto mt-3 max-w-[18rem] text-sm font-semibold leading-relaxed text-gray-500 dark:text-white/50">
+                          <span className="block">Loading charts, notes, and worship flow</span>
+                          <span className="block">from {serviceModeSourceLabel}.</span>
+                        </p>
+                        <div className="mt-7 overflow-hidden rounded-full bg-gray-200/80 p-1 dark:bg-white/10">
+                          <motion.div
+                            className="h-2 rounded-full bg-gradient-to-r from-emerald-400 via-lime-300 to-emerald-600"
+                            initial={{ width: '8%' }}
+                            animate={{ width: '100%' }}
+                            transition={{ duration: 8.5, ease: [0.22, 1, 0.36, 1] }}
+                          />
+                        </div>
+                      </div>
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="service-mode-chart"
+                      className="relative z-10 flex min-h-0 flex-1 flex-col"
+                      initial={{ opacity: 0, y: 24 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 18 }}
+                      transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                    >
+                      <motion.div
+                        initial={{ y: -18, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        exit={{ y: -12, opacity: 0 }}
+                        transition={{ duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
+                        className="relative z-10 flex shrink-0 items-center gap-2 border-b border-black/[0.06] bg-white/95 px-4 pb-3 pt-3 shadow-sm backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#0c0f0d]/95"
+                        style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)' }}
+                      >
+                        <button onClick={() => setServiceModeIndex(null)} className="rounded-full p-2 text-gray-500 hover:bg-black/[0.05] dark:text-white/55 dark:hover:bg-white/[0.08]">
+                          <X className="h-5 w-5" />
+                        </button>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700 dark:text-emerald-300">{serviceModeLabel}</p>
+                          <p className="truncate text-sm font-bold text-gray-900 dark:text-white">
+                            {(serviceModeIndex ?? 0) + 1} of {serviceModeSongs.length} · {serviceModeSong.songs.title}
+                          </p>
+                        </div>
+                        <button
+                          onClick={toggleTheme}
+                          className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.06] bg-white/80 text-gray-600 shadow-sm backdrop-blur-md transition hover:bg-white active:scale-95 dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/70 dark:hover:bg-white/[0.1]"
+                          aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+                          title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+                        >
+                          <Sun className={`absolute h-4.5 w-4.5 transition-all duration-300 ${theme === 'dark' ? 'scale-0 rotate-90 opacity-0' : 'scale-100 rotate-0 opacity-100'}`} />
+                          <Moon className={`absolute h-4.5 w-4.5 transition-all duration-300 ${theme === 'dark' ? 'scale-100 rotate-0 opacity-100' : 'scale-0 -rotate-90 opacity-0'}`} />
+                        </button>
+                      </motion.div>
+                      <motion.div
+                        initial={{ y: 28, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        exit={{ y: 24, opacity: 0 }}
+                        transition={{ duration: 0.62, delay: 0.04, ease: [0.22, 1, 0.36, 1] }}
+                        className="relative z-10 min-h-0 flex-1 overflow-hidden"
+                      >
+                        {!serviceChartEditing && (
+                          <>
+                            <button
+                              onClick={goToPreviousServiceSong}
+                              disabled={isFirstServiceSong}
+                              className="absolute left-4 top-1/2 z-10 hidden h-14 w-14 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-gray-700 shadow-xl ring-1 ring-black/10 backdrop-blur-xl transition hover:scale-105 hover:bg-white disabled:pointer-events-none disabled:opacity-20 dark:bg-black/45 dark:text-white/75 dark:ring-white/10 dark:hover:bg-black/60 lg:flex"
+                              aria-label="Previous song"
+                            >
+                              <ChevronLeft className="h-7 w-7" />
+                            </button>
+                            <button
+                              onClick={goToNextServiceSong}
+                              disabled={isLastServiceSong}
+                              className="absolute right-4 top-1/2 z-10 hidden h-14 w-14 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-gray-700 shadow-xl ring-1 ring-black/10 backdrop-blur-xl transition hover:scale-105 hover:bg-white disabled:pointer-events-none disabled:opacity-20 dark:bg-black/45 dark:text-white/75 dark:ring-white/10 dark:hover:bg-black/60 lg:flex"
+                              aria-label="Next song"
+                            >
+                              <ChevronRight className="h-7 w-7" />
+                            </button>
+                          </>
+                        )}
+                        <SongChartViewer
+                          songId={serviceModeSong.song_id}
+                          title={serviceModeSong.songs.title}
+                          artist={serviceModeSong.songs.artist}
+                          songKey={serviceModeSong.performed_key || serviceModeSong.songs.song_key}
+                          chordproText={serviceModeSong.songs.chordpro_text}
+                          editable={canManageSetlist || canEditSetlist}
+                          fullBleed
+                          saving={chartSaving}
+                          hideTitleHeader
+                          onEditingChange={setServiceChartEditing}
+                          onSave={(text) => handleSaveChart(serviceModeSong.song_id, text)}
+                        />
+                      </motion.div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
 
         <Modal open={!!showDecline} onClose={() => setShowDecline(null)} title="Decline Assignment" size="sm">
           <div className="space-y-4">

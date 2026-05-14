@@ -5,8 +5,13 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { PageLoader } from '../components/LoadingSpinner';
 import { PlatformDashboard } from './PlatformDashboard';
+import { PlatformActivityLog } from './PlatformActivityLog';
 
-export function PlatformPortal() {
+interface PlatformPortalProps {
+  view?: 'dashboard' | 'activity';
+}
+
+export function PlatformPortal({ view = 'dashboard' }: PlatformPortalProps) {
   const { user, loading, isPlatformOwner, signIn, signOut } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -45,6 +50,7 @@ export function PlatformPortal() {
   if (loading) return <PageLoader />;
 
   if (user && isPlatformOwner) {
+    if (view === 'activity') return <PlatformActivityLog />;
     return <PlatformDashboard />;
   }
 

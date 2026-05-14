@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { Eye, EyeOff, ArrowRight, ChevronLeft, Users, Building2 } from 'lucide-react';
+import { Eye, EyeOff, ArrowRight, ChevronLeft, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -291,19 +291,6 @@ export function Login() {
                               Ask your church admin for an invite
                             </p>
                           </div>
-                          {/* Action row — clickable */}
-                          <Link
-                            to="/create-church"
-                            className="flex items-center gap-3 px-3.5 py-3 rounded-xl bg-gray-50 dark:bg-white/[0.03] border border-gray-100 dark:border-white/[0.04] hover:bg-emerald-50 dark:hover:bg-emerald-500/[0.07] hover:border-emerald-100 dark:hover:border-emerald-500/[0.12] group transition-all duration-200"
-                          >
-                            <div className="h-7 w-7 rounded-lg bg-gray-100 dark:bg-white/[0.06] group-hover:bg-emerald-100 dark:group-hover:bg-emerald-500/[0.12] flex items-center justify-center shrink-0 transition-all duration-200">
-                              <Building2 className="h-3.5 w-3.5 text-gray-400 dark:text-white/30 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors duration-200" />
-                            </div>
-                            <span className="text-[13px] font-medium text-gray-500 dark:text-white/30 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors duration-200">
-                              Create your church
-                            </span>
-                            <ArrowRight className="h-3.5 w-3.5 ml-auto text-gray-300 dark:text-white/15 group-hover:text-emerald-500 dark:group-hover:text-emerald-400 transition-colors duration-200" />
-                          </Link>
                         </div>
                       ) : (
                         <p className="text-center text-[13px] text-gray-400 dark:text-white/30 transition-colors duration-300">

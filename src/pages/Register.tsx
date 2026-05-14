@@ -30,7 +30,6 @@ export function Register() {
   const params = new URLSearchParams(location.search);
   const redirectTo = params.get('redirect') || '/onboarding';
   const inviteEmail = params.get('email') || '';
-  const isCreateChurchFlow = params.get('create_church') === '1' && redirectTo === '/create-church';
   const isInviteJoinFlow = Boolean(inviteEmail) && redirectTo.startsWith('/invite/');
 
   useEffect(() => {
@@ -44,7 +43,7 @@ export function Register() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isInviteJoinFlow && !isCreateChurchFlow) {
+    if (!isInviteJoinFlow) {
       toast('error', 'Registration is invite-only right now');
       return;
     }
@@ -72,9 +71,7 @@ export function Register() {
     setLoading(false);
     toast(
       'success',
-      isInviteJoinFlow
-        ? 'Account created. Continue to accept your church invite.'
-        : 'Account created. Continue to set up your church.',
+      'Account created. Continue to accept your church invite.',
     );
     navigate(redirectTo);
   };
@@ -121,7 +118,7 @@ export function Register() {
               </div>
 
               {/* ── INVITE-ONLY STATE ── */}
-              {!isInviteJoinFlow && !isCreateChurchFlow && (
+              {!isInviteJoinFlow && (
                 <>
                   <div className="text-center mb-7">
                     <h1 className="text-[24px] font-bold text-gray-900 dark:text-white tracking-[-0.025em] transition-colors duration-300">
@@ -157,16 +154,14 @@ export function Register() {
               )}
 
               {/* ── FORM: CREATE ACCOUNT ── */}
-              {(isInviteJoinFlow || isCreateChurchFlow) && (
+              {isInviteJoinFlow && (
                 <>
                   <div className="text-center mb-7">
                     <h1 className="text-[24px] font-bold text-gray-900 dark:text-white tracking-[-0.025em] transition-colors duration-300">
                       Create your account
                     </h1>
                     <p className="mt-2 text-[14px] text-gray-500 dark:text-white/35 leading-relaxed transition-colors duration-300">
-                      {isInviteJoinFlow
-                        ? `Joining as ${inviteEmail}`
-                        : 'Set up your account to create a church workspace.'}
+                      Joining as {inviteEmail}
                     </p>
                   </div>
 
@@ -239,9 +234,7 @@ export function Register() {
                     <div className="flex items-start gap-3 p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-500/[0.07] border border-emerald-100 dark:border-emerald-500/[0.12] transition-colors duration-300">
                       <Shield className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
                       <p className="text-[13px] text-emerald-700 dark:text-emerald-300/80 leading-relaxed transition-colors duration-300">
-                        {isInviteJoinFlow
-                          ? 'Your church admin will assign your ministry roles after you join.'
-                          : 'You\'ll become the first church admin and can immediately invite your team.'}
+                        Your church admin will assign your ministry roles after you join.
                       </p>
                     </div>
 

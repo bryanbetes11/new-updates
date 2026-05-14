@@ -1,8 +1,9 @@
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import {
-  Users, Bell, LogOut, Shield, Library, Calendar, ClipboardCheck, ChevronRight, LockKeyhole,
+  Activity, Users, Bell, LogOut, Shield, Library, Calendar, ClipboardCheck, ChevronRight,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -29,6 +30,18 @@ const itemVariants = {
   hidden: { opacity: 0, y: 10, filter: 'blur(4px)' },
   show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] } },
 };
+
+interface MoreMenuItem {
+  icon: LucideIcon;
+  label: string;
+  desc: string;
+  path: string | null;
+  show: boolean;
+  action: (() => void) | null;
+  badge: number;
+  color: string;
+  badgeVariant?: 'red' | 'amber';
+}
 
 export function More() {
   const { user, profile, isLeader, isOrgAdmin, isPlatformOwner, signOut } = useAuth();
@@ -76,8 +89,8 @@ export function More() {
     }
   };
 
-  const menuItems = [
-    { icon: LockKeyhole, label: 'Platform Management', desc: 'Owner dashboard',        path: '/platform',           show: isPlatformOwner,         action: null,                              badge: 0,                    color: '#6366f1' },
+  const menuItems: MoreMenuItem[] = [
+    { icon: Activity,    label: 'Activity Log',         desc: 'Church activity',       path: '/activity-log',       show: isPlatformOwner,         action: null,                              badge: 0,                    color: '#0ea5e9' },
     { icon: Library,     label: 'Library',             desc: 'Browse songs and setlists', path: '/library',          show: true,                    action: null,                              badge: 0,                    color: '#16a34a' },
     { icon: Calendar,    label: 'Request Leave',        desc: 'Submit unavailability',  path: null,                  show: true,                    action: () => setShowRequestLeave(true),    badge: 0,                    color: '#f59e0b' },
     { icon: ClipboardCheck, label: 'Attendance Guide',  desc: 'How tracking works',     path: null,                  show: true,                    action: () => setShowAttendanceGuide(true), badge: 0,                    color: '#0ea5e9' },

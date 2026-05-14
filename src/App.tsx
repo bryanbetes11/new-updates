@@ -7,9 +7,8 @@ import { Layout } from './components/Layout';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { InviteAccept } from './pages/InviteAccept';
-import { CreateChurch } from './pages/CreateChurch';
 import { Landing } from './pages/Landing';
-import { PlatformPortal } from './pages/PlatformPortal';
+import { PlatformActivityLog } from './pages/PlatformActivityLog';
 import { Onboarding } from './pages/Onboarding';
 import { Dashboard } from './pages/Dashboard';
 import { Events } from './pages/Events';
@@ -131,17 +130,19 @@ export default function App() {
             />
             <Routes>
               <Route path="/" element={<Landing />} />
-              <Route path="/platform" element={<PlatformPortal />} />
+              <Route path="/platform" element={<Navigate to="/activity-log" replace />} />
+              <Route path="/platform/activity" element={<Navigate to="/activity-log" replace />} />
               <Route element={<Layout />}>
                 <Route path="/landing" element={<Navigate to="/" replace />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/register" element={<Register />} />
                 <Route path="/invite/:token" element={<InviteAccept />} />
-                <Route path="/create-church" element={<CreateChurch />} />
+                <Route path="/create-church" element={<Navigate to="/login" replace />} />
                 <Route element={<ProtectedRoute />}>
                   <Route path="/onboarding" element={<Onboarding />} />
                   <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/activity-log" element={<PlatformActivityLog />} />
                   <Route path="/events" element={<Events />} />
                   <Route path="/events/:id" element={<EventDetail />} />
                   <Route path="/announcements" element={<Announcements />} />

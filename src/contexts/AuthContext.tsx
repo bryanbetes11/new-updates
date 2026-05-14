@@ -33,20 +33,26 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 const AUTH_CONTEXT_REQUEST_TIMEOUT_MS = 10000;
 
-async function withAuthTimeout<T>(request: PromiseLike<T>, fallback: T, label: string): Promise<T> {
+async function withAuthTimeout<T>(
+  request: PromiseLike<T>,
+  fallback: unknown,
+  label: string,
+  timeoutMs = AUTH_CONTEXT_REQUEST_TIMEOUT_MS,
+): Promise<T> {
+  const typedFallback = fallback as T;
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<T>((resolve) => {
     timeoutId = setTimeout(() => {
       console.warn(`[Auth] ${label} timed out; continuing with fallback state.`);
-      resolve(fallback);
-    }, AUTH_CONTEXT_REQUEST_TIMEOUT_MS);
+      resolve(typedFallback);
+    }, timeoutMs);
   });
 
   try {
     return await Promise.race([Promise.resolve(request), timeout]);
   } catch (error) {
     console.error(`[Auth] ${label} failed:`, error);
-    return fallback;
+    return typedFallback;
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
   }
@@ -66,7 +72,12 @@ async function clearStoredAuthSession() {
   }
 
   try {
-    await supabase.auth.signOut({ scope: 'local' });
+    await withAuthTimeout(
+      supabase.auth.signOut({ scope: 'local' }),
+      { error: null } as Awaited<ReturnType<typeof supabase.auth.signOut>>,
+      'Local sign-out cleanup',
+      3000,
+    );
   } catch (error) {
     console.warn('[Auth] Failed to clear local Supabase session:', error);
   }

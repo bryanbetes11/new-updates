@@ -152,7 +152,7 @@ function AttendanceVisual() {
 
 // ── nav ─────────────────────────────────────────────────────────
 
-function Nav({ onSignIn, onStartFree }: { onSignIn: () => void; onStartFree: () => void }) {
+function Nav({ onSignIn }: { onSignIn: () => void }) {
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -175,7 +175,7 @@ function Nav({ onSignIn, onStartFree }: { onSignIn: () => void; onStartFree: () 
         </div>
 
         <div className="hidden md:flex items-center gap-7">
-          {[['Features', '#features'], ['Product', '#walkthrough'], ['Pricing', '#pricing'], ['FAQ', '#faq']].map(
+          {[['Features', '#features'], ['Product', '#walkthrough'], ['FAQ', '#faq']].map(
             ([label, href]) => (
               <a
                 key={label}
@@ -194,12 +194,6 @@ function Nav({ onSignIn, onStartFree }: { onSignIn: () => void; onStartFree: () 
             className="h-[38px] px-4 rounded-full border border-white/[0.10] text-[13px] font-semibold text-white/70 hover:text-white hover:bg-white/[0.06] transition-all duration-150"
           >
             Sign in
-          </button>
-          <button
-            onClick={onStartFree}
-            className="h-[38px] px-4 rounded-full bg-emerald-400 text-[#07101a] text-[13px] font-bold hover:bg-emerald-300 transition-colors duration-150 flex items-center gap-1.5 hover:-translate-y-px"
-          >
-            Start free <ArrowRight className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
@@ -246,7 +240,7 @@ const WALK = [
 ];
 
 const STEPS = [
-  { n: 'Step 01', title: 'Create your church',  body: 'Sign up, name your church, invite your worship team. Free 10-day trial — no card.' },
+  { n: 'Step 01', title: 'Sign in with your team account',  body: 'Use the church workspace already set up for your ministry team.' },
   { n: 'Step 02', title: 'Set the cadence',      body: 'Add your recurring services and rehearsals. ServeSync builds the weekly view automatically.' },
   { n: 'Step 03', title: 'Build a setlist',      body: 'Drop in songs, set the keys, write the notes. Share with the band in one tap.' },
   { n: 'Step 04', title: 'Run a calmer week',    body: 'Mark attendance, post updates, and let the rhythm carry the team instead of leaders chasing it.' },
@@ -256,31 +250,31 @@ const PLANS = [
   {
     name: 'Free',     price: '₱0',     seats: 'Up to 5 members',
     desc: 'For small teams trying ServeSync.',
-    cta: 'Start free', feat: false,
+    feat: false,
     features: ['Core workspace', 'Basic schedules', 'Basic setlists', 'Announcements'],
   },
   {
     name: 'Starter',  price: '₱599',   seats: 'Up to 12 members',
     desc: 'For one worship team getting organized.',
-    cta: 'Start Starter', feat: false,
+    feat: false,
     features: ['Everything in Free', 'Full schedule planning', 'Setlists + service notes', 'Attendance tracking'],
   },
   {
     name: 'Team',     price: '₱999',   seats: 'Up to 25 members',
     desc: 'For growing teams with regular rotations.',
-    cta: 'Start Team', feat: true,
+    feat: true,
     features: ['Everything in Starter', 'More team seats', 'Built for weekly rotations', 'Priority workspace features'],
   },
   {
     name: 'Ministry', price: '₱1,799', seats: 'Up to 60 members',
     desc: 'For larger ministries with multiple teams.',
-    cta: 'Start Ministry', feat: false,
+    feat: false,
     features: ['Everything in Team', 'Larger team capacity', 'Multi-service planning', 'Long-term ministry rhythm'],
   },
 ];
 
 const FAQS = [
-  { q: 'Do I need a credit card to start the trial?', a: 'No. You can create a church workspace and invite your team without entering payment details. We only ask for billing if you decide to upgrade after the 10-day trial.' },
+  { q: 'Can a new church sign up right now?', a: 'New church signups are paused while this workspace focuses on the current church team.' },
   { q: 'How is the team size counted?', a: 'A "member" is anyone you invite into the workspace — leaders, musicians, vocalists, tech volunteers. Inactive members can be archived without removing their history.' },
   { q: 'Can we use ServeSync for multiple teams or campuses?', a: 'Yes. The Ministry plan supports multiple worship teams and parallel service planning. Each team gets its own schedules, setlists, and announcements.' },
   { q: 'Does ServeSync work on mobile?', a: 'Yes. The app is built mobile-first — musicians can check setlists, confirm availability, and see schedules from their phones.' },
@@ -317,7 +311,7 @@ export function Landing() {
         style={{ background: 'radial-gradient(ellipse 1200px 720px at 50% -60px, rgba(52,211,153,0.11) 0%, rgba(125,211,252,0.05) 55%, transparent 100%)' }}
       />
 
-      <Nav onSignIn={() => navigate('/login')} onStartFree={() => navigate('/create-church')} />
+      <Nav onSignIn={() => navigate('/login')} />
 
       {/* ── Hero ──────────────────────────────────────────────────── */}
       <section style={{ padding: '72px 0 40px' }}>
@@ -336,15 +330,15 @@ export function Landing() {
                 Schedules, setlists, attendance and announcements in one place. Built for the way worship teams actually plan a week.
               </p>
               <div className="flex flex-wrap items-center gap-3 mt-7">
-                <button onClick={() => navigate('/create-church')} className="h-[50px] px-6 rounded-full bg-emerald-400 text-[#07101a] text-sm font-bold hover:bg-emerald-300 transition-all hover:-translate-y-px flex items-center gap-2">
-                  Start 10-day trial <ArrowRight className="h-4 w-4" />
+                <button onClick={() => navigate('/login')} className="h-[50px] px-6 rounded-full bg-emerald-400 text-[#07101a] text-sm font-bold hover:bg-emerald-300 transition-all hover:-translate-y-px flex items-center gap-2">
+                  Sign in <ArrowRight className="h-4 w-4" />
                 </button>
                 <button onClick={() => navigate('/login')} className="h-[50px] px-6 rounded-full border border-white/[0.12] text-sm font-semibold text-white/75 hover:text-white hover:bg-white/[0.05] transition-all hover:-translate-y-px">
                   Sign in
                 </button>
               </div>
               <div className="flex flex-wrap items-center gap-5 mt-5">
-                {['No card required', '10-day trial', 'Cancel anytime'].map(m => (
+                {['Private workspace', 'Invite-only access', 'Built for this team'].map(m => (
                   <span key={m} className="flex items-center gap-1.5 font-mono text-[11px] text-white/50">
                     <span className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-400/20 text-emerald-400">
                       <Check className="h-2.5 w-2.5" strokeWidth={3} />
@@ -371,15 +365,15 @@ export function Landing() {
                 Schedules, setlists, attendance and announcements in one place. Built for the way worship teams actually plan a week.
               </p>
               <div className="flex items-center gap-3 mt-7">
-                <button onClick={() => navigate('/create-church')} className="h-[50px] px-6 rounded-full bg-emerald-400 text-[#07101a] text-sm font-bold hover:bg-emerald-300 transition-all hover:-translate-y-px flex items-center gap-2">
-                  Start 10-day trial <ArrowRight className="h-4 w-4" />
+                <button onClick={() => navigate('/login')} className="h-[50px] px-6 rounded-full bg-emerald-400 text-[#07101a] text-sm font-bold hover:bg-emerald-300 transition-all hover:-translate-y-px flex items-center gap-2">
+                  Sign in <ArrowRight className="h-4 w-4" />
                 </button>
                 <button onClick={() => navigate('/login')} className="h-[50px] px-6 rounded-full border border-white/[0.12] text-sm font-semibold text-white/75 hover:text-white hover:bg-white/[0.05] transition-all hover:-translate-y-px">
                   Sign in
                 </button>
               </div>
               <div className="flex items-center gap-5 mt-5">
-                {['No card required', '10-day trial', 'Cancel anytime'].map(m => (
+                {['Private workspace', 'Invite-only access', 'Built for this team'].map(m => (
                   <span key={m} className="flex items-center gap-1.5 font-mono text-[11px] text-white/50">
                     <span className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-400/20 text-emerald-400">
                       <Check className="h-2.5 w-2.5" strokeWidth={3} />
@@ -697,7 +691,7 @@ export function Landing() {
               Honest plans.<br />Priced for ministries.
             </h2>
             <p className="mt-4 text-[15px] leading-[1.6] text-white/60">
-              Start free, upgrade when your team needs more space. All paid plans include a 10-day trial.
+              New church signups are paused for now while ServeSync stays focused on the current church workspace.
             </p>
           </div>
 
@@ -742,17 +736,17 @@ export function Landing() {
                   ))}
                 </ul>
                 <button
-                  onClick={() => navigate('/create-church')}
+                  onClick={() => navigate('/login')}
                   className={`w-full h-11 rounded-full text-[13px] font-semibold flex items-center justify-center gap-2 transition-all hover:-translate-y-px ${
                     p.feat
                       ? 'bg-emerald-400 text-[#07101a] hover:bg-emerald-300'
                       : 'border border-white/[0.12] text-white/80 hover:text-white hover:bg-white/[0.06]'
                   }`}
                 >
-                  {p.cta} <ArrowRight className="h-3.5 w-3.5" />
+                  Sign in <ArrowRight className="h-3.5 w-3.5" />
                 </button>
                 <div className="font-mono text-[11px] text-white/35 text-center mt-3">
-                  {p.price === '₱0' ? 'Free forever' : '10-day trial included'}
+                  Existing church access only
                 </div>
               </div>
             ))}
@@ -826,17 +820,17 @@ export function Landing() {
                 Ready for a quieter<br />Sunday morning?
               </h2>
               <p className="mt-5 text-[16px] leading-[1.6] text-white/60 max-w-[480px] mx-auto">
-                Set up your workspace, invite your team, plan your next service. Most worship leaders are ready by the end of the afternoon.
+                Sign in to your church workspace, plan your next service, and keep the team moving in one place.
               </p>
               <div className="flex flex-wrap items-center justify-center gap-3 mt-8">
-                <button onClick={() => navigate('/create-church')} className="h-[50px] px-7 rounded-full bg-emerald-400 text-[#07101a] text-sm font-bold hover:bg-emerald-300 transition-all hover:-translate-y-px flex items-center gap-2">
-                  Start 10-day trial <ArrowRight className="h-4 w-4" />
+                <button onClick={() => navigate('/login')} className="h-[50px] px-7 rounded-full bg-emerald-400 text-[#07101a] text-sm font-bold hover:bg-emerald-300 transition-all hover:-translate-y-px flex items-center gap-2">
+                  Sign in <ArrowRight className="h-4 w-4" />
                 </button>
                 <button onClick={() => navigate('/login')} className="h-[50px] px-7 rounded-full border border-white/[0.12] text-sm font-semibold text-white/75 hover:text-white hover:bg-white/[0.05] transition-all hover:-translate-y-px">
                   Sign in
                 </button>
               </div>
-              <div className="font-mono text-[11px] text-white/35 mt-5">No card required · cancel anytime</div>
+              <div className="font-mono text-[11px] text-white/35 mt-5">Invite-only access for the current church team</div>
             </div>
           </div>
         </Wrap>
@@ -857,7 +851,6 @@ export function Landing() {
             </div>
             <div className="flex flex-wrap items-center gap-5 text-[13px] text-white/50">
               <button onClick={() => navigate('/login')} className="hover:text-white transition-colors">Sign in</button>
-              <button onClick={() => navigate('/create-church')} className="hover:text-white transition-colors">Create church</button>
               <a href="#" className="hover:text-white transition-colors">Privacy</a>
               <a href="#" className="hover:text-white transition-colors">Terms</a>
               <a href="mailto:hello@servesync.app" className="hover:text-white transition-colors">Contact</a>

@@ -166,6 +166,50 @@ export interface PlatformRecentRegistration {
   is_onboarded: boolean;
 }
 
+export interface ActivityLog {
+  id: string;
+  org_id: string | null;
+  org_name: string | null;
+  actor_id: string | null;
+  actor_name: string | null;
+  actor_email: string | null;
+  target_user_id: string | null;
+  target_user_name: string | null;
+  target_user_email: string | null;
+  category: string;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  entity_label: string | null;
+  summary: string;
+  metadata: {
+    operation?: string;
+    table?: string;
+    changed_fields?: string[];
+    from_status?: string | null;
+    to_status?: string | null;
+    from_date?: string | null;
+    to_date?: string | null;
+    role_name?: string | null;
+    event_title?: string | null;
+    announcement_title?: string | null;
+    song_title?: string | null;
+    section_label?: string | null;
+    request_type?: string | null;
+    plan_code?: string | null;
+    amount?: string | null;
+    verdict?: string | null;
+    rating?: string | null;
+    score_overall?: string | null;
+    language_mode?: string | null;
+    emoji?: string | null;
+    artist?: string | null;
+    [key: string]: unknown;
+  };
+  source: string;
+  created_at: string;
+}
+
 export interface Role {
   id: string;
   name: string;

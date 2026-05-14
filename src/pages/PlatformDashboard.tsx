@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { addDays, format } from 'date-fns';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Building2, CalendarClock, CheckCircle2, CreditCard, Loader2, LogOut, Shield, Sparkles, Users, UserPlus, XCircle } from 'lucide-react';
+import { Activity, ArrowLeft, Building2, CalendarClock, CheckCircle2, CreditCard, Loader2, LogOut, Shield, Sparkles, Users, UserPlus, XCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -386,7 +386,7 @@ export function PlatformDashboard() {
 
   const handleSignOut = async () => {
     await signOut();
-    navigate('/platform', { replace: true });
+    navigate('/login', { replace: true });
   };
 
   const handleRejectSubmission = async () => {
@@ -475,13 +475,20 @@ export function PlatformDashboard() {
             </div>
 
             <div className="w-full lg:w-auto space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <button
                   onClick={() => navigate('/dashboard')}
                   className="h-11 px-4 rounded-2xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] text-sm font-semibold text-gray-700 dark:text-white/70 hover:bg-gray-50 dark:hover:bg-white/[0.08] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
                 >
                   <ArrowLeft className="h-4 w-4" />
                   Back to App
+                </button>
+                <button
+                  onClick={() => navigate('/activity-log')}
+                  className="h-11 px-4 rounded-2xl border border-sky-200 dark:border-sky-500/20 bg-sky-50 dark:bg-sky-500/[0.08] text-sm font-semibold text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-500/[0.14] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                >
+                  <Activity className="h-4 w-4" />
+                  Activity
                 </button>
                 <button
                   onClick={handleSignOut}

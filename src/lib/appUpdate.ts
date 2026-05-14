@@ -1,7 +1,7 @@
-export const APP_VERSION = '2026.05.13.1';
+export const APP_VERSION = '2026.05.14.1';
 export const APP_UPDATE_VERSION = APP_VERSION;
 export const APP_VERSION_LABEL = `v${APP_VERSION}`;
-export const APP_UPDATE_PUBLISHED_AT = '2026-05-13T05:50:00Z';
+export const APP_UPDATE_PUBLISHED_AT = '2026-05-14T15:56:29Z';
 
 export const APP_UPDATE_FEATURES = [
   'Chats now support @mentions, and mentioned users receive a dedicated mention notification with push delivery.',
@@ -25,6 +25,7 @@ export const APP_UPDATE_FEATURES = [
 ];
 
 export const APP_UPDATE_FIXES = [
+  'Activity Log now refreshes while open and when returning to the app, so new create/delete activity appears without getting stuck on a stale load state.',
   'Chat push delivery now refreshes the service worker cleanly while keeping lockscreen notifications limited to when ServeSync is not visibly open.',
   'The desktop chat composer now uses the full available width while typing, so messages no longer wrap onto new lines too early.',
   'Mentioned names in chat now render cleanly instead of showing raw underscore handles.',

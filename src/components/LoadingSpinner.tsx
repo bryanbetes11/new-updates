@@ -12,7 +12,7 @@ export function LoadingSpinner({ className = 'h-8 w-8' }: { className?: string }
 
 export function PageLoader() {
   return (
-    <div className="page-loader-shell relative isolate -mx-4 -mt-4 flex items-center justify-center overflow-hidden bg-[#f5f5f7] px-6 py-10 text-gray-950 animate-fade-in dark:bg-[#050806] dark:text-white sm:-mx-6 sm:-mt-5 lg:-mx-8">
+    <div className="page-loader-shell relative isolate -mx-4 flex items-center justify-center overflow-hidden bg-[#f5f5f7] px-6 py-10 text-gray-950 animate-fade-in dark:bg-[#050806] dark:text-white sm:-mx-6 lg:-mx-8">
       <div className="absolute inset-0 -z-20 bg-[radial-gradient(circle_at_50%_28%,rgba(34,197,94,0.22),transparent_34%),linear-gradient(180deg,#f7fff9_0%,#f4f5f7_52%,#eefbf3_100%)] dark:bg-[radial-gradient(circle_at_50%_25%,rgba(34,197,94,0.22),transparent_32%),radial-gradient(circle_at_50%_84%,rgba(16,185,129,0.12),transparent_36%),linear-gradient(180deg,#050806_0%,#09120c_55%,#030504_100%)]" />
       <div className="pointer-events-none absolute inset-x-0 top-0 z-0 h-20 bg-gradient-to-b from-[#f5f5f7] via-[#f5f5f7]/70 to-transparent dark:from-[#141414] dark:via-[#141414]/45" />
       <div className="pointer-events-none absolute inset-y-0 left-0 z-0 w-24 bg-gradient-to-r from-[#f5f5f7] via-[#f5f5f7]/55 to-transparent dark:from-[#141414] dark:via-[#141414]/35" />

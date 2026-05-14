@@ -47,6 +47,15 @@
     overscroll-behavior-y: auto;
   }
 
+  html.service-mode-active,
+  html.service-mode-active body,
+  body.service-mode-active {
+    height: 100%;
+    overflow: hidden !important;
+    overscroll-behavior: none !important;
+  }
+
+  html.service-mode-active [data-mobile-nav="true"],
   body.service-mode-active [data-mobile-nav="true"] {
     display: none !important;
   }

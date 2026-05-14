@@ -174,13 +174,22 @@ export function EventDetail() {
 
   useEffect(() => {
     if (serviceModeIndex === null) return;
+    const root = document.documentElement;
     const previousOverflow = document.body.style.overflow;
     const previousOverscroll = document.body.style.overscrollBehavior;
+    const previousRootOverflow = root.style.overflow;
+    const previousRootOverscroll = root.style.overscrollBehavior;
+    root.classList.add('service-mode-active');
     document.body.classList.add('service-mode-active');
+    root.style.overflow = 'hidden';
+    root.style.overscrollBehavior = 'none';
     document.body.style.overflow = 'hidden';
     document.body.style.overscrollBehavior = 'none';
     return () => {
+      root.classList.remove('service-mode-active');
       document.body.classList.remove('service-mode-active');
+      root.style.overflow = previousRootOverflow;
+      root.style.overscrollBehavior = previousRootOverscroll;
       document.body.style.overflow = previousOverflow;
       document.body.style.overscrollBehavior = previousOverscroll;
     };
@@ -2583,7 +2592,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                 animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
                 exit={{ opacity: 0, scale: 0.985, y: 18, filter: 'blur(10px)' }}
                 transition={{ duration: 0.58, ease: [0.22, 1, 0.36, 1] }}
-                className="fixed inset-0 isolate z-[2147483647] flex h-[100svh] h-[100dvh] w-screen flex-col overflow-hidden bg-white text-gray-950 dark:bg-[#0c0f0d] dark:text-white"
+                className="fixed inset-0 isolate z-[2147483647] flex w-screen flex-col overflow-hidden bg-white text-gray-950 dark:bg-[#0c0f0d] dark:text-white"
                 onPointerDown={(event) => {
                   serviceSwipeStart.current = { x: event.clientX, y: event.clientY };
                 }}

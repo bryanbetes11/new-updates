@@ -609,33 +609,48 @@ export function Events() {
     if (!user) return;
     if (!form.event_type) { toast('error', 'Please select an event type'); return; }
     setCreating(true);
-    const title = await generateEventTitle();
-    const { data: newEvent, error } = await supabase.from('events').insert({
-      title, event_date: form.event_date, start_time: form.start_time || null, end_time: form.end_time || null,
-      event_type: form.event_type, description: form.description || null, created_by: user.id,
-      proposal_due_date: calculateProposalDueDate(form.event_date, form.event_type),
-      song_leader_id: form.song_leader_id || null, linked_event_id: form.linked_event_id || null,
-    }).select('id').maybeSingle();
-    if (error || !newEvent) { toast('error', 'Failed to create event'); setCreating(false); return; }
+    let eventWasCreated = false;
+    try {
+      const draft = { ...form };
+      const draftAssignments = [...assignmentRows];
+      const title = await generateEventTitle();
+      const { data: newEvent, error } = await supabase.from('events').insert({
+        title, event_date: draft.event_date, start_time: draft.start_time || null, end_time: draft.end_time || null,
+        event_type: draft.event_type, description: draft.description || null, created_by: user.id,
+        proposal_due_date: calculateProposalDueDate(draft.event_date, draft.event_type),
+        song_leader_id: draft.song_leader_id || null, linked_event_id: draft.linked_event_id || null,
+      }).select('id').maybeSingle();
+      if (error || !newEvent) { toast('error', 'Failed to create event'); setCreating(false); return; }
 
-    const validAssignments = assignmentRows.filter(a => a.user_id && a.role_id);
-    if (form.song_leader_id) {
-      const slRole = roles.find(r => r.name === 'Song Leader');
-      if (slRole) validAssignments.push({ user_id: form.song_leader_id, role_id: slRole.id });
+      closeCreateEvent();
+      setCreating(false);
+      toast('success', 'Event created');
+      eventWasCreated = true;
+
+      const validAssignments = draftAssignments.filter(a => a.user_id && a.role_id);
+      if (draft.song_leader_id) {
+        const slRole = roles.find(r => r.name === 'Song Leader');
+        if (slRole) validAssignments.push({ user_id: draft.song_leader_id, role_id: slRole.id });
+      }
+      if (validAssignments.length > 0) await supabase.from('event_assignments').insert(validAssignments.map(a => ({ event_id: newEvent.id, user_id: a.user_id, role_id: a.role_id })));
+
+      if (draft.event_type === 'Rehearsals' && draft.linked_event_id && validAssignments.length > 0) {
+        const { data: existing } = await supabase.from('event_assignments').select('user_id, role_id').eq('event_id', draft.linked_event_id);
+        const existingSet = new Set((existing || []).map(a => `${a.user_id}-${a.role_id}`));
+        const newOnes = validAssignments.filter(a => !existingSet.has(`${a.user_id}-${a.role_id}`));
+        if (newOnes.length > 0) await supabase.from('event_assignments').insert(newOnes.map(a => ({ event_id: draft.linked_event_id, user_id: a.user_id, role_id: a.role_id })));
+      }
+
+      fetchEvents();
+    } catch (error) {
+      console.error('Create event error:', error);
+      setCreating(false);
+      if (eventWasCreated) {
+        fetchEvents();
+        return;
+      }
+      toast('error', 'Failed to create event');
     }
-    if (validAssignments.length > 0) await supabase.from('event_assignments').insert(validAssignments.map(a => ({ event_id: newEvent.id, user_id: a.user_id, role_id: a.role_id })));
-
-    if (form.event_type === 'Rehearsals' && form.linked_event_id && validAssignments.length > 0) {
-      const { data: existing } = await supabase.from('event_assignments').select('user_id, role_id').eq('event_id', form.linked_event_id);
-      const existingSet = new Set((existing || []).map(a => `${a.user_id}-${a.role_id}`));
-      const newOnes = validAssignments.filter(a => !existingSet.has(`${a.user_id}-${a.role_id}`));
-      if (newOnes.length > 0) await supabase.from('event_assignments').insert(newOnes.map(a => ({ event_id: form.linked_event_id, user_id: a.user_id, role_id: a.role_id })));
-    }
-
-    setCreating(false);
-    toast('success', 'Event created');
-    closeCreateEvent();
-    fetchEvents();
   };
 
   const handleEventDateChange = async (eventId: string, newDate: string) => {

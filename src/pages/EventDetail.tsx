@@ -895,6 +895,7 @@ export function EventDetail() {
     const { error } = await supabase.from('events').delete().eq('id', id);
     setDeleting(false);
     if (error) { toast('error', 'Failed to delete event'); return; }
+    setShowDeleteEvent(false);
     toast('success', 'Event deleted');
     setIsLeaving(true);
     setTimeout(() => navigate('/events'), 300);

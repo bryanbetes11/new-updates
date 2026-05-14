@@ -665,33 +665,31 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
           style={{
             paddingBottom: useDockedMobileNav ? '0px' : 'max(0px, calc(env(safe-area-inset-bottom) - 6px))',
             paddingTop: useDockedMobileNav ? '0px' : '6px',
-            background: useDockedMobileNav ? 'color-mix(in srgb, var(--sidebar-bg) 82%, transparent)' : undefined,
-            WebkitBackdropFilter: useDockedMobileNav ? 'blur(34px) saturate(200%) contrast(108%)' : undefined,
-            backdropFilter: useDockedMobileNav ? 'blur(34px) saturate(200%) contrast(108%)' : undefined,
+            background: useDockedMobileNav ? 'color-mix(in srgb, var(--sidebar-bg) 96%, transparent)' : undefined,
+            WebkitBackdropFilter: useDockedMobileNav ? 'blur(18px) saturate(160%) contrast(104%)' : undefined,
+            backdropFilter: useDockedMobileNav ? 'blur(18px) saturate(160%) contrast(104%)' : undefined,
             borderTop: useDockedMobileNav ? '1px solid var(--sidebar-border)' : undefined,
             boxShadow: useDockedMobileNav ? '0 -18px 42px -34px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.08)' : undefined,
           }}
         >
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-14 bg-gradient-to-b from-white/30 to-transparent dark:hidden" />
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-white/40 to-transparent dark:hidden" />
           <div className={`relative flex ${useDockedMobileNav ? 'justify-stretch px-0' : 'justify-center px-8'}`}>
             <nav
-              className={`pointer-events-auto relative flex ${useDockedMobileNav ? 'w-full items-start overflow-visible px-2 pt-2' : 'w-full max-w-[480px] items-center overflow-hidden p-1.5 rounded-full'}`}
+              className={`pointer-events-auto relative flex ${useDockedMobileNav ? 'w-full items-start overflow-visible px-2 pt-2' : 'w-full max-w-[480px] items-center overflow-hidden bg-white p-1.5 rounded-full dark:bg-[#151517]'}`}
               style={{
                 height: useDockedMobileNav ? 'calc(64px + env(safe-area-inset-bottom))' : undefined,
-                background: useDockedMobileNav ? 'transparent' : 'color-mix(in srgb, var(--nav-bg) 84%, transparent)',
-                WebkitBackdropFilter: useDockedMobileNav ? undefined : 'blur(34px) saturate(200%) contrast(108%)',
-                backdropFilter: useDockedMobileNav ? undefined : 'blur(34px) saturate(200%) contrast(108%)',
+                background: useDockedMobileNav ? 'transparent' : undefined,
+                WebkitBackdropFilter: useDockedMobileNav ? undefined : 'none',
+                backdropFilter: useDockedMobileNav ? undefined : 'none',
                 border: useDockedMobileNav ? undefined : '1px solid var(--nav-border)',
                 boxShadow: useDockedMobileNav
                   ? 'none'
-                  : '0 18px 42px -12px rgba(0,0,0,0.26), 0 2px 10px -4px rgba(0,0,0,0.16), inset 0 1px 0 rgba(255,255,255,0.12), inset 0 -12px 26px rgba(255,255,255,0.035)',
+                  : '0 18px 42px -14px rgba(0,0,0,0.24), 0 2px 10px -4px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.72)',
                 paddingBottom: useDockedMobileNav ? 'env(safe-area-inset-bottom)' : undefined,
               }}
             >
               {!useDockedMobileNav && (
                 <>
-                  <span className="pointer-events-none absolute inset-0 rounded-full bg-[radial-gradient(circle_at_20%_10%,rgba(255,255,255,0.55),transparent_34%),linear-gradient(135deg,rgba(255,255,255,0.28),rgba(255,255,255,0.04))] dark:bg-[radial-gradient(circle_at_20%_10%,rgba(255,255,255,0.11),transparent_34%),linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.015))]" />
+                  <span className="pointer-events-none absolute inset-0 rounded-full bg-[radial-gradient(circle_at_20%_10%,rgba(255,255,255,0.55),transparent_34%),linear-gradient(135deg,rgba(255,255,255,0.30),rgba(255,255,255,0.06))] dark:bg-[radial-gradient(circle_at_20%_10%,rgba(255,255,255,0.10),transparent_34%),linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))]" />
                   <span className="pointer-events-none absolute inset-x-3 top-0 h-px bg-gradient-to-r from-transparent via-white/75 to-transparent dark:via-white/20" />
                 </>
               )}

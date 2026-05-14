@@ -23,10 +23,8 @@ export function Library() {
           initial={{ opacity: 0, y: 14, filter: 'blur(6px)' }}
           animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          className="relative overflow-hidden rounded-[2rem] border border-emerald-200/70 bg-[radial-gradient(circle_at_18%_20%,rgba(52,211,153,0.22),transparent_34%),linear-gradient(135deg,#f0fdf4_0%,#ffffff_48%,#f8fafc_100%)] p-5 shadow-[0_24px_80px_-46px_rgba(6,95,70,0.72)] dark:border-white/[0.08] dark:bg-[radial-gradient(circle_at_16%_18%,rgba(16,185,129,0.17),transparent_34%),linear-gradient(135deg,#071c14_0%,#0d1110_46%,#070807_100%)] sm:p-6"
+          className="relative overflow-hidden rounded-[2rem] border border-emerald-200/70 bg-[radial-gradient(circle_at_18%_20%,rgba(52,211,153,0.22),transparent_34%),radial-gradient(circle_at_86%_24%,rgba(52,211,153,0.15),transparent_36%),linear-gradient(135deg,#f0fdf4_0%,#ffffff_48%,#f8fafc_100%)] p-5 shadow-[0_24px_80px_-46px_rgba(6,95,70,0.72)] dark:border-white/[0.08] dark:bg-[radial-gradient(circle_at_16%_18%,rgba(16,185,129,0.17),transparent_34%),radial-gradient(circle_at_86%_24%,rgba(16,185,129,0.11),transparent_36%),linear-gradient(135deg,#071c14_0%,#0d1110_46%,#070807_100%)] sm:p-6"
         >
-          <div className="pointer-events-none absolute -right-20 -top-24 h-56 w-56 rounded-full bg-emerald-300/25 blur-3xl dark:bg-emerald-500/10" />
-          <div className="pointer-events-none absolute -bottom-24 left-1/3 h-48 w-48 rounded-full bg-lime-200/30 blur-3xl dark:bg-lime-500/10" />
           <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/90 to-transparent dark:via-white/[0.09]" />
 
           <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
@@ -59,7 +57,7 @@ export function Library() {
                 <button
                   key={stat.label}
                   onClick={() => setTab(stat.label === 'Setlists' ? 'setlists' : 'videos')}
-                  className="rounded-2xl border border-white/70 bg-white/65 px-3 py-3 text-center shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:bg-white/85 active:scale-[0.98] dark:border-white/[0.08] dark:bg-white/[0.05] dark:hover:bg-white/[0.075]"
+                  className="rounded-2xl border border-white bg-white px-3 py-3 text-center shadow-sm transition-all hover:-translate-y-0.5 active:scale-[0.98] dark:border-white/[0.08] dark:bg-white/[0.05] dark:hover:bg-white/[0.075]"
                 >
                   <stat.icon className="mx-auto h-4 w-4 text-emerald-600 dark:text-emerald-300" />
                   <p className="mt-1 text-lg font-black leading-none text-gray-950 dark:text-white">{stat.value}</p>

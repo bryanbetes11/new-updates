@@ -19,6 +19,9 @@
     --nav-indicator: rgba(0,0,0,0.07);
     --sidebar-bg: rgba(255,255,255,0.97);
     --sidebar-border: rgba(0,0,0,0.06);
+    --service-mode-viewport-height: 100dvh;
+    --service-mode-bottom-bleed: max(env(safe-area-inset-bottom, 0px), 34px);
+    --service-mode-keyboard-inset: 0px;
     --duration-fast: 120ms;
     --duration-base: 220ms;
     --duration-slow: 360ms;
@@ -51,6 +54,7 @@
   html.service-mode-active body,
   body.service-mode-active {
     height: 100%;
+    min-height: calc(100dvh + var(--service-mode-bottom-bleed));
     background: #fff !important;
     overflow: hidden !important;
     overscroll-behavior: none !important;
@@ -230,10 +234,18 @@
     padding-bottom: calc(64px + env(safe-area-inset-bottom) + 1rem);
   }
 
+  .page-loader-shell {
+    min-height: calc(100dvh - 3.5rem - env(safe-area-inset-top, 0px) - 64px - env(safe-area-inset-bottom, 0px) - 1rem);
+  }
+
   @media (min-width: 1024px) {
     .mobile-layout-padding {
       padding-top: 2rem;
       padding-bottom: 2rem;
+    }
+
+    .page-loader-shell {
+      min-height: calc(100dvh + 1.25rem);
     }
   }
 
@@ -430,26 +442,90 @@
   .service-mode-overlay {
     top: 0;
     right: 0;
-    bottom: 0;
+    bottom: calc(0px - var(--service-mode-bottom-bleed));
     left: 0;
-    max-height: 100dvh;
+    max-height: none;
     min-height: 0;
-    height: 100dvh;
+    height: calc(var(--service-mode-viewport-height) + var(--service-mode-bottom-bleed));
+    overflow: visible;
+  }
+
+  .service-mode-chart-shell,
+  .service-mode-chart-frame {
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .service-mode-chart-viewer {
+    height: 100%;
+    min-height: 0;
     overflow: hidden;
   }
 
-  .service-bottom-controls {
-    position: fixed;
-    z-index: 2147483647 !important;
-    isolation: isolate;
-    overflow: visible;
-    background: transparent;
-    transform: translateZ(0);
+  .service-mode-chart-scroll {
+    margin-bottom: 0;
+    padding-bottom: calc(var(--service-mode-bottom-bleed) + 1.5rem);
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
   }
 
-  .service-bottom-controls > * {
-    position: relative;
-    z-index: 1;
+  .service-mode-edit-scroll {
+    margin-bottom: 0;
+    padding-bottom: calc(var(--service-mode-keyboard-inset, 0px) + var(--service-mode-bottom-bleed) + 1.5rem);
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .service-mode-keyboard-open .service-mode-overlay {
+    overflow: hidden;
+  }
+
+  .service-mode-section-textarea {
+    scroll-margin-bottom: calc(var(--service-mode-keyboard-inset, 0px) + 8rem);
+  }
+
+  .service-mode-song-stage {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    min-height: 0;
+    overflow: hidden;
+    background: #fff;
+  }
+
+  .dark .service-mode-song-stage {
+    background: #0c0f0d;
+  }
+
+  .service-mode-song-track {
+    position: absolute;
+    inset: 0;
+    min-height: 0;
+    cursor: grab;
+    touch-action: pan-y;
+    will-change: transform;
+  }
+
+  .service-mode-song-track:active {
+    cursor: grabbing;
+  }
+
+  .service-mode-song-panel {
+    position: absolute;
+    inset: 0;
+    min-height: 0;
+    overflow: hidden;
+    touch-action: pan-y;
+    backface-visibility: hidden;
+    will-change: transform;
+  }
+
+  .service-mode-chart-footer {
+    touch-action: manipulation;
   }
 
   @keyframes slideSheet {

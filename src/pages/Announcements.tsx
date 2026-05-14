@@ -14,7 +14,6 @@ import { Select } from '../components/Select';
 import { AnnouncementsSkeleton } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
 import { Avatar } from '../components/Avatar';
-import { FormattedText } from '../components/FormattedText';
 import { MentionTextarea } from '../components/MentionTextarea';
 import type { Announcement, AnnouncementReaction, AnnouncementPin } from '../types';
 import { withRequestTimeout } from '../lib/requestTimeout';
@@ -270,8 +269,8 @@ export function Announcements() {
 
   const getPreviewText = (a: AnnouncementWithBlocks) => {
     const blocks = a.content_blocks;
-    if (blocks && blocks.length > 0) return blocks.find(b => b.type === 'text')?.content || '';
-    return a.content;
+    const text = blocks && blocks.length > 0 ? blocks.find(b => b.type === 'text')?.content || '' : a.content;
+    return text.replace(/\s+/g, ' ').trim();
   };
 
   const firstImageUrl = (a: AnnouncementWithBlocks) => a.content_blocks?.find(b => b.type === 'image')?.content || null;
@@ -287,11 +286,8 @@ export function Announcements() {
           initial={{ opacity: 0, y: 14, filter: 'blur(6px)' }}
           animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          className="relative overflow-hidden rounded-[2rem] border border-amber-200/70 bg-[radial-gradient(circle_at_18%_20%,rgba(251,191,36,0.28),transparent_34%),linear-gradient(135deg,#fffaf0_0%,#ffffff_48%,#f8fafc_100%)] p-5 shadow-[0_24px_80px_-46px_rgba(146,64,14,0.65)] dark:border-white/[0.08] dark:bg-[radial-gradient(circle_at_16%_18%,rgba(245,158,11,0.18),transparent_34%),linear-gradient(135deg,#1c1307_0%,#10100d_46%,#070807_100%)] sm:p-6"
+          className="relative overflow-hidden rounded-[2rem] border border-amber-200/70 bg-[radial-gradient(circle_at_18%_20%,rgba(251,191,36,0.28),transparent_34%),radial-gradient(circle_at_86%_24%,rgba(251,191,36,0.18),transparent_36%),linear-gradient(135deg,#fffaf0_0%,#ffffff_48%,#f8fafc_100%)] p-5 shadow-[0_24px_80px_-46px_rgba(146,64,14,0.65)] dark:border-white/[0.08] dark:bg-[radial-gradient(circle_at_16%_18%,rgba(245,158,11,0.18),transparent_34%),radial-gradient(circle_at_86%_24%,rgba(245,158,11,0.12),transparent_36%),linear-gradient(135deg,#1c1307_0%,#10100d_46%,#070807_100%)] sm:p-6"
         >
-          <div className="pointer-events-none absolute -right-20 -top-24 h-56 w-56 rounded-full bg-amber-300/25 blur-3xl dark:bg-amber-500/10" />
-          <div className="pointer-events-none absolute -bottom-24 left-1/3 h-48 w-48 rounded-full bg-orange-200/30 blur-3xl dark:bg-orange-500/10" />
-
           <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="flex items-start">
               <div className="min-w-0">
@@ -313,7 +309,7 @@ export function Announcements() {
                 { label: 'Pinned', value: pinned.length },
                 { label: 'Urgent', value: urgentCount },
               ].map(stat => (
-                <div key={stat.label} className="rounded-2xl border border-white/70 bg-white/65 px-3 py-3 text-center shadow-sm backdrop-blur dark:border-white/[0.08] dark:bg-white/[0.05]">
+                <div key={stat.label} className="rounded-2xl border border-white bg-white px-3 py-3 text-center shadow-sm dark:border-white/[0.08] dark:bg-white/[0.05]">
                   <p className="text-lg font-black leading-none text-gray-950 dark:text-white">{stat.value}</p>
                   <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400 dark:text-white/32">{stat.label}</p>
                 </div>
@@ -479,8 +475,8 @@ export function Announcements() {
                               {a.title}
                             </p>
                           </div>
-                          <p className="mt-2 text-[13px] leading-relaxed text-gray-500/90 line-clamp-3 dark:text-white/44 sm:line-clamp-2">
-                            <FormattedText text={getPreviewText(a)} />
+                          <p className="mt-1.5 truncate text-[13px] leading-5 text-gray-500/90 dark:text-white/44">
+                            {getPreviewText(a)}
                           </p>
                         </div>
 

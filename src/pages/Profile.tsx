@@ -285,6 +285,16 @@ export function Profile() {
   const billingStatus = organization?.billing_status || organization?.subscription_status;
   const currentQuarter = Math.ceil((new Date().getMonth() + 1) / 3);
   const currentYear = new Date().getFullYear();
+  const joinedDate = profile.official_join_date || profile.created_at;
+  const joinedLabel = format(parseISO(joinedDate), 'MMM d, yyyy');
+  const joinedShortLabel = format(parseISO(joinedDate), 'MMM yyyy');
+  const primaryRoleLabel = sortedUserRoles[0]?.roles?.name || 'Member';
+  const profileStatusLabel = isLeaderProfile ? 'Leadership' : 'Member';
+  const heroFacts = [
+    { label: 'Roles', value: sortedUserRoles.length || '—' },
+    { label: 'Joined', value: joinedShortLabel },
+    { label: 'Status', value: profileStatusLabel },
+  ];
 
   return (
     <div className="page-container page-bottom-pad relative">
@@ -315,166 +325,162 @@ export function Profile() {
           animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
           transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
         >
-          {/* Desktop-only top action bar */}
-          <div className="hidden sm:flex items-center justify-end gap-1.5 mb-3">
-            <button
-              onClick={() => setEditing(!editing)}
-              className={`inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-semibold transition-all active:scale-[0.97] ${
-                editing
-                  ? 'bg-gray-100 dark:bg-white/[0.08] text-gray-600 dark:text-white/55 border border-black/[0.08] dark:border-white/[0.1]'
-                  : 'bg-white/70 dark:bg-white/[0.04] text-gray-600 dark:text-white/55 border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-md hover:bg-white dark:hover:bg-white/[0.07]'
-              }`}
-            >
-              {editing ? <><X className="h-3.5 w-3.5" /> Cancel</> : <><Pencil className="h-3.5 w-3.5" /> Edit</>}
-            </button>
-            <button
-              onClick={() => navigate('/change-password')}
-              className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-semibold text-gray-600 dark:text-white/55 bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-md hover:bg-white dark:hover:bg-white/[0.07] active:scale-[0.97] transition-colors"
-            >
-              <KeyRound className="h-3.5 w-3.5" /> Password
-            </button>
-            <button
-              onClick={handleSignOut}
-              className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/[0.1] border border-red-200 dark:border-red-500/25 hover:bg-red-100 dark:hover:bg-red-500/[0.18] active:scale-[0.97] transition-colors"
-            >
-              <LogOut className="h-3.5 w-3.5" /> Sign out
-            </button>
-          </div>
+          <div className="relative overflow-hidden rounded-[2rem] border border-emerald-200/70 bg-[radial-gradient(circle_at_18%_20%,rgba(52,211,153,0.24),transparent_34%),radial-gradient(circle_at_86%_24%,rgba(52,211,153,0.16),transparent_36%),linear-gradient(135deg,#f0fdf4_0%,#ffffff_48%,#f8fafc_100%)] p-4 shadow-[0_24px_80px_-46px_rgba(6,95,70,0.72)] dark:border-white/[0.08] dark:bg-[radial-gradient(circle_at_16%_18%,rgba(16,185,129,0.18),transparent_34%),radial-gradient(circle_at_86%_24%,rgba(16,185,129,0.12),transparent_36%),linear-gradient(135deg,#071c14_0%,#0d1110_46%,#070807_100%)] sm:p-6">
+            <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/90 to-transparent dark:via-white/[0.09]" />
 
-          {/* Identity block — avatar beside text on all sizes */}
-          <div className="flex items-start gap-4 sm:gap-6">
-            {/* Avatar */}
-            <div className="relative shrink-0 group">
-              <div
-                className="absolute inset-0 rounded-3xl"
-                style={{ background: 'radial-gradient(circle, rgba(34,197,94,0.45), transparent 70%)', filter: 'blur(16px)', transform: 'scale(1.5)' }}
-              />
-              <div
-                className="absolute -inset-[3px] rounded-[1.4rem] opacity-70 dark:opacity-90"
-                style={{ background: 'conic-gradient(from 200deg, rgba(34,197,94,0.6), rgba(16,185,129,0.2), rgba(20,184,166,0.5), rgba(34,197,94,0.6))' }}
-              />
-              {profile.avatar_url ? (
-                <img
-                  src={profile.avatar_url}
-                  alt={profile.first_name}
-                  className="relative h-[72px] w-[72px] sm:h-[100px] sm:w-[100px] rounded-3xl object-cover ring-4 ring-white dark:ring-[#0d0d0f]"
-                />
-              ) : (
-                <div
-                  className="relative h-[72px] w-[72px] sm:h-[100px] sm:w-[100px] rounded-3xl flex items-center justify-center text-white text-2xl sm:text-[2.2rem] font-black ring-4 ring-white dark:ring-[#0d0d0f]"
-                  style={{ background: 'linear-gradient(145deg, #16a34a, #15803d)', letterSpacing: '-0.02em' }}
-                >
-                  {profile.first_name[0]}{profile.last_name?.[0] || ''}
-                </div>
-              )}
-              <label className="absolute inset-0 flex items-center justify-center rounded-3xl bg-black/55 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                {avatarUploading ? <Loader2 className="h-5 w-5 text-white animate-spin" /> : <Camera className="h-5 w-5 text-white" />}
-                <input type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" disabled={avatarUploading} />
-              </label>
-            </div>
-
-            {/* Name + meta */}
-            <div className="min-w-0 flex-1 pt-0.5">
-              {/* Status eyebrow — sits just above the name */}
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-500 dark:bg-emerald-400 opacity-70 animate-ping" />
-                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500 dark:bg-emerald-400" />
+            <div className="relative flex items-start justify-between gap-4">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="relative flex h-1.5 w-1.5 shrink-0">
+                  <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-70 animate-ping dark:bg-emerald-400" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
                 </span>
-                <p className="text-[10px] font-mono font-medium uppercase tracking-[0.22em] text-gray-500 dark:text-white/45">
-                  {isLeaderProfile ? 'Leader · Active' : 'Active member'}
+                <p className="truncate text-[10px] font-mono font-black uppercase tracking-[0.32em] text-emerald-700/75 dark:text-emerald-300/70">
+                  Profile <span className="mx-1.5 text-emerald-700/25 dark:text-white/20">·</span> {isLeaderProfile ? 'Leadership' : 'Member'}
                 </p>
               </div>
 
-              <h1
-                className="text-[1.75rem] sm:text-[2.4rem] font-black leading-[0.98] tracking-tighter text-gray-900 dark:text-white break-words"
-                style={{ letterSpacing: '-0.045em' }}
-              >
-                <span className="dark:hidden">{fullName}</span>
-                <span
-                  className="hidden dark:inline"
-                  style={{
-                    background: 'linear-gradient(180deg, #ffffff 0%, rgba(255,255,255,0.6) 100%)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    backgroundClip: 'text',
-                  }}
+              <div className="hidden shrink-0 items-center gap-1.5 sm:flex">
+                <button
+                  onClick={() => setEditing(!editing)}
+                  className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[11px] font-black transition-all active:scale-[0.97] ${
+                    editing
+                      ? 'border border-black/[0.08] bg-white text-gray-600 shadow-sm dark:border-white/[0.1] dark:bg-white/[0.08] dark:text-white/65'
+                      : 'border border-white bg-white text-gray-700 shadow-sm hover:-translate-y-0.5 dark:border-white/[0.08] dark:bg-white/[0.055] dark:text-white/70'
+                  }`}
                 >
-                  {fullName}
-                </span>
-                {profile.nickname && (
-                  <span className="text-gray-300 dark:text-white/25 font-light italic ml-2 align-baseline whitespace-nowrap" style={{ letterSpacing: '-0.02em' }}>
-                    “{profile.nickname}”
-                  </span>
-                )}
-              </h1>
-              <p className="mt-1.5 text-[12px] sm:text-[13px] font-mono text-gray-500 dark:text-white/40 truncate tracking-wide">
-                {profile.email}
-              </p>
+                  {editing ? <><X className="h-3.5 w-3.5" /> Cancel</> : <><Pencil className="h-3.5 w-3.5" /> Edit</>}
+                </button>
+                <button
+                  onClick={() => navigate('/change-password')}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-white bg-white px-3 text-[11px] font-black text-gray-700 shadow-sm transition-all hover:-translate-y-0.5 active:scale-[0.97] dark:border-white/[0.08] dark:bg-white/[0.055] dark:text-white/70"
+                >
+                  <KeyRound className="h-3.5 w-3.5" /> Password
+                </button>
+                <button
+                  onClick={handleSignOut}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3 text-[11px] font-black text-red-600 transition-all hover:-translate-y-0.5 hover:bg-red-100 active:scale-[0.97] dark:border-red-500/25 dark:bg-red-500/[0.1] dark:text-red-400"
+                >
+                  <LogOut className="h-3.5 w-3.5" /> Sign out
+                </button>
+              </div>
             </div>
-          </div>
 
-          {/* Mono ID strip — 2-col grid on mobile, flex-wrap on desktop */}
-          {!editing && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
-              className="mt-6 grid grid-cols-2 sm:flex sm:flex-wrap gap-2"
-            >
-              {[
-                { icon: profile.gender === 'male' ? '♂' : profile.gender === 'female' ? '♀' : '·', label: 'GENDER', value: profile.gender === 'male' ? 'Male' : profile.gender === 'female' ? 'Female' : '—', mono: false },
-                { icon: <Phone className="h-3 w-3" />, label: 'PHONE', value: profile.phone || '—', mono: true, href: profilePhoneHref },
-                { icon: <Cake className="h-3 w-3" />, label: 'BIRTHDAY', value: profile.birthday ? format(parseISO(profile.birthday), 'MMM d, yyyy') : '—', mono: false },
-                { icon: <Calendar className="h-3 w-3" />, label: 'JOINED', value: format(parseISO(profile.official_join_date || profile.created_at), 'MMM d, yyyy'), mono: false },
-              ].map((item, i) => (
-                <div
-                  key={i}
-                  className="flex sm:inline-flex items-center gap-2 pl-3 pr-3.5 h-9 rounded-full bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-md min-w-0"
-                >
-                  <span className="flex items-center justify-center w-3 h-3 shrink-0 text-gray-400 dark:text-white/30 text-[12px] font-bold">
-                    {item.icon}
-                  </span>
-                  <span className="text-[9px] font-bold text-gray-400 dark:text-white/35 tracking-[0.14em] shrink-0">{item.label}</span>
-                  {item.href ? (
-                    <a
-                      href={item.href}
-                      className={`text-[12px] font-semibold text-emerald-700 dark:text-emerald-300 hover:underline truncate ${item.mono ? 'font-mono' : ''}`}
-                    >
-                      {item.value}
-                    </a>
+            <div className="relative mt-4 flex flex-col gap-4 sm:mt-5 sm:flex-row sm:items-end sm:justify-between sm:gap-5">
+              <div className="flex min-w-0 items-start gap-3 sm:gap-5">
+                <div className="group relative shrink-0">
+                  <div
+                    className="absolute -inset-[3px] rounded-[1.25rem] opacity-80 dark:opacity-90 sm:rounded-[1.45rem]"
+                    style={{ background: 'conic-gradient(from 200deg, rgba(34,197,94,0.7), rgba(16,185,129,0.18), rgba(20,184,166,0.55), rgba(34,197,94,0.7))' }}
+                  />
+                  {profile.avatar_url ? (
+                    <img
+                      src={profile.avatar_url}
+                      alt={profile.first_name}
+                      className="relative h-16 w-16 rounded-[1.15rem] object-cover ring-4 ring-white sm:h-[104px] sm:w-[104px] sm:rounded-[1.35rem] dark:ring-[#0d0d0f]"
+                    />
                   ) : (
-                    <span className={`text-[12px] font-semibold text-gray-800 dark:text-white/85 truncate ${item.mono ? 'font-mono' : ''}`}>{item.value}</span>
+                    <div
+                      className="relative flex h-16 w-16 items-center justify-center rounded-[1.15rem] text-xl font-black text-white ring-4 ring-white sm:h-[104px] sm:w-[104px] sm:rounded-[1.35rem] sm:text-[2.4rem] dark:ring-[#0d0d0f]"
+                      style={{ background: 'linear-gradient(145deg, #16a34a, #15803d)', letterSpacing: '-0.02em' }}
+                    >
+                      {profile.first_name[0]}{profile.last_name?.[0] || ''}
+                    </div>
+                  )}
+                  <label className="absolute inset-0 flex cursor-pointer items-center justify-center rounded-[1.15rem] bg-black/55 opacity-0 transition-opacity group-hover:opacity-100 sm:rounded-[1.35rem]">
+                    {avatarUploading ? <Loader2 className="h-5 w-5 animate-spin text-white" /> : <Camera className="h-5 w-5 text-white" />}
+                    <input type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" disabled={avatarUploading} />
+                  </label>
+                </div>
+
+                <div className="min-w-0 pt-0.5">
+                  <p className="truncate text-xs font-semibold text-gray-500 dark:text-white/45 sm:text-sm">{primaryRoleLabel}</p>
+                  <h1
+                    className="mt-1 text-[1.85rem] font-black leading-none text-gray-950 dark:text-white sm:text-[3.15rem] lg:text-[3.65rem]"
+                    style={{ letterSpacing: '-0.065em' }}
+                  >
+                    {fullName}
+                  </h1>
+                  <p className="mt-1.5 truncate text-[11px] font-mono tracking-wide text-gray-500 dark:text-white/40 sm:mt-2 sm:text-[13px]">
+                    {profile.email}
+                  </p>
+                  {profile.nickname && (
+                    <p className="mt-1 truncate text-[12px] font-bold text-emerald-700/80 dark:text-emerald-300/70">
+                      Called “{profile.nickname}”
+                    </p>
                   )}
                 </div>
-              ))}
-            </motion.div>
-          )}
+              </div>
 
-          {/* Mobile-only action row — bottom of hero, fills width evenly */}
-          <div className="sm:hidden grid grid-cols-3 gap-1.5 mt-5">
-            <button
-              onClick={() => setEditing(!editing)}
-              className={`inline-flex items-center justify-center gap-1.5 h-9 rounded-full text-[12px] font-semibold transition-all active:scale-[0.97] ${
-                editing
-                  ? 'bg-gray-100 dark:bg-white/[0.08] text-gray-600 dark:text-white/55 border border-black/[0.08] dark:border-white/[0.1]'
-                  : 'bg-white/70 dark:bg-white/[0.04] text-gray-600 dark:text-white/55 border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-md hover:bg-white dark:hover:bg-white/[0.07]'
-              }`}
-            >
-              {editing ? <><X className="h-3.5 w-3.5" /> Cancel</> : <><Pencil className="h-3.5 w-3.5" /> Edit</>}
-            </button>
-            <button
-              onClick={() => navigate('/change-password')}
-              className="inline-flex items-center justify-center gap-1.5 h-9 rounded-full text-[12px] font-semibold text-gray-600 dark:text-white/55 bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-md hover:bg-white dark:hover:bg-white/[0.07] active:scale-[0.97] transition-colors"
-            >
-              <KeyRound className="h-3.5 w-3.5" /> Password
-            </button>
-            <button
-              onClick={handleSignOut}
-              className="inline-flex items-center justify-center gap-1.5 h-9 rounded-full text-[12px] font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/[0.1] border border-red-200 dark:border-red-500/25 hover:bg-red-100 dark:hover:bg-red-500/[0.18] active:scale-[0.97] transition-colors"
-            >
-              <LogOut className="h-3.5 w-3.5" /> Sign out
-            </button>
+              <div className="hidden grid-cols-3 gap-2 sm:grid sm:min-w-[23rem]">
+                {heroFacts.map(item => (
+                  <div key={item.label} className="rounded-2xl border border-white bg-white px-3 py-3 text-center shadow-sm dark:border-white/[0.08] dark:bg-white/[0.05]">
+                    <p className="truncate text-lg font-black leading-none text-gray-950 dark:text-white">{item.value}</p>
+                    <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400 dark:text-white/32">{item.label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {!editing && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
+                className="relative mt-4 grid grid-cols-1 gap-2 border-t border-emerald-900/[0.07] pt-4 dark:border-white/[0.11] min-[420px]:grid-cols-2 sm:mt-5 sm:flex sm:flex-wrap"
+              >
+                {[
+                  { icon: profile.gender === 'male' ? '♂' : profile.gender === 'female' ? '♀' : '·', label: 'Gender', value: profile.gender === 'male' ? 'Male' : profile.gender === 'female' ? 'Female' : '—', mono: false },
+                  { icon: <Phone className="h-3 w-3" />, label: 'Phone', value: profile.phone || '—', mono: true, href: profilePhoneHref },
+                  { icon: <Cake className="h-3 w-3" />, label: 'Birthday', value: profile.birthday ? format(parseISO(profile.birthday), 'MMM d, yyyy') : '—', mono: false },
+                  { icon: <Calendar className="h-3 w-3" />, label: 'Joined', value: joinedLabel, mono: false },
+                ].map((fact, i) => (
+                  <div
+                    key={i}
+                    className="flex h-9 min-w-0 items-center gap-2 rounded-full border border-white bg-white pl-3 pr-3.5 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.05] sm:h-10"
+                  >
+                    <span className="flex h-3 w-3 shrink-0 items-center justify-center text-[12px] font-bold text-gray-400 dark:text-white/35">
+                      {fact.icon}
+                    </span>
+                    <span className="hidden shrink-0 text-[9px] font-black uppercase tracking-[0.14em] text-gray-400 dark:text-white/35 sm:inline">{fact.label}</span>
+                    {fact.href ? (
+                      <a
+                        href={fact.href}
+                        className={`min-w-0 truncate text-[12px] font-semibold text-emerald-700 hover:underline dark:text-emerald-300 ${fact.mono ? 'font-mono' : ''}`}
+                      >
+                        {fact.value}
+                      </a>
+                    ) : (
+                      <span className={`min-w-0 truncate text-[12px] font-semibold text-gray-800 dark:text-white/85 ${fact.mono ? 'font-mono' : ''}`}>{fact.value}</span>
+                    )}
+                  </div>
+                ))}
+              </motion.div>
+            )}
+
+            <div className="mt-4 grid grid-cols-3 gap-1.5 sm:hidden">
+              <button
+                onClick={() => setEditing(!editing)}
+                className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-full text-[12px] font-black transition-all active:scale-[0.97] ${
+                  editing
+                    ? 'border border-black/[0.08] bg-white text-gray-600 shadow-sm dark:border-white/[0.1] dark:bg-white/[0.08] dark:text-white/65'
+                    : 'border border-white bg-white text-gray-700 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.055] dark:text-white/70'
+                }`}
+              >
+                {editing ? <><X className="h-3.5 w-3.5" /> Cancel</> : <><Pencil className="h-3.5 w-3.5" /> Edit</>}
+              </button>
+              <button
+                onClick={() => navigate('/change-password')}
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full border border-white bg-white text-[12px] font-black text-gray-700 shadow-sm active:scale-[0.97] dark:border-white/[0.08] dark:bg-white/[0.055] dark:text-white/70"
+              >
+                <KeyRound className="h-3.5 w-3.5" /> Password
+              </button>
+              <button
+                onClick={handleSignOut}
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full border border-red-200 bg-red-50 text-[12px] font-black text-red-600 active:scale-[0.97] dark:border-red-500/25 dark:bg-red-500/[0.1] dark:text-red-400"
+              >
+                <LogOut className="h-3.5 w-3.5" /> Sign out
+              </button>
+            </div>
           </div>
 
           {/* Inline edit form */}

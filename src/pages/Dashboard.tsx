@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { differenceInCalendarDays, format, isAfter, parseISO, startOfToday } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { motion } from 'framer-motion';
-import { Calendar, CheckCircle, Clock, Music, ChevronRight, Megaphone, Image as ImageIcon, UserX, Trash2, ArrowUpRight, LayoutDashboard, Users, ClipboardCheck, ListChecks, Shield, ArrowLeftRight, Check, X, RefreshCw } from 'lucide-react';
+import { Calendar, Music, ChevronRight, Megaphone, Image as ImageIcon, UserX, Trash2, ArrowUpRight, LayoutDashboard, Users, ClipboardCheck, ListChecks, Shield, ArrowLeftRight, Check, X, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { DashboardSkeleton } from '../components/LoadingSpinner';
@@ -69,6 +69,39 @@ function getManilaEventDateTime(eventDate: string, timeValue: string | null | un
   return new Date(`${eventDate}T${timeValue}+08:00`);
 }
 
+function compareEventsByDateTime(a: Event, b: Event) {
+  return getManilaEventDateTime(a.event_date, a.start_time).getTime() - getManilaEventDateTime(b.event_date, b.start_time).getTime();
+}
+
+function compareAssignmentsByEventDateTime(a: EventAssignment, b: EventAssignment) {
+  if (!a.events || !b.events) return 0;
+  return compareEventsByDateTime(a.events, b.events);
+}
+
+async function loadDashboardSetlistSongs(event: Event): Promise<SetlistSong[]> {
+  const selectFields = 'id, setlist_songs(id, position, song_category, performed_key, songs(title, artist))';
+  const loadByEventId = async (eventId: string, label: string) => {
+    const { data: setlist } = await withDashboardTimeout(
+      supabase
+        .from('setlists')
+        .select(selectFields)
+        .eq('event_id', eventId)
+        .maybeSingle(),
+      { data: null },
+      label,
+    );
+
+    return (setlist?.setlist_songs as SetlistSong[] | undefined) || [];
+  };
+
+  const eventSongs = await loadByEventId(event.id, 'Next event setlist');
+  if (eventSongs.length > 0 || event.event_type !== 'Rehearsals' || !event.linked_event_id) {
+    return eventSongs;
+  }
+
+  return loadByEventId(event.linked_event_id, 'Linked rehearsal service setlist');
+}
+
 // Premium card — soft dual-shadow, theme-aware border, subtle inner top-edge highlight
 function Card({ children, className = '', interactive = false }: { children: React.ReactNode; className?: string; interactive?: boolean }) {
   return (
@@ -82,7 +115,9 @@ function Card({ children, className = '', interactive = false }: { children: Rea
     >
       {/* Inner top-edge highlight — luminous in dark, faint in light */}
       <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/90 to-transparent dark:via-white/[0.09]" />
-      <div className="pointer-events-none absolute -right-20 -top-24 h-44 w-44 rounded-full bg-emerald-200/0 blur-3xl transition-colors duration-300 group-hover:bg-emerald-200/30 dark:group-hover:bg-emerald-500/10" />
+      {interactive && (
+        <div className="pointer-events-none absolute -right-20 -top-24 h-44 w-44 rounded-full bg-emerald-200/0 blur-3xl transition-colors duration-300 group-hover:bg-emerald-200/30 dark:group-hover:bg-emerald-500/10" />
+      )}
       {children}
     </div>
   );
@@ -127,7 +162,6 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([]);
   const [myAssignments, setMyAssignments] = useState<EventAssignment[]>([]);
-  const [songLeaderByEvent, setSongLeaderByEvent] = useState<Record<string, string>>({});
   const [pendingSetlists, setPendingSetlists] = useState<Setlist[]>([]);
   const [recentAnnouncements, setRecentAnnouncements] = useState<Announcement[]>([]);
   const [unavailableMembers, setUnavailableMembers] = useState<UserAvailability[]>([]);
@@ -289,62 +323,28 @@ export function Dashboard() {
             : Promise.resolve({ count: 0 }),
         ]);
 
-        const events = eventsRes.data || [];
+        const events = ((eventsRes.data || []) as Event[]).slice().sort(compareEventsByDateTime);
         setUpcomingEvents(events);
 
         const nowForSetlist = new Date();
         const nextEvtForSetlist = events.find(e => getManilaEventDateTime(e.event_date, e.start_time) >= nowForSetlist) ?? events[0];
-        if (nextEvtForSetlist?.id) {
-          const { data: sl } = await withDashboardTimeout(
-            supabase
-              .from('setlists')
-              .select('id, setlist_songs(id, position, song_category, performed_key, songs(title, artist))')
-              .eq('event_id', nextEvtForSetlist.id)
-              .maybeSingle(),
-            { data: null },
-            'Next service setlist',
-          );
-          setNextEventSetlistSongs((sl?.setlist_songs as SetlistSong[] | undefined) || []);
+        if (nextEvtForSetlist) {
+          const songs = await loadDashboardSetlistSongs(nextEvtForSetlist);
+          setNextEventSetlistSongs(songs);
         } else {
           setNextEventSetlistSongs([]);
         }
 
         const assignments = (assignRes.data || []) as EventAssignment[];
-        const upcomingAssignments = assignments.filter(a => a.events && isAfter(parseISO(a.events.event_date), startOfToday()));
-        upcomingAssignments.sort((a, b) => parseISO(a.events!.event_date).getTime() - parseISO(b.events!.event_date).getTime());
+        const nowForAssignments = new Date();
+        const upcomingAssignments = assignments.filter(a => a.events && getManilaEventDateTime(a.events.event_date, a.events.start_time) >= nowForAssignments);
+        upcomingAssignments.sort(compareAssignmentsByEventDateTime);
         setMyAssignments(upcomingAssignments);
-        const nextEventIds = [...new Set(upcomingAssignments.map(a => a.event_id))].slice(0, 5);
-        if (nextEventIds.length > 0) {
-          const { data: songLeaderAssignments } = await withDashboardTimeout(
-            supabase
-              .from('event_assignments')
-              .select('event_id, profiles(first_name, last_name, gender), roles(name)')
-              .in('event_id', nextEventIds),
-            emptyList,
-            'Song leader assignments',
-          );
-          const leaders: Record<string, string> = {};
-          (songLeaderAssignments || []).forEach((assignment: any) => {
-            if (assignment.roles?.name !== 'Song Leader' || leaders[assignment.event_id]) return;
-            const firstName = assignment.profiles?.first_name || '';
-            const lastName = assignment.profiles?.last_name || '';
-            const gender = assignment.profiles?.gender || '';
-            const prefix = gender === 'male' ? 'Bro.' : gender === 'female' ? 'Sis.' : '';
-            const lastInitial = lastName ? lastName[0].toUpperCase() + '.' : '';
-            const name = prefix
-              ? `${prefix} ${firstName} ${lastInitial}`.trim()
-              : `${firstName} ${lastInitial}`.trim();
-            if (name) leaders[assignment.event_id] = name;
-          });
-          setSongLeaderByEvent(leaders);
-        } else {
-          setSongLeaderByEvent({});
-        }
         setPendingSetlists((setlistsRes.data || []) as Setlist[]);
         setRecentAnnouncements((announcementsRes.data || []) as Announcement[]);
         setUnavailableMembers((unavailableRes.data || []) as UserAvailability[]);
         setPendingLeaveCount(pendingLeaveRes.count || 0);
-        const upcoming = assignments.filter(a => a.events && isAfter(parseISO(a.events.event_date), startOfToday()));
+        const upcoming = assignments.filter(a => a.events && getManilaEventDateTime(a.events.event_date, a.events.start_time) >= nowForAssignments);
         setStats({ total: upcoming.length, confirmed: upcoming.filter(a => a.status === 'confirmed').length, pending: upcoming.filter(a => a.status === 'pending').length });
       } finally {
         setLoading(false);
@@ -447,19 +447,20 @@ export function Dashboard() {
   })();
 
   const nextEvent = upcomingEvents.find(event => getManilaEventDateTime(event.event_date, event.start_time) >= now) ?? upcomingEvents[0];
-  const daysUntilNext = nextEvent
-    ? Math.max(0, differenceInCalendarDays(parseISO(nextEvent.event_date), parseISO(getManilaTodayKey(now))))
-    : null;
   const nextAssignment = myAssignments[0];
-  const nextSongLeader = nextAssignment ? songLeaderByEvent[nextAssignment.event_id] : '';
   const serviceTime = nextEvent?.start_time ? formatTime12Hour(nextEvent.start_time) : null;
   const [serviceHour = 'Ready', servicePeriod = ''] = serviceTime?.split(' ') ?? [];
+  const serviceDateCaption = nextEvent?.event_date === getManilaTodayKey(now)
+    ? 'today'
+    : nextEvent
+      ? format(parseISO(nextEvent.event_date), 'MMM d')
+      : 'scheduled';
   const heroPulse = incomingSwapRequests.length > 0
     ? { label: 'Requests', value: incomingSwapRequests.length.toString(), caption: 'waiting' }
     : stats.pending > 0
       ? { label: 'Needs reply', value: stats.pending.toString(), caption: 'pending' }
       : serviceTime
-        ? { label: 'Service', value: serviceHour, caption: `${servicePeriod} today`.trim() }
+        ? { label: 'Service', value: serviceHour, caption: `${servicePeriod} ${serviceDateCaption}`.trim() }
         : { label: 'No service', value: 'Clear', caption: 'scheduled' };
 
   return (
@@ -490,14 +491,12 @@ export function Dashboard() {
         {/* ── 01 · Home Command Center ── */}
         <motion.section
           variants={item}
-          className="relative overflow-hidden rounded-[2rem] border border-emerald-200/70 bg-[radial-gradient(circle_at_18%_20%,rgba(52,211,153,0.24),transparent_34%),linear-gradient(135deg,#f0fdf4_0%,#ffffff_48%,#f8fafc_100%)] p-5 shadow-[0_24px_80px_-46px_rgba(6,95,70,0.72)] dark:border-white/[0.08] dark:bg-[radial-gradient(circle_at_16%_18%,rgba(16,185,129,0.18),transparent_34%),linear-gradient(135deg,#071c14_0%,#0d1110_46%,#070807_100%)] sm:p-6"
+          className="relative overflow-hidden rounded-[2rem] border border-emerald-200/70 bg-[radial-gradient(circle_at_18%_20%,rgba(52,211,153,0.24),transparent_34%),radial-gradient(circle_at_86%_24%,rgba(52,211,153,0.16),transparent_36%),linear-gradient(135deg,#f0fdf4_0%,#ffffff_48%,#f8fafc_100%)] p-5 shadow-[0_24px_80px_-46px_rgba(6,95,70,0.72)] dark:border-white/[0.08] dark:bg-[radial-gradient(circle_at_16%_18%,rgba(16,185,129,0.18),transparent_34%),radial-gradient(circle_at_86%_24%,rgba(16,185,129,0.12),transparent_36%),linear-gradient(135deg,#071c14_0%,#0d1110_46%,#070807_100%)] sm:p-6"
         >
-          <div className="pointer-events-none absolute -right-20 -top-24 h-56 w-56 rounded-full bg-emerald-300/25 blur-3xl dark:bg-emerald-500/10" />
-          <div className="pointer-events-none absolute -bottom-24 left-1/3 h-48 w-48 rounded-full bg-lime-200/30 blur-3xl dark:bg-lime-500/10" />
           <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/90 to-transparent dark:via-white/[0.09]" />
           <button
             onClick={() => navigate(heroPulse.label === 'Requests' ? '/my-assignments' : heroPulse.label === 'Needs reply' ? '/my-assignments?status=pending' : '/events')}
-            className="absolute right-5 top-[2.65rem] z-10 hidden w-[calc((100%-4rem)/3)] rounded-2xl border border-white/70 bg-white/58 px-3 py-2.5 text-center shadow-[0_14px_38px_-28px_rgba(6,95,70,0.8)] backdrop-blur-xl transition-all hover:-translate-y-0.5 hover:bg-white/80 active:scale-[0.98] dark:border-white/[0.08] dark:bg-white/[0.055] min-[390px]:block lg:hidden"
+            className="absolute right-5 top-[2.65rem] z-10 hidden w-[calc((100%-4rem)/3)] rounded-2xl border border-white bg-white px-3 py-2.5 text-center shadow-[0_14px_38px_-28px_rgba(6,95,70,0.8)] transition-all hover:-translate-y-0.5 active:scale-[0.98] dark:border-white/[0.08] dark:bg-white/[0.055] min-[390px]:block lg:hidden"
           >
             <p className="text-[8px] font-black uppercase tracking-[0.18em] text-emerald-700/55 dark:text-emerald-300/45">{heroPulse.label}</p>
             <p className="mt-1 truncate text-[1.35rem] font-black leading-none text-gray-950 dark:text-white" style={{ letterSpacing: '-0.055em' }}>{heroPulse.value}</p>
@@ -536,7 +535,7 @@ export function Dashboard() {
                 <button
                   key={stat.label}
                   onClick={() => navigate(`/my-assignments?status=${stat.status}`)}
-                  className="rounded-2xl border border-white/70 bg-white/65 px-3 py-3 text-center shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:bg-white/90 active:scale-[0.98] dark:border-white/[0.08] dark:bg-white/[0.05] dark:hover:bg-white/[0.075]"
+                  className="rounded-2xl border border-white bg-white px-3 py-3 text-center shadow-sm transition-all hover:-translate-y-0.5 active:scale-[0.98] dark:border-white/[0.08] dark:bg-white/[0.05] dark:hover:bg-white/[0.075]"
                 >
                   <p className="text-lg font-black leading-none text-gray-950 dark:text-white">{stat.value}</p>
                   <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400 dark:text-white/32">{stat.label}</p>
@@ -549,7 +548,7 @@ export function Dashboard() {
             <div className="min-w-0">
               {nextEvent ? (
                 <>
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700/70 dark:text-emerald-300/80">On deck</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700/70 dark:text-emerald-300/80">Coming Up</p>
                   <p className="mt-1 truncate text-sm font-extrabold text-gray-800 dark:text-white">
                     {nextEvent.title} <span className="font-mono text-xs font-semibold text-gray-400 dark:text-emerald-100/55">· {format(parseISO(nextEvent.event_date), 'MMM d')}</span>
                   </p>

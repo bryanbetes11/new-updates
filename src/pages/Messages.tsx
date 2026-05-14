@@ -2207,6 +2207,7 @@ function ChatWindow({
 }) {
   const [replyTo, setReplyTo] = useState<{ id: string; preview: string } | null>(null);
   const [activeMsg, setActiveMsg] = useState<string | null>(null);
+  const [actionMenuPlacement, setActionMenuPlacement] = useState<'above' | 'below'>('above');
   const [emojiMsgId, setEmojiMsgId] = useState<string | null>(null);
   const [tappedMsgId, setTappedMsgId] = useState<string | null>(null);
   const [showInfo, setShowInfo] = useState(false);
@@ -2218,6 +2219,7 @@ function ChatWindow({
   const [seenDetailsMessageId, setSeenDetailsMessageId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const chatHeaderRef = useRef<HTMLDivElement>(null);
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const msgLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draggedMessageId = useRef<string | null>(null);
@@ -2268,6 +2270,17 @@ function ChatWindow({
     if (!msgLongPressTimer.current) return;
     clearTimeout(msgLongPressTimer.current);
     msgLongPressTimer.current = null;
+  }, []);
+
+  const openMessageActions = useCallback((messageId: string, anchor?: HTMLElement | null) => {
+    const anchorRect = anchor?.getBoundingClientRect();
+    const headerBottom = chatHeaderRef.current?.getBoundingClientRect().bottom ?? 0;
+    const estimatedMenuHeight = 220;
+    const availableAboveHeader = anchorRect ? anchorRect.top - headerBottom : estimatedMenuHeight;
+    setActionMenuPlacement(availableAboveHeader < estimatedMenuHeight ? 'below' : 'above');
+    setActiveMsg(messageId);
+    setEmojiMsgId(null);
+    setTappedMsgId(null);
   }, []);
 
   const startReplyToMessage = useCallback((msg: Message) => {
@@ -2510,6 +2523,11 @@ function ChatWindow({
   const seenDetailsSeers = seenDetailsMessage
     ? (seenByMessage[seenDetailsMessage.id] || []).filter(seer => seer.userId !== seenDetailsMessage.sender_id)
     : [];
+  const detailsSheetOpen = Boolean(reactionDetailsMessage || (seenDetailsMessage && seenDetailsSeers.length > 0));
+
+  useEffect(() => {
+    if (detailsSheetOpen) stopTyping();
+  }, [detailsSheetOpen, stopTyping]);
 
   useEffect(() => {
     if (!seenDetailsMessageId) return;
@@ -2535,7 +2553,7 @@ function ChatWindow({
 
   return (
     <div className="relative flex flex-col h-full min-h-0 overflow-hidden bg-white dark:bg-[#111013]">
-      <div className="relative z-20 shrink-0 bg-white dark:bg-[#111013] lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96">
+      <div ref={chatHeaderRef} className="relative z-20 shrink-0 bg-white dark:bg-[#111013] lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96">
         {/* Header */}
         <div className="flex items-center gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+12px)] border-b border-gray-100 dark:border-white/[0.06] lg:pt-4">
           <button
@@ -2738,7 +2756,11 @@ function ChatWindow({
                           <span className="text-[13px]">😊</span>
                         </button>
                         <button
-                          onClick={e => { e.stopPropagation(); setActiveMsg(isActionsOpen ? null : msg.id); setEmojiMsgId(null); }}
+                          onClick={e => {
+                            e.stopPropagation();
+                            if (isActionsOpen) setActiveMsg(null);
+                            else openMessageActions(msg.id, e.currentTarget);
+                          }}
                           className="h-7 w-7 flex items-center justify-center rounded-full text-gray-400 dark:text-white/25 hover:bg-gray-100 dark:hover:bg-white/[0.07] hover:text-gray-600 dark:hover:text-white/60 transition-colors"
                         >
                           <MoreHorizontal className="h-3.5 w-3.5" />
@@ -2767,10 +2789,9 @@ function ChatWindow({
                       }}
                       onPointerDown={e => {
                         if (e.pointerType !== 'touch') return;
+                        const anchor = e.currentTarget;
                         msgLongPressTimer.current = setTimeout(() => {
-                          setActiveMsg(msg.id);
-                          setEmojiMsgId(null);
-                          setTappedMsgId(null);
+                          openMessageActions(msg.id, anchor);
                         }, 500);
                       }}
                       onPointerUp={clearMessageLongPress}
@@ -2879,7 +2900,11 @@ function ChatWindow({
                           <span className="text-[13px]">😊</span>
                         </button>
                         <button
-                          onClick={e => { e.stopPropagation(); setActiveMsg(isActionsOpen ? null : msg.id); setEmojiMsgId(null); }}
+                          onClick={e => {
+                            e.stopPropagation();
+                            if (isActionsOpen) setActiveMsg(null);
+                            else openMessageActions(msg.id, e.currentTarget);
+                          }}
                           className="h-7 w-7 flex items-center justify-center rounded-full text-gray-400 dark:text-white/25 hover:bg-gray-100 dark:hover:bg-white/[0.07] hover:text-gray-600 dark:hover:text-white/60 transition-colors"
                         >
                           <MoreHorizontal className="h-3.5 w-3.5" />
@@ -2928,7 +2953,7 @@ function ChatWindow({
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.9, y: 4 }}
                         transition={{ duration: 0.12 }}
-                        className={`absolute z-20 bottom-full mb-1 ${isMe ? 'right-0' : 'left-0'} min-w-[140px] bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-100 dark:border-white/[0.08] shadow-xl overflow-hidden`}
+                        className={`absolute z-20 ${actionMenuPlacement === 'below' ? 'top-full mt-1' : 'bottom-full mb-1'} ${isMe ? 'right-0' : 'left-0'} min-w-[140px] bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-100 dark:border-white/[0.08] shadow-xl overflow-hidden`}
                         onClick={e => e.stopPropagation()}
                       >
                         <button
@@ -3041,7 +3066,7 @@ function ChatWindow({
         <div ref={messagesEndRef} />
       </div>
 
-      {!showInfo && (
+      {!showInfo && !detailsSheetOpen && (
         <>
           <InputBar
             onSend={handleSend}

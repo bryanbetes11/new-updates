@@ -648,8 +648,6 @@ export function Events() {
   const today = startOfDay(new Date());
   const upcomingEvents = events.filter(e => parseISO(e.event_date) >= today);
   const pastEvents = events.filter(e => parseISO(e.event_date) < today);
-  const sortedUpcoming = [...upcomingEvents].sort((a, b) => a.event_date.localeCompare(b.event_date));
-  const nextEvent = sortedUpcoming[0];
   const eventsThisWeek = upcomingEvents.filter(e => {
     const eventDate = parseISO(e.event_date);
     return eventDate >= today && eventDate <= addDays(today, 7);
@@ -674,10 +672,8 @@ export function Events() {
         {/* ── Schedule Command Center ── */}
         <motion.section
           {...fadeUp(0)}
-          className="relative overflow-hidden rounded-[2rem] border border-emerald-200/70 bg-[radial-gradient(circle_at_18%_20%,rgba(52,211,153,0.24),transparent_34%),linear-gradient(135deg,#f0fdf4_0%,#ffffff_48%,#f8fafc_100%)] p-5 shadow-[0_24px_80px_-46px_rgba(6,95,70,0.72)] dark:border-white/[0.08] dark:bg-[radial-gradient(circle_at_16%_18%,rgba(16,185,129,0.18),transparent_34%),linear-gradient(135deg,#071c14_0%,#0d1110_46%,#070807_100%)] sm:p-6"
+          className="relative overflow-hidden rounded-[2rem] border border-emerald-200/70 bg-[radial-gradient(circle_at_18%_20%,rgba(52,211,153,0.24),transparent_34%),radial-gradient(circle_at_86%_24%,rgba(52,211,153,0.16),transparent_36%),linear-gradient(135deg,#f0fdf4_0%,#ffffff_48%,#f8fafc_100%)] p-5 shadow-[0_24px_80px_-46px_rgba(6,95,70,0.72)] dark:border-white/[0.08] dark:bg-[radial-gradient(circle_at_16%_18%,rgba(16,185,129,0.18),transparent_34%),radial-gradient(circle_at_86%_24%,rgba(16,185,129,0.12),transparent_36%),linear-gradient(135deg,#071c14_0%,#0d1110_46%,#070807_100%)] sm:p-6"
         >
-          <div className="pointer-events-none absolute -right-20 -top-24 h-56 w-56 rounded-full bg-emerald-300/25 blur-3xl dark:bg-emerald-500/10" />
-          <div className="pointer-events-none absolute -bottom-24 left-1/3 h-48 w-48 rounded-full bg-lime-200/30 blur-3xl dark:bg-lime-500/10" />
           <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/90 to-transparent dark:via-white/[0.09]" />
 
           <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
@@ -708,7 +704,7 @@ export function Events() {
                 { label: 'Ready', value: approvedSetlists.length },
                 { label: 'Pending', value: pendingSetlists.length },
               ].map(stat => (
-                <div key={stat.label} className="rounded-2xl border border-white/70 bg-white/65 px-3 py-3 text-center shadow-sm backdrop-blur dark:border-white/[0.08] dark:bg-white/[0.05]">
+                <div key={stat.label} className="rounded-2xl border border-white bg-white px-3 py-3 text-center shadow-sm dark:border-white/[0.08] dark:bg-white/[0.05]">
                   <p className="text-lg font-black leading-none text-gray-950 dark:text-white">{stat.value}</p>
                   <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400 dark:text-white/32">{stat.label}</p>
                 </div>
@@ -716,38 +712,29 @@ export function Events() {
             </div>
           </div>
 
-          <div className="relative mt-5 grid gap-3 border-t border-emerald-900/[0.07] pt-4 dark:border-white/[0.11] md:grid-cols-[1fr_auto] md:items-center">
-            <div className="min-w-0">
-              {nextEvent ? (
-                <>
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700/70 dark:text-emerald-300/80">Next on calendar</p>
-                  <p className="mt-1 truncate text-sm font-extrabold text-gray-800 dark:text-white">
-                    {songLeaderMap[nextEvent.id] || nextEvent.title}
-                    <span className="font-mono text-xs font-semibold text-gray-400 dark:text-emerald-100/55">
-                      {' '}· {format(parseISO(nextEvent.event_date), 'MMM d')}
-                      {nextEvent.start_time ? ` · ${formatTime12Hour(nextEvent.start_time)}` : ''}
-                    </span>
+          {(isLeader || upcomingEvents.length === 0 || approvedLeaveToday > 0) && (
+            <div className="relative mt-5 grid gap-3 border-t border-emerald-900/[0.07] pt-4 dark:border-white/[0.11] md:grid-cols-[1fr_auto] md:items-center">
+              <div className="min-w-0">
+                {upcomingEvents.length === 0 && (
+                  <p className="text-sm font-semibold text-gray-500 dark:text-white/70">No upcoming events are scheduled yet.</p>
+                )}
+                {approvedLeaveToday > 0 && (
+                  <p className="text-[11px] font-semibold text-orange-600 dark:text-orange-300">
+                    {approvedLeaveToday} team member{approvedLeaveToday === 1 ? '' : 's'} unavailable today.
                   </p>
-                </>
-              ) : (
-                <p className="text-sm font-semibold text-gray-500 dark:text-white/70">No upcoming events are scheduled yet.</p>
-              )}
-              {approvedLeaveToday > 0 && (
-                <p className="mt-1 text-[11px] font-semibold text-orange-600 dark:text-orange-300">
-                  {approvedLeaveToday} team member{approvedLeaveToday === 1 ? '' : 's'} unavailable today.
-                </p>
+                )}
+              </div>
+              {isLeader && (
+                <button
+                  onClick={() => openCreateEvent()}
+                  className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full px-5 text-[12px] font-black text-white shadow-[0_12px_28px_-16px_rgba(6,95,70,0.9)] transition-all active:scale-[0.97]"
+                  style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)' }}
+                >
+                  <Plus className="h-3.5 w-3.5" /> New event
+                </button>
               )}
             </div>
-            {isLeader && (
-              <button
-                onClick={() => openCreateEvent()}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full px-5 text-[12px] font-black text-white shadow-[0_12px_28px_-16px_rgba(6,95,70,0.9)] transition-all active:scale-[0.97]"
-                style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)' }}
-              >
-                <Plus className="h-3.5 w-3.5" /> New event
-              </button>
-            )}
-          </div>
+          )}
         </motion.section>
 
         {/* ── Toolbar ── */}

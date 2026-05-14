@@ -3,8 +3,8 @@ import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { format, parseISO, differenceInDays, startOfDay, subWeeks, previousSunday, addDays, subDays } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Calendar, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronLeft, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, Moon, Sun } from 'lucide-react';
+import { animate, motion, useMotionValue, AnimatePresence, type PanInfo } from 'framer-motion';
+import { ArrowLeft, Calendar, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, Moon, Sun, Settings2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -52,6 +52,9 @@ const blurUp = (delay = 0) => ({
   animate: { opacity: 1, y: 0, filter: 'blur(0px)' },
   transition: { duration: 0.85, delay, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] },
 });
+
+const serviceSongPanelTransition = { type: 'spring' as const, stiffness: 380, damping: 36, mass: 0.88 };
+const serviceSwipeOffsets = [-1, 0, 1] as const;
 
 export function EventDetail() {
   const { id } = useParams<{ id: string }>();
@@ -123,6 +126,9 @@ export function EventDetail() {
   const [serviceModeIndex, setServiceModeIndex] = useState<number | null>(null);
   const [serviceChartEditing, setServiceChartEditing] = useState(false);
   const [serviceModeEntering, setServiceModeEntering] = useState(false);
+  const [serviceChartControlsVisible, setServiceChartControlsVisible] = useState(true);
+  const [serviceSongPickerOpen, setServiceSongPickerOpen] = useState(false);
+  const [serviceSongStageWidth, setServiceSongStageWidth] = useState(0);
   const [chartSaving, setChartSaving] = useState(false);
   const [lyricsInput, setLyricsInput] = useState('');
   const [savingLyrics, setSavingLyrics] = useState(false);
@@ -149,9 +155,12 @@ export function EventDetail() {
   const [showCreateChatModal, setShowCreateChatModal] = useState(false);
   const [creatingChat, setCreatingChat] = useState(false);
   const [showSwapModal, setShowSwapModal] = useState(false);
-  const serviceSwipeStart = useRef<{ x: number; y: number } | null>(null);
+  const serviceSongStageRef = useRef<HTMLDivElement | null>(null);
+  const serviceSwipeAnimating = useRef(false);
+  const serviceTrackAnimation = useRef<{ stop: () => void } | null>(null);
   const serviceModeEnterTimer = useRef<number | null>(null);
   const serviceModeClosing = useRef(false);
+  const serviceTrackX = useMotionValue(0);
 
   const resetEventDetailScroll = useCallback(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
@@ -182,19 +191,78 @@ export function EventDetail() {
     const previousOverscroll = document.body.style.overscrollBehavior;
     const previousRootOverflow = root.style.overflow;
     const previousRootOverscroll = root.style.overscrollBehavior;
+    let restingViewportHeight = Math.max(window.innerHeight, window.visualViewport?.height || 0);
+    const updateServiceViewportHeight = () => {
+      const viewport = window.visualViewport;
+      const activeElement = document.activeElement;
+      const editorFocused =
+        activeElement instanceof HTMLTextAreaElement ||
+        activeElement instanceof HTMLInputElement;
+      const rawKeyboardInset = viewport
+        ? Math.max(0, restingViewportHeight - viewport.height - viewport.offsetTop)
+        : 0;
+      const keyboardOpen = editorFocused && rawKeyboardInset > 120;
+
+      if (!keyboardOpen) {
+        restingViewportHeight = Math.max(restingViewportHeight, window.innerHeight, viewport?.height || 0);
+      }
+
+      root.style.setProperty('--service-mode-viewport-height', `${Math.round(restingViewportHeight)}px`);
+      root.style.setProperty('--service-mode-keyboard-inset', `${Math.round(keyboardOpen ? rawKeyboardInset : 0)}px`);
+      root.classList.toggle('service-mode-keyboard-open', keyboardOpen);
+      if (keyboardOpen) window.scrollTo(0, 0);
+    };
+
+    updateServiceViewportHeight();
     root.classList.add('service-mode-active');
     document.body.classList.add('service-mode-active');
     root.style.overflow = 'hidden';
     root.style.overscrollBehavior = 'none';
     document.body.style.overflow = 'hidden';
     document.body.style.overscrollBehavior = 'none';
+    window.addEventListener('resize', updateServiceViewportHeight);
+    window.visualViewport?.addEventListener('resize', updateServiceViewportHeight);
+    window.visualViewport?.addEventListener('scroll', updateServiceViewportHeight);
+    window.addEventListener('focusin', updateServiceViewportHeight);
+    window.addEventListener('focusout', updateServiceViewportHeight);
     return () => {
       root.classList.remove('service-mode-active');
+      root.classList.remove('service-mode-keyboard-open');
       document.body.classList.remove('service-mode-active');
+      root.style.removeProperty('--service-mode-viewport-height');
+      root.style.removeProperty('--service-mode-keyboard-inset');
       root.style.overflow = previousRootOverflow;
       root.style.overscrollBehavior = previousRootOverscroll;
       document.body.style.overflow = previousOverflow;
       document.body.style.overscrollBehavior = previousOverscroll;
+      window.removeEventListener('resize', updateServiceViewportHeight);
+      window.visualViewport?.removeEventListener('resize', updateServiceViewportHeight);
+      window.visualViewport?.removeEventListener('scroll', updateServiceViewportHeight);
+      window.removeEventListener('focusin', updateServiceViewportHeight);
+      window.removeEventListener('focusout', updateServiceViewportHeight);
+    };
+  }, [serviceModeIndex]);
+
+  useLayoutEffect(() => {
+    if (serviceModeIndex === null) return;
+
+    const updateStageWidth = () => {
+      const stage = serviceSongStageRef.current;
+      setServiceSongStageWidth(stage?.getBoundingClientRect().width || window.innerWidth || 0);
+    };
+
+    updateStageWidth();
+    window.addEventListener('resize', updateStageWidth);
+
+    const observer = typeof ResizeObserver === 'undefined' || !serviceSongStageRef.current
+      ? null
+      : new ResizeObserver(updateStageWidth);
+
+    if (serviceSongStageRef.current) observer?.observe(serviceSongStageRef.current);
+
+    return () => {
+      window.removeEventListener('resize', updateStageWidth);
+      observer?.disconnect();
     };
   }, [serviceModeIndex]);
 
@@ -206,6 +274,8 @@ export function EventDetail() {
       }
       setServiceChartEditing(false);
       setServiceModeEntering(false);
+      setServiceChartControlsVisible(true);
+      setServiceSongPickerOpen(false);
     }
   }, [serviceModeIndex]);
 
@@ -926,9 +996,9 @@ const openLyricsModal = (ss: SetlistSong) => {
   const handleSaveChart = async (songId: string, text: string) => {
     setChartSaving(true);
     try {
-      const { error } = await withSaveTimeout(
+      const { error } = await withSaveTimeout(Promise.resolve(
         supabase.from('songs').update({ chordpro_text: text }).eq('id', songId)
-      );
+      ));
 
       if (error) {
         console.error('Failed to save chart:', error);
@@ -1174,8 +1244,23 @@ const openLyricsModal = (ss: SetlistSong) => {
     : linkedServiceEvent?.title || 'linked Sunday Service';
   const serviceModeLabel = event.event_type === 'Rehearsals' ? 'Rehearsal Mode' : 'Service Mode';
   const serviceModeLoadingTitle = event.event_type === 'Rehearsals' ? 'Preparing rehearsal flow.' : 'Preparing your setlist.';
+  const serviceModeLoadingSteps = [
+    { label: 'Opening charts', detail: `${serviceModeSongs.length} ${serviceModeSongs.length === 1 ? 'song' : 'songs'}`, icon: FileText },
+    { label: 'Syncing notes', detail: 'Team and private notes', icon: MessageCircle },
+    { label: 'Setting flow', detail: serviceModeSourceLabel, icon: ClipboardCheck },
+  ];
   const isFirstServiceSong = (serviceModeIndex ?? 0) === 0;
   const isLastServiceSong = (serviceModeIndex ?? 0) === serviceModeSongs.length - 1;
+  const serviceSwipeWidth = serviceSongStageWidth || (typeof window !== 'undefined' ? window.innerWidth : 390);
+  const serviceSongPanels = serviceModeIndex === null
+    ? []
+    : serviceSwipeOffsets
+      .map(offset => ({
+        offset,
+        index: serviceModeIndex + offset,
+        song: serviceModeSongs[serviceModeIndex + offset],
+      }))
+      .filter((panel): panel is { offset: -1 | 0 | 1; index: number; song: SetlistSong & { songs: Song } } => !!panel.song?.songs);
   const openServiceMode = (index = 0) => {
     if (serviceModeSongs.length === 0) return;
     if (event.event_type !== 'Rehearsals' && setlist?.status !== 'approved') return;
@@ -1184,6 +1269,10 @@ const openLyricsModal = (ss: SetlistSong) => {
       window.clearTimeout(serviceModeEnterTimer.current);
     }
     setServiceChartEditing(false);
+    setServiceChartControlsVisible(true);
+    setServiceSongPickerOpen(false);
+    serviceTrackAnimation.current?.stop();
+    serviceTrackX.set(0);
     setServiceModeEntering(true);
     setServiceModeIndex(nextIndex);
     serviceModeEnterTimer.current = window.setTimeout(() => {
@@ -1205,7 +1294,12 @@ const openLyricsModal = (ss: SetlistSong) => {
     root.style.overscrollBehavior = '';
     document.body.style.overflow = '';
     document.body.style.overscrollBehavior = '';
+    serviceTrackAnimation.current?.stop();
+    serviceTrackX.set(0);
+    serviceSwipeAnimating.current = false;
     setServiceChartEditing(false);
+    setServiceChartControlsVisible(true);
+    setServiceSongPickerOpen(false);
     setServiceModeEntering(false);
     setServiceModeIndex(null);
 
@@ -1215,24 +1309,71 @@ const openLyricsModal = (ss: SetlistSong) => {
     const nextSearch = params.toString();
     navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ''}`, { replace: true });
   };
-  const goToPreviousServiceSong = () => {
+  const goToServiceSong = (direction: -1 | 1) => {
+    if (serviceSwipeAnimating.current || serviceModeIndex === null) return;
+    const currentIndex = serviceModeIndex;
+    const targetIndex = Math.min(serviceModeSongs.length - 1, Math.max(0, currentIndex + direction));
+
+    if (targetIndex === currentIndex) {
+      serviceTrackAnimation.current?.stop();
+      serviceTrackAnimation.current = animate(serviceTrackX, 0, serviceSongPanelTransition);
+      return;
+    }
+
     setServiceChartEditing(false);
-    setServiceModeIndex(index => Math.max(0, (index ?? 0) - 1));
+    setServiceSongPickerOpen(false);
+    serviceSwipeAnimating.current = true;
+    serviceTrackAnimation.current?.stop();
+    serviceTrackAnimation.current = animate(serviceTrackX, direction === 1 ? -serviceSwipeWidth : serviceSwipeWidth, {
+      ...serviceSongPanelTransition,
+      onComplete: () => {
+        serviceTrackX.set(0);
+        setServiceModeIndex(targetIndex);
+        serviceSwipeAnimating.current = false;
+      },
+    });
+  };
+  const selectServiceSong = (index: number) => {
+    if (serviceSwipeAnimating.current || serviceModeEntering || serviceModeIndex === null) return;
+    const targetIndex = Math.min(serviceModeSongs.length - 1, Math.max(0, index));
+
+    setServiceSongPickerOpen(false);
+    if (targetIndex === serviceModeIndex) return;
+
+    setServiceChartEditing(false);
+    serviceTrackAnimation.current?.stop();
+    serviceTrackX.set(0);
+    setServiceModeIndex(targetIndex);
+  };
+  const goToPreviousServiceSong = () => {
+    goToServiceSong(-1);
   };
   const goToNextServiceSong = () => {
-    setServiceChartEditing(false);
-    setServiceModeIndex(index => Math.min(serviceModeSongs.length - 1, (index ?? 0) + 1));
+    goToServiceSong(1);
   };
-  const handleServiceSwipeEnd = (x: number, y: number) => {
-    const start = serviceSwipeStart.current;
-    serviceSwipeStart.current = null;
-    if (!start) return;
-    const deltaX = x - start.x;
-    const deltaY = y - start.y;
-    if (serviceChartEditing || serviceModeEntering) return;
-    if (Math.abs(deltaX) < 70 || Math.abs(deltaX) < Math.abs(deltaY) * 1.15) return;
-    if (deltaX < 0 && !isLastServiceSong) goToNextServiceSong();
-    if (deltaX > 0 && !isFirstServiceSong) goToPreviousServiceSong();
+  const handleServiceDragStart = () => {
+    if (serviceSwipeAnimating.current || serviceChartEditing || serviceModeEntering) return;
+    serviceTrackAnimation.current?.stop();
+  };
+  const handleServiceDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+    if (serviceSwipeAnimating.current || serviceChartEditing || serviceModeEntering) return;
+
+    const threshold = Math.min(Math.max(serviceSwipeWidth * 0.22, 72), 120);
+    const hasEnoughDistance = Math.abs(info.offset.x) >= threshold;
+    const hasEnoughVelocity = Math.abs(info.velocity.x) >= 520;
+
+    if ((hasEnoughDistance || hasEnoughVelocity) && info.offset.x < 0 && !isLastServiceSong) {
+      goToServiceSong(1);
+      return;
+    }
+
+    if ((hasEnoughDistance || hasEnoughVelocity) && info.offset.x > 0 && !isFirstServiceSong) {
+      goToServiceSong(-1);
+      return;
+    }
+
+    serviceTrackAnimation.current?.stop();
+    serviceTrackAnimation.current = animate(serviceTrackX, 0, serviceSongPanelTransition);
   };
 
   const heroChipGradient = heroIsPast
@@ -2663,12 +2804,10 @@ const openLyricsModal = (ss: SetlistSong) => {
                 animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
                 transition={{ duration: 0.58, ease: [0.22, 1, 0.36, 1] }}
                 className="service-mode-overlay fixed inset-0 isolate z-[2147483000] flex w-screen flex-col overflow-visible bg-white text-gray-950 dark:bg-[#0c0f0d] dark:text-white"
-                onPointerDown={(event) => {
-                  serviceSwipeStart.current = { x: event.clientX, y: event.clientY };
-                }}
-                onPointerUp={(event) => handleServiceSwipeEnd(event.clientX, event.clientY)}
-                onPointerCancel={() => {
-                  serviceSwipeStart.current = null;
+                style={{
+                  bottom: 'calc(0px - var(--service-mode-bottom-bleed))',
+                  height: 'calc(var(--service-mode-viewport-height) + var(--service-mode-bottom-bleed))',
+                  overflow: 'visible',
                 }}
               >
                 <motion.div
@@ -2696,21 +2835,57 @@ const openLyricsModal = (ss: SetlistSong) => {
                       transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
                       className="absolute inset-0 z-20 flex items-center justify-center bg-white px-6 text-center dark:bg-[#0c0f0d]"
                     >
-                      <div className="relative max-w-sm">
+                      <div className="relative w-full max-w-sm">
                         <motion.div
                           aria-hidden="true"
-                          className="absolute inset-0 -z-10 rounded-full bg-emerald-400/20 blur-3xl"
-                          animate={{ scale: [0.8, 1.25, 0.95], opacity: [0.25, 0.6, 0.3] }}
-                          transition={{ duration: 1.8, ease: 'easeInOut' }}
+                          className="absolute left-1/2 top-4 -z-10 h-64 w-64 -translate-x-1/2 rounded-full bg-emerald-400/20 blur-3xl"
+                          animate={{ scale: [0.85, 1.18, 0.98], opacity: [0.22, 0.52, 0.28] }}
+                          transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
                         />
-                        <motion.div
-                          className="mx-auto flex h-24 w-24 items-center justify-center rounded-[2rem] bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-2xl shadow-emerald-600/30"
-                          animate={{ y: [0, -8, 0], rotate: [0, -2, 2, 0] }}
-                          transition={{ duration: 1.8, ease: 'easeInOut' }}
-                        >
-                          <Music className="h-10 w-10" />
-                        </motion.div>
-                        <p className="mt-6 text-[10px] font-black uppercase tracking-[0.28em] text-emerald-700 dark:text-emerald-300">
+                        <div className="relative mx-auto flex h-36 w-36 items-center justify-center">
+                          <motion.div
+                            aria-hidden="true"
+                            className="absolute inset-0 rounded-full border border-emerald-500/15"
+                            animate={{ scale: [0.92, 1.08, 0.92], opacity: [0.38, 0.7, 0.38] }}
+                            transition={{ duration: 3.6, repeat: Infinity, ease: 'easeInOut' }}
+                          />
+                          <motion.div
+                            aria-hidden="true"
+                            className="absolute inset-4 rounded-full border border-dashed border-emerald-500/20 dark:border-emerald-300/20"
+                            animate={{ rotate: 360 }}
+                            transition={{ duration: 18, repeat: Infinity, ease: 'linear' }}
+                          />
+                          <motion.div
+                            aria-hidden="true"
+                            className="absolute -left-1 top-14 flex h-8 w-8 items-center justify-center rounded-2xl border border-emerald-200 bg-white/90 text-emerald-600 shadow-lg shadow-emerald-500/10 dark:border-emerald-400/15 dark:bg-white/[0.08] dark:text-emerald-200"
+                            animate={{ y: [0, -8, 0], opacity: [0.72, 1, 0.72] }}
+                            transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
+                          >
+                            <FileText className="h-3.5 w-3.5" />
+                          </motion.div>
+                          <motion.div
+                            aria-hidden="true"
+                            className="absolute -right-1 top-14 flex h-8 w-8 items-center justify-center rounded-2xl border border-emerald-200 bg-white/90 text-emerald-600 shadow-lg shadow-emerald-500/10 dark:border-emerald-400/15 dark:bg-white/[0.08] dark:text-emerald-200"
+                            animate={{ y: [0, 8, 0], opacity: [0.72, 1, 0.72] }}
+                            transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut', delay: 0.55 }}
+                          >
+                            <ClipboardCheck className="h-3.5 w-3.5" />
+                          </motion.div>
+                          <motion.div
+                            className="relative flex h-24 w-24 items-center justify-center rounded-[2rem] bg-gradient-to-br from-emerald-500 via-emerald-600 to-emerald-800 text-white shadow-2xl shadow-emerald-600/30"
+                            animate={{ y: [0, -7, 0], rotate: [0, -1.5, 1.5, 0], borderRadius: ['2rem', '2.35rem', '2rem'] }}
+                            transition={{ duration: 3.1, repeat: Infinity, ease: 'easeInOut' }}
+                          >
+                            <motion.span
+                              aria-hidden="true"
+                              className="absolute inset-0 rounded-[inherit] bg-[linear-gradient(135deg,rgba(255,255,255,0.24),transparent_42%,rgba(255,255,255,0.1))]"
+                              animate={{ opacity: [0.28, 0.72, 0.36] }}
+                              transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
+                            />
+                            <Music className="relative h-10 w-10" />
+                          </motion.div>
+                        </div>
+                        <p className="mt-5 text-[10px] font-black uppercase tracking-[0.28em] text-emerald-700 dark:text-emerald-300">
                           Entering {serviceModeLabel}
                         </p>
                         <h2 className="mt-2 text-3xl font-black tracking-[-0.05em] text-gray-950 dark:text-white">
@@ -2720,20 +2895,62 @@ const openLyricsModal = (ss: SetlistSong) => {
                           <span className="block">Loading charts, notes, and worship flow</span>
                           <span className="block">from {serviceModeSourceLabel}.</span>
                         </p>
-                        <div className="mt-7 overflow-hidden rounded-full bg-gray-200/80 p-1 dark:bg-white/10">
+
+                        <div className="mt-6 grid gap-2">
+                          {serviceModeLoadingSteps.map((step, index) => {
+                            const StepIcon = step.icon;
+                            return (
+                              <motion.div
+                                key={step.label}
+                                className="flex items-center gap-3 rounded-2xl border border-emerald-500/10 bg-white/70 px-3 py-2 text-left shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/[0.05]"
+                                initial={{ opacity: 0, y: 8 }}
+                                animate={{ opacity: [0.68, 1, 0.78], y: 0 }}
+                                transition={{
+                                  opacity: { duration: 2.4, repeat: Infinity, ease: 'easeInOut', delay: index * 0.45 },
+                                  y: { duration: 0.5, ease: [0.22, 1, 0.36, 1], delay: index * 0.08 },
+                                }}
+                              >
+                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-500/10 dark:bg-emerald-400/10 dark:text-emerald-200">
+                                  <StepIcon className="h-3.5 w-3.5" />
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="block text-xs font-black text-gray-900 dark:text-white">{step.label}</span>
+                                  <span className="block truncate text-[11px] font-semibold text-gray-500 dark:text-white/45">{step.detail}</span>
+                                </span>
+                                <motion.span
+                                  className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_14px_rgba(16,185,129,0.75)]"
+                                  animate={{ scale: [0.7, 1.25, 0.7], opacity: [0.45, 1, 0.45] }}
+                                  transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut', delay: index * 0.35 }}
+                                />
+                              </motion.div>
+                            );
+                          })}
+                        </div>
+
+                        <div className="relative mt-6 overflow-hidden rounded-full bg-gray-200/80 p-1 dark:bg-white/10">
                           <motion.div
-                            className="h-2 rounded-full bg-gradient-to-r from-emerald-400 via-lime-300 to-emerald-600"
-                            initial={{ width: '8%' }}
-                            animate={{ width: '100%' }}
-                            transition={{ duration: 8.5, ease: [0.22, 1, 0.36, 1] }}
+                            className="h-2 w-1/2 rounded-full bg-gradient-to-r from-emerald-400 via-lime-300 to-emerald-600 shadow-[0_0_18px_rgba(16,185,129,0.45)]"
+                            initial={{ x: '-70%' }}
+                            animate={{ x: ['-70%', '18%', '44%', '88%'] }}
+                            transition={{ duration: 5.2, repeat: Infinity, ease: [0.45, 0, 0.2, 1] }}
+                          />
+                          <motion.div
+                            aria-hidden="true"
+                            className="absolute inset-y-1 w-16 rounded-full bg-white/45 blur-sm"
+                            initial={{ x: '-100%' }}
+                            animate={{ x: ['-100%', '520%'] }}
+                            transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
                           />
                         </div>
+                        <p className="mt-3 text-[11px] font-bold text-emerald-700/70 dark:text-emerald-200/55">
+                          Preparing everything before the first chart opens...
+                        </p>
                       </div>
                     </motion.div>
                   ) : (
                     <motion.div
                       key="service-mode-chart"
-                      className="relative z-10 flex min-h-0 flex-1 flex-col bg-white dark:bg-[#0c0f0d]"
+                      className="service-mode-chart-shell relative z-10 flex min-h-0 flex-1 flex-col bg-white dark:bg-[#0c0f0d]"
                       initial={{ opacity: 0, y: 24 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 18 }}
@@ -2744,18 +2961,102 @@ const openLyricsModal = (ss: SetlistSong) => {
                         animate={{ y: 0, opacity: 1 }}
                         exit={{ y: -12, opacity: 0 }}
                         transition={{ duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
-                        className="relative z-10 flex shrink-0 items-center gap-2 border-b border-black/[0.06] bg-white/95 px-4 pb-3 pt-3 shadow-sm backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#0c0f0d]/95"
+                        className="relative z-[80] flex shrink-0 items-center gap-2 border-b border-black/[0.06] bg-white/95 px-4 pb-3 pt-3 shadow-sm backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#0c0f0d]/95"
                         style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)' }}
                       >
                         <button onClick={closeServiceMode} className="rounded-full p-2 text-gray-500 hover:bg-black/[0.05] dark:text-white/55 dark:hover:bg-white/[0.08]">
                           <X className="h-5 w-5" />
                         </button>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700 dark:text-emerald-300">{serviceModeLabel}</p>
-                          <p className="truncate text-sm font-bold text-gray-900 dark:text-white">
-                            {(serviceModeIndex ?? 0) + 1} of {serviceModeSongs.length} · {serviceModeSong.songs.title}
-                          </p>
+                        <div className="relative min-w-0 flex-1">
+                          <button
+                            type="button"
+                            onClick={() => setServiceSongPickerOpen(value => !value)}
+                            aria-expanded={serviceSongPickerOpen}
+                            className="group flex w-full min-w-0 items-center gap-2 rounded-2xl px-2 py-1 text-left transition hover:bg-emerald-50/70 active:scale-[0.99] dark:hover:bg-emerald-500/10"
+                          >
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700 dark:text-emerald-300">{serviceModeLabel}</span>
+                              <span className="block truncate text-sm font-bold text-gray-900 dark:text-white">
+                                {serviceModeSong.songs.title}
+                              </span>
+                            </span>
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm transition group-hover:border-emerald-300 group-hover:bg-emerald-100 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
+                              <motion.span
+                                animate={{ rotate: serviceSongPickerOpen ? 180 : 0 }}
+                                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                              >
+                                <ChevronDown className="h-3.5 w-3.5" />
+                              </motion.span>
+                            </span>
+                          </button>
+
+                          <AnimatePresence initial={false}>
+                            {serviceSongPickerOpen && (
+                              <motion.div
+                                className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-[90] overflow-hidden rounded-3xl border border-black/[0.06] bg-white/95 p-2 shadow-2xl shadow-black/10 backdrop-blur-2xl dark:border-white/[0.08] dark:bg-[#141815]/95"
+                                initial={{ opacity: 0, y: -8, scale: 0.98, filter: 'blur(8px)' }}
+                                animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+                                exit={{ opacity: 0, y: -8, scale: 0.98, filter: 'blur(8px)' }}
+                                transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+                              >
+                                <div className="space-y-1">
+                                  {serviceModeSongs.map((song, index) => {
+                                    const selected = index === serviceModeIndex;
+                                    return (
+                                      <button
+                                        key={song.song_id}
+                                        type="button"
+                                        onClick={() => selectServiceSong(index)}
+                                        className={`flex w-full items-center gap-2.5 rounded-2xl px-2.5 py-1.5 text-left transition active:scale-[0.99] ${
+                                          selected
+                                            ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20'
+                                            : 'text-gray-800 hover:bg-emerald-50 dark:text-white/80 dark:hover:bg-white/[0.06]'
+                                        }`}
+                                      >
+                                        <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-xl ${
+                                          selected
+                                            ? 'bg-white/20 text-white'
+                                            : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
+                                        }`}>
+                                          {selected ? <Check className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
+                                        </span>
+                                        <span className="min-w-0 flex-1">
+                                          <span className="block truncate text-[13px] font-black leading-tight">
+                                            {index + 1}. {song.songs.title}
+                                          </span>
+                                          <span className={`block truncate text-[10px] font-semibold leading-tight ${selected ? 'text-white/70' : 'text-gray-500 dark:text-white/40'}`}>
+                                            {song.performed_key || song.songs.song_key ? `Key ${song.performed_key || song.songs.song_key}` : 'Chord chart'}
+                                          </span>
+                                        </span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
                         </div>
+                        <button
+                          onClick={() => setServiceChartControlsVisible(value => !value)}
+                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 backdrop-blur-md transition active:scale-95 ${
+                            serviceChartControlsVisible
+                              ? 'border-emerald-500 bg-emerald-600 text-white shadow-lg shadow-emerald-600/25'
+                              : 'border-black/[0.06] bg-white/90 text-gray-600 shadow-sm hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/70 dark:hover:border-emerald-500/30 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300'
+                          }`}
+                          aria-label={serviceChartControlsVisible ? 'Hide chart controls' : 'Show chart controls'}
+                          aria-pressed={serviceChartControlsVisible}
+                          title={serviceChartControlsVisible ? 'Hide chart controls' : 'Show chart controls'}
+                          >
+                            <motion.span
+                              animate={{
+                                rotate: serviceChartControlsVisible ? 90 : 0,
+                                scale: serviceChartControlsVisible ? 1.08 : 1,
+                              }}
+                              transition={{ type: 'spring', stiffness: 430, damping: 24 }}
+                            >
+                              <Settings2 className="h-4.5 w-4.5" />
+                            </motion.span>
+                          </button>
                         <button
                           onClick={toggleTheme}
                           className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.06] bg-white/80 text-gray-600 shadow-sm backdrop-blur-md transition hover:bg-white active:scale-95 dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/70 dark:hover:bg-white/[0.1]"
@@ -2771,81 +3072,59 @@ const openLyricsModal = (ss: SetlistSong) => {
                         animate={{ y: 0, opacity: 1 }}
                         exit={{ y: 24, opacity: 0 }}
                         transition={{ duration: 0.62, delay: 0.04, ease: [0.22, 1, 0.36, 1] }}
-                        className="relative z-10 min-h-0 flex-1 overflow-hidden bg-white dark:bg-[#0c0f0d]"
+                        className="service-mode-chart-frame relative z-10 min-h-0 flex-1 overflow-visible bg-white dark:bg-[#0c0f0d]"
                       >
-                        {!serviceChartEditing && (
-                          <>
-                            <button
-                              onClick={goToPreviousServiceSong}
-                              disabled={isFirstServiceSong}
-                              className="absolute left-4 top-1/2 z-10 hidden h-14 w-14 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-gray-700 shadow-xl ring-1 ring-black/10 backdrop-blur-xl transition hover:scale-105 hover:bg-white disabled:pointer-events-none disabled:opacity-20 dark:bg-black/45 dark:text-white/75 dark:ring-white/10 dark:hover:bg-black/60 lg:flex"
-                              aria-label="Previous song"
-                            >
-                              <ChevronLeft className="h-7 w-7" />
-                            </button>
-                            <button
-                              onClick={goToNextServiceSong}
-                              disabled={isLastServiceSong}
-                              className="absolute right-4 top-1/2 z-10 hidden h-14 w-14 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-gray-700 shadow-xl ring-1 ring-black/10 backdrop-blur-xl transition hover:scale-105 hover:bg-white disabled:pointer-events-none disabled:opacity-20 dark:bg-black/45 dark:text-white/75 dark:ring-white/10 dark:hover:bg-black/60 lg:flex"
-                              aria-label="Next song"
-                            >
-                              <ChevronRight className="h-7 w-7" />
-                            </button>
-                          </>
-                        )}
-                        <SongChartViewer
-                          songId={serviceModeSong.song_id}
-                          title={serviceModeSong.songs.title}
-                          artist={serviceModeSong.songs.artist}
-                          songKey={serviceModeSong.performed_key || serviceModeSong.songs.song_key}
-                          chordproText={serviceModeSong.songs.chordpro_text}
-                          editable={canManageSetlist || canEditSetlist}
-                          fullBleed
-                          saving={chartSaving}
-                          hideTitleHeader
-                          onEditingChange={setServiceChartEditing}
-                          onSave={(text) => handleSaveChart(serviceModeSong.song_id, text)}
-                        />
+                        <div ref={serviceSongStageRef} className="service-mode-song-stage">
+                          <motion.div
+                            className="service-mode-song-track"
+                            style={{ x: serviceTrackX }}
+                            drag={!serviceChartEditing && !serviceModeEntering && serviceModeSongs.length > 1 ? 'x' : false}
+                            dragConstraints={{
+                              left: isLastServiceSong ? 0 : -serviceSwipeWidth,
+                              right: isFirstServiceSong ? 0 : serviceSwipeWidth,
+                            }}
+                            dragDirectionLock
+                            dragElastic={0.08}
+                            dragMomentum={false}
+                            onDragStart={handleServiceDragStart}
+                            onDragEnd={handleServiceDragEnd}
+                          >
+                            {serviceSongPanels.map(({ offset, index, song }) => (
+                              <div
+                                key={`${song.song_id}-${index}`}
+                                className={`service-mode-song-panel ${offset === 0 ? '' : 'pointer-events-none'}`}
+                                style={{ transform: `translate3d(${offset * 100}%, 0, 0)` }}
+                              >
+                                <SongChartViewer
+                                  songId={song.song_id}
+                                  title={song.songs.title}
+                                  artist={song.songs.artist}
+                                  songKey={song.performed_key || song.songs.song_key}
+                                  chordproText={song.songs.chordpro_text}
+                                  editable={offset === 0 && (canManageSetlist || canEditSetlist)}
+                                  fullBleed
+                                  saving={offset === 0 ? chartSaving : false}
+                                  hideTitleHeader
+                                  controlsVisible={offset === 0 ? serviceChartControlsVisible : false}
+                                  onEditingChange={offset === 0 ? setServiceChartEditing : undefined}
+                                  onSave={offset === 0 ? (text) => handleSaveChart(song.song_id, text) : undefined}
+                                  footerNavigation={offset === 0 ? {
+                                    currentLabel: `${index + 1} of ${serviceModeSongs.length}`,
+                                    canGoPrevious: index > 0,
+                                    canGoNext: index < serviceModeSongs.length - 1,
+                                    onPrevious: goToPreviousServiceSong,
+                                    onNext: goToNextServiceSong,
+                                  } : undefined}
+                                />
+                              </div>
+                            ))}
+                          </motion.div>
+                        </div>
                       </motion.div>
                     </motion.div>
                   )}
                 </AnimatePresence>
               </motion.div>,
-          document.body
-        )}
-
-        {typeof document !== 'undefined' && serviceModeSong?.songs && !serviceModeEntering && !serviceChartEditing && createPortal(
-          <div
-            className="service-bottom-controls pointer-events-none fixed inset-x-0 bottom-0 px-7 py-2.5"
-            style={{
-              bottom: '4px',
-              zIndex: 2147483647,
-              isolation: 'isolate',
-              transform: 'translateZ(0)',
-            }}
-          >
-            <div className="relative z-[1] mx-auto grid max-w-[22.5rem] grid-cols-[1fr_56px_1fr] items-center gap-2">
-              <button
-                onClick={goToPreviousServiceSong}
-                disabled={isFirstServiceSong}
-                className="pointer-events-auto inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-black/[0.07] bg-gray-100 px-4 text-sm font-black text-gray-700 shadow-sm transition active:scale-[0.97] disabled:opacity-35 disabled:active:scale-100 dark:border-white/[0.08] dark:bg-white/[0.08] dark:text-white/70"
-              >
-                <ChevronLeft className="h-4 w-4" />
-                Prev
-              </button>
-              <span className="inline-flex h-11 items-center justify-center rounded-full bg-gray-100 px-2 text-[11px] font-black text-gray-500 dark:bg-white/[0.08] dark:text-white/45">
-                {(serviceModeIndex ?? 0) + 1}/{serviceModeSongs.length}
-              </span>
-              <button
-                onClick={goToNextServiceSong}
-                disabled={isLastServiceSong}
-                className="pointer-events-auto inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-black text-white shadow-lg shadow-emerald-600/25 transition active:scale-[0.97] disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none disabled:active:scale-100 dark:disabled:bg-white/[0.07] dark:disabled:text-white/30"
-              >
-                Next
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-          </div>,
           document.body
         )}
 

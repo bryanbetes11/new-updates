@@ -151,6 +151,7 @@ export function EventDetail() {
   const [showSwapModal, setShowSwapModal] = useState(false);
   const serviceSwipeStart = useRef<{ x: number; y: number } | null>(null);
   const serviceModeEnterTimer = useRef<number | null>(null);
+  const serviceModeClosing = useRef(false);
 
   const resetEventDetailScroll = useCallback(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
@@ -210,6 +211,7 @@ export function EventDetail() {
 
   useEffect(() => {
     if (!id || loading || serviceModeIndex !== null) return;
+    if (serviceModeClosing.current) return;
 
     const availableSongs = (setlistSongs.length > 0 ? setlistSongs : linkedSetlistSongs)
       .filter((song): song is SetlistSong => !!song && typeof song === 'object');
@@ -232,6 +234,7 @@ export function EventDetail() {
 
   useEffect(() => {
     if (!id || serviceModeIndex === null) return;
+    if (serviceModeClosing.current) return;
 
     saveActiveServiceMode(id, serviceModeIndex);
     const params = new URLSearchParams(location.search);
@@ -242,6 +245,11 @@ export function EventDetail() {
     const currentLocation = `${location.pathname}${location.search}`;
     if (nextLocation !== currentLocation) navigate(nextLocation, { replace: true });
   }, [event?.event_type, id, location.pathname, location.search, navigate, serviceModeIndex]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (!params.has('mode')) serviceModeClosing.current = false;
+  }, [location.search]);
 
   useEffect(() => {
     if (setlist?.status !== 'approved') {
@@ -1184,6 +1192,7 @@ const openLyricsModal = (ss: SetlistSong) => {
     }, 8500);
   };
   const closeServiceMode = () => {
+    serviceModeClosing.current = true;
     if (id) clearActiveServiceMode(id);
     if (serviceModeEnterTimer.current) {
       window.clearTimeout(serviceModeEnterTimer.current);

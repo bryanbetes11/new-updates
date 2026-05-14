@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { format, parseISO, differenceInDays, startOfDay, subWeeks, previousSunday, addDays, subDays } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -18,6 +18,7 @@ import { Avatar } from '../components/Avatar';
 import { dispatchBadgeCountsRefresh } from '../lib/realtimeSignals';
 import { SongChartViewer } from '../components/SongChartViewer';
 import { withSaveTimeout } from '../lib/saveTimeout';
+import { clearActiveServiceMode, getActiveServiceMode, saveActiveServiceMode } from '../lib/serviceModeResume';
 
 import type { Event, EventAssignment, Setlist, SetlistSong, Song, ServiceFormat, SetlistCheckReport } from '../types';
 import { inferServiceFormat, SERVICE_FORMAT_LABELS } from '../lib/setlistCheckerEngine';
@@ -55,6 +56,7 @@ const blurUp = (delay = 0) => ({
 export function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const { user, roles, userRoles, isLeader, isProductionDirector } = useAuth();
   const { toast } = useToast();
@@ -205,6 +207,41 @@ export function EventDetail() {
       setServiceModeEntering(false);
     }
   }, [serviceModeIndex]);
+
+  useEffect(() => {
+    if (!id || loading || serviceModeIndex !== null) return;
+
+    const availableSongs = (setlistSongs.length > 0 ? setlistSongs : linkedSetlistSongs)
+      .filter((song): song is SetlistSong => !!song && typeof song === 'object');
+    if (availableSongs.length === 0) return;
+    if (event?.event_type !== 'Rehearsals' && setlist?.status !== 'approved') return;
+
+    const params = new URLSearchParams(location.search);
+    const modeParam = params.get('mode');
+    const shouldRestoreFromUrl = modeParam === 'service' || modeParam === 'rehearsal' || modeParam === 'restore';
+    const savedMode = getActiveServiceMode();
+    const shouldRestoreFromStorage = savedMode?.eventId === id;
+    if (!shouldRestoreFromUrl && !shouldRestoreFromStorage) return;
+
+    const requestedIndex = Number(params.get('song') ?? savedMode?.songIndex ?? 0);
+    const restoredIndex = Math.min(Math.max(Number.isFinite(requestedIndex) ? requestedIndex : 0, 0), availableSongs.length - 1);
+    setServiceChartEditing(false);
+    setServiceModeEntering(false);
+    setServiceModeIndex(restoredIndex);
+  }, [event?.event_type, id, linkedSetlistSongs, loading, location.search, serviceModeIndex, setlist?.status, setlistSongs]);
+
+  useEffect(() => {
+    if (!id || serviceModeIndex === null) return;
+
+    saveActiveServiceMode(id, serviceModeIndex);
+    const params = new URLSearchParams(location.search);
+    params.set('mode', event?.event_type === 'Rehearsals' ? 'rehearsal' : 'service');
+    params.set('song', String(serviceModeIndex));
+    const nextSearch = params.toString();
+    const nextLocation = `${location.pathname}?${nextSearch}`;
+    const currentLocation = `${location.pathname}${location.search}`;
+    if (nextLocation !== currentLocation) navigate(nextLocation, { replace: true });
+  }, [event?.event_type, id, location.pathname, location.search, navigate, serviceModeIndex]);
 
   useEffect(() => {
     if (setlist?.status !== 'approved') {
@@ -1104,6 +1141,8 @@ const openLyricsModal = (ss: SetlistSong) => {
   const showSetlistEditControls = !isApprovedSetlist || setlistEditMode;
   const showLinkedSetlistReference = !setlist && event.event_type === 'Rehearsals' && !!event.linked_event_id && !!linkedSetlist;
   const linkedSetlistStatus = linkedSetlist?.status || 'draft';
+  const canShowPrimaryModeButton = event.event_type === 'Rehearsals' || isApprovedSetlist;
+  const canShowLinkedRehearsalModeButton = event.event_type === 'Rehearsals';
   let linkedServiceDateLabel = '';
   if (linkedServiceEvent?.event_date) {
     try {
@@ -1131,16 +1170,34 @@ const openLyricsModal = (ss: SetlistSong) => {
   const isLastServiceSong = (serviceModeIndex ?? 0) === serviceModeSongs.length - 1;
   const openServiceMode = (index = 0) => {
     if (serviceModeSongs.length === 0) return;
+    if (event.event_type !== 'Rehearsals' && setlist?.status !== 'approved') return;
+    const nextIndex = Math.min(Math.max(index, 0), serviceModeSongs.length - 1);
     if (serviceModeEnterTimer.current) {
       window.clearTimeout(serviceModeEnterTimer.current);
     }
     setServiceChartEditing(false);
     setServiceModeEntering(true);
-    setServiceModeIndex(Math.min(Math.max(index, 0), serviceModeSongs.length - 1));
+    setServiceModeIndex(nextIndex);
     serviceModeEnterTimer.current = window.setTimeout(() => {
       setServiceModeEntering(false);
       serviceModeEnterTimer.current = null;
     }, 8500);
+  };
+  const closeServiceMode = () => {
+    if (id) clearActiveServiceMode(id);
+    if (serviceModeEnterTimer.current) {
+      window.clearTimeout(serviceModeEnterTimer.current);
+      serviceModeEnterTimer.current = null;
+    }
+    setServiceChartEditing(false);
+    setServiceModeEntering(false);
+    setServiceModeIndex(null);
+
+    const params = new URLSearchParams(location.search);
+    params.delete('mode');
+    params.delete('song');
+    const nextSearch = params.toString();
+    navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ''}`, { replace: true });
   };
   const goToPreviousServiceSong = () => {
     setServiceChartEditing(false);
@@ -1653,7 +1710,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                   </p>
                 </div>
                 <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto">
-                  {linkedReferenceSongs.length > 0 && (
+                  {canShowLinkedRehearsalModeButton && linkedReferenceSongs.length > 0 && (
                     <button
                       onClick={() => openServiceMode(0)}
                       className="group relative inline-flex h-11 min-w-0 flex-1 items-center justify-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-700 px-4 text-sm font-black text-white shadow-xl shadow-emerald-600/25 transition hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-emerald-600/30 active:scale-[0.98] sm:flex-none"
@@ -1822,7 +1879,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    {setlistSongs.length > 0 && (
+                    {canShowPrimaryModeButton && setlistSongs.length > 0 && (
                       <button
                         onClick={() => openServiceMode(0)}
                         className="relative inline-flex flex-1 items-center justify-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-700 px-4 py-3 text-sm font-black text-white shadow-xl shadow-emerald-600/25 transition active:scale-[0.98]"
@@ -1864,7 +1921,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                     <span className={statusColors[setlist.status] || 'badge-blue'}>{statusLabels[setlist.status] || setlist.status}</span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    {setlistSongs.length > 0 && (
+                    {canShowPrimaryModeButton && setlistSongs.length > 0 && (
                       <button
                         onClick={() => openServiceMode(0)}
                         className="group relative inline-flex items-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-700 px-5 py-3 text-sm font-black text-white shadow-xl shadow-emerald-600/25 transition hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-emerald-600/30"
@@ -2677,7 +2734,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                         className="relative z-10 flex shrink-0 items-center gap-2 border-b border-black/[0.06] bg-white/95 px-4 pb-3 pt-3 shadow-sm backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#0c0f0d]/95"
                         style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)' }}
                       >
-                        <button onClick={() => setServiceModeIndex(null)} className="rounded-full p-2 text-gray-500 hover:bg-black/[0.05] dark:text-white/55 dark:hover:bg-white/[0.08]">
+                        <button onClick={closeServiceMode} className="rounded-full p-2 text-gray-500 hover:bg-black/[0.05] dark:text-white/55 dark:hover:bg-white/[0.08]">
                           <X className="h-5 w-5" />
                         </button>
                         <div className="min-w-0 flex-1">
@@ -2736,34 +2793,32 @@ const openLyricsModal = (ss: SetlistSong) => {
                           onEditingChange={setServiceChartEditing}
                           onSave={(text) => handleSaveChart(serviceModeSong.song_id, text)}
                         />
-                      </motion.div>
-                      {!serviceChartEditing && (
-                        <div
-                          className="relative z-30 shrink-0 border-t border-black/[0.06] bg-white px-4 py-3 shadow-[0_-20px_50px_-36px_rgba(15,23,42,0.55)] dark:border-white/[0.08] dark:bg-[#0c0f0d]"
-                        >
-                          <div className="mx-auto grid max-w-md grid-cols-[1fr_56px_1fr] items-center gap-2">
-                            <button
-                              onClick={goToPreviousServiceSong}
-                              disabled={isFirstServiceSong}
-                              className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-black/[0.07] bg-gray-100 px-4 text-sm font-black text-gray-700 shadow-sm transition active:scale-[0.97] disabled:opacity-35 disabled:active:scale-100 dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/70"
-                            >
-                              <ChevronLeft className="h-4 w-4" />
-                              Prev
-                            </button>
-                            <span className="inline-flex h-11 items-center justify-center rounded-full bg-gray-100 px-2 text-[11px] font-black text-gray-500 dark:bg-white/[0.07] dark:text-white/45">
-                              {(serviceModeIndex ?? 0) + 1}/{serviceModeSongs.length}
-                            </span>
-                            <button
-                              onClick={goToNextServiceSong}
-                              disabled={isLastServiceSong}
-                              className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-black text-white shadow-lg shadow-emerald-600/25 transition active:scale-[0.97] disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none disabled:active:scale-100 dark:disabled:bg-white/[0.07] dark:disabled:text-white/30"
-                            >
-                              Next
-                              <ChevronRight className="h-4 w-4" />
-                            </button>
+                        {!serviceChartEditing && (
+                          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-white via-white/95 to-transparent px-4 pb-3 pt-8 dark:from-[#0c0f0d] dark:via-[#0c0f0d]/95">
+                            <div className="mx-auto grid max-w-md grid-cols-[1fr_56px_1fr] items-center gap-2">
+                              <button
+                                onClick={goToPreviousServiceSong}
+                                disabled={isFirstServiceSong}
+                                className="pointer-events-auto inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-black/[0.07] bg-gray-100 px-4 text-sm font-black text-gray-700 shadow-sm transition active:scale-[0.97] disabled:opacity-35 disabled:active:scale-100 dark:border-white/[0.08] dark:bg-white/[0.08] dark:text-white/70"
+                              >
+                                <ChevronLeft className="h-4 w-4" />
+                                Prev
+                              </button>
+                              <span className="inline-flex h-11 items-center justify-center rounded-full bg-gray-100 px-2 text-[11px] font-black text-gray-500 dark:bg-white/[0.08] dark:text-white/45">
+                                {(serviceModeIndex ?? 0) + 1}/{serviceModeSongs.length}
+                              </span>
+                              <button
+                                onClick={goToNextServiceSong}
+                                disabled={isLastServiceSong}
+                                className="pointer-events-auto inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-black text-white shadow-lg shadow-emerald-600/25 transition active:scale-[0.97] disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none disabled:active:scale-100 dark:disabled:bg-white/[0.07] dark:disabled:text-white/30"
+                              >
+                                Next
+                                <ChevronRight className="h-4 w-4" />
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
+                      </motion.div>
                     </motion.div>
                   )}
                 </AnimatePresence>

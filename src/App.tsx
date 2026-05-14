@@ -39,6 +39,7 @@ import {
   hasPendingAppUpdate,
   shouldRequireAppUpdate,
 } from './lib/serviceWorkerUpdate';
+import { getActiveServiceMode, serviceModeResumePath } from './lib/serviceModeResume';
 
 function PasswordRecoveryRedirect() {
   const location = useLocation();
@@ -49,6 +50,45 @@ function PasswordRecoveryRedirect() {
     if (!isPasswordRecoveryUrl(location.search, location.hash)) return;
     navigate(recoveryRedirectPath(location.search, location.hash), { replace: true });
   }, [location.hash, location.pathname, location.search, navigate]);
+
+  return null;
+}
+
+function ServiceModeResumeRedirect() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const restoreServiceMode = () => {
+      const activeMode = getActiveServiceMode();
+      if (!activeMode) return;
+
+      const target = serviceModeResumePath(activeMode);
+      const current = `${location.pathname}${location.search}`;
+      if (current === target) return;
+      if (location.pathname === `/events/${activeMode.eventId}`) {
+        const params = new URLSearchParams(location.search);
+        const mode = params.get('mode');
+        if (mode === 'service' || mode === 'rehearsal' || mode === 'restore') return;
+      }
+
+      navigate(target, { replace: true });
+    };
+
+    restoreServiceMode();
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') restoreServiceMode();
+    };
+
+    window.addEventListener('pageshow', restoreServiceMode);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('pageshow', restoreServiceMode);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [location.pathname, location.search, navigate]);
 
   return null;
 }
@@ -75,6 +115,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <PasswordRecoveryRedirect />
+      <ServiceModeResumeRedirect />
       <ThemeProvider>
         <AuthProvider>
           <ToastProvider>

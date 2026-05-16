@@ -36,7 +36,7 @@ export function LeadershipWorkspace() {
 
   const tabs: TabConfig[] = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard, show: isLeader },
-    { id: 'setlists', label: 'Setlists', icon: ListMusic, show: isLeader },
+    { id: 'setlists', label: 'Approve Setlist', icon: ListMusic, show: isLeader },
     { id: 'leave', label: 'Leave', icon: CalendarCheck, show: !!canApproveLeave },
     { id: 'swaps', label: 'Swaps', icon: ArrowLeftRight, show: isLeader },
     { id: 'discipline', label: 'Conduct', icon: AlertTriangle, show: isLeader || !!canManageDiscipline },

@@ -46,6 +46,14 @@ interface ImportRow {
 }
 
 const RULE_DAYS = 90;
+const SONG_CHART_OPEN_STORAGE_PREFIX = 'servesync:songs:open-chart-id';
+
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
+    return error.message;
+  }
+  return fallback;
+};
 
 const sanitizeSongTitle = (title: string): string => {
   return title
@@ -129,7 +137,14 @@ function SectionLabel({ index, children, action }: { index: string; children: Re
   );
 }
 
-export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setlists' | 'songs' }) {
+type SetlistsTabView = 'setlists' | 'songs';
+
+interface SetlistsTabProps {
+  initialView?: SetlistsTabView;
+  fixedView?: SetlistsTabView;
+}
+
+export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTabProps) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [setlists, setSetlists] = useState<SetlistWithEvent[]>([]);
@@ -143,7 +158,9 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
   const [importProgress, setImportProgress] = useState({ songsDone: 0, eventsDone: 0, totalSongs: 0, totalEvents: 0 });
   const [songLeaderMap, setSongLeaderMap] = useState<Record<string, string>>({});
   const [songLeaderAvatarMap, setSongLeaderAvatarMap] = useState<Record<string, { avatarUrl: string | null; firstName: string; lastName: string }>>({});
-  const [showSongResults, setShowSongResults] = useState(initialView === 'songs');
+  const isSongsOnly = fixedView === 'songs';
+  const isSetlistsOnly = fixedView === 'setlists';
+  const [showSongResults, setShowSongResults] = useState((fixedView || initialView) === 'songs');
   const [selectedSetlists, setSelectedSetlists] = useState<Set<string>>(new Set());
   const [selectedSongs, setSelectedSongs] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
@@ -157,6 +174,7 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
   const [chartImporting, setChartImporting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const chartFileRef = useRef<HTMLInputElement>(null);
+  const openChartStorageKey = user?.id ? `${SONG_CHART_OPEN_STORAGE_PREFIX}:${user.id}` : '';
 
   const fetchData = async () => {
     const [setlistRes, songsRes, songLeadersRes] = await Promise.all([
@@ -219,6 +237,65 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  useEffect(() => {
+    if (!fixedView) return;
+    setShowSongResults(fixedView === 'songs');
+  }, [fixedView]);
+
+  useEffect(() => {
+    if (!openChartStorageKey || selectedChartSong) return;
+
+    try {
+      const rawStoredSong = localStorage.getItem(openChartStorageKey);
+      if (!rawStoredSong) return;
+
+      const parsed = JSON.parse(rawStoredSong) as Partial<SongUsage>;
+      if (typeof parsed.id !== 'string' || typeof parsed.title !== 'string') {
+        localStorage.removeItem(openChartStorageKey);
+        return;
+      }
+
+      setSelectedChartSong({
+        id: parsed.id,
+        title: parsed.title,
+        artist: parsed.artist || '',
+        song_key: parsed.song_key || '',
+        chordpro_text: parsed.chordpro_text ?? null,
+        last_used_date: parsed.last_used_date ?? null,
+        days_since: parsed.days_since ?? null,
+        is_safe: Boolean(parsed.is_safe),
+      });
+    } catch {
+      localStorage.removeItem(openChartStorageKey);
+    }
+  }, [openChartStorageKey, selectedChartSong]);
+
+  useEffect(() => {
+    if (!selectedChartSong) return;
+    const latestSong = songUsages.find(song => song.id === selectedChartSong.id);
+    if (latestSong && latestSong !== selectedChartSong) setSelectedChartSong(latestSong);
+  }, [selectedChartSong?.id, songUsages]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const openChartSong = (song: SongUsage) => {
+    setSelectedChartSong(song);
+    if (!openChartStorageKey) return;
+    try {
+      localStorage.setItem(openChartStorageKey, JSON.stringify(song));
+    } catch {
+      // Open chart persistence is a convenience only.
+    }
+  };
+
+  const closeChartSong = () => {
+    setSelectedChartSong(null);
+    if (!openChartStorageKey) return;
+    try {
+      localStorage.removeItem(openChartStorageKey);
+    } catch {
+      // Ignore storage failures.
+    }
+  };
 
   const loadXLSX = (): Promise<any> => {
     const w = window as any;
@@ -408,9 +485,9 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
 
       toast('success', `Imported ${chartFiles.length} charts (${createdCount} new, ${updatedCount} updated)`);
       await fetchData();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to import song charts:', error);
-      toast('error', error?.message || 'Failed to import song charts');
+      toast('error', getErrorMessage(error, 'Failed to import song charts'));
     } finally {
       setChartImporting(false);
       if (chartFileRef.current) chartFileRef.current.value = '';
@@ -421,25 +498,36 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
     if (!selectedChartSong) return;
     setChartSaving(true);
     try {
-      const { error } = await withSaveTimeout(
+      const { data, error } = await withSaveTimeout(
         supabase
           .from('songs')
           .update({ chordpro_text: text })
           .eq('id', selectedChartSong.id)
+          .select('id, chordpro_text')
+          .maybeSingle()
       );
 
-      if (error) {
+      if (error || !data) {
+        const message = error?.message || 'No song chart was updated';
         console.error('Failed to save chart:', error);
-        toast('error', error.message || 'Failed to save chart');
-        return;
+        throw new Error(message);
       }
 
       toast('success', 'Song chart saved');
-      setSelectedChartSong(prev => prev ? { ...prev, chordpro_text: text } : prev);
-      setSongUsages(prev => prev.map(song => song.id === selectedChartSong.id ? { ...song, chordpro_text: text } : song));
-    } catch (error: any) {
+      const updatedSong = { ...selectedChartSong, chordpro_text: data.chordpro_text };
+      setSelectedChartSong(updatedSong);
+      if (openChartStorageKey) {
+        try {
+          localStorage.setItem(openChartStorageKey, JSON.stringify(updatedSong));
+        } catch {
+          // Cached open-chart state is best-effort.
+        }
+      }
+      setSongUsages(prev => prev.map(song => song.id === selectedChartSong.id ? { ...song, chordpro_text: data.chordpro_text } : song));
+    } catch (error: unknown) {
       console.error('Failed to save chart:', error);
-      toast('error', error?.message || 'Failed to save chart');
+      toast('error', getErrorMessage(error, 'Failed to save chart'));
+      throw error;
     } finally {
       setChartSaving(false);
     }
@@ -525,7 +613,7 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
         setImportProgress({ songsDone, eventsDone, totalSongs, totalEvents });
       }
 
-      toast('success', `Imported ${totalEvents} setlists with ${totalSongs} songs`);
+      toast('success', `Imported ${totalEvents} sets with ${totalSongs} songs`);
       setShowImport(false);
       setImportData([]);
       fetchData();
@@ -567,9 +655,9 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
       }
       setSelectedSetlists(new Set());
       setShowDeleteConfirm(null);
-      toast('success', `Deleted ${ids.length} setlist${ids.length > 1 ? 's' : ''}`);
+      toast('success', `Deleted ${ids.length} set${ids.length > 1 ? 's' : ''}`);
       fetchData();
-    } catch { toast('error', 'Failed to delete setlists'); }
+    } catch { toast('error', 'Failed to delete sets'); }
     setDeleting(false);
   };
 
@@ -608,14 +696,6 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
   const notReadyCount = songUsages.filter(s => !s.is_safe && s.days_since !== null).length;
   const neverUsed = songUsages.filter(s => s.days_since === null).length;
 
-  const showSongFilter = (filter: typeof activeFilter) => {
-    const shouldClear = showSongResults && activeFilter === filter && filter !== 'all';
-    setActiveFilter(shouldClear ? 'all' : filter);
-    setSelectedSongs(new Set());
-    setSelectModeSongs(false);
-    setShowSongResults(!shouldClear);
-  };
-
   if (loading) {
     return (
       <div className="space-y-4 pt-1">
@@ -639,7 +719,9 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
   }
 
   /* ────────────────────────── Setlists View ────────────────────────── */
-  if (!showSongResults) {
+  const showSongsView = isSongsOnly || showSongResults;
+
+  if (!showSongsView) {
     return (
       <div className="space-y-5 pb-2">
 
@@ -657,50 +739,15 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
             </button>
           }
         >
-          <span className="flex items-center gap-1.5"><ListMusic className="h-3 w-3" /> Approved Setlists</span>
+          <span className="flex items-center gap-1.5"><ListMusic className="h-3 w-3" /> Approved Sets</span>
         </SectionLabel>
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={e => handleFileUpload(e.target.files)} />
-
-        {/* ── Stats strip ── */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-          className="grid grid-cols-2 sm:grid-cols-4 gap-2"
-        >
-          <StatCard
-            label="Songs"
-            value={setlists.reduce((acc, s) => acc + (s.setlist_songs?.length ?? 0), 0)}
-            active={showSongResults && activeFilter === 'all'}
-            onClick={() => showSongFilter('all')}
-          />
-          <StatCard
-            label="Never Used"
-            value={neverUsed}
-            active={activeFilter === 'never_used'}
-            onClick={() => showSongFilter('never_used')}
-          />
-          <StatCard
-            label="Safe"
-            value={safeCount}
-            color="green"
-            active={activeFilter === 'safe'}
-            onClick={() => showSongFilter('safe')}
-          />
-          <StatCard
-            label="Not Ready"
-            value={notReadyCount}
-            color={notReadyCount > 0 ? 'red' : 'default'}
-            active={activeFilter === 'not_ready'}
-            onClick={() => showSongFilter('not_ready')}
-          />
-        </motion.div>
 
         {setlists.length === 0 ? (
           <EmptyState
             icon={<Music className="h-8 w-8" />}
-            title="No approved setlists"
-            description="Approved setlists from events will appear here. You can also import past setlists from Excel."
+            title="No approved sets"
+            description="Approved sets from events will appear here. You can also import past sets from Excel."
             action={<button onClick={() => fileRef.current?.click()} className="btn-primary"><Upload className="h-4 w-4" /> Import Excel</button>}
           />
         ) : (
@@ -937,12 +984,12 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
         <Modal
           open={showDeleteConfirm !== null}
           onClose={() => { if (!deleting) setShowDeleteConfirm(null); }}
-          title="Delete Setlists"
+          title="Delete Sets"
           size="sm"
         >
           <div className="space-y-4">
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              Are you sure you want to delete {selectedSetlists.size} setlist{selectedSetlists.size > 1 ? 's' : ''} and their associated imported events? This cannot be undone.
+              Are you sure you want to delete {selectedSetlists.size} set{selectedSetlists.size > 1 ? 's' : ''} and their associated imported events? This cannot be undone.
             </p>
             <div className="flex justify-end gap-3">
               <button onClick={() => setShowDeleteConfirm(null)} disabled={deleting} className="btn-secondary">Cancel</button>
@@ -954,7 +1001,7 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
         </Modal>
 
         {/* Import modal */}
-        <Modal open={showImport} onClose={() => { if (!importing) { setShowImport(false); setImportData([]); } }} title="Import Setlists from Excel" size="lg">
+        <Modal open={showImport} onClose={() => { if (!importing) { setShowImport(false); setImportData([]); } }} title="Import Sets from Excel" size="lg">
           <div className="space-y-4">
             {importing ? (
               <div className="py-4 space-y-5">
@@ -1009,7 +1056,7 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
                     </tbody>
                   </table>
                 </div>
-                <p className="text-xs text-gray-400">Supports worship setlist format (Date, Service Type, Opening, Praise, Worship, Offering, Closing) or standard format (Date, Event, Song Title, Artist, Key). Song keys in brackets like [D] are auto-detected.</p>
+                <p className="text-xs text-gray-400">Supports worship set format (Date, Service Type, Opening, Praise, Worship, Offering, Closing) or standard format (Date, Event, Song Title, Artist, Key). Song keys in brackets like [D] are auto-detected.</p>
                 <div className="flex justify-end gap-3 pt-2">
                   <button onClick={() => { setShowImport(false); setImportData([]); }} className="btn-secondary">Cancel</button>
                   <button onClick={handleImport} className="btn-primary">Import {importData.length} Songs</button>
@@ -1040,20 +1087,22 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
               <FileMusic className="h-3.5 w-3.5" />
               {chartImporting ? 'Importing...' : 'Import .cho'}
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setShowSongResults(false);
-                setActiveFilter('all');
-                setSearch('');
-                setSelectedSongs(new Set());
-                setSelectModeSongs(false);
-              }}
-              className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-semibold text-white transition-all active:scale-[0.97]"
-              style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', boxShadow: '0 3px 10px rgba(22,163,74,0.3)' }}
-            >
-              Back to setlists
-            </button>
+            {!isSongsOnly && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSongResults(false);
+                  setActiveFilter('all');
+                  setSearch('');
+                  setSelectedSongs(new Set());
+                  setSelectModeSongs(false);
+                }}
+                className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-semibold text-white transition-all active:scale-[0.97]"
+                style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', boxShadow: '0 3px 10px rgba(22,163,74,0.3)' }}
+              >
+                Back to sets
+              </button>
+            )}
           </div>
         }
       >
@@ -1104,7 +1153,7 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
             type="button"
             onClick={() => {
               setActiveFilter('all');
-              setShowSongResults(false);
+              if (!isSongsOnly) setShowSongResults(false);
             }}
             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors ${
               activeFilter === 'safe' ? 'bg-emerald-100 dark:bg-emerald-500/[0.18] text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/25'
@@ -1239,7 +1288,7 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
                   {song.artist && <p className="text-[11px] text-gray-400 dark:text-white/30 truncate mt-0.5">{song.artist}</p>}
                   <button
                     type="button"
-                    onClick={() => setSelectedChartSong(song)}
+                    onClick={() => openChartSong(song)}
                     className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold transition-colors ${
                       song.chordpro_text
                         ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/80 hover:bg-emerald-100 dark:bg-emerald-500/[0.12] dark:text-emerald-300 dark:ring-emerald-500/20'
@@ -1294,7 +1343,7 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
       >
         <div className="space-y-4">
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            Are you sure you want to delete {selectedSongs.size} song{selectedSongs.size > 1 ? 's' : ''}? They will also be removed from all setlists. This cannot be undone.
+            Are you sure you want to delete {selectedSongs.size} song{selectedSongs.size > 1 ? 's' : ''}? They will also be removed from all sets. This cannot be undone.
           </p>
           <div className="flex justify-end gap-3">
             <button onClick={() => setShowDeleteConfirm(null)} disabled={deleting} className="btn-secondary">Cancel</button>
@@ -1307,7 +1356,7 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
 
       <Modal
         open={selectedChartSong !== null}
-        onClose={() => setSelectedChartSong(null)}
+        onClose={closeChartSong}
         title="Song Chart"
         size="lg"
         hideHeader
@@ -1321,7 +1370,7 @@ export function SetlistsTab({ initialView = 'setlists' }: { initialView?: 'setli
             chordproText={selectedChartSong.chordpro_text}
             editable
             saving={chartSaving}
-            onClose={() => setSelectedChartSong(null)}
+            onClose={closeChartSong}
             onSave={handleSaveChart}
           />
         )}

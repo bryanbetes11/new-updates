@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LogOut, ChevronLeft, ChevronRight, Music2 } from 'lucide-react';
+import { BookOpen, ListChecks, LogOut, ChevronLeft, ChevronRight, Music2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useUnreadCounts } from '../hooks/useUnreadCounts';
 import { NotificationBell } from './NotificationBell';
@@ -14,7 +14,7 @@ import {
   type MobileNavStyle,
 } from '../lib/mobileNavPreference';
 import {
-  HomeIcon, CalendarIcon, NewsIcon, MediaIcon, MoreIcon,
+  HomeIcon, CalendarIcon, NewsIcon, MoreIcon,
   LeaveIcon, ShieldNavIcon, MessageIcon,
 } from './NavIcons';
 
@@ -29,6 +29,9 @@ interface NavItem {
   exact?: boolean;
 }
 
+const SongsNavIcon: NavIcon = ({ className, style }) => <BookOpen className={className} style={style} />;
+const SetsNavIcon: NavIcon = ({ className, style }) => <ListChecks className={className} style={style} />;
+
 const mobileNavItems: NavItem[] = [
   { path: '/dashboard', label: 'Home', icon: HomeIcon, exact: true },
   { path: '/events', label: 'Events', icon: CalendarIcon, badgeKey: 'events', badgeColor: 'red' },
@@ -41,7 +44,8 @@ const sidebarMainItems: NavItem[] = [
   { path: '/dashboard', label: 'Home', icon: HomeIcon, exact: true },
   { path: '/events', label: 'Events', icon: CalendarIcon, badgeKey: 'events', badgeColor: 'red' },
   { path: '/announcements', label: 'News', icon: NewsIcon, badgeKey: 'announcements', badgeColor: 'blue' },
-  { path: '/library', label: 'Library', icon: MediaIcon },
+  { path: '/library', label: 'Library', icon: SongsNavIcon },
+  { path: '/sets', label: 'Sets', icon: SetsNavIcon },
   { path: '/messages', label: 'Chat', icon: MessageIcon, badgeKey: 'messages', badgeColor: 'red' },
 ];
 

@@ -55,6 +55,14 @@ const blurUp = (delay = 0) => ({
 
 const serviceSongPanelTransition = { type: 'spring' as const, stiffness: 380, damping: 36, mass: 0.88 };
 const serviceSwipeOffsets = [-1, 0, 1] as const;
+const EVENT_CHART_OPEN_STORAGE_PREFIX = 'servesync:event-chart:open-song-id';
+
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
+    return error.message;
+  }
+  return fallback;
+};
 
 export function EventDetail() {
   const { id } = useParams<{ id: string }>();
@@ -96,6 +104,7 @@ export function EventDetail() {
   const [songConfig, setSongConfig] = useState({ category: '', youtube_url: '', performed_key: '' });
   const [assignForm, setAssignForm] = useState({ user_id: '', role_id: '' });
   const [newSong, setNewSong] = useState({ title: '', artist: '', song_key: '', duration: '', youtube_url: '' });
+  const [newSongError, setNewSongError] = useState('');
   const [declineReason, setDeclineReason] = useState('');
   const [showDecline, setShowDecline] = useState<string | null>(null);
   const [showDeleteEvent, setShowDeleteEvent] = useState(false);
@@ -128,8 +137,10 @@ export function EventDetail() {
   const [serviceModeEntering, setServiceModeEntering] = useState(false);
   const [serviceChartControlsVisible, setServiceChartControlsVisible] = useState(true);
   const [serviceSongPickerOpen, setServiceSongPickerOpen] = useState(false);
+  const [serviceCloseConfirmOpen, setServiceCloseConfirmOpen] = useState(false);
   const [serviceSongStageWidth, setServiceSongStageWidth] = useState(0);
   const [chartSaving, setChartSaving] = useState(false);
+  const chartModalStorageKey = user?.id && id ? `${EVENT_CHART_OPEN_STORAGE_PREFIX}:${user.id}:${id}` : '';
   const [lyricsInput, setLyricsInput] = useState('');
   const [savingLyrics, setSavingLyrics] = useState(false);
   const [fetchingLyrics, setFetchingLyrics] = useState(false);
@@ -150,6 +161,8 @@ export function EventDetail() {
   const [setlistEditMode, setSetlistEditMode] = useState(false);
   const [reorderSongs, setReorderSongs] = useState<SetlistSong[]>([]);
   const [savingOrder, setSavingOrder] = useState(false);
+  const [addingSetlistSong, setAddingSetlistSong] = useState(false);
+  const [creatingSong, setCreatingSong] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [eventConversationId, setEventConversationId] = useState<string | null | undefined>(undefined);
   const [showCreateChatModal, setShowCreateChatModal] = useState(false);
@@ -276,6 +289,7 @@ export function EventDetail() {
       setServiceModeEntering(false);
       setServiceChartControlsVisible(true);
       setServiceSongPickerOpen(false);
+      setServiceCloseConfirmOpen(false);
     }
   }, [serviceModeIndex]);
 
@@ -434,6 +448,42 @@ export function EventDetail() {
   }, [id, isMissingSetlistSubmissionTableError]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  useEffect(() => {
+    if (!chartModalStorageKey || loading || chartModalSong) return;
+    const availableSongs = [...setlistSongs, ...linkedSetlistSongs];
+    if (availableSongs.length === 0) return;
+
+    try {
+      const storedSongId = localStorage.getItem(chartModalStorageKey);
+      if (!storedSongId) return;
+      const restoredSong = availableSongs.find(song => song.song_id === storedSongId);
+      if (restoredSong) setChartModalSong(restoredSong);
+      else localStorage.removeItem(chartModalStorageKey);
+    } catch {
+      // Restoring an open chart is best-effort.
+    }
+  }, [chartModalSong, chartModalStorageKey, linkedSetlistSongs, loading, setlistSongs]);
+
+  const openChartModal = (song: SetlistSong) => {
+    setChartModalSong(song);
+    if (!chartModalStorageKey) return;
+    try {
+      localStorage.setItem(chartModalStorageKey, song.song_id);
+    } catch {
+      // Ignore storage failures; the modal still opens normally.
+    }
+  };
+
+  const closeChartModal = () => {
+    setChartModalSong(null);
+    if (!chartModalStorageKey) return;
+    try {
+      localStorage.removeItem(chartModalStorageKey);
+    } catch {
+      // Ignore storage failures.
+    }
+  };
 
   const fetchAttendance = useCallback(async () => {
     if (!id || !user) return;
@@ -682,33 +732,73 @@ export function EventDetail() {
   const handleDragEnd = () => setDragIndex(null);
 
   const markSetlistNeedsReapproval = async () => {
-    if (!setlist || setlist.status !== 'approved' || !event) return;
-    await supabase.from('setlists').update({ status: 'pending_review' }).eq('id', setlist.id);
+    if (!setlist || setlist.status !== 'approved' || !event) return true;
+
+    const { data, error } = await withSaveTimeout(
+      supabase
+        .from('setlists')
+        .update({ status: 'pending_review' })
+        .eq('id', setlist.id)
+        .select('id, status')
+        .maybeSingle()
+    );
+
+    if (error || !data) {
+      toast('error', error?.message || 'Setlist was updated, but could not be marked for re-approval');
+      return false;
+    }
+
     setSetlist(prev => prev ? { ...prev, status: 'pending_review' } : prev);
     if (setlist.approved_by) {
-      await supabase.from('notifications').insert({
+      const { error: notificationError } = await supabase.from('notifications').insert({
         user_id: setlist.approved_by,
         type: 'setlist_changed',
         title: 'Setlist Updated — Re-approval Needed',
         body: `The setlist for "${event.title}" was updated after approval and needs to be reviewed again.`,
         data: { event_id: event.id, setlist_id: setlist.id },
       });
+      if (notificationError) {
+        console.error('Failed to notify approver about setlist update:', notificationError);
+      }
     }
     toast('info', 'Setlist updated — re-approval required');
+    return true;
   };
 
   const handleAddSongToSetlist = async (songId: string, category: string, youtubeUrl: string, performedKey: string) => {
-    if (!setlist) return;
-    const { error } = await supabase.from('setlist_songs').insert({
-      setlist_id: setlist.id, song_id: songId, position: setlistSongs.length + 1, song_category: category, youtube_url: youtubeUrl, performed_key: performedKey,
-    });
-    if (error) { toast('error', error.message); return; }
+    if (!setlist) return null;
+    const nextPosition = setlistSongs.length + 1;
+    const { data, error } = await withSaveTimeout(
+      supabase
+        .from('setlist_songs')
+        .insert({
+          setlist_id: setlist.id,
+          song_id: songId,
+          position: nextPosition,
+          song_category: category,
+          youtube_url: youtubeUrl.trim(),
+          performed_key: performedKey,
+        })
+        .select('*, songs(*)')
+        .single()
+    );
+
+    if (error || !data) {
+      toast('error', error?.message || 'Failed to add song to setlist');
+      return null;
+    }
+
+    const insertedSong = data as SetlistSong;
+    setSetlistSongs(prev => [...prev, insertedSong].sort((a, b) => a.position - b.position));
+
     if (setlist.status === 'approved') {
       await markSetlistNeedsReapproval();
     } else {
       toast('success', 'Song added');
     }
+
     fetchAll();
+    return insertedSong;
   };
 
   const openSongConfig = (songId: string) => {
@@ -719,12 +809,21 @@ export function EventDetail() {
     setShowSetlist(false);
   };
 
-  const confirmAddSong = async () => {
-    if (!selectedSongForConfig) return;
-    await handleAddSongToSetlist(selectedSongForConfig, songConfig.category, songConfig.youtube_url, songConfig.performed_key);
+  const resetSongConfigModal = () => {
     setShowSongConfig(false);
     setSelectedSongForConfig(null);
     setSongConfig({ category: '', youtube_url: '', performed_key: '' });
+  };
+
+  const confirmAddSong = async () => {
+    if (!selectedSongForConfig || addingSetlistSong) return;
+    setAddingSetlistSong(true);
+    try {
+      const insertedSong = await handleAddSongToSetlist(selectedSongForConfig, songConfig.category, songConfig.youtube_url, songConfig.performed_key);
+      if (insertedSong) resetSongConfigModal();
+    } finally {
+      setAddingSetlistSong(false);
+    }
   };
 
   const handleRemoveSongFromSetlist = async (slSongId: string) => {
@@ -763,14 +862,63 @@ export function EventDetail() {
   };
 
   const handleCreateSong = async () => {
-    if (!user) return;
-    const { data, error } = await supabase.from('songs').insert({ ...newSong, created_by: user.id }).select().maybeSingle();
-    if (error || !data) { toast('error', 'Failed to create song'); return; }
-    toast('success', 'Song created');
-    setNewSong({ title: '', artist: '', song_key: '', duration: '', youtube_url: '' });
-    setShowAddSong(false);
-    fetchAll();
-    if (setlist) openSongConfig(data.id);
+    if (!user || creatingSong) return;
+    const title = newSong.title.trim();
+    if (!title) {
+      setNewSongError('Song title is required.');
+      toast('error', 'Song title is required');
+      return;
+    }
+
+    setCreatingSong(true);
+    setNewSongError('');
+    try {
+      const { data, error } = await withSaveTimeout(
+        supabase
+          .from('songs')
+          .insert({
+            title,
+            artist: newSong.artist.trim(),
+            song_key: newSong.song_key.trim(),
+            duration: newSong.duration.trim(),
+            youtube_url: newSong.youtube_url.trim(),
+            created_by: user.id,
+          })
+          .select('id, title, artist, song_key, duration, key_notes, youtube_url, lyrics, chordpro_text, created_by, created_at')
+          .single()
+      );
+
+      if (error || !data) {
+        const message = error?.message || 'Failed to create song';
+        setNewSongError(message);
+        toast('error', message);
+        return;
+      }
+
+      const createdSong = data as Song;
+      setSongs(prev => [createdSong, ...prev.filter(song => song.id !== createdSong.id)]);
+      setNewSong({ title: '', artist: '', song_key: '', duration: '', youtube_url: '' });
+      setShowAddSong(false);
+      toast('success', 'Song created');
+
+      if (setlist) {
+        setSelectedSongForConfig(createdSong.id);
+        setSongConfig({
+          category: '',
+          youtube_url: createdSong.youtube_url || '',
+          performed_key: createdSong.song_key || '',
+        });
+        setShowSongConfig(true);
+      }
+
+      fetchAll();
+    } catch (error) {
+      const message = getErrorMessage(error, 'Failed to create song');
+      setNewSongError(message);
+      toast('error', message);
+    } finally {
+      setCreatingSong(false);
+    }
   };
 
   const handleSetlistAction = async (action: 'pending_review' | 'approved' | 'revision_requested' | 'rejected' | 'draft', notes?: string) => {
@@ -999,31 +1147,37 @@ const openLyricsModal = (ss: SetlistSong) => {
   const handleSaveChart = async (songId: string, text: string) => {
     setChartSaving(true);
     try {
-      const { error } = await withSaveTimeout(Promise.resolve(
-        supabase.from('songs').update({ chordpro_text: text }).eq('id', songId)
-      ));
+      const { data, error } = await withSaveTimeout(
+        supabase
+          .from('songs')
+          .update({ chordpro_text: text })
+          .eq('id', songId)
+          .select('id, chordpro_text')
+          .maybeSingle()
+      );
 
-      if (error) {
+      if (error || !data) {
+        const message = error?.message || 'No song chart was updated';
         console.error('Failed to save chart:', error);
-        toast('error', error.message || 'Failed to save chart');
-        return;
+        throw new Error(message);
       }
 
       setSetlistSongs(prev => prev.map(s =>
         s.song_id === songId
-          ? { ...s, songs: s.songs ? { ...s.songs, chordpro_text: text } : s.songs }
+          ? { ...s, songs: s.songs ? { ...s.songs, chordpro_text: data.chordpro_text } : s.songs }
           : s
       ));
       setLinkedSetlistSongs(prev => prev.map(s =>
         s.song_id === songId
-          ? { ...s, songs: s.songs ? { ...s.songs, chordpro_text: text } : s.songs }
+          ? { ...s, songs: s.songs ? { ...s.songs, chordpro_text: data.chordpro_text } : s.songs }
           : s
       ));
-      setChartModalSong(prev => prev?.song_id === songId ? { ...prev, songs: prev.songs ? { ...prev.songs, chordpro_text: text } : prev.songs } : prev);
+      setChartModalSong(prev => prev?.song_id === songId ? { ...prev, songs: prev.songs ? { ...prev.songs, chordpro_text: data.chordpro_text } : prev.songs } : prev);
       toast('success', 'Song chart saved');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to save chart:', error);
-      toast('error', error?.message || 'Failed to save chart');
+      toast('error', getErrorMessage(error, 'Failed to save chart'));
+      throw error;
     } finally {
       setChartSaving(false);
     }
@@ -1303,6 +1457,7 @@ const openLyricsModal = (ss: SetlistSong) => {
     setServiceChartEditing(false);
     setServiceChartControlsVisible(true);
     setServiceSongPickerOpen(false);
+    setServiceCloseConfirmOpen(false);
     setServiceModeEntering(false);
     setServiceModeIndex(null);
 
@@ -1311,6 +1466,11 @@ const openLyricsModal = (ss: SetlistSong) => {
     params.delete('song');
     const nextSearch = params.toString();
     navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ''}`, { replace: true });
+  };
+
+  const requestCloseServiceMode = () => {
+    setServiceSongPickerOpen(false);
+    setServiceCloseConfirmOpen(true);
   };
   const goToServiceSong = (direction: -1 | 1) => {
     if (serviceSwipeAnimating.current || serviceModeIndex === null) return;
@@ -2239,7 +2399,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                 <span>{ss.songs?.lyrics ? 'Edit Lyrics' : 'Add Lyrics'}</span>
                               </button>}
                               {showSetlistEditControls && <button
-                                onClick={() => setChartModalSong(ss)}
+                                onClick={() => openChartModal(ss)}
                                 title={ss.songs?.chordpro_text ? 'Open chart' : 'Add chart'}
                                 className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold transition-colors shrink-0 ${
                                   ss.songs?.chordpro_text
@@ -2290,7 +2450,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                     <span>{ss.songs?.lyrics ? 'Edit Lyrics' : 'Add Lyrics'}</span>
                                   </button>}
                                   {showSetlistEditControls && <button
-                                    onClick={() => setChartModalSong(ss)}
+                                    onClick={() => openChartModal(ss)}
                                     title={ss.songs?.chordpro_text ? 'Open chart' : 'Add chart'}
                                     className={`inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-[10px] font-semibold transition-colors ${
                                       ss.songs?.chordpro_text
@@ -2627,7 +2787,7 @@ const openLyricsModal = (ss: SetlistSong) => {
           </div>
         </Modal>
 
-        <Modal open={showAddSong} onClose={() => setShowAddSong(false)} title="Create New Song">
+        <Modal open={showAddSong} onClose={() => { if (!creatingSong) { setShowAddSong(false); setNewSongError(''); } }} title="Create New Song">
           <form onSubmit={e => { e.preventDefault(); handleCreateSong(); }} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Title</label>
@@ -2657,14 +2817,21 @@ const openLyricsModal = (ss: SetlistSong) => {
                 placeholder="https://youtube.com/watch?v=..."
               />
             </div>
+            {newSongError && (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">
+                {newSongError}
+              </div>
+            )}
             <div className="flex justify-end gap-3 pt-2">
-              <button type="button" onClick={() => setShowAddSong(false)} className="btn-secondary">Cancel</button>
-              <button type="submit" className="btn-primary">Create & Add</button>
+              <button type="button" onClick={() => { setShowAddSong(false); setNewSongError(''); }} disabled={creatingSong} className="btn-secondary disabled:opacity-60">Cancel</button>
+              <button type="button" onClick={handleCreateSong} disabled={creatingSong || !newSong.title.trim()} className="btn-primary disabled:opacity-60">
+                {creatingSong ? 'Creating...' : 'Create & Add'}
+              </button>
             </div>
           </form>
         </Modal>
 
-        <Modal open={showSongConfig} onClose={() => setShowSongConfig(false)} title="Configure Song">
+        <Modal open={showSongConfig} onClose={resetSongConfigModal} title="Configure Song">
           <div className="space-y-4">
             {selectedSongForConfig && (() => {
               const song = songs.find(s => s.id === selectedSongForConfig);
@@ -2718,8 +2885,10 @@ const openLyricsModal = (ss: SetlistSong) => {
               />
             </div>
             <div className="flex justify-end gap-3 pt-2">
-              <button onClick={() => setShowSongConfig(false)} className="btn-secondary">Cancel</button>
-              <button onClick={confirmAddSong} disabled={!songConfig.category} className="btn-primary">Add to Setlist</button>
+              <button type="button" onClick={resetSongConfigModal} disabled={addingSetlistSong} className="btn-secondary disabled:opacity-60">Cancel</button>
+              <button type="button" onClick={confirmAddSong} disabled={!songConfig.category || addingSetlistSong} className="btn-primary disabled:opacity-60">
+                {addingSetlistSong ? 'Adding...' : 'Add to Setlist'}
+              </button>
             </div>
           </div>
         </Modal>
@@ -2780,7 +2949,7 @@ const openLyricsModal = (ss: SetlistSong) => {
 
         <Modal
           open={!!chartModalSong}
-          onClose={() => setChartModalSong(null)}
+          onClose={closeChartModal}
           title="Song Chart"
           size="lg"
           hideHeader
@@ -2794,7 +2963,7 @@ const openLyricsModal = (ss: SetlistSong) => {
               chordproText={chartModalSong.songs.chordpro_text}
               editable={canManageSetlist || canEditSetlist}
               saving={chartSaving}
-              onClose={() => setChartModalSong(null)}
+              onClose={closeChartModal}
               onSave={(text) => handleSaveChart(chartModalSong.song_id, text)}
             />
           )}
@@ -2967,7 +3136,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                         className="relative z-[80] flex shrink-0 items-center gap-2 border-b border-black/[0.06] bg-white/95 px-4 pb-3 pt-3 shadow-sm backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#0c0f0d]/95"
                         style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)' }}
                       >
-                        <button onClick={closeServiceMode} className="rounded-full p-2 text-gray-500 hover:bg-black/[0.05] dark:text-white/55 dark:hover:bg-white/[0.08]">
+                        <button onClick={requestCloseServiceMode} className="rounded-full p-2 text-gray-500 hover:bg-black/[0.05] dark:text-white/55 dark:hover:bg-white/[0.08]">
                           <X className="h-5 w-5" />
                         </button>
                         <div className="relative min-w-0 flex-1">
@@ -3005,6 +3174,8 @@ const openLyricsModal = (ss: SetlistSong) => {
                                 <div className="space-y-1">
                                   {serviceModeSongs.map((song, index) => {
                                     const selected = index === serviceModeIndex;
+                                    const songTitle = song.songs?.title || 'Untitled song';
+                                    const chartKey = song.performed_key || song.songs?.song_key || '';
                                     return (
                                       <button
                                         key={song.song_id}
@@ -3025,10 +3196,10 @@ const openLyricsModal = (ss: SetlistSong) => {
                                         </span>
                                         <span className="min-w-0 flex-1">
                                           <span className="block truncate text-[13px] font-black leading-tight">
-                                            {index + 1}. {song.songs.title}
+                                            {index + 1}. {songTitle}
                                           </span>
                                           <span className={`block truncate text-[10px] font-semibold leading-tight ${selected ? 'text-white/70' : 'text-gray-500 dark:text-white/40'}`}>
-                                            {song.performed_key || song.songs.song_key ? `Key ${song.performed_key || song.songs.song_key}` : 'Chord chart'}
+                                            {chartKey ? `Key ${chartKey}` : 'Chord chart'}
                                           </span>
                                         </span>
                                       </button>
@@ -3122,6 +3293,60 @@ const openLyricsModal = (ss: SetlistSong) => {
                               </div>
                             ))}
                           </motion.div>
+                        </div>
+                      </motion.div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                <AnimatePresence>
+                  {serviceCloseConfirmOpen && (
+                    <motion.div
+                      className="absolute inset-0 z-[160] flex items-center justify-center bg-black/45 px-5 backdrop-blur-md"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                      onClick={() => setServiceCloseConfirmOpen(false)}
+                    >
+                      <motion.div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="service-close-title"
+                        className="w-full max-w-sm overflow-hidden rounded-[28px] border border-black/[0.06] bg-white p-4 text-gray-950 shadow-2xl shadow-black/25 dark:border-white/[0.08] dark:bg-[#141815] dark:text-white"
+                        initial={{ opacity: 0, y: 18, scale: 0.96, filter: 'blur(10px)' }}
+                        animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+                        exit={{ opacity: 0, y: 12, scale: 0.98, filter: 'blur(8px)' }}
+                        transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                        onClick={event => event.stopPropagation()}
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-red-600 ring-1 ring-red-500/10 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-400/15">
+                            <X className="h-5 w-5" />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p id="service-close-title" className="text-lg font-black tracking-[-0.02em]">
+                              Close {serviceModeLabel}?
+                            </p>
+                            <p className="mt-1 text-sm font-semibold leading-relaxed text-gray-500 dark:text-white/50">
+                              This will close the full-screen chart flow and return you to the event page.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="mt-5 grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setServiceCloseConfirmOpen(false)}
+                            className="h-11 rounded-2xl border border-black/[0.06] bg-gray-100 text-sm font-black text-gray-700 transition active:scale-[0.97] dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/70"
+                          >
+                            Stay
+                          </button>
+                          <button
+                            type="button"
+                            onClick={closeServiceMode}
+                            className="h-11 rounded-2xl bg-red-600 text-sm font-black text-white shadow-lg shadow-red-600/20 transition active:scale-[0.97]"
+                          >
+                            Close
+                          </button>
                         </div>
                       </motion.div>
                     </motion.div>

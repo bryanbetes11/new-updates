@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ALargeSmall, ArrowDown, ArrowUp, Bold, Captions, ChevronLeft, ChevronRight, Copy, Edit3, GripVertical, Italic, Lock, Minus, Music2, Plus, Save, StickyNote, Trash2, Users, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { ChordProLine, detectChordProKey, formatChordProForPlainEditor, getKeyTransposeOffset, parseChordPro, parseChordProMetadata, plainEditorToChordPro, transposeChordPro, transposeKey } from '../lib/chordPro';
+import { ChordProLine, detectChordProKey, formatChordProForPlainEditor, getKeyTransposeOffset, parseChordPro, parseChordProMetadata, plainEditorSectionsToChordPro, plainEditorToChordPro, transposeChordPro, transposeKey } from '../lib/chordPro';
 
 const SECTION_TONES = [
   {
@@ -81,7 +81,9 @@ const DEFAULT_SECTION_TONE = {
 };
 
 const CHART_SETTINGS_STORAGE_KEY = 'servesync:song-chart-display-settings';
-const CHART_SETTINGS_VERSION = 2;
+const CHART_SETTINGS_VERSION = 3;
+const CHART_EDITOR_DRAFT_STORAGE_VERSION = 1;
+const CHART_EDITOR_DRAFT_STORAGE_PREFIX = 'servesync:song-chart-editor-draft';
 const CHART_FONT_SIZE_MIN = 8;
 const CHART_FONT_SIZE_MAX = 36;
 const SHARP_KEY_OPTIONS = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
@@ -99,11 +101,33 @@ interface ChartDisplaySettings {
   lyricsOnly: boolean;
 }
 
+interface StoredChartEditorDraft {
+  version: number;
+  songId: string;
+  savedPlainDraft: string;
+  plainDraft: string;
+  sectionEditorEnabled: boolean;
+  draftSections: EditableChartSection[];
+  isEditing: boolean;
+  selectionStart?: number;
+  selectionEnd?: number;
+  updatedAt: string;
+}
+
+interface InitialEditorState {
+  draft: string;
+  draftSections: EditableChartSection[];
+  sectionEditorEnabled: boolean;
+  isEditing: boolean;
+  selectionStart?: number;
+  selectionEnd?: number;
+}
+
 const DEFAULT_CHART_SETTINGS: ChartDisplaySettings = {
   settingsVersion: CHART_SETTINGS_VERSION,
-  lyricFontSize: 12,
-  chordFontSize: 12,
-  sectionBadgeFontSize: 12,
+  lyricFontSize: 10,
+  chordFontSize: 10,
+  sectionBadgeFontSize: 10,
   lyricBold: false,
   lyricItalic: false,
   chordBold: true,
@@ -133,6 +157,71 @@ function loadChartDisplaySettings(): ChartDisplaySettings {
   } catch {
     return DEFAULT_CHART_SETTINGS;
   }
+}
+
+function chartEditorDraftStorageKey(songId?: string) {
+  return songId ? `${CHART_EDITOR_DRAFT_STORAGE_PREFIX}:v${CHART_EDITOR_DRAFT_STORAGE_VERSION}:${songId}` : '';
+}
+
+function isEditableSectionArray(value: unknown): value is EditableChartSection[] {
+  return Array.isArray(value)
+    && value.every(section =>
+      section
+      && typeof section === 'object'
+      && typeof (section as EditableChartSection).id === 'string'
+      && typeof (section as EditableChartSection).label === 'string'
+      && typeof (section as EditableChartSection).body === 'string'
+    );
+}
+
+function loadStoredChartEditorDraft(songId: string | undefined, savedPlainDraft: string): StoredChartEditorDraft | null {
+  if (typeof window === 'undefined') return null;
+  const storageKey = chartEditorDraftStorageKey(songId);
+  if (!storageKey || !songId) return null;
+
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<StoredChartEditorDraft>;
+    if (
+      parsed.version !== CHART_EDITOR_DRAFT_STORAGE_VERSION
+      || parsed.songId !== songId
+      || parsed.savedPlainDraft !== savedPlainDraft
+      || typeof parsed.plainDraft !== 'string'
+      || typeof parsed.sectionEditorEnabled !== 'boolean'
+      || typeof parsed.isEditing !== 'boolean'
+      || !isEditableSectionArray(parsed.draftSections)
+    ) {
+      window.localStorage.removeItem(storageKey);
+      return null;
+    }
+    return parsed as StoredChartEditorDraft;
+  } catch {
+    return null;
+  }
+}
+
+function getInitialEditorState(songId: string | undefined, chordproText: string | null | undefined): InitialEditorState {
+  const savedPlainDraft = formatChordProForPlainEditor(chordproText || '');
+  const storedDraft = loadStoredChartEditorDraft(songId, savedPlainDraft);
+  if (storedDraft) {
+    return {
+      draft: storedDraft.plainDraft,
+      draftSections: storedDraft.draftSections,
+      sectionEditorEnabled: storedDraft.sectionEditorEnabled,
+      isEditing: false,
+      selectionStart: storedDraft.selectionStart,
+      selectionEnd: storedDraft.selectionEnd,
+    };
+  }
+
+  const draftSections = createEditableSectionsFromChordPro(chordproText || '');
+  return {
+    draft: savedPlainDraft,
+    draftSections,
+    sectionEditorEnabled: draftSections.length > 0,
+    isEditing: false,
+  };
 }
 
 function clampFontSize(value: number, min: number, max: number) {
@@ -274,9 +363,11 @@ function createEditableSectionsFromChordPro(chordpro: string): EditableChartSect
 
 function editableSectionsToPlainEditor(sections: EditableChartSection[]) {
   return sections
-    .map(section => [section.label.trim() || 'Section', section.body.trimEnd()].filter(Boolean).join('\n'))
-    .join('\n\n')
-    .trimEnd();
+    .map(section => {
+      const label = section.label.trim() || 'Section';
+      return section.body.length > 0 ? `${label}\n${section.body}` : label;
+    })
+    .join('\n\n');
 }
 
 function createEditableSection(label = 'Verse') {
@@ -313,7 +404,7 @@ function AutoSizeSectionTextarea({ value, onChange, placeholder }: AutoSizeSecti
       ref={textareaRef}
       value={value}
       onChange={event => onChange(event.target.value)}
-      className="service-mode-section-textarea w-full resize-none overflow-hidden rounded-[18px] border border-black/[0.06] bg-gray-50 p-3 font-mono text-sm leading-7 text-gray-950 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-500/10 dark:border-white/[0.08] dark:bg-black/20 dark:text-white/85"
+      className="service-mode-section-textarea w-full resize-none overflow-hidden rounded-[18px] border border-black/[0.06] bg-gray-50 p-3 font-mono text-[12px] leading-7 text-gray-950 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-500/10 dark:border-white/[0.08] dark:bg-black/20 dark:text-white/85"
       style={{ minHeight: getSectionEditorHeight('') }}
       placeholder={placeholder}
       spellCheck={false}
@@ -337,11 +428,13 @@ export function SongChartViewer({
   onEditingChange,
   footerNavigation,
 }: SongChartViewerProps) {
+  const initialEditorState = useMemo(() => getInitialEditorState(songId, chordproText), []); // eslint-disable-line react-hooks/exhaustive-deps
   const [transpose, setTranspose] = useState(0);
-  const [isEditing, setIsEditing] = useState(false);
-  const [draft, setDraft] = useState(formatChordProForPlainEditor(chordproText || ''));
-  const [draftSections, setDraftSections] = useState<EditableChartSection[]>(() => createEditableSectionsFromChordPro(chordproText || ''));
-  const [sectionEditorEnabled, setSectionEditorEnabled] = useState(() => createEditableSectionsFromChordPro(chordproText || '').length > 0);
+  const [isEditing, setIsEditing] = useState(initialEditorState.isEditing);
+  const [draft, setDraft] = useState(initialEditorState.draft);
+  const [draftSections, setDraftSections] = useState<EditableChartSection[]>(initialEditorState.draftSections);
+  const [sectionEditorEnabled, setSectionEditorEnabled] = useState(initialEditorState.sectionEditorEnabled);
+  const [savedPlainDraft, setSavedPlainDraft] = useState(() => formatChordProForPlainEditor(chordproText || ''));
   const [selfNotes, setSelfNotes] = useState<Record<string, string>>({});
   const [teamNotes, setTeamNotes] = useState<Record<string, TeamSectionNote>>({});
   const [editingNote, setEditingNote] = useState<EditingSectionNote | null>(null);
@@ -354,10 +447,18 @@ export function SongChartViewer({
   const [keyPickerOpen, setKeyPickerOpen] = useState(false);
   const [displaySettings, setDisplaySettings] = useState<ChartDisplaySettings>(() => loadChartDisplaySettings());
   const [draggedSectionIndex, setDraggedSectionIndex] = useState<number | null>(null);
+  const [savedPreviewChordPro, setSavedPreviewChordPro] = useState<string | null>(null);
+  const plainTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const mountedSongIdRef = useRef(songId);
+  const selectionRef = useRef<{ start?: number; end?: number }>({
+    start: initialEditorState.selectionStart,
+    end: initialEditorState.selectionEnd,
+  });
   const chartAnimationIdentity = `${songId ?? ''}:${chordproText}`;
   const previousChartAnimationIdentityRef = useRef(chartAnimationIdentity);
   const isSwitchingChartContent = previousChartAnimationIdentityRef.current !== chartAnimationIdentity;
-  const savedPlainDraft = useMemo(() => formatChordProForPlainEditor(chordproText || ''), [chordproText]);
+  const savedPlainDraftFromProps = useMemo(() => formatChordProForPlainEditor(chordproText || ''), [chordproText]);
+  const draftStorageKey = useMemo(() => chartEditorDraftStorageKey(songId), [songId]);
   const sectionDraft = useMemo(() => editableSectionsToPlainEditor(draftSections), [draftSections]);
   const activeDraft = sectionEditorEnabled ? sectionDraft : draft;
   const hasDraftChanges = activeDraft !== savedPlainDraft;
@@ -369,13 +470,83 @@ export function SongChartViewer({
   const sectionBadgeFontSize = normalizeFontSize(displaySettings.sectionBadgeFontSize, DEFAULT_CHART_SETTINGS.sectionBadgeFontSize);
 
   useEffect(() => {
-    const nextSections = createEditableSectionsFromChordPro(chordproText || '');
-    setDraft(savedPlainDraft);
-    setDraftSections(nextSections);
-    setSectionEditorEnabled(nextSections.length > 0);
-    setIsEditing(false);
-    setTranspose(assignedTranspose);
-  }, [assignedTranspose, chordproText, savedPlainDraft, title]);
+    if (mountedSongIdRef.current !== songId) {
+      const nextEditorState = getInitialEditorState(songId, chordproText);
+      mountedSongIdRef.current = songId;
+      setSavedPlainDraft(savedPlainDraftFromProps);
+      setDraft(nextEditorState.draft);
+      setDraftSections(nextEditorState.draftSections);
+      setSectionEditorEnabled(nextEditorState.sectionEditorEnabled);
+      setIsEditing(nextEditorState.isEditing);
+      setSavedPreviewChordPro(null);
+      selectionRef.current = {
+        start: nextEditorState.selectionStart,
+        end: nextEditorState.selectionEnd,
+      };
+      setTranspose(assignedTranspose);
+      return;
+    }
+
+    if (!isEditing && !hasDraftChanges && savedPlainDraft !== savedPlainDraftFromProps) {
+      const nextSections = createEditableSectionsFromChordPro(chordproText || '');
+      setSavedPlainDraft(savedPlainDraftFromProps);
+      setDraft(savedPlainDraftFromProps);
+      setDraftSections(nextSections);
+      setSectionEditorEnabled(nextSections.length > 0);
+      setSavedPreviewChordPro(null);
+    }
+  }, [assignedTranspose, chordproText, hasDraftChanges, isEditing, savedPlainDraft, savedPlainDraftFromProps, songId]);
+
+  useLayoutEffect(() => {
+    if (!isEditing || sectionEditorEnabled) return;
+    const textarea = plainTextareaRef.current;
+    const { start, end } = selectionRef.current;
+    if (!textarea || typeof start !== 'number' || typeof end !== 'number') return;
+    const safeStart = Math.min(start, textarea.value.length);
+    const safeEnd = Math.min(end, textarea.value.length);
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(safeStart, safeEnd);
+    });
+  }, [isEditing, sectionEditorEnabled, songId]);
+
+  useEffect(() => {
+    if (!draftStorageKey || !editable) return;
+
+    if (!isEditing && !hasDraftChanges) {
+      localStorage.removeItem(draftStorageKey);
+      return;
+    }
+
+    const payload: StoredChartEditorDraft = {
+      version: CHART_EDITOR_DRAFT_STORAGE_VERSION,
+      songId: songId || '',
+      savedPlainDraft,
+      plainDraft: draft,
+      sectionEditorEnabled,
+      draftSections,
+      isEditing,
+      selectionStart: selectionRef.current.start,
+      selectionEnd: selectionRef.current.end,
+      updatedAt: new Date().toISOString(),
+    };
+
+    try {
+      localStorage.setItem(draftStorageKey, JSON.stringify(payload));
+    } catch {
+      // Local drafts are a safety net; saving to the database still works without them.
+    }
+  }, [draft, draftSections, draftStorageKey, editable, hasDraftChanges, isEditing, savedPlainDraft, sectionEditorEnabled, songId]);
+
+  useEffect(() => {
+    if (!hasDraftChanges) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasDraftChanges]);
 
   useEffect(() => {
     onEditingChange?.(isEditing);
@@ -396,7 +567,8 @@ export function SongChartViewer({
     }
   }, [chordFontSize, displaySettings, lyricFontSize, sectionBadgeFontSize]);
 
-  const renderedText = useMemo(() => transposeChordPro(chordproText || '', transpose), [chordproText, transpose]);
+  const previewChordProText = savedPreviewChordPro ?? chordproText ?? '';
+  const renderedText = useMemo(() => transposeChordPro(previewChordProText, transpose), [previewChordProText, transpose]);
   const chartLines = useMemo(() => parseChordPro(renderedText), [renderedText]);
   const chartSections = useMemo(() => buildChartSections(chartLines), [chartLines]);
   const displayKey = detectedKey ? transposeKey(detectedKey, transpose) : '';
@@ -562,13 +734,34 @@ export function SongChartViewer({
   };
 
   const handleSaveChartDraft = async () => {
-    if (!onSave || localChartSaving || !hasDraftChanges) return;
+    if (!onSave || localChartSaving) return;
+    if (!hasDraftChanges) {
+      setIsEditing(false);
+      return;
+    }
     setLocalChartSaving(true);
     try {
-      await onSave(plainEditorToChordPro(activeDraft, chordproText || ''));
+      const nextChordPro = sectionEditorEnabled
+        ? plainEditorSectionsToChordPro(draftSections, chordproText || '')
+        : plainEditorToChordPro(activeDraft, chordproText || '');
+      await onSave(nextChordPro);
+      setSavedPlainDraft(activeDraft);
+      setSavedPreviewChordPro(nextChordPro);
+      setIsEditing(false);
+      if (draftStorageKey) localStorage.removeItem(draftStorageKey);
+    } catch (error) {
+      console.error('Failed to save chart draft:', error);
     } finally {
       setLocalChartSaving(false);
     }
+  };
+
+  const requestClose = () => {
+    if (hasDraftChanges) {
+      const shouldClose = window.confirm('Close this chart editor? Your unsaved draft will stay on this device, but it has not been saved to the database yet.');
+      if (!shouldClose) return;
+    }
+    onClose?.();
   };
 
   const updateDraftSection = (id: string, updates: Partial<EditableChartSection>) => {
@@ -621,7 +814,7 @@ export function SongChartViewer({
                 <p className="mt-0.5 truncate text-sm text-gray-500 dark:text-white/45">{metadata.artist || artist || 'No artist'}{displayKey ? ` · Key ${displayKey}` : ''}</p>
               </div>
               {onClose && (
-                <button onClick={onClose} className="rounded-full p-2 text-gray-400 transition-colors hover:bg-black/[0.04] hover:text-gray-700 dark:hover:bg-white/[0.08] dark:hover:text-white">
+                <button onClick={requestClose} className="rounded-full p-2 text-gray-400 transition-colors hover:bg-black/[0.04] hover:text-gray-700 dark:hover:bg-white/[0.08] dark:hover:text-white">
                   <X className="h-5 w-5" />
                 </button>
               )}
@@ -687,36 +880,34 @@ export function SongChartViewer({
               </button>
             </>
           )}
-          {editable && (
+          {editable && !isEditing && (
             <button
-              onClick={() => {
-                if (!isEditing) {
-                  const nextSections = createEditableSectionsFromChordPro(chordproText || '');
-                  setDraft(formatChordProForPlainEditor(chordproText || ''));
-                  setDraftSections(nextSections);
-                  setSectionEditorEnabled(nextSections.length > 0);
-                }
-                setIsEditing(v => !v);
-              }}
-              className={`ml-auto inline-flex h-10 items-center gap-1.5 rounded-full border-2 px-3.5 text-sm font-black transition active:scale-[0.97] ${
-                isEditing
-                  ? 'border-amber-400 bg-amber-500 text-white shadow-lg shadow-amber-500/20'
-                  : 'border-slate-200 bg-slate-900 text-white shadow-lg shadow-slate-900/15 dark:border-white/[0.10] dark:bg-white/[0.12] dark:text-white'
-              }`}
+              onClick={() => setIsEditing(true)}
+              className="ml-auto inline-flex h-10 items-center gap-1.5 rounded-full border-2 border-slate-200 bg-slate-900 px-3.5 text-sm font-black text-white shadow-lg shadow-slate-900/15 transition active:scale-[0.97] dark:border-white/[0.10] dark:bg-white/[0.12] dark:text-white"
             >
               <Edit3 className="h-3.5 w-3.5" />
-              <span className="sm:hidden">{isEditing ? 'Preview' : 'Edit'}</span>
-              <span className="hidden sm:inline">{isEditing ? 'Preview' : 'Edit chart'}</span>
+              <span className="sm:hidden">Edit</span>
+              <span className="hidden sm:inline">Edit chart</span>
+            </button>
+          )}
+          {editable && isEditing && onSave && (
+            <button
+              type="button"
+              onClick={() => setIsEditing(false)}
+              className="ml-auto inline-flex h-10 items-center gap-1.5 rounded-full border-2 border-gray-200 bg-white px-3.5 text-sm font-black text-gray-600 shadow-sm transition active:scale-[0.97] dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-white/65"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              <span>Back</span>
             </button>
           )}
           {editable && isEditing && onSave && (
             <button
               onClick={handleSaveChartDraft}
-              disabled={saving || localChartSaving || !hasDraftChanges}
+              disabled={saving || localChartSaving}
               className={`inline-flex h-10 items-center gap-1.5 rounded-full border-2 px-3.5 text-sm font-black transition active:scale-[0.97] disabled:cursor-not-allowed disabled:active:scale-100 ${
                 hasDraftChanges
                   ? 'border-emerald-500 bg-emerald-600 text-white shadow-lg shadow-emerald-600/20 disabled:opacity-60'
-                  : 'border-gray-200 bg-gray-100 text-gray-400 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/35'
+                  : 'border-gray-200 bg-gray-100 text-gray-500 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/50'
               }`}
             >
               <Save className="h-3.5 w-3.5" /> {saving || localChartSaving ? 'Saving...' : 'Save'}
@@ -1015,9 +1206,16 @@ export function SongChartViewer({
         </div>
       ) : isEditing ? (
         <textarea
+          ref={plainTextareaRef}
           value={draft}
           onChange={e => setDraft(e.target.value)}
-          className="min-h-0 flex-1 resize-none bg-gray-50 p-5 font-mono text-sm leading-7 outline-none dark:bg-black/20 dark:text-white/85"
+          onSelect={event => {
+            selectionRef.current = {
+              start: event.currentTarget.selectionStart,
+              end: event.currentTarget.selectionEnd,
+            };
+          }}
+          className="min-h-0 flex-1 resize-none bg-gray-50 p-5 font-mono text-[12px] leading-7 outline-none dark:bg-black/20 dark:text-white/85"
           placeholder={`Verse 1\nG                 Em7\nThe splendor of a King, clothed in majesty,\n\nChorus\nG\nHow great is our God, sing with me,`}
           spellCheck={false}
         />
@@ -1150,7 +1348,7 @@ export function SongChartViewer({
                             {hasChords && !displaySettings.lyricsOnly && (
                               <motion.div
                                 key="chords"
-                                className={section.tone.chord}
+                                className={`${section.tone.chord} whitespace-pre-wrap`}
                                 initial={false}
                                 animate={{ opacity: 1, y: 0, scaleY: 1, filter: 'blur(0px)', height: 'auto' }}
                                 exit={
@@ -1183,7 +1381,7 @@ export function SongChartViewer({
                           </AnimatePresence>
                           {hasLyrics && (
                             <div
-                              className={section.tone.lyric}
+                              className={`${section.tone.lyric} whitespace-pre-wrap`}
                               style={{
                                 fontSize: `${lyricFontSize}px`,
                                 fontWeight: displaySettings.lyricBold ? 800 : 400,

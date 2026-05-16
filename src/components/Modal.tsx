@@ -36,6 +36,12 @@ export function Modal({
   const [visible, setVisible] = useState(false);
   const [closing, setClosing] = useState(false);
 
+  const requestClose = () => {
+    if (closing) return;
+    setClosing(true);
+    onClose();
+  };
+
   useEffect(() => {
     if (open) {
       setClosing(false);
@@ -56,11 +62,11 @@ export function Modal({
   useEffect(() => {
     if (!visible) return;
     const handleEsc = (e: KeyboardEvent) => {
-      if (closeOnEscape && e.key === 'Escape') onClose();
+      if (closeOnEscape && e.key === 'Escape') requestClose();
     };
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
-  }, [visible, onClose, closeOnEscape]);
+  }, [visible, closeOnEscape, closing]);
 
   if (!visible) return null;
 
@@ -72,7 +78,7 @@ export function Modal({
   return createPortal(
     <div
       className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center"
-      onClick={() => { if (closeOnBackdrop) onClose(); }}
+      onClick={() => { if (closeOnBackdrop) requestClose(); }}
     >
       <div className={`fixed inset-0 bg-black/50 backdrop-blur-sm ${backdropClass}`} />
       <div
@@ -94,7 +100,8 @@ export function Modal({
             </h2>
             {!hideCloseButton && (
               <button
-                onClick={onClose}
+                type="button"
+                onClick={requestClose}
                 className="p-1.5 -mr-1 rounded-xl text-gray-400 hover:bg-gray-100 dark:hover:bg-white/[0.07] hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
                 aria-label="Close"
               >

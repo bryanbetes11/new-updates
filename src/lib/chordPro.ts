@@ -12,6 +12,11 @@ export interface ChordProLine {
   lyrics?: string;
 }
 
+export interface PlainEditorSection {
+  label: string;
+  body: string;
+}
+
 const SHARP_NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const FLAT_TO_SHARP: Record<string, string> = {
   Db: 'C#',
@@ -30,7 +35,7 @@ const SHARP_TO_FLAT: Record<string, string> = {
 const FLAT_KEY_NAMES = new Set(['F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb']);
 
 const normalizeDirectiveKey = (key: string) => key.trim().toLowerCase().replace(/_/g, '');
-const SECTION_LABEL_PATTERN = /^(intro|instrumental|interlude|verse(?:\s+\d+)?|v\d+|pre[-\s]?chorus|prechorus|pc|chorus|refrain|bridge(?:\s+\d+)?|b\d+|tag|ending|outro)$/i;
+const SECTION_LABEL_PATTERN = /^(intro|instrumental|interlude|verse(?:\s+\d+)?|v\d+|pre[-\s]?chorus|prechorus|pc|chorus|refrain|bridge(?:\s+\d+)?|b\d+|tag|ending|outro|part(?:\s+\d+)?|section(?:\s+\d+)?|vamp|turnaround|breakdown|hook|channel)$/i;
 const CHORD_TOKEN_PATTERN = /^[A-G](?:#|b)?(?:maj|min|m|dim|aug|sus|add|ø)?[0-9]*(?:[#b0-9()+/.-]*)?(?:\/[A-G](?:#|b)?)?$/;
 
 export function parseChordProMetadata(chordpro: string): ChordProMetadata {
@@ -106,6 +111,9 @@ function parseChordLine(line: string): ChordProLine {
     lyrics += char;
     lyricIndex += 1;
     if (chordBuffer) {
+      if (/\s/.test(char) && chords.length >= lyricIndex - 1) {
+        chords += ' ';
+      }
       chords = padTo(chords, lyricIndex);
       chordBuffer = '';
     }
@@ -115,7 +123,8 @@ function parseChordLine(line: string): ChordProLine {
 }
 
 function isChordOnlyChordProLine(line: string) {
-  return /\[[^\]]+\]/.test(line) && line.replace(/\[[^\]]+\]/g, '').trim().length === 0;
+  return /\[[^\]]+\]/.test(line)
+    && line.replace(/\[[^\]]+\]/g, '').replace(/[\s|/\\\-–—]+/g, '').length === 0;
 }
 
 function padTo(value: string, targetLength: number) {
@@ -227,11 +236,11 @@ export function plainEditorToChordPro(plainText: string, originalChordPro = ''):
   const output: string[] = [...metadata];
 
   for (let index = 0; index < lines.length; index += 1) {
-    const currentLine = lines[index].trimEnd();
+    const currentLine = lines[index];
     const trimmed = currentLine.trim();
 
     if (!trimmed) {
-      output.push('');
+      output.push(currentLine);
       continue;
     }
 
@@ -241,20 +250,29 @@ export function plainEditorToChordPro(plainText: string, originalChordPro = ''):
     }
 
     if (isChordOnlyLine(currentLine)) {
-      const nextLine = lines[index + 1]?.trimEnd();
-      if (nextLine !== undefined && nextLine.trim() && !isSectionLabel(nextLine.trim()) && !isChordOnlyLine(nextLine)) {
-        output.push(mergeChordLineWithLyrics(currentLine, nextLine));
-        index += 1;
-      } else {
-        output.push(chordOnlyLineToChordPro(currentLine));
-      }
+      output.push(chordOnlyLineToChordPro(currentLine));
       continue;
     }
 
     output.push(escapeChordProText(currentLine));
   }
 
-  return output.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return output.join('\n');
+}
+
+export function plainEditorSectionsToChordPro(sections: PlainEditorSection[], originalChordPro = ''): string {
+  const output: string[] = [...extractMetadataDirectives(originalChordPro)];
+
+  sections.forEach((section, index) => {
+    if (index > 0) output.push('');
+    output.push(`{c: ${toDisplaySectionLabel(section.label || 'Section')}}`);
+
+    if (section.body.length > 0) {
+      output.push(...plainEditorToChordPro(section.body, '').split('\n'));
+    }
+  });
+
+  return output.join('\n');
 }
 
 function extractMetadataDirectives(chordpro: string): string[] {
@@ -284,29 +302,8 @@ function isChordOnlyLine(line: string) {
   return tokens.length > 0 && tokens.every(token => CHORD_TOKEN_PATTERN.test(token));
 }
 
-function mergeChordLineWithLyrics(chordLine: string, lyricLine: string) {
-  const chords = Array.from(chordLine.matchAll(/\S+/g)).filter(match => CHORD_TOKEN_PATTERN.test(match[0]));
-  if (chords.length === 0) return escapeChordProText(lyricLine);
-
-  let result = '';
-  let lyricIndex = 0;
-
-  chords.forEach(match => {
-    const chord = match[0];
-    const position = Math.min(match.index || 0, lyricLine.length);
-    if (position > lyricIndex) {
-      result += escapeChordProText(lyricLine.slice(lyricIndex, position));
-      lyricIndex = position;
-    }
-    result += `[${chord}]`;
-  });
-
-  result += escapeChordProText(lyricLine.slice(lyricIndex));
-  return result;
-}
-
 function chordOnlyLineToChordPro(line: string) {
-  return line.trim().split(/\s+/).map(token => CHORD_TOKEN_PATTERN.test(token) ? `[${token}]` : token).join(' ');
+  return line.replace(/\S+/g, token => CHORD_TOKEN_PATTERN.test(token) ? `[${token}]` : token);
 }
 
 function escapeChordProText(text: string) {

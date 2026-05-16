@@ -1,18 +1,18 @@
 import { useState } from 'react';
-import { BookOpen, ListMusic, Video } from 'lucide-react';
+import { BookOpen, Video } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { VideosTab } from './library/VideosTab';
 import { SetlistsTab } from './library/SetlistsTab';
 
-type Tab = 'setlists' | 'videos';
+type Tab = 'songs' | 'videos';
 
 const tabs: { id: Tab; label: string; shortLabel: string; icon: React.ElementType }[] = [
-  { id: 'setlists', label: 'Setlists', shortLabel: 'Setlists', icon: ListMusic },
+  { id: 'songs', label: 'Songs', shortLabel: 'Songs', icon: BookOpen },
   { id: 'videos', label: 'Videos', shortLabel: 'Videos', icon: Video },
 ];
 
 export function Library() {
-  const [tab, setTab] = useState<Tab>('setlists');
+  const [tab, setTab] = useState<Tab>('songs');
 
   return (
     <div className="page-container page-bottom-pad overflow-hidden">
@@ -45,18 +45,18 @@ export function Library() {
                 Library.
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600 dark:text-white/52">
-                Keep approved setlists and ministry media close, organized, and ready for rehearsal.
+                Keep songs, chord charts, and ministry videos organized and ready for rehearsal.
               </p>
             </div>
 
             <div className="grid grid-cols-2 gap-2 sm:min-w-[18rem]">
               {[
-                { label: 'Setlists', value: 'Live', icon: ListMusic },
+                { label: 'Songs', value: 'Ready', icon: BookOpen },
                 { label: 'Videos', value: 'Ready', icon: Video },
               ].map(stat => (
                 <button
                   key={stat.label}
-                  onClick={() => setTab(stat.label === 'Setlists' ? 'setlists' : 'videos')}
+                  onClick={() => setTab(stat.label === 'Songs' ? 'songs' : 'videos')}
                   className="rounded-2xl border border-white bg-white px-3 py-3 text-center shadow-sm transition-all hover:-translate-y-0.5 active:scale-[0.98] dark:border-white/[0.08] dark:bg-white/[0.05] dark:hover:bg-white/[0.075]"
                 >
                   <stat.icon className="mx-auto h-4 w-4 text-emerald-600 dark:text-emerald-300" />
@@ -70,8 +70,8 @@ export function Library() {
           <div className="relative mt-5 border-t border-emerald-900/[0.07] pt-4 dark:border-white/[0.11]">
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700/70 dark:text-emerald-300/80">Now viewing</p>
             <p className="mt-1 text-sm font-extrabold text-gray-800 dark:text-white">
-              {tab === 'setlists' ? 'Approved worship setlists' : 'Training and reference videos'}
-              <span className="font-mono text-xs font-semibold text-gray-400 dark:text-emerald-100/55"> · {tab === 'setlists' ? 'Music planning' : 'Media resources'}</span>
+              {tab === 'songs' ? 'Songs and chord charts' : 'Training and reference videos'}
+              <span className="font-mono text-xs font-semibold text-gray-400 dark:text-emerald-100/55"> · {tab === 'songs' ? 'Music library' : 'Media resources'}</span>
             </p>
           </div>
         </motion.section>
@@ -115,8 +115,8 @@ export function Library() {
           animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
           transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
         >
-          {tab === 'setlists' ? (
-            <SetlistsTab initialView="setlists" />
+          {tab === 'songs' ? (
+            <SetlistsTab fixedView="songs" />
           ) : (
             <VideosTab />
           )}

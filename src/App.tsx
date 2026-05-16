@@ -16,6 +16,8 @@ import { EventDetail } from './pages/EventDetail';
 import { Announcements } from './pages/Announcements';
 import { AnnouncementDetail } from './pages/AnnouncementDetail';
 import { Library } from './pages/Library';
+import { Songs } from './pages/Songs';
+import { Sets } from './pages/Sets';
 import { Profile } from './pages/Profile';
 import { RequestLeave } from './pages/RequestLeave';
 import { Notifications } from './pages/Notifications';
@@ -148,6 +150,9 @@ export default function App() {
                   <Route path="/announcements" element={<Announcements />} />
                   <Route path="/announcements/:id" element={<AnnouncementDetail />} />
                   <Route path="/library" element={<Library />} />
+                  <Route path="/songs" element={<Songs />} />
+                  <Route path="/sets" element={<Sets />} />
+                  <Route path="/approve-setlist" element={<Navigate to="/leadership/setlists" replace />} />
                   <Route path="/my-assignments" element={<MyAssignments />} />
                   <Route path="/unavailable-members" element={<UnavailableMembers />} />
                   <Route path="/profile" element={<Profile />} />

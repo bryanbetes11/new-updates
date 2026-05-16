@@ -303,6 +303,8 @@ export interface SetlistSong {
   song_category: string;
   youtube_url: string;
   performed_key: string;
+  arrangement_chordpro_text?: string | null;
+  arrangement_section_order?: string[] | null;
   section_role: string | null;
   is_manual_entry: boolean;
   songs?: Song;

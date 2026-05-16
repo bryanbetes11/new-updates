@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
@@ -13,6 +13,7 @@ interface ModalProps {
   closeOnBackdrop?: boolean;
   closeOnEscape?: boolean;
   titleAlign?: 'left' | 'center';
+  bodyClassName?: string;
 }
 
 const desktopSizes = {
@@ -20,6 +21,27 @@ const desktopSizes = {
   md: 'sm:max-w-md',
   lg: 'sm:max-w-xl',
 };
+
+const MODAL_LOCK_ATTR = 'data-modal-lock-count';
+
+function lockBodyScroll() {
+  const body = document.body;
+  const nextCount = Number(body.getAttribute(MODAL_LOCK_ATTR) || '0') + 1;
+  body.setAttribute(MODAL_LOCK_ATTR, String(nextCount));
+  body.style.overflow = 'hidden';
+
+  return () => {
+    const currentCount = Number(body.getAttribute(MODAL_LOCK_ATTR) || '1');
+    const nextCount = Math.max(0, currentCount - 1);
+
+    if (nextCount === 0) {
+      body.removeAttribute(MODAL_LOCK_ATTR);
+      body.style.overflow = '';
+    } else {
+      body.setAttribute(MODAL_LOCK_ATTR, String(nextCount));
+    }
+  };
+}
 
 export function Modal({
   open,
@@ -32,32 +54,34 @@ export function Modal({
   closeOnBackdrop = true,
   closeOnEscape = true,
   titleAlign = 'left',
+  bodyClassName = '',
 }: ModalProps) {
   const [visible, setVisible] = useState(false);
   const [closing, setClosing] = useState(false);
 
-  const requestClose = () => {
+  const requestClose = useCallback(() => {
     if (closing) return;
-    setClosing(true);
     onClose();
-  };
+  }, [closing, onClose]);
 
   useEffect(() => {
     if (open) {
       setClosing(false);
       setVisible(true);
-      document.body.style.overflow = 'hidden';
     } else if (visible) {
       setClosing(true);
       const t = setTimeout(() => {
         setVisible(false);
         setClosing(false);
-        document.body.style.overflow = '';
       }, 200);
       return () => clearTimeout(t);
     }
-    return () => { document.body.style.overflow = ''; };
-  }, [open]);
+  }, [open, visible]);
+
+  useEffect(() => {
+    if (!visible) return;
+    return lockBodyScroll();
+  }, [visible]);
 
   useEffect(() => {
     if (!visible) return;
@@ -77,17 +101,21 @@ export function Modal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center"
+      className="fixed inset-0 z-[2147483647] flex items-end sm:items-center justify-center"
       onClick={() => { if (closeOnBackdrop) requestClose(); }}
+      role="presentation"
     >
       <div className={`fixed inset-0 bg-black/50 backdrop-blur-sm ${backdropClass}`} />
       <div
         className={`relative w-full ${desktopSizes[size]} rounded-t-[28px] sm:rounded-2xl bg-white dark:bg-[#1c1b1e] ring-1 ring-black/[0.06] dark:ring-white/[0.08] ${sheetClass} max-h-[92dvh] sm:max-h-[85vh] flex flex-col overflow-hidden sm:mx-4`}
         style={{
-          paddingBottom: 'env(safe-area-inset-bottom)',
           boxShadow: '0 24px 64px -16px rgba(0,0,0,0.3), 0 8px 24px -8px rgba(0,0,0,0.15)',
         }}
         onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title || 'Dialog'}
+        data-modal-sheet
       >
         {!hideHeader && (
           <div className={`relative flex items-center justify-between px-5 border-b border-black/[0.05] dark:border-white/[0.06] shrink-0 ${titleAlign === 'center' ? 'pt-8 pb-5' : 'pt-7 pb-4'}`}>
@@ -113,7 +141,7 @@ export function Modal({
         {hideHeader && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 w-8 h-1 rounded-full bg-gray-200 dark:bg-gray-700 sm:hidden z-10" />
         )}
-        <div className="overflow-y-auto flex-1 px-5 py-5 scrollbar-thin">
+        <div className={`overflow-y-auto overflow-x-hidden flex-1 px-5 py-5 scrollbar-thin overscroll-contain ${bodyClassName}`} data-modal-body>
           {children}
         </div>
       </div>

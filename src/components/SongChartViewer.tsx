@@ -1,9 +1,11 @@
 import { useLayoutEffect, useRef } from 'react';
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ALargeSmall, ArrowDown, ArrowUp, Bold, Captions, ChevronLeft, ChevronRight, Copy, Edit3, GripVertical, Italic, Lock, Minus, Music2, Plus, Save, StickyNote, Trash2, Users, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Bold, Captions, Check, ChevronLeft, ChevronRight, Copy, Edit3, Gauge, Italic, ListOrdered, Lock, Minus, Moon, Music2, Pause, Play, Plus, RotateCcw, Save, Settings2, StickyNote, Sun, Trash2, Users, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { ChordProLine, detectChordProKey, formatChordProForPlainEditor, getKeyTransposeOffset, parseChordPro, parseChordProMetadata, plainEditorSectionsToChordPro, plainEditorToChordPro, transposeChordPro, transposeKey } from '../lib/chordPro';
+import { useTheme } from '../contexts/ThemeContext';
 
 const SECTION_TONES = [
   {
@@ -86,6 +88,9 @@ const CHART_EDITOR_DRAFT_STORAGE_VERSION = 1;
 const CHART_EDITOR_DRAFT_STORAGE_PREFIX = 'servesync:song-chart-editor-draft';
 const CHART_FONT_SIZE_MIN = 8;
 const CHART_FONT_SIZE_MAX = 36;
+const AUTO_SCROLL_SPEED_MIN = 8;
+const AUTO_SCROLL_SPEED_MAX = 80;
+const AUTO_SCROLL_SPEED_DEFAULT = 24;
 const SHARP_KEY_OPTIONS = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
 const FLAT_KEY_OPTIONS = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
 
@@ -99,6 +104,7 @@ interface ChartDisplaySettings {
   chordBold: boolean;
   chordItalic: boolean;
   lyricsOnly: boolean;
+  autoScrollSpeed: number;
 }
 
 interface StoredChartEditorDraft {
@@ -133,6 +139,7 @@ const DEFAULT_CHART_SETTINGS: ChartDisplaySettings = {
   chordBold: true,
   chordItalic: false,
   lyricsOnly: false,
+  autoScrollSpeed: AUTO_SCROLL_SPEED_DEFAULT,
 };
 
 function loadChartDisplaySettings(): ChartDisplaySettings {
@@ -153,6 +160,7 @@ function loadChartDisplaySettings(): ChartDisplaySettings {
       chordBold: typeof parsed.chordBold === 'boolean' ? parsed.chordBold : DEFAULT_CHART_SETTINGS.chordBold,
       chordItalic: typeof parsed.chordItalic === 'boolean' ? parsed.chordItalic : DEFAULT_CHART_SETTINGS.chordItalic,
       lyricsOnly: typeof parsed.lyricsOnly === 'boolean' ? parsed.lyricsOnly : DEFAULT_CHART_SETTINGS.lyricsOnly,
+      autoScrollSpeed: normalizeAutoScrollSpeed(parsed.autoScrollSpeed),
     };
   } catch {
     return DEFAULT_CHART_SETTINGS;
@@ -209,7 +217,7 @@ function getInitialEditorState(songId: string | undefined, chordproText: string 
       draft: storedDraft.plainDraft,
       draftSections: storedDraft.draftSections,
       sectionEditorEnabled: storedDraft.sectionEditorEnabled,
-      isEditing: false,
+      isEditing: storedDraft.isEditing,
       selectionStart: storedDraft.selectionStart,
       selectionEnd: storedDraft.selectionEnd,
     };
@@ -234,6 +242,12 @@ function normalizeFontSize(value: unknown, fallback: number) {
     : fallback;
 }
 
+function normalizeAutoScrollSpeed(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? clampFontSize(value, AUTO_SCROLL_SPEED_MIN, AUTO_SCROLL_SPEED_MAX)
+    : AUTO_SCROLL_SPEED_DEFAULT;
+}
+
 function stepFontSize(value: unknown, delta: number, fallback: number) {
   return normalizeFontSize(normalizeFontSize(value, fallback) + delta, fallback);
 }
@@ -245,6 +259,8 @@ function getSectionTone(section?: string) {
 
 interface SongChartViewerProps {
   songId?: string;
+  draftStorageId?: string;
+  sectionOrder?: string[] | null;
   title: string;
   artist?: string | null;
   songKey?: string | null;
@@ -254,8 +270,13 @@ interface SongChartViewerProps {
   saving?: boolean;
   hideTitleHeader?: boolean;
   controlsVisible?: boolean;
+  arrangementOpen?: boolean;
+  onArrangementOpenChange?: (open: boolean) => void;
+  autoScrollEnabled?: boolean;
+  onAutoScrollEnabledChange?: (enabled: boolean) => void;
   onClose?: () => void;
   onSave?: (text: string) => Promise<void> | void;
+  onSaveSectionOrder?: (order: string[] | null) => Promise<void> | void;
   onEditingChange?: (isEditing: boolean) => void;
   footerNavigation?: {
     currentLabel: string;
@@ -361,6 +382,43 @@ function createEditableSectionsFromChordPro(chordpro: string): EditableChartSect
   }));
 }
 
+function getSectionOrderPrefix(label: string) {
+  const normalized = label.toLowerCase();
+  if (normalized.includes('pre') && normalized.includes('chorus')) return 'PC';
+  if (normalized.includes('intro')) return 'I';
+  if (normalized.includes('interlude')) return 'I';
+  if (normalized.includes('verse')) return 'V';
+  if (normalized.includes('chorus')) return 'C';
+  if (normalized.includes('bridge')) return 'B';
+  if (normalized.includes('tag')) return 'T';
+  if (normalized.includes('outro')) return 'O';
+  if (normalized.includes('ending')) return 'E';
+  return (label.match(/[a-z0-9]/i)?.[0] || 'S').toUpperCase();
+}
+
+function buildSectionOrderLookups(sections: ChartSection[]) {
+  const counts: Record<string, number> = {};
+  const byCode = new Map<string, ChartSection>();
+  const codesByKey = new Map<string, string>();
+
+  sections.forEach(section => {
+    const prefix = getSectionOrderPrefix(section.label);
+    counts[prefix] = (counts[prefix] || 0) + 1;
+    const code = `${prefix}${counts[prefix]}`;
+    byCode.set(code, section);
+    codesByKey.set(section.key, code);
+  });
+
+  return { byCode, codesByKey };
+}
+
+function parseSectionOrderInput(input: string) {
+  return input
+    .split(/[\s,>|\-]+/)
+    .map(token => token.trim().toUpperCase())
+    .filter(Boolean);
+}
+
 function editableSectionsToPlainEditor(sections: EditableChartSection[]) {
   return sections
     .map(section => {
@@ -378,8 +436,8 @@ function createEditableSection(label = 'Verse') {
   };
 }
 
-function getSectionEditorHeight(text: string) {
-  const lineCount = Math.max(5, text.split(/\r?\n/).length + 1);
+function getSectionEditorHeight(text: string, minLines = 5) {
+  const lineCount = Math.max(minLines, text.split(/\r?\n/).length + 1);
   return `${lineCount * 28 + 28}px`;
 }
 
@@ -387,9 +445,10 @@ interface AutoSizeSectionTextareaProps {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
+  flat?: boolean;
 }
 
-function AutoSizeSectionTextarea({ value, onChange, placeholder }: AutoSizeSectionTextareaProps) {
+function AutoSizeSectionTextarea({ value, onChange, placeholder, flat = false }: AutoSizeSectionTextareaProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useLayoutEffect(() => {
@@ -404,8 +463,12 @@ function AutoSizeSectionTextarea({ value, onChange, placeholder }: AutoSizeSecti
       ref={textareaRef}
       value={value}
       onChange={event => onChange(event.target.value)}
-      className="service-mode-section-textarea w-full resize-none overflow-hidden rounded-[18px] border border-black/[0.06] bg-gray-50 p-3 font-mono text-[12px] leading-7 text-gray-950 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-500/10 dark:border-white/[0.08] dark:bg-black/20 dark:text-white/85"
-      style={{ minHeight: getSectionEditorHeight('') }}
+      className={
+        flat
+          ? 'service-mode-section-textarea w-full resize-none overflow-hidden border-l-2 border-transparent bg-transparent px-2 py-1 font-mono text-[12px] leading-7 text-gray-950 outline-none transition focus:border-emerald-300 focus:bg-emerald-50/40 dark:text-white/85 dark:focus:border-emerald-400/60 dark:focus:bg-emerald-500/10'
+          : 'service-mode-section-textarea w-full resize-none overflow-hidden rounded-[18px] border border-black/[0.06] bg-gray-50 p-3 font-mono text-[12px] leading-7 text-gray-950 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-500/10 dark:border-white/[0.08] dark:bg-black/20 dark:text-white/85'
+      }
+      style={{ minHeight: flat ? '36px' : getSectionEditorHeight('', 5) }}
       placeholder={placeholder}
       spellCheck={false}
     />
@@ -414,6 +477,8 @@ function AutoSizeSectionTextarea({ value, onChange, placeholder }: AutoSizeSecti
 
 export function SongChartViewer({
   songId,
+  draftStorageId,
+  sectionOrder,
   title,
   artist,
   songKey,
@@ -423,11 +488,17 @@ export function SongChartViewer({
   saving = false,
   hideTitleHeader = false,
   controlsVisible = true,
+  arrangementOpen: controlledArrangementOpen,
+  onArrangementOpenChange,
+  autoScrollEnabled: controlledAutoScrollEnabled,
+  onAutoScrollEnabledChange,
   onClose,
   onSave,
+  onSaveSectionOrder,
   onEditingChange,
   footerNavigation,
 }: SongChartViewerProps) {
+  const { theme, toggle: toggleTheme } = useTheme();
   const initialEditorState = useMemo(() => getInitialEditorState(songId, chordproText), []); // eslint-disable-line react-hooks/exhaustive-deps
   const [transpose, setTranspose] = useState(0);
   const [isEditing, setIsEditing] = useState(initialEditorState.isEditing);
@@ -445,10 +516,16 @@ export function SongChartViewer({
   const [noteError, setNoteError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [keyPickerOpen, setKeyPickerOpen] = useState(false);
+  const [internalArrangementOpen, setInternalArrangementOpen] = useState(false);
+  const [arrangementInput, setArrangementInput] = useState('');
+  const [arrangementSaving, setArrangementSaving] = useState(false);
+  const [arrangementSaveMessage, setArrangementSaveMessage] = useState<string | null>(null);
+  const [clearArrangementConfirmOpen, setClearArrangementConfirmOpen] = useState(false);
   const [displaySettings, setDisplaySettings] = useState<ChartDisplaySettings>(() => loadChartDisplaySettings());
-  const [draggedSectionIndex, setDraggedSectionIndex] = useState<number | null>(null);
+  const [internalAutoScrollEnabled, setInternalAutoScrollEnabled] = useState(false);
   const [savedPreviewChordPro, setSavedPreviewChordPro] = useState<string | null>(null);
   const plainTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const chartScrollRef = useRef<HTMLDivElement | null>(null);
   const mountedSongIdRef = useRef(songId);
   const selectionRef = useRef<{ start?: number; end?: number }>({
     start: initialEditorState.selectionStart,
@@ -458,7 +535,7 @@ export function SongChartViewer({
   const previousChartAnimationIdentityRef = useRef(chartAnimationIdentity);
   const isSwitchingChartContent = previousChartAnimationIdentityRef.current !== chartAnimationIdentity;
   const savedPlainDraftFromProps = useMemo(() => formatChordProForPlainEditor(chordproText || ''), [chordproText]);
-  const draftStorageKey = useMemo(() => chartEditorDraftStorageKey(songId), [songId]);
+  const draftStorageKey = useMemo(() => chartEditorDraftStorageKey(draftStorageId || songId), [draftStorageId, songId]);
   const sectionDraft = useMemo(() => editableSectionsToPlainEditor(draftSections), [draftSections]);
   const activeDraft = sectionEditorEnabled ? sectionDraft : draft;
   const hasDraftChanges = activeDraft !== savedPlainDraft;
@@ -468,11 +545,29 @@ export function SongChartViewer({
   const lyricFontSize = normalizeFontSize(displaySettings.lyricFontSize, DEFAULT_CHART_SETTINGS.lyricFontSize);
   const chordFontSize = normalizeFontSize(displaySettings.chordFontSize, DEFAULT_CHART_SETTINGS.chordFontSize);
   const sectionBadgeFontSize = normalizeFontSize(displaySettings.sectionBadgeFontSize, DEFAULT_CHART_SETTINGS.sectionBadgeFontSize);
+  const autoScrollSpeed = normalizeAutoScrollSpeed(displaySettings.autoScrollSpeed);
+  const arrangementOpen = controlledArrangementOpen ?? internalArrangementOpen;
+  const setArrangementOpen = (next: boolean | ((current: boolean) => boolean)) => {
+    const nextValue = typeof next === 'function' ? next(arrangementOpen) : next;
+    if (controlledArrangementOpen === undefined) {
+      setInternalArrangementOpen(nextValue);
+    }
+    onArrangementOpenChange?.(nextValue);
+  };
+  const autoScrollEnabled = controlledAutoScrollEnabled ?? internalAutoScrollEnabled;
+  const setAutoScrollEnabled = (next: boolean | ((current: boolean) => boolean)) => {
+    const nextValue = typeof next === 'function' ? next(autoScrollEnabled) : next;
+    if (controlledAutoScrollEnabled === undefined) {
+      setInternalAutoScrollEnabled(nextValue);
+    }
+    onAutoScrollEnabledChange?.(nextValue);
+  };
 
   useEffect(() => {
     if (mountedSongIdRef.current !== songId) {
       const nextEditorState = getInitialEditorState(songId, chordproText);
       mountedSongIdRef.current = songId;
+      setAutoScrollEnabled(false);
       setSavedPlainDraft(savedPlainDraftFromProps);
       setDraft(nextEditorState.draft);
       setDraftSections(nextEditorState.draftSections);
@@ -551,6 +646,7 @@ export function SongChartViewer({
   useEffect(() => {
     onEditingChange?.(isEditing);
     if (isEditing) setSettingsOpen(false);
+    if (isEditing) setAutoScrollEnabled(false);
   }, [isEditing, onEditingChange]);
 
   useEffect(() => {
@@ -561,24 +657,83 @@ export function SongChartViewer({
         lyricFontSize,
         chordFontSize,
         sectionBadgeFontSize,
+        autoScrollSpeed,
       }));
     } catch {
       // Display settings are a convenience; the chart should still work if storage is unavailable.
     }
-  }, [chordFontSize, displaySettings, lyricFontSize, sectionBadgeFontSize]);
+  }, [autoScrollSpeed, chordFontSize, displaySettings, lyricFontSize, sectionBadgeFontSize]);
 
   const previewChordProText = savedPreviewChordPro ?? chordproText ?? '';
   const renderedText = useMemo(() => transposeChordPro(previewChordProText, transpose), [previewChordProText, transpose]);
   const chartLines = useMemo(() => parseChordPro(renderedText), [renderedText]);
   const chartSections = useMemo(() => buildChartSections(chartLines), [chartLines]);
+  const sectionOrderLookups = useMemo(() => buildSectionOrderLookups(chartSections), [chartSections]);
+  const defaultSectionOrder = useMemo(
+    () => chartSections.map(section => sectionOrderLookups.codesByKey.get(section.key)).filter((code): code is string => Boolean(code)),
+    [chartSections, sectionOrderLookups]
+  );
+  const effectiveSectionOrder = sectionOrder?.length ? sectionOrder.map(token => token.toUpperCase()) : defaultSectionOrder;
+  const arrangedChartSections = useMemo(() => {
+    if (!sectionOrder?.length) return chartSections;
+    const arranged = sectionOrder
+      .map(token => sectionOrderLookups.byCode.get(token.toUpperCase()))
+      .filter((section): section is ChartSection => Boolean(section));
+    return arranged.length > 0 ? arranged : chartSections;
+  }, [chartSections, sectionOrder, sectionOrderLookups]);
   const displayKey = detectedKey ? transposeKey(detectedKey, transpose) : '';
   const keyOptions = useMemo(
     () => detectedKey.includes('b') ? FLAT_KEY_OPTIONS : SHARP_KEY_OPTIONS,
     [detectedKey]
   );
   const showControls = controlsVisible || isEditing;
-  const showTopBar = !hideTitleHeader || showControls;
+  const showTopBar = !hideTitleHeader || showControls || arrangementOpen;
   const selfNotesStorageKey = songId ? `servesync:song-section-notes:${songId}` : '';
+
+  useEffect(() => {
+    setArrangementInput(effectiveSectionOrder.join(' '));
+  }, [effectiveSectionOrder.join(' ')]);
+
+  useEffect(() => {
+    if (!arrangementSaveMessage) return;
+    const timeoutId = window.setTimeout(() => setArrangementSaveMessage(null), 1800);
+    return () => window.clearTimeout(timeoutId);
+  }, [arrangementSaveMessage]);
+
+  useEffect(() => {
+    if (!autoScrollEnabled || isEditing) return;
+    const scrollElement = chartScrollRef.current;
+    if (!scrollElement) return;
+
+    let lastFrameTime = performance.now();
+    let pendingPixels = 0;
+    let animationFrame = 0;
+
+    const tick = (frameTime: number) => {
+      const secondsElapsed = Math.min((frameTime - lastFrameTime) / 1000, 0.08);
+      lastFrameTime = frameTime;
+
+      const maxScrollTop = scrollElement.scrollHeight - scrollElement.clientHeight;
+      if (maxScrollTop <= 0 || scrollElement.scrollTop >= maxScrollTop - 1) {
+        setAutoScrollEnabled(false);
+        return;
+      }
+
+      pendingPixels += autoScrollSpeed * secondsElapsed;
+      const wholePixels = Math.floor(pendingPixels);
+
+      if (wholePixels > 0) {
+        pendingPixels -= wholePixels;
+        scrollElement.scrollTop = Math.min(maxScrollTop, scrollElement.scrollTop + wholePixels);
+      }
+
+      animationFrame = window.requestAnimationFrame(tick);
+    };
+
+    animationFrame = window.requestAnimationFrame(tick);
+
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [autoScrollEnabled, autoScrollSpeed, isEditing, renderedText]);
 
   useEffect(() => {
     if (!controlsVisible) {
@@ -588,7 +743,9 @@ export function SongChartViewer({
   }, [controlsVisible]);
 
   useEffect(() => {
-    if (isEditing) setKeyPickerOpen(false);
+    if (!isEditing) return;
+    setKeyPickerOpen(false);
+    setArrangementOpen(false);
   }, [isEditing]);
 
   useEffect(() => {
@@ -756,6 +913,49 @@ export function SongChartViewer({
     }
   };
 
+  const handleSaveSectionOrder = async () => {
+    if (!onSaveSectionOrder || arrangementSaving) return;
+
+    const tokens = parseSectionOrderInput(arrangementInput);
+    if (tokens.length === 0) {
+      setArrangementSaveMessage(null);
+      setNoteError('Add at least one section before saving, or use reset to restore the default order.');
+      return;
+    }
+
+    const invalidTokens = tokens.filter(token => !sectionOrderLookups.byCode.has(token));
+    if (invalidTokens.length > 0) {
+      setArrangementSaveMessage(null);
+      setNoteError(`Unknown section: ${invalidTokens[0]}. Use one of ${defaultSectionOrder.join(', ')}.`);
+      return;
+    }
+
+    const isDefaultOrder = tokens.length === defaultSectionOrder.length
+      && tokens.every((token, index) => token === defaultSectionOrder[index]);
+
+    setArrangementSaving(true);
+    setNoteError('');
+    try {
+      await onSaveSectionOrder(isDefaultOrder ? null : tokens);
+      setArrangementInput((isDefaultOrder ? defaultSectionOrder : tokens).join(' '));
+      setArrangementSaveMessage(isDefaultOrder ? 'Default restored' : 'Saved');
+    } catch (error) {
+      console.error('Failed to save section order:', error);
+      setArrangementSaveMessage(null);
+      setNoteError('Could not save the section order.');
+    } finally {
+      setArrangementSaving(false);
+    }
+  };
+
+  const confirmClearSectionOrder = () => {
+    if (arrangementSaving) return;
+    setNoteError('');
+    setArrangementSaveMessage(null);
+    setArrangementInput('');
+    setClearArrangementConfirmOpen(false);
+  };
+
   const requestClose = () => {
     if (hasDraftChanges) {
       const shouldClose = window.confirm('Close this chart editor? Your unsaved draft will stay on this device, but it has not been saved to the database yet.');
@@ -785,6 +985,14 @@ export function SongChartViewer({
       const duplicate = { ...section, id: createEditableSection().id, label: `${section.label} Copy` };
       const nextSections = [...sections];
       nextSections.splice(index + 1, 0, duplicate);
+      return nextSections;
+    });
+  };
+
+  const insertDraftSectionAfter = (index: number) => {
+    setDraftSections(sections => {
+      const nextSections = [...sections];
+      nextSections.splice(index + 1, 0, createEditableSection('New Section'));
       return nextSections;
     });
   };
@@ -824,7 +1032,7 @@ export function SongChartViewer({
         <AnimatePresence initial={false}>
           {showControls && (
             <motion.div
-              className={`flex flex-wrap items-center gap-2 overflow-visible py-1 ${hideTitleHeader ? '-my-1' : 'mt-3 -mb-1'}`}
+              className={`flex flex-nowrap items-center gap-1.5 overflow-visible py-1 ${hideTitleHeader ? '-my-1' : 'mt-3 -mb-1'}`}
               initial={{ height: 0, opacity: 0, y: -10, filter: 'blur(8px)' }}
               animate={{ height: 'auto', opacity: 1, y: 0, filter: 'blur(0px)' }}
               exit={{ height: 0, opacity: 0, y: -8, filter: 'blur(8px)' }}
@@ -838,10 +1046,11 @@ export function SongChartViewer({
                   if (!detectedKey) return;
                   setKeyPickerOpen(value => !value);
                   setSettingsOpen(false);
+                  setArrangementOpen(false);
                 }}
                 disabled={!detectedKey}
                 aria-expanded={keyPickerOpen}
-                className={`inline-flex h-10 min-w-[102px] items-center justify-center rounded-full border-2 px-4 text-sm font-black transition active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 ${
+                className={`inline-flex h-10 min-w-[74px] shrink-0 items-center justify-center whitespace-nowrap rounded-full border-2 px-3 text-[13px] font-black transition active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-[102px] sm:px-4 sm:text-sm ${
                   keyPickerOpen
                     ? 'border-emerald-500 bg-emerald-600 text-white shadow-lg shadow-emerald-600/20'
                     : 'border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm shadow-emerald-500/10 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-300'
@@ -855,21 +1064,22 @@ export function SongChartViewer({
                 onClick={() => {
                   setSettingsOpen(value => !value);
                   setKeyPickerOpen(false);
+                  setArrangementOpen(false);
                 }}
-                className={`inline-flex h-10 items-center gap-1.5 rounded-full border-2 px-3.5 text-sm font-black transition active:scale-[0.97] ${
+                className={`inline-flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border-2 px-2.5 text-[13px] font-black transition active:scale-[0.97] sm:px-3.5 sm:text-sm ${
                   settingsOpen
                     ? 'border-emerald-500 bg-emerald-600 text-white shadow-lg shadow-emerald-600/20'
                     : 'border-black/[0.08] bg-white/90 text-gray-700 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-white/70'
                 }`}
               >
-                <ALargeSmall className="h-3.5 w-3.5" />
-                <span>Font</span>
+                <Settings2 className="h-3.5 w-3.5" />
+                <span>Display</span>
               </button>
               <button
                 type="button"
                 onClick={() => setDisplaySettings(settings => ({ ...settings, lyricsOnly: !settings.lyricsOnly }))}
                 aria-pressed={displaySettings.lyricsOnly}
-                className={`inline-flex h-10 items-center gap-1.5 rounded-full border-2 px-3.5 text-sm font-black transition active:scale-[0.97] ${
+                className={`inline-flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border-2 px-2.5 text-[13px] font-black transition active:scale-[0.97] sm:px-3.5 sm:text-sm ${
                   displaySettings.lyricsOnly
                     ? 'border-sky-500 bg-sky-600 text-white shadow-lg shadow-sky-600/20'
                     : 'border-black/[0.08] bg-white/90 text-gray-700 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-white/70'
@@ -883,7 +1093,7 @@ export function SongChartViewer({
           {editable && !isEditing && (
             <button
               onClick={() => setIsEditing(true)}
-              className="ml-auto inline-flex h-10 items-center gap-1.5 rounded-full border-2 border-slate-200 bg-slate-900 px-3.5 text-sm font-black text-white shadow-lg shadow-slate-900/15 transition active:scale-[0.97] dark:border-white/[0.10] dark:bg-white/[0.12] dark:text-white"
+              className="ml-auto inline-flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border-2 border-slate-200 bg-slate-900 px-3 text-[13px] font-black text-white shadow-lg shadow-slate-900/15 transition active:scale-[0.97] dark:border-white/[0.10] dark:bg-white/[0.12] dark:text-white sm:px-3.5 sm:text-sm"
             >
               <Edit3 className="h-3.5 w-3.5" />
               <span className="sm:hidden">Edit</span>
@@ -961,7 +1171,60 @@ export function SongChartViewer({
               exit={{ height: 0, opacity: 0, y: -8, scale: 0.98, filter: 'blur(10px)' }}
               transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
             >
-              <div className="grid gap-2 p-2 sm:grid-cols-3">
+              <div className="grid gap-2 p-2 sm:grid-cols-2 xl:grid-cols-5">
+                <div className="grid gap-1.5 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-2 shadow-sm shadow-slate-500/5 dark:border-white/10 dark:bg-white/[0.055]">
+                  <span className="flex items-center justify-between text-[12px] font-black uppercase tracking-[0.16em] text-slate-900 dark:text-white">
+                    Appearance
+                    <span className="rounded-full bg-white/80 px-2 py-0.5 font-mono text-[11px] capitalize text-slate-600 ring-1 ring-slate-200/80 dark:bg-white/[0.07] dark:text-white/70 dark:ring-white/10">{theme}</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={toggleTheme}
+                    className="relative inline-flex h-10 items-center justify-center gap-2 rounded-full bg-white px-3 text-xs font-black text-slate-700 ring-1 ring-black/[0.06] transition active:scale-[0.97] dark:bg-white/[0.08] dark:text-white/75 dark:ring-white/[0.08]"
+                    aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+                  >
+                    <span className="relative flex h-4 w-4 items-center justify-center">
+                      <Sun className={`absolute h-4 w-4 transition-all duration-300 ${theme === 'dark' ? 'scale-0 rotate-90 opacity-0' : 'scale-100 rotate-0 opacity-100'}`} />
+                      <Moon className={`absolute h-4 w-4 transition-all duration-300 ${theme === 'dark' ? 'scale-100 rotate-0 opacity-100' : 'scale-0 -rotate-90 opacity-0'}`} />
+                    </span>
+                    {theme === 'dark' ? 'Use light' : 'Use dark'}
+                  </button>
+                </div>
+                <div className="grid gap-1.5 rounded-2xl border border-emerald-200/80 bg-emerald-50/70 p-2 shadow-sm shadow-emerald-500/5 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:shadow-emerald-950/10">
+                  <span className="flex items-center justify-between text-[12px] font-black uppercase tracking-[0.16em] text-emerald-900 dark:text-emerald-100">
+                    Auto Scroll
+                    <span className="rounded-full bg-white/80 px-2 py-0.5 font-mono text-[11px] text-emerald-700 ring-1 ring-emerald-200/80 dark:bg-emerald-300/10 dark:text-emerald-100 dark:ring-emerald-300/20">{autoScrollSpeed}px/s</span>
+                  </span>
+                  <div className="grid grid-cols-[42px_1fr] items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setAutoScrollEnabled(value => !value)}
+                      className={`flex h-10 items-center justify-center rounded-full transition active:scale-[0.96] ${
+                        autoScrollEnabled
+                          ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20'
+                          : 'bg-white text-emerald-700 ring-1 ring-emerald-200/80 dark:bg-white/[0.08] dark:text-emerald-200 dark:ring-emerald-300/15'
+                      }`}
+                      aria-label={autoScrollEnabled ? 'Pause auto scroll' : 'Start auto scroll'}
+                      aria-pressed={autoScrollEnabled}
+                    >
+                      {autoScrollEnabled ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                    </button>
+                    <label className="grid gap-1">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-200">
+                        <Gauge className="h-3 w-3" /> Speed
+                      </span>
+                      <input
+                        type="range"
+                        min={AUTO_SCROLL_SPEED_MIN}
+                        max={AUTO_SCROLL_SPEED_MAX}
+                        step={2}
+                        value={autoScrollSpeed}
+                        onChange={event => setDisplaySettings(settings => ({ ...settings, autoScrollSpeed: normalizeAutoScrollSpeed(Number(event.target.value)) }))}
+                        className="h-2 w-full accent-emerald-600"
+                      />
+                    </label>
+                  </div>
+                </div>
                 <div className="grid gap-1.5 rounded-2xl border border-sky-200/80 bg-sky-50/70 p-2 shadow-sm shadow-sky-500/5 dark:border-sky-400/20 dark:bg-sky-500/10 dark:shadow-sky-950/10">
                   <span className="flex items-center justify-between text-[12px] font-black uppercase tracking-[0.16em] text-sky-900 dark:text-sky-100">
                     Lyrics <span className="rounded-full bg-white/80 px-2 py-0.5 font-mono text-[11px] text-sky-700 ring-1 ring-sky-200/80 dark:bg-sky-300/10 dark:text-sky-100 dark:ring-sky-300/20">{lyricFontSize}px</span>
@@ -1108,100 +1371,191 @@ export function SongChartViewer({
             </motion.div>
           )}
         </AnimatePresence>
+
+        <AnimatePresence initial={false}>
+          {arrangementOpen && onSaveSectionOrder && !isEditing && (
+            <motion.div
+              className="mt-3 overflow-hidden rounded-3xl border border-amber-200/80 bg-amber-50/90 shadow-sm shadow-amber-500/10 backdrop-blur-xl dark:border-amber-400/20 dark:bg-amber-500/10"
+              initial={{ height: 0, opacity: 0, y: -10, scale: 0.98, filter: 'blur(10px)' }}
+              animate={{ height: 'auto', opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+              exit={{ height: 0, opacity: 0, y: -8, scale: 0.98, filter: 'blur(10px)' }}
+              transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <div className="grid gap-2 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="inline-flex items-center gap-1.5 text-[12px] font-black uppercase tracking-[0.16em] text-amber-900 dark:text-amber-100">
+                    <ListOrdered className="h-3.5 w-3.5" />
+                    Arrangement
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="rounded-full bg-white/80 px-2 py-0.5 font-mono text-[11px] text-amber-700 ring-1 ring-amber-200/80 dark:bg-amber-300/10 dark:text-amber-100 dark:ring-amber-300/20">
+                      {effectiveSectionOrder.length}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setArrangementSaveMessage(null);
+                        setNoteError('');
+                        setArrangementInput(defaultSectionOrder.join(' '));
+                      }}
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-amber-700 ring-1 ring-amber-200 transition active:scale-[0.95] dark:bg-white/[0.08] dark:text-amber-100 dark:ring-amber-300/15"
+                      aria-label="Reset arrangement to default"
+                      title="Reset arrangement to default"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {defaultSectionOrder.map(code => (
+                    <button
+                      key={code}
+                      type="button"
+                      onClick={() => {
+                        setArrangementSaveMessage(null);
+                        setNoteError('');
+                        setArrangementInput(value => `${value.trim()} ${code}`.trim());
+                      }}
+                      className="h-8 rounded-full bg-white px-3 font-mono text-xs font-black text-amber-800 ring-1 ring-amber-200 transition active:scale-[0.96] dark:bg-white/[0.08] dark:text-amber-100 dark:ring-amber-300/15"
+                    >
+                      {code}
+                    </button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-[1fr_auto_auto] gap-1.5">
+                  <input
+                    value={arrangementInput}
+                    onChange={event => {
+                      setArrangementSaveMessage(null);
+                      setNoteError('');
+                      setArrangementInput(event.target.value.toUpperCase());
+                    }}
+                    className="h-10 min-w-0 rounded-full border border-amber-200 bg-white px-3 font-mono text-xs font-bold uppercase text-gray-900 outline-none focus:border-amber-400 focus:ring-4 focus:ring-amber-500/10 dark:border-amber-300/20 dark:bg-white/[0.06] dark:text-white"
+                    placeholder={defaultSectionOrder.join(' ')}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setClearArrangementConfirmOpen(true)}
+                    disabled={arrangementSaving}
+                    className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-red-500 ring-1 ring-red-200 transition active:scale-[0.96] disabled:opacity-60 dark:bg-white/[0.08] dark:text-red-300 dark:ring-red-400/20"
+                    aria-label="Delete custom arrangement"
+                    title="Delete custom arrangement"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveSectionOrder}
+                    disabled={arrangementSaving}
+                    className="flex h-10 items-center gap-1.5 rounded-full bg-amber-600 px-3 text-xs font-black text-white shadow-lg shadow-amber-600/20 transition active:scale-[0.96] disabled:opacity-60"
+                  >
+                    <ListOrdered className="h-3.5 w-3.5" />
+                    {arrangementSaving ? 'Saving' : 'Save'}
+                  </button>
+                </div>
+                <AnimatePresence initial={false}>
+                  {arrangementSaveMessage && (
+                    <motion.div
+                      className="inline-flex h-8 w-fit items-center gap-1.5 rounded-full border border-emerald-200 bg-white/90 px-3 text-xs font-black text-emerald-700 shadow-sm shadow-emerald-500/10 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:text-emerald-200"
+                      initial={{ opacity: 0, y: -4, scale: 0.96 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -4, scale: 0.96 }}
+                      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                      {arrangementSaveMessage}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                {noteError && (
+                  <p className="text-xs font-bold leading-relaxed text-red-600 dark:text-red-300">
+                    {noteError}
+                  </p>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
         </div>
       )}
 
       {isEditing && sectionEditorEnabled ? (
-        <div className={`min-h-0 flex-1 overflow-y-auto bg-gray-50/70 dark:bg-black/20 ${fullBleed ? 'service-mode-edit-scroll px-4 pt-5 sm:px-8 sm:pt-7' : 'px-5 py-5'}`}>
-          <div className="mx-auto max-w-3xl space-y-3">
-            <div className="flex items-center justify-between gap-3 rounded-3xl border border-black/[0.06] bg-white/85 p-3 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.04]">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300">Arrange sections</p>
-                <p className="mt-1 text-xs font-semibold text-gray-500 dark:text-white/45">Edit, duplicate, delete, or drag cards into the order you want.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setDraftSections(sections => [...sections, createEditableSection('New Section')])}
-                className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-emerald-600 px-3 text-xs font-black text-white shadow-lg shadow-emerald-600/20 transition active:scale-[0.97]"
-              >
-                <Plus className="h-3.5 w-3.5" /> Section
-              </button>
-            </div>
+        <div ref={chartScrollRef} className={`min-h-0 flex-1 overflow-y-auto ${fullBleed ? 'service-mode-chart-scroll bg-white px-4 pt-4 dark:bg-[#111412] sm:px-6 sm:pt-6' : 'bg-gray-50/70 px-5 py-5 dark:bg-black/20'}`}>
+          <div className={`mx-auto ${fullBleed ? 'max-w-none space-y-0' : 'max-w-3xl space-y-3'}`}>
+            {draftSections.map((section, index) => {
+              const tone = getSectionTone(section.label);
 
-            {draftSections.map((section, index) => (
-              <div
-                key={section.id}
-                onDragOver={event => event.preventDefault()}
-                onDrop={() => {
-                  if (draggedSectionIndex !== null) moveDraftSection(draggedSectionIndex, index);
-                  setDraggedSectionIndex(null);
-                }}
-                onDragEnd={() => setDraggedSectionIndex(null)}
-                className={`rounded-[24px] border bg-white p-3 shadow-sm transition dark:bg-[#141815] ${
-                  draggedSectionIndex === index
-                    ? 'border-emerald-300 opacity-70 shadow-emerald-500/15 dark:border-emerald-400/40'
-                    : 'border-black/[0.06] dark:border-white/[0.08]'
-                }`}
-              >
-                <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    draggable
-                    onDragStart={() => setDraggedSectionIndex(index)}
-                    onDragEnd={() => setDraggedSectionIndex(null)}
-                    className="flex h-9 w-9 cursor-grab items-center justify-center rounded-full bg-gray-100 text-gray-400 active:cursor-grabbing dark:bg-white/[0.06] dark:text-white/40"
-                    aria-label={`Drag ${section.label}`}
-                  >
-                    <GripVertical className="h-4 w-4" />
-                  </button>
-                  <input
-                    value={section.label}
-                    onChange={event => updateDraftSection(section.id, { label: event.target.value })}
-                    className="h-9 min-w-0 flex-1 rounded-full border border-black/[0.06] bg-gray-50 px-3 text-xs font-black uppercase tracking-[0.16em] text-gray-900 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-500/10 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white"
-                    placeholder="Section name"
+              return (
+                <section
+                  key={section.id}
+                  className={
+                    fullBleed
+                      ? 'border-t border-black/[0.06] px-0.5 py-5 transition first:border-t-0 dark:border-white/[0.08]'
+                      : 'rounded-[24px] border border-black/[0.06] bg-white p-3 shadow-sm transition dark:border-white/[0.08] dark:bg-[#141815]'
+                  }
+                >
+                  <div className="mb-3 flex flex-wrap items-center gap-1.5">
+                    <input
+                      value={section.label}
+                      onChange={event => updateDraftSection(section.id, { label: event.target.value })}
+                      className={fullBleed
+                        ? `h-8 min-w-0 flex-1 rounded-full border px-3 text-xs font-black uppercase tracking-[0.16em] outline-none transition focus:ring-4 focus:ring-emerald-500/10 ${tone.badge}`
+                        : 'h-8 min-w-0 flex-1 rounded-full border border-black/[0.06] bg-gray-50 px-3 text-xs font-black uppercase tracking-[0.16em] text-gray-900 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-500/10 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white'
+                      }
+                      placeholder="Section name"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => moveDraftSection(index, index - 1)}
+                      disabled={index === 0}
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition active:scale-[0.96] disabled:opacity-35 dark:bg-white/[0.06] dark:text-white/50"
+                      aria-label="Move section up"
+                    >
+                      <ArrowUp className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveDraftSection(index, index + 1)}
+                      disabled={index === draftSections.length - 1}
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition active:scale-[0.96] disabled:opacity-35 dark:bg-white/[0.06] dark:text-white/50"
+                      aria-label="Move section down"
+                    >
+                      <ArrowDown className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => insertDraftSectionAfter(index)}
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 transition active:scale-[0.96] dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/20"
+                      aria-label={`Add section after ${section.label || 'this section'}`}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => duplicateDraftSection(index)}
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 transition active:scale-[0.96] dark:bg-emerald-500/10 dark:text-emerald-300"
+                      aria-label="Duplicate section"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteDraftSection(section.id)}
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-red-50 text-red-500 transition active:scale-[0.96] dark:bg-red-500/10 dark:text-red-300"
+                      aria-label="Delete section"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <AutoSizeSectionTextarea
+                    value={section.body}
+                    onChange={value => updateDraftSection(section.id, { body: value })}
+                    placeholder={`G                 Em7\nThe splendor of a King, clothed in majesty,`}
+                    flat={fullBleed}
                   />
-                  <button
-                    type="button"
-                    onClick={() => moveDraftSection(index, index - 1)}
-                    disabled={index === 0}
-                    className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition active:scale-[0.96] disabled:opacity-35 dark:bg-white/[0.06] dark:text-white/50"
-                    aria-label="Move section up"
-                  >
-                    <ArrowUp className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => moveDraftSection(index, index + 1)}
-                    disabled={index === draftSections.length - 1}
-                    className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition active:scale-[0.96] disabled:opacity-35 dark:bg-white/[0.06] dark:text-white/50"
-                    aria-label="Move section down"
-                  >
-                    <ArrowDown className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => duplicateDraftSection(index)}
-                    className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 transition active:scale-[0.96] dark:bg-emerald-500/10 dark:text-emerald-300"
-                    aria-label="Duplicate section"
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => deleteDraftSection(section.id)}
-                    className="flex h-9 w-9 items-center justify-center rounded-full bg-red-50 text-red-500 transition active:scale-[0.96] dark:bg-red-500/10 dark:text-red-300"
-                    aria-label="Delete section"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-                <AutoSizeSectionTextarea
-                  value={section.body}
-                  onChange={value => updateDraftSection(section.id, { body: value })}
-                  placeholder={`G                 Em7\nThe splendor of a King, clothed in majesty,`}
-                />
-              </div>
-            ))}
+                </section>
+              );
+            })}
           </div>
         </div>
       ) : isEditing ? (
@@ -1215,7 +1569,11 @@ export function SongChartViewer({
               end: event.currentTarget.selectionEnd,
             };
           }}
-          className="min-h-0 flex-1 resize-none bg-gray-50 p-5 font-mono text-[12px] leading-7 outline-none dark:bg-black/20 dark:text-white/85"
+          className={`min-h-0 flex-1 resize-none font-mono text-[12px] leading-7 outline-none dark:text-white/85 ${
+            fullBleed
+              ? 'bg-white px-4 py-5 dark:bg-[#111412] sm:px-6'
+              : 'bg-gray-50 p-5 dark:bg-black/20'
+          }`}
           placeholder={`Verse 1\nG                 Em7\nThe splendor of a King, clothed in majesty,\n\nChorus\nG\nHow great is our God, sing with me,`}
           spellCheck={false}
         />
@@ -1238,8 +1596,8 @@ export function SongChartViewer({
           </div>
         </div>
       ) : (
-        <div className={`min-h-0 flex-1 overflow-y-auto ${fullBleed ? 'service-mode-chart-scroll px-5 pt-6 sm:px-10 sm:pt-8' : 'px-5 py-5'}`}>
-          <div className="mx-auto max-w-3xl space-y-4">
+        <div ref={chartScrollRef} className={`min-h-0 flex-1 overflow-y-auto ${fullBleed ? 'service-mode-chart-scroll px-4 pt-4 sm:px-6 sm:pt-6' : 'px-5 py-5'}`}>
+          <div className={`mx-auto ${fullBleed ? 'max-w-none space-y-0' : 'max-w-3xl space-y-4'}`}>
             {noteError && (
               <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
                 {noteError}
@@ -1250,15 +1608,22 @@ export function SongChartViewer({
                 Loading notes...
               </div>
             )}
-            {chartSections.map(section => {
+            {arrangedChartSections.map((section, arrangementIndex) => {
               const selfNote = selfNotes[section.key];
               const teamNote = teamNotes[section.key]?.note;
               const isEditingSelf = editingNote?.sectionKey === section.key && editingNote.scope === 'self';
               const isEditingTeam = editingNote?.sectionKey === section.key && editingNote.scope === 'team';
 
               return (
-                <section key={section.key} className="rounded-[24px] border border-black/[0.05] bg-white/75 p-4 shadow-sm dark:border-white/[0.07] dark:bg-white/[0.035]">
-                  <div className="mb-4 flex flex-wrap items-center gap-2">
+                <section
+                  key={`${section.key}-${arrangementIndex}`}
+                  className={
+                    fullBleed
+                      ? 'border-t border-black/[0.06] px-0.5 py-5 first:border-t-0 dark:border-white/[0.08]'
+                      : 'rounded-[24px] border border-black/[0.05] bg-white/75 p-4 shadow-sm dark:border-white/[0.07] dark:bg-white/[0.035]'
+                  }
+                >
+                  <div className={`${fullBleed ? 'mb-3' : 'mb-4'} flex flex-wrap items-center gap-2`}>
                     <div
                       className={`mr-auto inline-flex items-center gap-2 rounded-full border px-3.5 py-2 font-black uppercase tracking-[0.18em] shadow-sm ${section.tone.badge}`}
                       style={{ fontSize: `${sectionBadgeFontSize}px`, lineHeight: 1.15 }}
@@ -1267,21 +1632,34 @@ export function SongChartViewer({
                       <span>{section.label}</span>
                     </div>
                     {songId && (
-                      <>
+                      <div className="inline-flex shrink-0 items-center gap-1 rounded-full border border-black/[0.04] bg-white/45 p-1 shadow-sm shadow-black/[0.02] dark:border-white/[0.06] dark:bg-white/[0.035]">
                         <button
                           onClick={() => openSectionNote(section.key, section.label, 'self')}
-                          className="inline-flex h-8 items-center gap-1.5 rounded-full border border-black/[0.06] bg-white/75 px-2.5 text-[11px] font-bold text-gray-600 transition active:scale-[0.97] dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/60"
+                          className={`relative inline-flex h-7 w-7 items-center justify-center rounded-full transition active:scale-[0.94] ${
+                            selfNote
+                              ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/20'
+                              : 'text-gray-400 hover:bg-gray-50 hover:text-gray-600 dark:text-white/35 dark:hover:bg-white/[0.06] dark:hover:text-white/60'
+                          }`}
+                          aria-label={selfNote ? `Edit private note for ${section.label}` : `Add private note for ${section.label}`}
+                          title={selfNote ? 'Private note' : 'Add private note'}
                         >
-                          <Lock className="h-3.5 w-3.5" /> {selfNote ? 'Self note' : 'Self'}
+                          <Lock className="h-3.5 w-3.5" />
+                          {selfNote && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-sky-500 ring-1 ring-white dark:ring-[#111412]" />}
                         </button>
                         <button
                           onClick={() => openSectionNote(section.key, section.label, 'team')}
-                          className="inline-flex h-8 items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 text-[11px] font-black text-emerald-700 ring-1 ring-emerald-200 transition active:scale-[0.97] dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/20"
+                          className={`relative inline-flex h-7 w-7 items-center justify-center rounded-full transition active:scale-[0.94] ${
+                            teamNote
+                              ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/20'
+                              : 'text-gray-400 hover:bg-emerald-50 hover:text-emerald-700 dark:text-white/35 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300'
+                          }`}
+                          aria-label={teamNote ? `Edit team note for ${section.label}` : `Add team note for ${section.label}`}
+                          title={teamNote ? 'Team note' : 'Add team note'}
                         >
                           {teamNote ? <StickyNote className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
-                          {teamNote ? 'Team note' : 'Team'}
+                          {teamNote && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-emerald-500 ring-1 ring-white dark:ring-[#111412]" />}
                         </button>
-                      </>
+                      </div>
                     )}
                   </div>
 
@@ -1306,7 +1684,7 @@ export function SongChartViewer({
                         </button>
                       )}
                       {(isEditingSelf || isEditingTeam) && (
-                        <div className="rounded-2xl border border-black/[0.06] bg-gray-50 p-3 dark:border-white/[0.08] dark:bg-black/20">
+                        <div className="border-y border-black/[0.06] py-3 dark:border-white/[0.08]">
                           <div className="mb-2 flex items-center justify-between gap-3">
                             <p className="text-[11px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-white/45">
                               {editingNote.scope === 'self' ? 'Private section note' : 'Team section note'}
@@ -1321,10 +1699,10 @@ export function SongChartViewer({
                           <textarea
                             value={noteDraft}
                             onChange={event => setNoteDraft(event.target.value)}
-                            className="min-h-24 w-full resize-none rounded-2xl border border-black/[0.08] bg-white px-3 py-2 text-sm font-semibold leading-relaxed text-gray-900 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-500/10 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white"
+                            className="min-h-28 w-full resize-none rounded-none border-0 bg-transparent px-0 py-1 text-sm font-semibold leading-relaxed text-gray-900 outline-none placeholder:text-gray-400 focus:ring-0 dark:text-white dark:placeholder:text-white/35"
                             placeholder={`Add a note for ${section.label.toLowerCase()}...`}
                           />
-                          <div className="mt-2 flex justify-end gap-2">
+                          <div className="mt-2 flex justify-end gap-2 border-t border-black/[0.04] pt-2 dark:border-white/[0.06]">
                             <button onClick={() => setEditingNote(null)} className="h-9 rounded-full px-3 text-xs font-bold text-gray-500 hover:bg-black/[0.04] dark:text-white/50 dark:hover:bg-white/[0.06]">
                               Cancel
                             </button>
@@ -1431,6 +1809,71 @@ export function SongChartViewer({
             )}
           </div>
         </div>
+      )}
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {clearArrangementConfirmOpen && (
+            <motion.div
+              className="fixed inset-0 z-[2147483647] flex items-center justify-center bg-black/45 px-5 backdrop-blur-md"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+              onClick={() => {
+                if (!arrangementSaving) setClearArrangementConfirmOpen(false);
+              }}
+            >
+              <motion.div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="clear-arrangement-title"
+                className="w-full max-w-sm overflow-hidden rounded-[28px] border border-black/[0.06] bg-white p-4 text-gray-950 shadow-2xl shadow-black/25 dark:border-white/[0.08] dark:bg-[#141815] dark:text-white"
+                initial={{ opacity: 0, y: 18, scale: 0.96, filter: 'blur(10px)' }}
+                animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+                exit={{ opacity: 0, y: 12, scale: 0.98, filter: 'blur(8px)' }}
+                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                onClick={event => event.stopPropagation()}
+              >
+                <div className="flex items-start gap-3">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-red-600 ring-1 ring-red-500/10 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-400/15">
+                    <X className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p id="clear-arrangement-title" className="text-lg font-black tracking-[-0.02em]">
+                      Clear arrangement?
+                    </p>
+                    <p className="mt-1 text-sm font-semibold leading-relaxed text-gray-500 dark:text-white/50">
+                      This will empty the arrangement field so you can build a new order from the section buttons.
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-300/20 dark:bg-amber-500/10">
+                  <p className="text-[11px] font-black uppercase tracking-[0.16em] text-amber-800 dark:text-amber-100">Current arrangement</p>
+                  <p className="mt-1 break-words font-mono text-xs font-bold text-amber-900 dark:text-amber-50">{arrangementInput.trim() || 'Empty'}</p>
+                </div>
+                <div className="mt-5 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setClearArrangementConfirmOpen(false)}
+                    disabled={arrangementSaving}
+                    className="h-11 rounded-2xl border border-black/[0.06] bg-gray-100 text-sm font-black text-gray-700 transition active:scale-[0.97] disabled:opacity-60 dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/70"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmClearSectionOrder}
+                    disabled={arrangementSaving}
+                    className="h-11 rounded-2xl bg-red-600 text-sm font-black text-white shadow-lg shadow-red-600/20 transition active:scale-[0.97] disabled:opacity-60"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
       )}
     </div>
   );

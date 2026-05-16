@@ -36,7 +36,11 @@ const FLAT_KEY_NAMES = new Set(['F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb']);
 
 const normalizeDirectiveKey = (key: string) => key.trim().toLowerCase().replace(/_/g, '');
 const SECTION_LABEL_PATTERN = /^(intro|instrumental|interlude|verse(?:\s+\d+)?|v\d+|pre[-\s]?chorus|prechorus|pc|chorus|refrain|bridge(?:\s+\d+)?|b\d+|tag|ending|outro|part(?:\s+\d+)?|section(?:\s+\d+)?|vamp|turnaround|breakdown|hook|channel)$/i;
-const CHORD_TOKEN_PATTERN = /^[A-G](?:#|b)?(?:maj|min|m|dim|aug|sus|add|ø)?[0-9]*(?:[#b0-9()+/.-]*)?(?:\/[A-G](?:#|b)?)?$/;
+const CHORD_ROOT_PATTERN = '[A-G](?:#|b)?';
+const CHORD_QUALITY_PATTERN = '(?:maj|min|m|mi|dim|aug|sus|add|ø|o|\\+|-)?';
+const CHORD_EXTENSION_PATTERN = '(?:[0-9]+)?(?:maj|min|m|dim|aug|sus|add|no|omit|alt|#|b|\\d|\\(|\\)|\\+|-|\\/)*';
+const CHORD_BASS_PATTERN = `(?:/${CHORD_ROOT_PATTERN})?`;
+const CHORD_TOKEN_PATTERN = new RegExp(`^(?:N\\.?C\\.?|${CHORD_ROOT_PATTERN}${CHORD_QUALITY_PATTERN}${CHORD_EXTENSION_PATTERN}${CHORD_BASS_PATTERN})$`, 'i');
 
 export function parseChordProMetadata(chordpro: string): ChordProMetadata {
   const metadata: ChordProMetadata = { title: '', artist: '', key: '', capo: '' };
@@ -67,10 +71,10 @@ export function parseChordPro(chordpro: string): ChordProLine[] {
       if (['title', 't', 'artist', 'subtitle', 'st', 'key', 'capo'].includes(key)) {
         return null;
       }
-      if (['c', 'comment', 'soc', 'startofchorus', 'sov', 'startofverse', 'sob', 'startofbridge'].includes(key)) {
+      if (['c', 'comment', 'soc', 'startofchorus', 'sov', 'startofverse', 'sob', 'startofbridge', 'sop', 'startofpart', 'sot', 'startoftab'].includes(key)) {
         return { type: 'section', section: value || directive[1].trim() };
       }
-      if (['eoc', 'endofchorus', 'eov', 'endofverse', 'eob', 'endofbridge'].includes(key)) {
+      if (['eoc', 'endofchorus', 'eov', 'endofverse', 'eob', 'endofbridge', 'eop', 'endofpart', 'eot', 'endoftab'].includes(key)) {
         return null;
       }
       return { type: 'section', section: value || directive[1].trim() };
@@ -85,6 +89,14 @@ function parseChordLine(line: string): ChordProLine {
     return {
       type: 'lyrics',
       chords: line.replace(/\[([^\]]+)\]/g, (_, chord: string) => chord.trim()).trimEnd(),
+      lyrics: '',
+    };
+  }
+
+  if (isChordOnlyLine(line)) {
+    return {
+      type: 'lyrics',
+      chords: chordOnlyLineToPlainText(line).trimEnd(),
       lyrics: '',
     };
   }
@@ -298,12 +310,107 @@ function toDisplaySectionLabel(label: string) {
 }
 
 function isChordOnlyLine(line: string) {
-  const tokens = line.trim().split(/\s+/).filter(token => !['|', '/', '-', '–', '—'].includes(token));
-  return tokens.length > 0 && tokens.every(token => CHORD_TOKEN_PATTERN.test(token));
+  const tokens = line.trim().split(/\s+/).filter(token => token.length > 0);
+  const meaningfulTokens = tokens.filter(token => !isChordRhythmToken(token));
+  if (meaningfulTokens.length === 0) return false;
+
+  const chordTokenCount = meaningfulTokens.filter(token => chordTokenToChordPro(token) !== null).length;
+  if (chordTokenCount === meaningfulTokens.length) return true;
+
+  return meaningfulTokens.length >= 3
+    && chordTokenCount >= 2
+    && chordTokenCount / meaningfulTokens.length >= 0.75;
 }
 
 function chordOnlyLineToChordPro(line: string) {
-  return line.replace(/\S+/g, token => CHORD_TOKEN_PATTERN.test(token) ? `[${token}]` : token);
+  return line.replace(/\S+/g, token => {
+    const chordToken = chordTokenToChordPro(token);
+    if (chordToken) return chordToken;
+    if (isChordRhythmToken(token)) return token;
+
+    const fallbackChord = token.trim().replace(/[.,;:!?]+$/, '');
+    return fallbackChord ? `[${escapeChordProText(fallbackChord)}]` : token;
+  });
+}
+
+function chordOnlyLineToPlainText(line: string) {
+  return line.replace(/\S+/g, token => chordTokenToPlainText(token) ?? token);
+}
+
+function chordTokenToChordPro(token: string) {
+  const parts = parseChordTokenParts(token);
+  if (!parts) return null;
+  return parts.map(part => part.type === 'chord' ? `[${part.value}]` : part.value).join('');
+}
+
+function chordTokenToPlainText(token: string) {
+  const parts = parseChordTokenParts(token);
+  return parts ? parts.map(part => part.value).join('') : null;
+}
+
+function isChordRhythmToken(token: string) {
+  return /^[|/\\]+$/.test(token) || /^[-–—]+$/.test(token);
+}
+
+function parseChordTokenParts(token: string): Array<{ type: 'chord' | 'separator'; value: string }> | null {
+  const trimmed = token.trim().replace(/[.,;:!?]+$/, '');
+  if (!trimmed) return null;
+
+  const dashedParts = splitDashedChordToken(trimmed);
+  if (dashedParts) return dashedParts;
+
+  if (CHORD_TOKEN_PATTERN.test(trimmed)) return [{ type: 'chord', value: trimmed }];
+
+  const compactChords = splitCompactChordToken(trimmed);
+  if (!compactChords) return null;
+  return compactChords.flatMap((chord, index) => (
+    index === 0
+      ? [{ type: 'chord' as const, value: chord }]
+      : [{ type: 'separator' as const, value: ' ' }, { type: 'chord' as const, value: chord }]
+  ));
+}
+
+function splitDashedChordToken(token: string): Array<{ type: 'chord' | 'separator'; value: string }> | null {
+  if (!/[-–—]/.test(token)) return null;
+
+  const pieces = token.split(/([-–—]+)/).filter(piece => piece.length > 0);
+  if (pieces.length < 3) return null;
+
+  const result: Array<{ type: 'chord' | 'separator'; value: string }> = [];
+  for (const piece of pieces) {
+    if (/^[-–—]+$/.test(piece)) {
+      result.push({ type: 'separator', value: piece });
+      continue;
+    }
+
+    const compactChords = CHORD_TOKEN_PATTERN.test(piece) ? [piece] : splitCompactChordToken(piece);
+    if (!compactChords) return null;
+    compactChords.forEach((chord, index) => {
+      if (index > 0) result.push({ type: 'separator', value: ' ' });
+      result.push({ type: 'chord', value: chord });
+    });
+  }
+
+  return result.some(part => part.type === 'separator') ? result : null;
+}
+
+function splitCompactChordToken(token: string): string[] | null {
+  if (CHORD_TOKEN_PATTERN.test(token)) return [token];
+
+  const rootMatches = Array.from(token.matchAll(/[A-G](?:#|b)?/g));
+  if (rootMatches.length < 2) return null;
+
+  for (let i = 1; i < rootMatches.length; i += 1) {
+    const splitIndex = rootMatches[i].index ?? -1;
+    if (splitIndex <= 0) continue;
+    const head = token.slice(0, splitIndex);
+    const tail = token.slice(splitIndex);
+    if (!CHORD_TOKEN_PATTERN.test(head)) continue;
+    const tailParts = splitCompactChordToken(tail);
+    if (tailParts) return [head, ...tailParts];
+  }
+
+  return null;
 }
 
 function escapeChordProText(text: string) {

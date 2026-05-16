@@ -912,9 +912,9 @@ export function Events() {
       </div>
 
       {/* ── Create Modal ── */}
-      <Modal open={showCreate} onClose={closeCreateEvent} title="Create Event" size="lg" hideHeader>
-        <form onSubmit={handleCreate} className="-mx-5 -my-5">
-          <div className="relative overflow-hidden px-5 pt-6 pb-5 border-b border-black/[0.05] dark:border-white/[0.06]">
+      <Modal open={showCreate} onClose={closeCreateEvent} title="Create Event" size="lg" hideHeader bodyClassName="!overflow-hidden !p-0 flex min-h-0 flex-col">
+        <form onSubmit={handleCreate} className="flex min-h-0 flex-1 flex-col">
+          <div className="relative shrink-0 overflow-hidden px-5 pt-6 pb-5 border-b border-black/[0.05] dark:border-white/[0.06]">
             <div
               className="pointer-events-none absolute inset-0 opacity-90"
               style={{
@@ -955,7 +955,7 @@ export function Events() {
             </div>
           </div>
 
-          <div className="px-5 py-5 space-y-5">
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 py-5 space-y-5 scrollbar-thin overscroll-contain">
             <section className="space-y-3.5">
               <div className="flex items-center gap-2">
                 <span className="inline-flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-50 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 ring-1 ring-emerald-200/70 dark:ring-emerald-500/20">
@@ -1048,10 +1048,6 @@ export function Events() {
                 </div>
               )}
 
-              <div>
-                <label className="block text-[12px] font-semibold text-gray-600 dark:text-white/55 mb-1.5">Description <span className="font-medium text-gray-400 dark:text-white/30">(optional)</span></label>
-                <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="input-field h-20 resize-none" />
-              </div>
             </section>
 
             <section className="pt-5 border-t border-black/[0.05] dark:border-white/[0.06]">
@@ -1071,12 +1067,23 @@ export function Events() {
               ) : (
                 <div className="space-y-2.5">
                   {assignmentRows.map((row, i) => (
-                    <div key={i} className="grid grid-cols-[1fr] sm:grid-cols-[1fr_1fr_auto] gap-2 items-center">
-                      <Select value={row.role_id} onChange={v => updateAssignmentRow(i, 'role_id', v)} options={roles.filter(r => !r.is_leadership).map(r => ({ value: r.id, label: r.name }))} placeholder="Select role" />
-                      <Select value={row.user_id} onChange={v => updateAssignmentRow(i, 'user_id', v)} options={getMembersForRole(row.role_id).map(m => ({ value: m.id, label: `${m.first_name} ${m.last_name}` }))} placeholder={row.role_id ? 'Select member' : 'Pick role first'} />
-                      <button type="button" onClick={() => removeAssignmentRow(i)} className="h-11 w-full sm:w-11 inline-flex items-center justify-center rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors">
+                    <div
+                      key={i}
+                      className="grid grid-cols-[minmax(0,1fr)_3rem] gap-2 rounded-2xl border border-gray-200/80 bg-white/70 p-2.5 dark:border-white/[0.08] dark:bg-white/[0.03]"
+                    >
+                      <div className="min-w-0 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <Select value={row.role_id} onChange={v => updateAssignmentRow(i, 'role_id', v)} options={roles.filter(r => !r.is_leadership).map(r => ({ value: r.id, label: r.name }))} placeholder="Select role" />
+                        <Select value={row.user_id} onChange={v => updateAssignmentRow(i, 'user_id', v)} options={getMembersForRole(row.role_id).map(m => ({ value: m.id, label: `${m.first_name} ${m.last_name}` }))} placeholder={row.role_id ? 'Select member' : 'Pick role first'} />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeAssignmentRow(i)}
+                        className="inline-flex min-h-[5.875rem] w-12 items-center justify-center rounded-xl bg-red-50 text-red-500 ring-1 ring-red-100 transition-colors hover:bg-red-100 hover:text-red-600 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-500/15 dark:hover:bg-red-500/15 sm:min-h-11"
+                        aria-label={`Remove assignment ${i + 1}`}
+                        title="Remove this assignment"
+                      >
                         <Trash2 className="h-4 w-4" />
-                        <span className="sr-only">Remove assignment</span>
+                        <span className="sr-only">Remove this role and member assignment</span>
                       </button>
                     </div>
                   ))}
@@ -1085,12 +1092,15 @@ export function Events() {
             </section>
           </div>
 
-          <div className="px-5 py-4 bg-gray-50/80 dark:bg-black/15 border-t border-black/[0.05] dark:border-white/[0.06] flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5">
-            <button type="button" onClick={closeCreateEvent} className="btn-secondary sm:min-w-24">Cancel</button>
+          <div
+            className="z-20 flex shrink-0 items-center justify-center border-t border-black/[0.05] bg-gray-50/95 px-4 py-3 shadow-[0_-14px_28px_-24px_rgba(15,23,42,0.55)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-[#1c1b1e]/95 sm:justify-end sm:px-5 sm:py-4"
+            style={{ gap: '0.625rem', paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}
+          >
+            <button type="button" onClick={closeCreateEvent} className="btn-secondary h-12 flex-1 max-w-[10.75rem] sm:h-auto sm:flex-none sm:min-w-24">Cancel</button>
             <button
               type="submit"
               disabled={creating}
-              className="btn-primary sm:min-w-32"
+              className="btn-primary h-12 flex-1 max-w-[10.75rem] sm:h-auto sm:flex-none sm:min-w-32"
               style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', boxShadow: '0 4px 14px rgba(22,163,74,0.28)' }}
             >
               {creating ? 'Creating...' : 'Create Event'}

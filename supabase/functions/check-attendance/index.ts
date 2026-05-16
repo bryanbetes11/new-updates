@@ -59,8 +59,9 @@ Deno.serve(async (req: Request) => {
     const url = new URL(req.url);
     const action = url.searchParams.get("action") || "remind";
 
-    const phNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
-    const phToday = phNow.toISOString().split("T")[0];
+    const now = new Date();
+    const manilaNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+    const phToday = manilaNow.toISOString().split("T")[0];
 
     let result: any = {};
 
@@ -102,19 +103,19 @@ Deno.serve(async (req: Request) => {
 
           const reminderDefinitions = [
             {
-              trigger: isWithinMinute(phNow, openAt),
+              trigger: isWithinMinute(now, openAt),
               type: "attendance_open",
               title: "Attendance is Now Open",
               body: `Attendance for ${eventDisplay} is now open. Mark your attendance when you are already at church.`,
             },
             {
-              trigger: isWithinMinute(phNow, fiveMinutesBefore),
+              trigger: isWithinMinute(now, fiveMinutesBefore),
               type: "attendance_five_min_reminder",
               title: "Attendance Reminder",
               body: `${eventDisplay} starts at ${eventTimeFormatted}. You still need to mark your attendance.`,
             },
             {
-              trigger: isWithinMinute(phNow, graceEndingSoon),
+              trigger: isWithinMinute(now, graceEndingSoon),
               type: "attendance_grace_final_reminder",
               title: "Grace Period Ending Soon",
               body: `${eventDisplay} already started. You have about 1 minute left before the 5-minute grace period closes.`,
@@ -167,7 +168,7 @@ Deno.serve(async (req: Request) => {
         notificationsSent,
       };
     } else if (action === "remind") {
-      const yesterday = new Date(phNow);
+      const yesterday = new Date(manilaNow);
       yesterday.setDate(yesterday.getDate() - 1);
       const yesterdayStr = yesterday.toISOString().split("T")[0];
 
@@ -241,7 +242,7 @@ Deno.serve(async (req: Request) => {
         remindersSent,
       };
     } else if (action === "mark_absent") {
-      const twoDaysAgo = new Date(phNow);
+      const twoDaysAgo = new Date(manilaNow);
       twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
       const twoDaysAgoStr = twoDaysAgo.toISOString().split("T")[0];
 

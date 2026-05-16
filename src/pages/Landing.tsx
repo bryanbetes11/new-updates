@@ -162,7 +162,10 @@ function Nav({ onSignIn }: { onSignIn: () => void }) {
   }, []);
 
   return (
-    <nav className="sticky top-4 z-50 px-5 lg:px-7">
+    <nav
+      className="sticky z-50 px-5 lg:px-7"
+      style={{ top: 'max(1rem, calc(env(safe-area-inset-top, 0px) + 0.75rem))' }}
+    >
       <div
         className={`mx-auto flex h-[60px] max-w-[1180px] items-center justify-between rounded-full border border-white/[0.08] px-5 transition-colors duration-200`}
         style={{ backdropFilter: 'blur(14px)', background: scrolled ? 'rgba(7,16,26,0.92)' : 'rgba(14,26,38,0.70)' }}
@@ -643,7 +646,7 @@ export function Landing() {
               { tag: 'REAL PHOTO', label: 'Sunday service — wide shot' },
             ].map(p => (
               <div
-                key={p.tag}
+                key={p.label}
                 className="relative rounded-[18px] overflow-hidden aspect-[4/3] flex items-end p-4"
                 style={{ background: 'repeating-linear-gradient(135deg, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 1px, transparent 1px, transparent 12px), #0a1420' }}
               >

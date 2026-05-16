@@ -545,10 +545,17 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [quickEmoji, setQuickEmoji] = useState(() => localStorage.getItem('msg-quick-action') || '👍');
   const [showQuickPicker, setShowQuickPicker] = useState(false);
+  const [editableMentionQuery, setEditableMentionQuery] = useState('');
+  const [showEditableMentionDropdown, setShowEditableMentionDropdown] = useState(false);
+  const [editableMentionStart, setEditableMentionStart] = useState<number | null>(null);
+  const [editableMentionActiveIndex, setEditableMentionActiveIndex] = useState(0);
+  const [editableDropdownRect, setEditableDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const attachRef = useRef<HTMLInputElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const editableRef = useRef<HTMLDivElement>(null);
+  const editableMentionTouchHandledRef = useRef(false);
+  const editableMentionReleaseCleanupRef = useRef<(() => void) | null>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [useEditableComposer, setUseEditableComposer] = useState(false);
   const { user } = useAuth();
@@ -560,11 +567,102 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
     el.style.height = `${Math.min(el.scrollHeight, 132)}px`;
   }, []);
 
+  const editableMentionProfiles = useMemo(() => {
+    return mentionProfiles.filter(profile => {
+      if (!editableMentionQuery) return true;
+      const search = [
+        profile.first_name,
+        profile.last_name,
+        profile.mentionHandle,
+        profile.mentionLabel,
+        profile.mentionDescription,
+      ].filter(Boolean).join(' ').toLowerCase();
+      return search.includes(editableMentionQuery.toLowerCase());
+    }).slice(0, 6);
+  }, [editableMentionQuery, mentionProfiles]);
+
+  const computeEditableDropdownPosition = useCallback(() => {
+    const el = editableRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const dropdownHeight = Math.min(editableMentionProfiles.length, 6) * 52 + 8;
+    const width = Math.min(Math.max(rect.width + 56, 260), window.innerWidth - 16);
+    const top = Math.max(8, rect.top - dropdownHeight - 8);
+    const left = Math.min(Math.max(rect.left, 8), window.innerWidth - width - 8);
+    setEditableDropdownRect({ top, left, width });
+  }, [editableMentionProfiles.length]);
+
+  const getEditableCaretOffset = useCallback(() => {
+    const el = editableRef.current;
+    const selection = window.getSelection();
+    if (!el || !selection || selection.rangeCount === 0) return text.length;
+    const range = selection.getRangeAt(0);
+    if (!el.contains(range.startContainer)) return text.length;
+    const preCaretRange = range.cloneRange();
+    preCaretRange.selectNodeContents(el);
+    preCaretRange.setEnd(range.startContainer, range.startOffset);
+    return preCaretRange.toString().length;
+  }, [text.length]);
+
+  const setEditableCaretOffset = useCallback((offset: number) => {
+    const el = editableRef.current;
+    if (!el) return;
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let remaining = offset;
+    let node = walker.nextNode();
+
+    while (node) {
+      const textNode = node as Text;
+      if (remaining <= textNode.length) {
+        const range = document.createRange();
+        const selection = window.getSelection();
+        range.setStart(textNode, remaining);
+        range.collapse(true);
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+        return;
+      }
+      remaining -= textNode.length;
+      node = walker.nextNode();
+    }
+
+    const range = document.createRange();
+    const selection = window.getSelection();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  }, []);
+
+  const updateEditableMentionState = useCallback((value: string, cursor: number) => {
+    const textBefore = value.slice(0, cursor);
+    const atMatch = textBefore.match(/@(\w*)$/);
+
+    if (atMatch) {
+      setEditableMentionStart(cursor - atMatch[0].length);
+      setEditableMentionQuery(atMatch[1]);
+      setShowEditableMentionDropdown(true);
+      setEditableMentionActiveIndex(0);
+      requestAnimationFrame(computeEditableDropdownPosition);
+      return;
+    }
+
+    setShowEditableMentionDropdown(false);
+    setEditableMentionStart(null);
+    setEditableMentionQuery('');
+  }, [computeEditableDropdownPosition]);
+
   const handleSend = () => {
     if (!text.trim()) return;
     onTyping(false);
     onSend(text);
     setText('');
+    if (editableRef.current) {
+      editableRef.current.textContent = '';
+    }
+    setShowEditableMentionDropdown(false);
+    setEditableMentionStart(null);
+    setEditableMentionQuery('');
     requestAnimationFrame(resizeComposer);
   };
 
@@ -602,12 +700,151 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
     const value = e.currentTarget.innerText.replace(/\n$/, '');
     setText(value);
     resizeComposer();
+    updateEditableMentionState(value, getEditableCaretOffset());
     onTyping(value.trim().length > 0);
+  };
+
+  const suppressEditableMentionRelease = useCallback(() => {
+    editableMentionReleaseCleanupRef.current?.();
+
+    let timeoutId: number | null = null;
+    const releaseEvents = ['pointerup', 'mouseup', 'click'];
+    const stopRelease = (event: Event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      (event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.();
+      if (event.type === 'click') {
+        cleanup();
+      }
+    };
+    const cleanup = () => {
+      releaseEvents.forEach(type => {
+        document.removeEventListener(type, stopRelease, { capture: true });
+      });
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      if (editableMentionReleaseCleanupRef.current === cleanup) {
+        editableMentionReleaseCleanupRef.current = null;
+      }
+    };
+
+    releaseEvents.forEach(type => {
+      document.addEventListener(type, stopRelease, { capture: true, passive: false });
+    });
+    timeoutId = window.setTimeout(cleanup, 650);
+    editableMentionReleaseCleanupRef.current = cleanup;
+  }, []);
+
+  const insertEditableMention = useCallback((profile: (typeof mentionProfiles)[number], options: { deferClose?: boolean } = {}) => {
+    if (editableMentionStart === null) return;
+    const cursor = getEditableCaretOffset();
+    const before = text.slice(0, editableMentionStart);
+    const after = text.slice(cursor);
+    const mentionHandle = profile.mentionHandle ?? `${profile.first_name} ${profile.last_name}`
+      .trim()
+      .replace(/\s+/g, '_');
+    const mention = `@${mentionHandle}`;
+    const nextText = `${before}${mention} ${after}`;
+    const nextCursor = before.length + mention.length + 1;
+
+    const el = editableRef.current;
+    if (el) {
+      el.textContent = nextText;
+      el.focus({ preventScroll: true });
+      setEditableCaretOffset(nextCursor);
+      resizeComposer();
+      window.dispatchEvent(new Event('messages-composer-focus'));
+    }
+
+    setText(nextText);
+    setEditableMentionStart(null);
+    setEditableMentionQuery('');
+
+    const closeDropdown = () => {
+      setShowEditableMentionDropdown(false);
+      const currentEl = editableRef.current;
+      if (!currentEl) return;
+      currentEl.focus({ preventScroll: true });
+      setEditableCaretOffset(nextCursor);
+    };
+
+    if (options.deferClose) {
+      window.setTimeout(closeDropdown, 180);
+    } else {
+      closeDropdown();
+    }
+
+    requestAnimationFrame(() => {
+      const el = editableRef.current;
+      if (!el) return;
+      el.textContent = nextText;
+      el.focus({ preventScroll: true });
+      setEditableCaretOffset(nextCursor);
+      resizeComposer();
+    });
+  }, [editableMentionStart, getEditableCaretOffset, resizeComposer, setEditableCaretOffset, text]);
+
+  const stopEditableMentionEvent = useCallback((event: React.SyntheticEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    (event.nativeEvent as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.();
+    editableRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  const handleEditableMentionTouchStart = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    stopEditableMentionEvent(event);
+  }, [stopEditableMentionEvent]);
+
+  const handleEditableMentionTouchEnd = useCallback((event: React.TouchEvent<HTMLDivElement>, profile: (typeof mentionProfiles)[number]) => {
+    stopEditableMentionEvent(event);
+    if (editableMentionTouchHandledRef.current) return;
+    editableMentionTouchHandledRef.current = true;
+    suppressEditableMentionRelease();
+    insertEditableMention(profile, { deferClose: true });
+    window.setTimeout(() => {
+      editableMentionTouchHandledRef.current = false;
+    }, 350);
+  }, [insertEditableMention, stopEditableMentionEvent, suppressEditableMentionRelease]);
+
+  const handleEditableMentionMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>, profile: (typeof mentionProfiles)[number]) => {
+    stopEditableMentionEvent(event);
+    if (editableMentionTouchHandledRef.current) return;
+    suppressEditableMentionRelease();
+    insertEditableMention(profile);
+  }, [insertEditableMention, stopEditableMentionEvent, suppressEditableMentionRelease]);
+
+  const handleEditableKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (showEditableMentionDropdown && editableMentionProfiles.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setEditableMentionActiveIndex(i => Math.min(i + 1, editableMentionProfiles.length - 1));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setEditableMentionActiveIndex(i => Math.max(i - 1, 0));
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        insertEditableMention(editableMentionProfiles[editableMentionActiveIndex]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        setShowEditableMentionDropdown(false);
+      }
+    }
   };
 
   useEffect(() => {
     return () => onTyping(false);
   }, [onTyping]);
+
+  useEffect(() => {
+    return () => editableMentionReleaseCleanupRef.current?.();
+  }, []);
 
   useEffect(() => {
     const isAppleTouch =
@@ -628,6 +865,17 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
     }
     requestAnimationFrame(resizeComposer);
   }, [resizeComposer, text, useEditableComposer]);
+
+  useEffect(() => {
+    if (!showEditableMentionDropdown || !useEditableComposer) return;
+    computeEditableDropdownPosition();
+    window.addEventListener('resize', computeEditableDropdownPosition);
+    window.addEventListener('scroll', computeEditableDropdownPosition, true);
+    return () => {
+      window.removeEventListener('resize', computeEditableDropdownPosition);
+      window.removeEventListener('scroll', computeEditableDropdownPosition, true);
+    };
+  }, [computeEditableDropdownPosition, showEditableMentionDropdown, useEditableComposer]);
 
   const handleImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -759,6 +1007,10 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
               suppressContentEditableWarning
               onInput={handleEditableInput}
               onFocus={() => window.dispatchEvent(new Event('messages-composer-focus'))}
+              onClick={() => {
+                if (showEditableMentionDropdown) computeEditableDropdownPosition();
+              }}
+              onKeyDown={handleEditableKeyDown}
               onPointerDown={focusEditableComposerWithoutPageScroll}
               className={`chat-editable-input flex-1 px-3.5 py-2 text-[15px] bg-transparent text-gray-900 dark:text-white outline-none leading-relaxed overflow-y-auto whitespace-pre-wrap break-words ${text.trim() ? '' : 'is-empty'}`}
               style={{ maxHeight: '132px', minHeight: '40px' }}
@@ -854,6 +1106,61 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
           </AnimatePresence>
         </div>
       </div>
+      {useEditableComposer && showEditableMentionDropdown && editableMentionProfiles.length > 0 && editableDropdownRect &&
+        createPortal(
+          <div
+            className="fixed z-[2147483647] overflow-hidden rounded-xl bg-white shadow-2xl ring-1 ring-black/[0.08] dark:bg-[#1c1b1e] dark:ring-white/[0.1]"
+            style={{
+              top: editableDropdownRect.top,
+              left: editableDropdownRect.left,
+              width: editableDropdownRect.width,
+              touchAction: 'none',
+              WebkitUserSelect: 'none',
+              userSelect: 'none',
+            }}
+          >
+            {editableMentionProfiles.map((profile, index) => (
+              <div
+                key={profile.id}
+                role="option"
+                aria-selected={index === editableMentionActiveIndex}
+                onTouchStartCapture={handleEditableMentionTouchStart}
+                onTouchEndCapture={event => handleEditableMentionTouchEnd(event, profile)}
+                onMouseDownCapture={event => handleEditableMentionMouseDown(event, profile)}
+                onClickCapture={event => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                className={`flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors ${
+                  index === editableMentionActiveIndex
+                    ? 'bg-brand-50 dark:bg-brand-900/20'
+                    : 'hover:bg-gray-50 dark:hover:bg-white/[0.04]'
+                }`}
+              >
+                {profile.mentionType === 'everyone' ? (
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-[12px] font-black text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/10">
+                    @
+                  </span>
+                ) : (
+                  <Avatar src={profile.avatar_url} firstName={profile.first_name} lastName={profile.last_name} size="sm" />
+                )}
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
+                    {profile.mentionLabel ?? `${profile.first_name} ${profile.last_name}`}
+                  </p>
+                  <p className="truncate text-[11px] text-gray-400 dark:text-gray-500">
+                    @{profile.mentionHandle ?? `${profile.first_name}_${profile.last_name}`}
+                  </p>
+                  {profile.mentionDescription && (
+                    <p className="truncate text-[11px] text-gray-400 dark:text-gray-500">{profile.mentionDescription}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>,
+          document.body
+        )
+      }
     </div>
   );
 
@@ -2247,7 +2554,7 @@ function ChatWindow({
         avatar_url: null,
         gender: null,
         mentionHandle: 'everyone',
-        mentionLabel: 'Everyone',
+        mentionLabel: 'Everyone in this chat',
         mentionDescription: `Mention all ${Math.max(conv.members.length - 1, 0)} other ${conv.members.length - 1 === 1 ? 'member' : 'members'} in this chat`,
         mentionType: 'everyone' as const,
       },
@@ -3331,6 +3638,60 @@ function useMessagesKeyboardInset(active: boolean) {
   }, [active]);
 }
 
+function useDisableChatEdgeBackSwipe(active: boolean) {
+  useEffect(() => {
+    if (!active) return;
+
+    const edgeThreshold = 36;
+    let gestureStart: { x: number; y: number } | null = null;
+    let blockingEdgeSwipe = false;
+
+    const handleTouchStart = (event: TouchEvent) => {
+      if (event.touches.length !== 1) {
+        gestureStart = null;
+        blockingEdgeSwipe = false;
+        return;
+      }
+
+      const touch = event.touches[0];
+      gestureStart = touch.clientX <= edgeThreshold
+        ? { x: touch.clientX, y: touch.clientY }
+        : null;
+      blockingEdgeSwipe = false;
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      if (!gestureStart || event.touches.length !== 1) return;
+
+      const touch = event.touches[0];
+      const deltaX = touch.clientX - gestureStart.x;
+      const deltaY = touch.clientY - gestureStart.y;
+      const isBackSwipe = deltaX > 8 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2;
+
+      if (!isBackSwipe && !blockingEdgeSwipe) return;
+      blockingEdgeSwipe = true;
+      event.preventDefault();
+    };
+
+    const clearGesture = () => {
+      gestureStart = null;
+      blockingEdgeSwipe = false;
+    };
+
+    window.addEventListener('touchstart', handleTouchStart, { capture: true, passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { capture: true, passive: false });
+    window.addEventListener('touchend', clearGesture, { capture: true });
+    window.addEventListener('touchcancel', clearGesture, { capture: true });
+
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart, { capture: true });
+      window.removeEventListener('touchmove', handleTouchMove, { capture: true });
+      window.removeEventListener('touchend', clearGesture, { capture: true });
+      window.removeEventListener('touchcancel', clearGesture, { capture: true });
+    };
+  }, [active]);
+}
+
 export function Messages() {
   const { conversationId: paramConvId } = useParams<{ conversationId?: string }>();
   const navigate = useNavigate();
@@ -3357,6 +3718,7 @@ export function Messages() {
     discardEmptyConversation,
   } = useConversations();
   useMessagesKeyboardInset(!isDesktop && Boolean(selectedConvId));
+  useDisableChatEdgeBackSwipe(!isDesktop && Boolean(selectedConvId));
 
   const myUserId = user?.id ?? '';
 

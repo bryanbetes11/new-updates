@@ -15,8 +15,8 @@ import { Events } from './pages/Events';
 import { EventDetail } from './pages/EventDetail';
 import { Announcements } from './pages/Announcements';
 import { AnnouncementDetail } from './pages/AnnouncementDetail';
-import { Library } from './pages/Library';
 import { Songs } from './pages/Songs';
+import { Videos } from './pages/Videos';
 import { Sets } from './pages/Sets';
 import { Profile } from './pages/Profile';
 import { RequestLeave } from './pages/RequestLeave';
@@ -149,8 +149,9 @@ export default function App() {
                   <Route path="/events/:id" element={<EventDetail />} />
                   <Route path="/announcements" element={<Announcements />} />
                   <Route path="/announcements/:id" element={<AnnouncementDetail />} />
-                  <Route path="/library" element={<Library />} />
+                  <Route path="/library" element={<Navigate to="/songs" replace />} />
                   <Route path="/songs" element={<Songs />} />
+                  <Route path="/videos" element={<Videos />} />
                   <Route path="/sets" element={<Sets />} />
                   <Route path="/approve-setlist" element={<Navigate to="/leadership/setlists" replace />} />
                   <Route path="/my-assignments" element={<MyAssignments />} />

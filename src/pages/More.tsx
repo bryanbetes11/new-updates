@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import {
-  Activity, Users, Bell, LogOut, Shield, Library, Calendar, ClipboardCheck, ChevronRight, ListChecks,
+  Activity, Users, Bell, LogOut, Shield, BookOpen, Video, Calendar, ClipboardCheck, ChevronRight, ListChecks,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -91,7 +91,8 @@ export function More() {
 
   const menuItems: MoreMenuItem[] = [
     { icon: Activity,    label: 'Activity Log',         desc: 'Church activity',       path: '/activity-log',       show: isPlatformOwner,         action: null,                              badge: 0,                    color: '#0ea5e9' },
-    { icon: Library,     label: 'Library',             desc: 'Songs, chord charts, and videos', path: '/library',    show: true,                    action: null,                              badge: 0,                    color: '#16a34a' },
+    { icon: BookOpen,    label: 'Songs',               desc: 'Song library and chord charts', path: '/songs',       show: true,                    action: null,                              badge: 0,                    color: '#16a34a' },
+    { icon: Video,       label: 'Videos',              desc: 'Training and reference videos', path: '/videos',      show: true,                    action: null,                              badge: 0,                    color: '#0ea5e9' },
     { icon: ListChecks,  label: 'Sets',                desc: 'Past event sets', path: '/sets',                       show: true,                    action: null,                              badge: 0,                    color: '#10b981' },
     { icon: Calendar,    label: 'Request Leave',        desc: 'Submit unavailability',  path: null,                  show: true,                    action: () => setShowRequestLeave(true),    badge: 0,                    color: '#f59e0b' },
     { icon: ClipboardCheck, label: 'Attendance Guide',  desc: 'How tracking works',     path: null,                  show: true,                    action: () => setShowAttendanceGuide(true), badge: 0,                    color: '#0ea5e9' },

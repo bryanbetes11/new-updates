@@ -5,6 +5,7 @@ import {
   Music, Upload, CheckCircle, AlertTriangle, Calendar, Search,
   ChevronDown, Trash2, Square, CheckSquare, X,
   ListMusic, Clock, Music2, ArrowUpDown, BarChart2, ArrowRight, FileMusic,
+  ExternalLink, Globe2, ClipboardPaste,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -73,6 +74,16 @@ const normalizeSongTitle = (title: string): string => {
 };
 
 type SortKey = 'date_desc' | 'date_asc' | 'songs_desc';
+
+const ULTIMATE_GUITAR_SEARCH_URL = (query: string) =>
+  `https://www.ultimate-guitar.com/search.php?search_type=title&value=${encodeURIComponent(query)}`;
+
+type NormalizeChartInputOptions = Parameters<typeof import('../../lib/chordSheetAdapter').normalizeImportedChordSheet>[1];
+
+async function normalizeChartInput(text: string, options?: NormalizeChartInputOptions) {
+  const { normalizeImportedChordSheet } = await import('../../lib/chordSheetAdapter');
+  return normalizeImportedChordSheet(text, options);
+}
 
 const containerVariants = {
   hidden: {},
@@ -172,6 +183,15 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   const [selectedChartSong, setSelectedChartSong] = useState<SongUsage | null>(null);
   const [chartSaving, setChartSaving] = useState(false);
   const [chartImporting, setChartImporting] = useState(false);
+  const [showWebImport, setShowWebImport] = useState(false);
+  const [webImportSaving, setWebImportSaving] = useState(false);
+  const [webImportQuery, setWebImportQuery] = useState('');
+  const [webImportForm, setWebImportForm] = useState({
+    title: '',
+    artist: '',
+    song_key: '',
+    chordpro_text: '',
+  });
   const fileRef = useRef<HTMLInputElement>(null);
   const chartFileRef = useRef<HTMLInputElement>(null);
   const openChartStorageKey = user?.id ? `${SONG_CHART_OPEN_STORAGE_PREFIX}:${user.id}` : '';
@@ -294,6 +314,128 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
       localStorage.removeItem(openChartStorageKey);
     } catch {
       // Ignore storage failures.
+    }
+  };
+
+  const openWebImport = () => {
+    const query = search.trim();
+    setWebImportQuery(query);
+    setWebImportForm({
+      title: query,
+      artist: '',
+      song_key: '',
+      chordpro_text: '',
+    });
+    setShowWebImport(true);
+  };
+
+  const closeWebImport = () => {
+    if (webImportSaving) return;
+    setShowWebImport(false);
+  };
+
+  const openWebChartSource = () => {
+    const query = webImportQuery.trim() || webImportForm.title.trim();
+    if (!query) {
+      toast('error', 'Enter a song title first');
+      return;
+    }
+
+    window.open(ULTIMATE_GUITAR_SEARCH_URL(query), '_blank', 'noopener,noreferrer');
+  };
+
+  const handleSaveWebImport = async () => {
+    if (!user || webImportSaving) return;
+
+    const normalizedChart = await normalizeChartInput(webImportForm.chordpro_text, { preferredFormat: 'ultimate-guitar' });
+    const chartText = normalizedChart.chordproText.trim();
+    const metadata = parseChordProMetadata(chartText);
+    const title = sanitizeSongTitle((webImportForm.title || metadata.title || webImportQuery).trim());
+    const artist = (webImportForm.artist || metadata.artist || '').trim();
+    const songKey = (webImportForm.song_key || metadata.key || '').trim();
+
+    if (!title) {
+      toast('error', 'Song title is required');
+      return;
+    }
+
+    if (!chartText) {
+      toast('error', 'Paste the chart before saving');
+      return;
+    }
+
+    setWebImportSaving(true);
+    try {
+      const { data: existingSongs, error: existingError } = await supabase
+        .from('songs')
+        .select('id, title, artist, song_key, chordpro_text');
+      if (existingError) throw existingError;
+
+      const existing = existingSongs?.find(song => normalizeSongTitle(song.title) === normalizeSongTitle(title));
+      let savedSong: SongUsage | null = null;
+
+      if (existing) {
+        const { data, error } = await withSaveTimeout(
+          supabase
+            .from('songs')
+            .update({
+              artist: existing.artist || artist,
+              song_key: existing.song_key || songKey,
+              chordpro_text: chartText,
+            })
+            .eq('id', existing.id)
+            .select('id, title, artist, song_key, chordpro_text')
+            .maybeSingle()
+        );
+        if (error || !data) throw new Error(error?.message || 'Could not update the song chart');
+        savedSong = {
+          id: data.id,
+          title: sanitizeSongTitle(data.title),
+          artist: data.artist || '',
+          song_key: data.song_key || '',
+          chordpro_text: data.chordpro_text,
+          last_used_date: null,
+          days_since: null,
+          is_safe: true,
+        };
+        toast('success', 'Song chart updated');
+      } else {
+        const { data, error } = await withSaveTimeout(
+          supabase
+            .from('songs')
+            .insert({
+              title,
+              artist,
+              song_key: songKey,
+              chordpro_text: chartText,
+              created_by: user.id,
+            })
+            .select('id, title, artist, song_key, chordpro_text')
+            .maybeSingle()
+        );
+        if (error || !data) throw new Error(error?.message || 'Could not add song to library');
+        savedSong = {
+          id: data.id,
+          title: sanitizeSongTitle(data.title),
+          artist: data.artist || '',
+          song_key: data.song_key || '',
+          chordpro_text: data.chordpro_text,
+          last_used_date: null,
+          days_since: null,
+          is_safe: true,
+        };
+        toast('success', 'Song added to library');
+      }
+
+      setShowWebImport(false);
+      setWebImportForm({ title: '', artist: '', song_key: '', chordpro_text: '' });
+      await fetchData();
+      if (savedSong) openChartSong(savedSong);
+    } catch (error: unknown) {
+      console.error('Failed to save web chart import:', error);
+      toast('error', getErrorMessage(error, 'Failed to save song chart'));
+    } finally {
+      setWebImportSaving(false);
     }
   };
 
@@ -447,7 +589,8 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
       const existingByTitle = new Map((existingSongs || []).map(song => [normalizeSongTitle(song.title), song]));
 
       for (const chartFile of chartFiles) {
-        const metadata = parseChordProMetadata(chartFile.text);
+        const normalizedChart = await normalizeChartInput(chartFile.text);
+        const metadata = parseChordProMetadata(normalizedChart.chordproText);
         const fallbackName = chartFile.name.replace(/\.cho$/i, '').split('/').pop() || 'Untitled Song';
         const title = sanitizeSongTitle(metadata.title || fallbackName);
         const artist = metadata.artist || '';
@@ -460,7 +603,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
             .update({
               artist: existing.artist || artist,
               song_key: existing.song_key || songKey,
-              chordpro_text: chartFile.text,
+              chordpro_text: normalizedChart.chordproText,
             })
             .eq('id', existing.id);
           if (error) throw error;
@@ -472,7 +615,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
               title,
               artist,
               song_key: songKey,
-              chordpro_text: chartFile.text,
+              chordpro_text: normalizedChart.chordproText,
               created_by: user.id,
             })
             .select('id, title, artist, song_key')
@@ -1080,6 +1223,14 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
           <div className="flex items-center gap-2">
             <button
               type="button"
+              onClick={openWebImport}
+              className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-semibold text-sky-700 bg-sky-50 border border-sky-200/80 transition-all active:scale-[0.97] dark:bg-sky-500/[0.12] dark:text-sky-300 dark:border-sky-500/20"
+            >
+              <Globe2 className="h-3.5 w-3.5" />
+              Search UG
+            </button>
+            <button
+              type="button"
               onClick={() => chartFileRef.current?.click()}
               disabled={chartImporting}
               className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 transition-all active:scale-[0.97] disabled:opacity-60 dark:bg-emerald-500/[0.12] dark:text-emerald-300 dark:border-emerald-500/20"
@@ -1333,6 +1484,137 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
         <span className="flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-full bg-amber-500" style={{ boxShadow: '0 0 6px rgba(245,158,11,0.5)' }} />Caution (60–90d)</span>
         <span className="flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-full bg-red-500" style={{ boxShadow: '0 0 6px rgba(239,68,68,0.5)' }} />Not ready (&lt;60d)</span>
       </div>
+
+      <Modal open={showWebImport} onClose={closeWebImport} title="Search Ultimate Guitar" size="lg">
+        <div className="space-y-5">
+          <div className="relative rounded-3xl border border-sky-200/80 bg-sky-50/80 p-3 dark:border-sky-500/20 dark:bg-sky-500/[0.08]">
+            <div className="flex items-center gap-2">
+              <div className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl bg-white px-4 py-3 text-left text-gray-950 shadow-sm ring-1 ring-sky-200/70 dark:bg-white/[0.06] dark:text-white dark:ring-white/[0.07]">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-700 ring-1 ring-sky-200/80 dark:bg-sky-500/[0.16] dark:text-sky-200 dark:ring-sky-500/20">
+                  <Globe2 className="h-5 w-5" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[10px] font-black uppercase tracking-[0.18em] text-sky-600 dark:text-sky-300">Search source</span>
+                  <span className="block truncate text-lg font-semibold">ultimate-guitar.com</span>
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={openWebChartSource}
+                className="inline-flex h-[3.25rem] shrink-0 items-center justify-center gap-1.5 rounded-2xl bg-gray-950 px-4 text-xs font-bold text-white shadow-lg shadow-gray-950/10 transition active:scale-[0.97] dark:bg-white dark:text-gray-950"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Open
+              </button>
+            </div>
+          </div>
+
+          <div className="grid gap-2">
+            <label className="text-[10px] font-black uppercase tracking-[0.16em] text-gray-400 dark:text-white/35">Search</label>
+            <div className="relative">
+              <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <input
+                value={webImportQuery}
+                onChange={e => {
+                  setWebImportQuery(e.target.value);
+                  if (!webImportForm.title) setWebImportForm(prev => ({ ...prev, title: e.target.value }));
+                }}
+                placeholder="Song title or artist"
+                className="w-full h-11 rounded-2xl border border-gray-200 bg-white pl-10 pr-3 text-sm text-gray-900 outline-none transition-all focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:placeholder-white/30"
+              />
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/[0.07] dark:bg-white/[0.03]">
+            <div className="flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-sky-50 text-sky-700 ring-1 ring-sky-200/80 dark:bg-sky-500/[0.12] dark:text-sky-300 dark:ring-sky-500/20">
+                <Globe2 className="h-5 w-5" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-black text-gray-900 dark:text-white">Search Ultimate Guitar, then paste the chart here.</p>
+                <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-white/45">
+                  Ultimate Guitar handles the result list and chart screen. ServeSync stores the chart after you paste it.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={openWebChartSource}
+                className="hidden shrink-0 items-center gap-1.5 rounded-2xl bg-gray-950 px-4 py-2.5 text-xs font-bold text-white shadow-lg shadow-gray-950/10 transition active:scale-[0.97] dark:bg-white dark:text-gray-950 sm:inline-flex"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Open search
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr,0.75fr,5rem]">
+            <div>
+              <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.16em] text-gray-400 dark:text-white/35">Title</label>
+              <input
+                value={webImportForm.title}
+                onChange={e => setWebImportForm(prev => ({ ...prev, title: e.target.value }))}
+                className="w-full h-10 rounded-2xl border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none transition-all focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.16em] text-gray-400 dark:text-white/35">Artist</label>
+              <input
+                value={webImportForm.artist}
+                onChange={e => setWebImportForm(prev => ({ ...prev, artist: e.target.value }))}
+                className="w-full h-10 rounded-2xl border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none transition-all focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.16em] text-gray-400 dark:text-white/35">Key</label>
+              <input
+                value={webImportForm.song_key}
+                onChange={e => setWebImportForm(prev => ({ ...prev, song_key: e.target.value }))}
+                placeholder="G"
+                className="w-full h-10 rounded-2xl border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none transition-all focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:placeholder-white/30"
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-2">
+            <div className="flex items-center justify-between gap-3">
+              <label className="text-[10px] font-black uppercase tracking-[0.16em] text-gray-400 dark:text-white/35">Chart</label>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-700 ring-1 ring-amber-200/80 dark:bg-amber-500/[0.12] dark:text-amber-200 dark:ring-amber-500/20">
+                <ClipboardPaste className="h-3 w-3" />
+                Paste only charts you can store
+              </span>
+            </div>
+            <textarea
+              value={webImportForm.chordpro_text}
+              onChange={e => {
+                const text = e.target.value;
+                const metadata = parseChordProMetadata(text);
+                setWebImportForm(prev => ({
+                  ...prev,
+                  chordpro_text: text,
+                  title: prev.title || metadata.title || '',
+                  artist: prev.artist || metadata.artist || '',
+                  song_key: prev.song_key || metadata.key || '',
+                }));
+              }}
+              spellCheck={false}
+              placeholder={"Paste the chord chart here...\n\nExample:\nVerse 1:\nG        Em7\nAmazing grace how sweet the sound"}
+              className="min-h-[14rem] w-full resize-y rounded-2xl border border-gray-200 bg-white p-3 font-mono text-[12px] leading-6 text-gray-900 outline-none transition-all focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:placeholder-white/25"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 border-t border-black/[0.05] pt-4 dark:border-white/[0.06]">
+            <button type="button" onClick={closeWebImport} disabled={webImportSaving} className="btn-secondary">Cancel</button>
+            <button
+              type="button"
+              onClick={handleSaveWebImport}
+              disabled={webImportSaving || !webImportForm.chordpro_text.trim()}
+              className="btn-primary"
+            >
+              {webImportSaving ? 'Saving...' : 'Add to Library'}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Delete modal */}
       <Modal

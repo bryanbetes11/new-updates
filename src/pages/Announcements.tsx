@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import {
-  Megaphone, Plus, Search, Eye, AlertTriangle, AlertCircle, Image, X, Type, Camera, Trash2,
+  Megaphone, Plus, Eye, AlertTriangle, AlertCircle, Image, X, Type, Camera, Trash2,
   Pin, Lock, MessageCircle, Smile, ChevronRight,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -81,9 +81,6 @@ export function Announcements() {
   const navigate = useNavigate();
   const [announcements, setAnnouncements] = useState<AnnouncementWithBlocks[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [priorityFilter, setPriorityFilter] = useState('');
-  const [showLeadersOnly, setShowLeadersOnly] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
   const [formTitle, setFormTitle] = useState('');
@@ -253,10 +250,7 @@ export function Announcements() {
 
   const filtered = announcements.filter(a => {
     if (!isLeader && (a as AnnouncementWithBlocks).is_leaders_only) return false;
-    if (showLeadersOnly && !(a as AnnouncementWithBlocks).is_leaders_only) return false;
-    const matchSearch = !search || a.title.toLowerCase().includes(search.toLowerCase()) || a.content.toLowerCase().includes(search.toLowerCase());
-    const matchPriority = !priorityFilter || a.priority === priorityFilter;
-    return matchSearch && matchPriority;
+    return true;
   });
 
   const pinned = filtered.filter(a => (a.announcement_pins?.length || 0) > 0);
@@ -265,7 +259,6 @@ export function Announcements() {
   const visibleUnreadCount = filtered.filter(a => user && !a.announcement_views?.some(v => v.user_id === user.id)).length;
   const urgentCount = filtered.filter(a => a.priority === 'urgent').length;
   const latestAnnouncement = sortedFiltered[0];
-  const activeFilterCount = [search, priorityFilter, showLeadersOnly ? 'leaders' : ''].filter(Boolean).length;
 
   const getPreviewText = (a: AnnouncementWithBlocks) => {
     const blocks = a.content_blocks;
@@ -337,59 +330,6 @@ export function Announcements() {
               </button>
             )}
           </div>
-        </motion.div>
-
-        {/* ── Toolbar ──────────────────────────────────── */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
-          className="rounded-[1.6rem] border border-black/[0.05] bg-white/75 p-2 shadow-[0_16px_44px_-34px_rgba(15,23,42,0.65)] backdrop-blur-xl dark:border-white/[0.07] dark:bg-white/[0.035]"
-        >
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <div className="relative flex-1">
-              <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-amber-500/80 pointer-events-none" />
-              <input
-                type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search announcements..."
-                className="h-11 w-full rounded-[1.15rem] border border-transparent bg-gray-50/90 pl-10 pr-10 text-[13px] font-semibold text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-amber-300 focus:bg-white focus:ring-4 focus:ring-amber-500/10 dark:bg-black/20 dark:text-white dark:placeholder:text-white/26 dark:focus:border-amber-500/40 dark:focus:bg-white/[0.055]"
-              />
-              {search && (
-                <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-gray-400 transition-colors hover:bg-black/[0.04] hover:text-gray-600 dark:hover:bg-white/[0.06] dark:hover:text-gray-300">
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-            <Select
-              value={priorityFilter}
-              onChange={setPriorityFilter}
-              options={[{ value: '', label: 'All Priorities' }, { value: 'normal', label: 'Normal' }, { value: 'high', label: 'High' }, { value: 'urgent', label: 'Urgent' }]}
-              placeholder="All Priorities"
-              className="sm:w-48"
-            />
-            {isLeader && (
-              <button
-                onClick={() => setShowLeadersOnly(s => !s)}
-                className={`inline-flex h-11 items-center justify-center gap-1.5 rounded-[1.15rem] px-4 text-[12px] font-black transition-all ${
-                  showLeadersOnly
-                    ? 'bg-gray-950 text-white shadow-sm dark:bg-white dark:text-gray-950'
-                    : 'bg-gray-50/90 text-gray-600 hover:bg-gray-100 dark:bg-black/20 dark:text-white/56 dark:hover:bg-white/[0.06]'
-                }`}
-              >
-                <Lock className="h-3.5 w-3.5" /> Leaders
-              </button>
-            )}
-          </div>
-          {activeFilterCount > 0 && (
-            <div className="mt-2 flex items-center justify-between rounded-[1rem] bg-amber-50/80 px-3 py-2 text-[11px] font-bold text-amber-800 dark:bg-amber-500/[0.09] dark:text-amber-200/80">
-              <span>{activeFilterCount} filter{activeFilterCount === 1 ? '' : 's'} active</span>
-              <button onClick={() => { setSearch(''); setPriorityFilter(''); setShowLeadersOnly(false); }} className="text-amber-700/70 transition-colors hover:text-amber-900 dark:text-amber-200/60 dark:hover:text-amber-100">
-                Clear
-              </button>
-            </div>
-          )}
         </motion.div>
 
         {/* ── List ─────────────────────────────────────── */}

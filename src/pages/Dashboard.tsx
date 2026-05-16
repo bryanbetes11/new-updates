@@ -9,7 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { DashboardSkeleton } from '../components/LoadingSpinner';
 import { formatTime12Hour } from '../lib/timeFormat';
 import { Modal } from '../components/Modal';
-import type { Event, EventAssignment, Setlist, SetlistSong, Announcement, UserAvailability, SwapRequest } from '../types';
+import type { Event, EventAssignment, Setlist, Announcement, UserAvailability, SwapRequest } from '../types';
 
 const verses = [
   { text: 'Shout with joy to the Lord, all the earth!', ref: 'Psalm 100:1 NLT' },
@@ -78,30 +78,6 @@ function compareAssignmentsByEventDateTime(a: EventAssignment, b: EventAssignmen
   return compareEventsByDateTime(a.events, b.events);
 }
 
-async function loadDashboardSetlistSongs(event: Event): Promise<SetlistSong[]> {
-  const selectFields = 'id, setlist_songs(id, position, song_category, performed_key, songs(title, artist))';
-  const loadByEventId = async (eventId: string, label: string) => {
-    const { data: setlist } = await withDashboardTimeout(
-      supabase
-        .from('setlists')
-        .select(selectFields)
-        .eq('event_id', eventId)
-        .maybeSingle(),
-      { data: null },
-      label,
-    );
-
-    return (setlist?.setlist_songs as SetlistSong[] | undefined) || [];
-  };
-
-  const eventSongs = await loadByEventId(event.id, 'Next event setlist');
-  if (eventSongs.length > 0 || event.event_type !== 'Rehearsals' || !event.linked_event_id) {
-    return eventSongs;
-  }
-
-  return loadByEventId(event.linked_event_id, 'Linked rehearsal service setlist');
-}
-
 // Premium card — soft dual-shadow, theme-aware border, subtle inner top-edge highlight
 function Card({ children, className = '', interactive = false }: { children: React.ReactNode; className?: string; interactive?: boolean }) {
   return (
@@ -167,7 +143,6 @@ export function Dashboard() {
   const [unavailableMembers, setUnavailableMembers] = useState<UserAvailability[]>([]);
   const [pendingLeaveCount, setPendingLeaveCount] = useState(0);
   const [stats, setStats] = useState({ total: 0, confirmed: 0, pending: 0 });
-  const [nextEventSetlistSongs, setNextEventSetlistSongs] = useState<SetlistSong[]>([]);
   const [incomingSwapRequests, setIncomingSwapRequests] = useState<SwapRequest[]>([]);
   const [respondingSwap, setRespondingSwap] = useState<string | null>(null);
   const [selectedUnavailability, setSelectedUnavailability] = useState<UserAvailability | null>(null);
@@ -325,15 +300,6 @@ export function Dashboard() {
 
         const events = ((eventsRes.data || []) as Event[]).slice().sort(compareEventsByDateTime);
         setUpcomingEvents(events);
-
-        const nowForSetlist = new Date();
-        const nextEvtForSetlist = events.find(e => getManilaEventDateTime(e.event_date, e.start_time) >= nowForSetlist) ?? events[0];
-        if (nextEvtForSetlist) {
-          const songs = await loadDashboardSetlistSongs(nextEvtForSetlist);
-          setNextEventSetlistSongs(songs);
-        } else {
-          setNextEventSetlistSongs([]);
-        }
 
         const assignments = (assignRes.data || []) as EventAssignment[];
         const nowForAssignments = new Date();
@@ -733,61 +699,6 @@ export function Dashboard() {
                 </div>
               </div>
             </button>
-          </motion.section>
-        )}
-
-        {/* ── 03b · Next Service Setlist Preview ── */}
-        {nextEvent && (
-          <motion.section variants={item}>
-            <Card>
-              <button
-                onClick={() => navigate(`/events/${nextEvent.id}`)}
-                className="group flex items-center gap-3 px-5 py-3.5 w-full text-left border-b border-gray-100 dark:border-white/[0.06] hover:bg-gray-50 dark:hover:bg-white/[0.03] transition-colors rounded-t-3xl"
-              >
-                <div className="h-7 w-7 rounded-lg flex items-center justify-center bg-brand-50 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400 shrink-0">
-                  <Music className="h-[13px] w-[13px]" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <span className="text-[10px] font-mono font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-white/30 block">Next Service Setlist</span>
-                  <span className="text-[12px] font-semibold text-gray-700 dark:text-white/60 truncate block leading-tight mt-0.5">
-                    {nextEvent.title} <span className="text-gray-400 dark:text-white/30">·</span> {format(parseISO(nextEvent.event_date), 'MMM d')}
-                  </span>
-                </div>
-                <ChevronRight className="h-4 w-4 text-gray-300 dark:text-white/20 group-hover:translate-x-0.5 group-hover:text-gray-500 dark:group-hover:text-white/40 transition-all shrink-0" />
-              </button>
-
-              {nextEventSetlistSongs.length === 0 ? (
-                <div className="px-5 py-10 text-center">
-                  <div className="h-10 w-10 rounded-2xl bg-gray-100 dark:bg-white/[0.05] flex items-center justify-center mx-auto mb-3">
-                    <Music className="h-5 w-5 text-gray-400 dark:text-white/25" />
-                  </div>
-                  <p className="text-[13px] font-medium text-gray-500 dark:text-white/40">Setlist not yet published</p>
-                  <p className="text-[11px] text-gray-400 dark:text-white/25 mt-1">Check back closer to the service date.</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-gray-100 dark:divide-white/[0.05]">
-                  {[...nextEventSetlistSongs]
-                    .sort((a, b) => a.position - b.position)
-                    .map((ss) => (
-                      <div key={ss.id} className="flex items-center gap-3.5 px-5 py-3">
-                        <span className="text-[11px] font-mono font-bold text-gray-300 dark:text-white/20 w-4 shrink-0 tabular-nums text-right">
-                          {ss.position}
-                        </span>
-                        <div className="w-px h-6 bg-gray-100 dark:bg-white/[0.06] shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[13px] font-semibold text-gray-900 dark:text-white truncate" style={{ letterSpacing: '-0.01em' }}>
-                            {ss.songs?.title}
-                          </p>
-                          <p className="text-[11px] text-gray-500 dark:text-white/35 font-mono mt-0.5">
-                            {ss.song_category && <span className="capitalize">{ss.song_category.replace(/_/g, ' ')}</span>}
-                            {ss.performed_key && <span> · {ss.performed_key}</span>}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              )}
-            </Card>
           </motion.section>
         )}
 

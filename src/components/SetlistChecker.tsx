@@ -7,6 +7,7 @@ import {
   Target, AlertCircle, ChevronRight,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { createStableId } from '../lib/createStableId';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import {
@@ -111,7 +112,7 @@ export function SetlistChecker({ setlistId, setlistStatus, initialSongs = [], se
 
   const addSongFromDB = (song: Song) => {
     const newEntry: SetlistCheckerSong = {
-      id: crypto.randomUUID(),
+      id: createStableId('checker-song'),
       song_id: song.id,
       title: song.title,
       artist: song.artist,
@@ -129,7 +130,7 @@ export function SetlistChecker({ setlistId, setlistStatus, initialSongs = [], se
 
   const addManualSong = () => {
     const newEntry: SetlistCheckerSong = {
-      id: crypto.randomUUID(),
+      id: createStableId('checker-song'),
       song_id: null,
       title: 'New Song',
       artist: '',
@@ -188,7 +189,7 @@ export function SetlistChecker({ setlistId, setlistStatus, initialSongs = [], se
 
     const now = new Date().toISOString();
     const r: SetlistCheckerResult & { songAnalyses: SongAnalysisResult[] } = {
-      id: crypto.randomUUID(),
+      id: createStableId('checker-result'),
       setlist_id: setlistId || null,
       session_id: null,
       created_by: user?.id || '',

@@ -1,23 +1,175 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Navigation } from './Navigation';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { BillingStatusBanner } from './BillingStatusBanner';
+import { buildAppRoute, rememberRoute } from '../lib/navigationHistory';
 
 export function Layout() {
   const { user } = useAuth();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [mobileChromeHidden, setMobileChromeHidden] = useState(false);
+  const lastScrollYRef = useRef(0);
+  const revealDistanceRef = useRef(0);
+  const scrollTickingRef = useRef(false);
 
   const staticHideNav = ['/', '/login', '/register', '/onboarding', '/reset-password', '/create-church'].includes(location.pathname)
     || /^\/invite\/[^/]+$/.test(location.pathname);
+  const isEventDetail = /^\/events\/[^/]+$/.test(location.pathname);
   const isAnnouncementDetail = /^\/announcements\/[^/]+$/.test(location.pathname);
   const isMessagesPage = location.pathname.startsWith('/messages');
   const isMessagesConversation = /^\/messages\/[^/]+$/.test(location.pathname);
+  const isDashboardPage = location.pathname === '/dashboard';
+  const isEventsPage = location.pathname === '/events';
+  const isAnnouncementsPage = location.pathname === '/announcements';
+  const isSongsPage = location.pathname === '/songs';
+  const isVideosPage = location.pathname === '/videos';
+  const isSetsPage = location.pathname === '/sets';
+  const isRequestLeavePage = location.pathname === '/request-leave';
+  const isNotificationsPage = location.pathname === '/notifications';
+  const isProfilePage = location.pathname === '/profile';
+  const isLeadershipPage = location.pathname.startsWith('/leadership');
+  const isWideShellPage =
+    isDashboardPage
+    || isEventsPage
+    || isEventDetail
+    || isAnnouncementsPage
+    || isAnnouncementDetail
+    || isSongsPage
+    || isVideosPage
+    || isSetsPage
+    || isRequestLeavePage
+    || isNotificationsPage
+    || isProfilePage
+    || isLeadershipPage;
   const hideNavMobile = staticHideNav || isAnnouncementDetail;
+  const shouldShiftForMobileMenu = user && !staticHideNav && !isMessagesConversation && mobileOpen;
+
+  useEffect(() => {
+    rememberRoute(buildAppRoute(location.pathname, location.search, location.hash));
+  }, [location.hash, location.pathname, location.search]);
+
+  useEffect(() => {
+    if (staticHideNav || isMessagesConversation || mobileOpen) {
+      setMobileChromeHidden(false);
+      return;
+    }
+
+    setMobileChromeHidden(false);
+    lastScrollYRef.current = Math.max(0, window.scrollY || document.documentElement.scrollTop || 0);
+    revealDistanceRef.current = 0;
+
+    const updateMobileChrome = () => {
+      scrollTickingRef.current = false;
+
+      const currentY = Math.max(0, window.scrollY || document.documentElement.scrollTop || 0);
+      const delta = currentY - lastScrollYRef.current;
+      const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+
+      if (currentY <= 84 || maxScroll < 260) {
+        revealDistanceRef.current = 0;
+        setMobileChromeHidden(false);
+      } else if (delta > 7) {
+        revealDistanceRef.current = 0;
+        setMobileChromeHidden(true);
+      } else if (delta < -7) {
+        revealDistanceRef.current += Math.abs(delta);
+        if (revealDistanceRef.current >= 36) setMobileChromeHidden(false);
+      }
+
+      lastScrollYRef.current = currentY;
+    };
+
+    const handleScroll = () => {
+      if (scrollTickingRef.current) return;
+      scrollTickingRef.current = true;
+      window.requestAnimationFrame(updateMobileChrome);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleScroll, { passive: true });
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleScroll);
+      scrollTickingRef.current = false;
+    };
+  }, [staticHideNav, isMessagesConversation, mobileOpen, location.pathname]);
+
+  useEffect(() => {
+    const clampHorizontalScroll = () => {
+      if (window.scrollX === 0) return;
+      window.scrollTo(0, window.scrollY);
+    };
+
+    window.addEventListener('scroll', clampHorizontalScroll, { passive: true });
+    return () => window.removeEventListener('scroll', clampHorizontalScroll);
+  }, []);
+
+  useEffect(() => {
+    if (!shouldShiftForMobileMenu) return;
+    let touchStartY = 0;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    const previousHtmlOverscrollBehavior = document.documentElement.style.overscrollBehavior;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousBodyOverscrollBehavior = document.body.style.overscrollBehavior;
+
+    const preventBackgroundWheel = (event: WheelEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-mobile-menu-scroll]')) return;
+      event.preventDefault();
+    };
+
+    const handleTouchStart = (event: TouchEvent) => {
+      touchStartY = event.touches[0]?.clientY ?? 0;
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      const target = event.target as HTMLElement | null;
+      const scrollContainer = target?.closest('[data-mobile-menu-scroll]') as HTMLElement | null;
+
+      if (!scrollContainer) {
+        event.preventDefault();
+        return;
+      }
+
+      const currentY = event.touches[0]?.clientY ?? touchStartY;
+      const deltaY = currentY - touchStartY;
+      const canScroll = scrollContainer.scrollHeight > scrollContainer.clientHeight + 1;
+      const atTop = scrollContainer.scrollTop <= 0;
+      const atBottom = scrollContainer.scrollTop + scrollContainer.clientHeight >= scrollContainer.scrollHeight - 1;
+
+      if (!canScroll || (atTop && deltaY > 0) || (atBottom && deltaY < 0)) {
+        event.preventDefault();
+      }
+    };
+
+    document.documentElement.style.overflow = 'hidden';
+    document.documentElement.style.overscrollBehavior = 'none';
+    document.body.style.overflow = 'hidden';
+    document.body.style.overscrollBehavior = 'none';
+    document.documentElement.classList.add('mobile-menu-active');
+    document.body.classList.add('mobile-menu-active');
+    document.addEventListener('touchstart', handleTouchStart, { passive: true, capture: true });
+    document.addEventListener('touchmove', handleTouchMove, { passive: false, capture: true });
+    document.addEventListener('wheel', preventBackgroundWheel, { passive: false });
+
+    return () => {
+      document.removeEventListener('touchstart', handleTouchStart, true);
+      document.removeEventListener('touchmove', handleTouchMove, true);
+      document.removeEventListener('wheel', preventBackgroundWheel);
+      document.documentElement.classList.remove('mobile-menu-active');
+      document.body.classList.remove('mobile-menu-active');
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      document.documentElement.style.overscrollBehavior = previousHtmlOverscrollBehavior;
+      document.body.style.overflow = previousBodyOverflow;
+      document.body.style.overscrollBehavior = previousBodyOverscrollBehavior;
+    };
+  }, [shouldShiftForMobileMenu]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -76,6 +228,7 @@ export function Layout() {
           onCollapsedChange={setCollapsed}
           mobileOpen={mobileOpen}
           onMobileOpenChange={setMobileOpen}
+          mobileChromeHidden={mobileChromeHidden}
         />
       )}
 
@@ -83,28 +236,55 @@ export function Layout() {
         animate={{
           marginLeft: 0,
           width: '100%',
+          x: shouldShiftForMobileMenu ? 'min(82vw, 340px)' : 0,
+          filter: shouldShiftForMobileMenu ? 'blur(1.25px) brightness(0.78)' : 'blur(0px) brightness(1)',
         }}
-        transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+        transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
         className={`overflow-x-hidden ${isMessagesPage ? 'box-border flex flex-col min-h-[100dvh] overflow-hidden lg:fixed lg:inset-0 lg:h-[100dvh] lg:pt-24' : ''}`}
+        style={{ pointerEvents: shouldShiftForMobileMenu ? 'none' : undefined }}
       >
         {isMessagesPage ? (
           <div className="flex flex-col flex-1 min-h-0 h-full">
             <Outlet />
           </div>
         ) : (
-          <div className={staticHideNav ? '' : 'px-4 sm:px-6 lg:px-8 mobile-layout-padding lg:pt-24'}>
-            {!staticHideNav && (
+          <div
+            className={
+              staticHideNav
+                ? ''
+                : isWideShellPage
+                  ? 'bg-[#f6f4ef] dark:bg-[#121212] lg:pt-24'
+                  : 'px-4 sm:px-6 lg:px-8 mobile-layout-padding lg:pt-24'
+            }
+            style={
+              isWideShellPage
+                ? {
+                    paddingTop: 'calc(3.5rem + env(safe-area-inset-top))',
+                    paddingBottom: 'calc(64px + env(safe-area-inset-bottom) + 1rem)',
+                  }
+                : undefined
+            }
+          >
+            {!staticHideNav && !isWideShellPage && (
               <div className="max-w-7xl mx-auto pt-4 sm:pt-5">
                 <BillingStatusBanner />
               </div>
             )}
-            <div className="relative">
+            <div className={`relative ${isWideShellPage ? 'min-h-[calc(100dvh-(3.5rem+env(safe-area-inset-top)+64px+1rem))] lg:min-h-[calc(100dvh-6rem)]' : ''}`}>
               <AnimatePresence mode="popLayout" initial={false}>
                 <motion.div
                   key={location.pathname}
-                  initial={{ opacity: 0, y: 10, filter: 'blur(6px)' }}
-                  animate={{ opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] } }}
-                  exit={{ opacity: 0, y: -6, filter: 'blur(3px)', transition: { duration: 0.18, ease: [0.4, 0, 1, 1] } }}
+                  initial={isWideShellPage ? { opacity: 0 } : { opacity: 0, y: 10, filter: 'blur(6px)' }}
+                  animate={
+                    isWideShellPage
+                      ? { opacity: 1, transition: { duration: 0.24, ease: [0.16, 1, 0.3, 1] } }
+                      : { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] } }
+                  }
+                  exit={
+                    isWideShellPage
+                      ? { opacity: 0, transition: { duration: 0.16, ease: [0.4, 0, 1, 1] } }
+                      : { opacity: 0, y: -6, filter: 'blur(3px)', transition: { duration: 0.18, ease: [0.4, 0, 1, 1] } }
+                  }
                 >
                   <Outlet />
                 </motion.div>

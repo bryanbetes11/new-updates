@@ -8,6 +8,7 @@ interface ModalProps {
   title: string;
   children: ReactNode;
   size?: 'sm' | 'md' | 'lg';
+  mobileView?: 'sheet' | 'page';
   hideCloseButton?: boolean;
   hideHeader?: boolean;
   closeOnBackdrop?: boolean;
@@ -49,6 +50,7 @@ export function Modal({
   title,
   children,
   size = 'md',
+  mobileView = 'sheet',
   hideCloseButton = false,
   hideHeader = false,
   closeOnBackdrop = true,
@@ -95,19 +97,20 @@ export function Modal({
   if (!visible) return null;
 
   const backdropClass = closing ? 'animate-fade-out' : 'animate-fade-in';
+  const isMobilePage = mobileView === 'page';
   const sheetClass = closing
-    ? 'animate-slide-sheet-out sm:animate-scale-out'
-    : 'animate-slide-sheet sm:animate-scale-in';
+    ? `${isMobilePage ? 'animate-fade-out sm:animate-scale-out' : 'animate-slide-sheet-out sm:animate-scale-out'}`
+    : `${isMobilePage ? 'animate-fade-in sm:animate-scale-in' : 'animate-slide-sheet sm:animate-scale-in'}`;
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[2147483647] flex items-end sm:items-center justify-center"
+      className={`fixed inset-0 z-[2147483647] flex justify-center ${isMobilePage ? 'items-stretch sm:items-center' : 'items-end sm:items-center'}`}
       onClick={() => { if (closeOnBackdrop) requestClose(); }}
       role="presentation"
     >
       <div className={`fixed inset-0 bg-black/50 backdrop-blur-sm ${backdropClass}`} />
       <div
-        className={`relative w-full ${desktopSizes[size]} rounded-t-[28px] sm:rounded-2xl bg-white dark:bg-[#1c1b1e] ring-1 ring-black/[0.06] dark:ring-white/[0.08] ${sheetClass} max-h-[92dvh] sm:max-h-[85vh] flex flex-col overflow-hidden sm:mx-4`}
+        className={`relative w-full ${desktopSizes[size]} ${isMobilePage ? 'h-[100dvh] rounded-none sm:h-auto sm:rounded-2xl' : 'rounded-t-[28px] sm:rounded-2xl'} bg-white dark:bg-[#1c1b1e] ring-1 ring-black/[0.06] dark:ring-white/[0.08] ${sheetClass} ${isMobilePage ? 'max-h-[100dvh] sm:max-h-[85vh]' : 'max-h-[92dvh] sm:max-h-[85vh]'} flex flex-col overflow-hidden ${isMobilePage ? '' : 'sm:mx-4'}`}
         style={{
           boxShadow: '0 24px 64px -16px rgba(0,0,0,0.3), 0 8px 24px -8px rgba(0,0,0,0.15)',
         }}
@@ -118,8 +121,13 @@ export function Modal({
         data-modal-sheet
       >
         {!hideHeader && (
-          <div className={`relative flex items-center justify-between px-5 border-b border-black/[0.05] dark:border-white/[0.06] shrink-0 ${titleAlign === 'center' ? 'pt-8 pb-5' : 'pt-7 pb-4'}`}>
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 w-8 h-1 rounded-full bg-gray-200 dark:bg-gray-700 sm:hidden" />
+          <div
+            className={`relative flex items-center justify-between px-5 border-b border-black/[0.05] dark:border-white/[0.06] shrink-0 ${titleAlign === 'center' ? 'pt-8 pb-5' : 'pt-7 pb-4'} ${isMobilePage ? 'sm:pt-7 sm:pb-4' : ''}`}
+            style={isMobilePage ? { paddingTop: 'calc(env(safe-area-inset-top) + 1.25rem)' } : undefined}
+          >
+            {!isMobilePage && (
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 w-8 h-1 rounded-full bg-gray-200 dark:bg-gray-700 sm:hidden" />
+            )}
             <h2
               className={`text-[15px] font-bold text-gray-900 dark:text-white ${titleAlign === 'center' ? 'absolute left-1/2 -translate-x-1/2 text-center' : ''}`}
               style={{ letterSpacing: '-0.02em' }}
@@ -141,7 +149,11 @@ export function Modal({
         {hideHeader && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 w-8 h-1 rounded-full bg-gray-200 dark:bg-gray-700 sm:hidden z-10" />
         )}
-        <div className={`overflow-y-auto overflow-x-hidden flex-1 px-5 py-5 scrollbar-thin overscroll-contain ${bodyClassName}`} data-modal-body>
+        <div
+          className={`overflow-y-auto overflow-x-hidden flex-1 px-5 py-5 scrollbar-thin overscroll-contain ${bodyClassName}`}
+          style={isMobilePage ? { paddingBottom: 'calc(env(safe-area-inset-bottom) + 1.25rem)' } : undefined}
+          data-modal-body
+        >
           {children}
         </div>
       </div>

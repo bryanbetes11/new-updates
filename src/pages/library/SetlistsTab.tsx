@@ -637,16 +637,19 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
     }
   };
 
-  const handleSaveChart = async (text: string) => {
+  const handleSaveChart = async (text: string, assignedSongKey?: string) => {
     if (!selectedChartSong) return;
     setChartSaving(true);
     try {
       const { data, error } = await withSaveTimeout(
         supabase
           .from('songs')
-          .update({ chordpro_text: text })
+          .update({
+            chordpro_text: text,
+            ...(assignedSongKey ? { song_key: assignedSongKey.trim() } : {}),
+          })
           .eq('id', selectedChartSong.id)
-          .select('id, chordpro_text')
+          .select('id, chordpro_text, song_key')
           .maybeSingle()
       );
 
@@ -656,8 +659,8 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
         throw new Error(message);
       }
 
-      toast('success', 'Song chart saved');
-      const updatedSong = { ...selectedChartSong, chordpro_text: data.chordpro_text };
+      toast('success', assignedSongKey ? `Song chart saved in key ${assignedSongKey.trim()}` : 'Song chart saved');
+      const updatedSong = { ...selectedChartSong, chordpro_text: data.chordpro_text, song_key: data.song_key || selectedChartSong.song_key };
       setSelectedChartSong(updatedSong);
       if (openChartStorageKey) {
         try {
@@ -666,7 +669,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
           // Cached open-chart state is best-effort.
         }
       }
-      setSongUsages(prev => prev.map(song => song.id === selectedChartSong.id ? { ...song, chordpro_text: data.chordpro_text } : song));
+      setSongUsages(prev => prev.map(song => song.id === selectedChartSong.id ? { ...song, chordpro_text: data.chordpro_text, song_key: data.song_key || song.song_key } : song));
     } catch (error: unknown) {
       console.error('Failed to save chart:', error);
       toast('error', getErrorMessage(error, 'Failed to save chart'));

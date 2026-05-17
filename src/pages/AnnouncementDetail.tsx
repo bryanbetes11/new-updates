@@ -16,6 +16,7 @@ import { Select } from '../components/Select';
 import { Avatar } from '../components/Avatar';
 import { FormattedText } from '../components/FormattedText';
 import { MentionTextarea } from '../components/MentionTextarea';
+import { useSmartBack } from '../lib/navigationHistory';
 import type { Announcement, AnnouncementComment, AnnouncementView } from '../types';
 
 interface ContentBlock {
@@ -337,6 +338,7 @@ const blockItem = {
 export function AnnouncementDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const smartBack = useSmartBack('/announcements');
   const { user } = useAuth();
   const { toast } = useToast();
   const [announcement, setAnnouncement] = useState<AnnouncementWithBlocks | null>(null);
@@ -575,7 +577,7 @@ export function AnnouncementDetail() {
 
   const goBack = () => {
     setIsLeaving(true);
-    setTimeout(() => navigate('/announcements'), 300);
+    setTimeout(() => smartBack(), 300);
   };
 
   return (
@@ -583,7 +585,7 @@ export function AnnouncementDetail() {
       <motion.div
         animate={isLeaving ? { opacity: 0, y: -12, filter: 'blur(8px)' } : { opacity: 1, y: 0, filter: 'blur(0px)' }}
         transition={{ duration: 0.28, ease: [0.4, 0, 1, 1] }}
-        className="max-w-2xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 space-y-5"
+        className="max-w-2xl lg:max-w-6xl xl:max-w-[1560px] mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-5 space-y-5"
       >
 
         {/* ── Back ─────────────────────────────────────── */}

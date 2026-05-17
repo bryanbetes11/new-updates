@@ -4,6 +4,7 @@ import { Eye, EyeOff, Lock, ChevronLeft, CheckCircle, AlertCircle } from 'lucide
 import { motion } from 'framer-motion';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../contexts/ToastContext';
+import { useSmartBack } from '../lib/navigationHistory';
 
 const requirements = [
   { label: 'At least 8 characters', test: (p: string) => p.length >= 8 },
@@ -14,6 +15,7 @@ const requirements = [
 
 export function ChangePassword() {
   const navigate = useNavigate();
+  const smartBack = useSmartBack('/profile');
   const { toast } = useToast();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -67,7 +69,7 @@ export function ChangePassword() {
       <div className="sticky top-0 z-20 bg-white/80 dark:bg-[#111113]/80 backdrop-blur-xl border-b border-black/[0.06] dark:border-white/[0.06]">
         <div className="max-w-xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3">
           <button
-            onClick={() => navigate(-1)}
+            onClick={smartBack}
             className="flex items-center gap-1.5 text-sm font-medium text-brand-600 dark:text-brand-400 hover:opacity-75 transition-opacity"
           >
             <ChevronLeft className="h-4 w-4" />

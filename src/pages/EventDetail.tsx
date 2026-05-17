@@ -18,6 +18,7 @@ import { dispatchBadgeCountsRefresh } from '../lib/realtimeSignals';
 import { SongChartViewer } from '../components/SongChartViewer';
 import { withSaveTimeout } from '../lib/saveTimeout';
 import { clearActiveServiceMode, getActiveServiceMode, saveActiveServiceMode } from '../lib/serviceModeResume';
+import { useSmartBack } from '../lib/navigationHistory';
 
 import type { Event, EventAssignment, Setlist, SetlistSong, Song, ServiceFormat, SetlistCheckReport } from '../types';
 import { inferServiceFormat, SERVICE_FORMAT_LABELS } from '../lib/setlistCheckerEngine';
@@ -67,6 +68,7 @@ export function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const smartBack = useSmartBack('/events');
 
   const { user, roles, userRoles, isLeader, isProductionDirector } = useAuth();
   const { toast } = useToast();
@@ -117,6 +119,7 @@ export function EventDetail() {
   const [songUsage, setSongUsage] = useState<Record<string, { lastDate: string; days: number }>>({});
   const [showEditEvent, setShowEditEvent] = useState(false);
   const [editForm, setEditForm] = useState({ title: '', description: '', event_type: '', event_date: '', start_time: '', end_time: '', song_leader_id: '', linked_event_id: '' });
+  const [savingEventEdit, setSavingEventEdit] = useState(false);
   const [sundayServices, setSundayServices] = useState<Event[]>([]);
   const [attendance, setAttendance] = useState<EventAttendance | null>(null);
   const [allAttendance, setAllAttendance] = useState<EventAttendance[]>([]);
@@ -134,6 +137,7 @@ export function EventDetail() {
   const [serviceModeIndex, setServiceModeIndex] = useState<number | null>(null);
   const [serviceChartEditing, setServiceChartEditing] = useState(false);
   const [serviceModeEntering, setServiceModeEntering] = useState(false);
+  const [serviceModeDisplayKey, setServiceModeDisplayKey] = useState('');
   const [serviceChartControlsVisible, setServiceChartControlsVisible] = useState(false);
   const [serviceArrangementOpen, setServiceArrangementOpen] = useState(false);
   const [serviceAutoScrollEnabled, setServiceAutoScrollEnabled] = useState(false);
@@ -1260,15 +1264,18 @@ const openLyricsModal = (ss: SetlistSong) => {
   const getSetlistSongChartText = (song: SetlistSong | null | undefined) =>
     song?.songs?.chordpro_text ?? null;
 
-  const handleSaveChart = async (songId: string, text: string) => {
+  const handleSaveChart = async (songId: string, text: string, assignedSongKey?: string) => {
     setChartSaving(true);
     try {
       const { data, error } = await withSaveTimeout(
         supabase
           .from('songs')
-          .update({ chordpro_text: text })
+          .update({
+            chordpro_text: text,
+            ...(assignedSongKey ? { song_key: assignedSongKey.trim() } : {}),
+          })
           .eq('id', songId)
-          .select('id, chordpro_text')
+          .select('id, chordpro_text, song_key')
           .maybeSingle()
       );
 
@@ -1280,16 +1287,16 @@ const openLyricsModal = (ss: SetlistSong) => {
 
       setSetlistSongs(prev => prev.map(s =>
         s.song_id === songId
-          ? { ...s, songs: s.songs ? { ...s.songs, chordpro_text: data.chordpro_text } : s.songs }
+          ? { ...s, songs: s.songs ? { ...s.songs, chordpro_text: data.chordpro_text, song_key: data.song_key || s.songs.song_key } : s.songs }
           : s
       ));
       setLinkedSetlistSongs(prev => prev.map(s =>
         s.song_id === songId
-          ? { ...s, songs: s.songs ? { ...s.songs, chordpro_text: data.chordpro_text } : s.songs }
+          ? { ...s, songs: s.songs ? { ...s.songs, chordpro_text: data.chordpro_text, song_key: data.song_key || s.songs.song_key } : s.songs }
           : s
       ));
-      setChartModalSong(prev => prev?.song_id === songId ? { ...prev, songs: prev.songs ? { ...prev.songs, chordpro_text: data.chordpro_text } : prev.songs } : prev);
-      toast('success', 'Song chart saved');
+      setChartModalSong(prev => prev?.song_id === songId ? { ...prev, songs: prev.songs ? { ...prev.songs, chordpro_text: data.chordpro_text, song_key: data.song_key || prev.songs.song_key } : prev.songs } : prev);
+      toast('success', assignedSongKey ? `Song chart saved in key ${assignedSongKey.trim()}` : 'Song chart saved');
     } catch (error: unknown) {
       console.error('Failed to save chart:', error);
       toast('error', getErrorMessage(error, 'Failed to save chart'));
@@ -1439,25 +1446,35 @@ const openLyricsModal = (ss: SetlistSong) => {
   };
 
   const handleEditEvent = async () => {
-    if (!id) return;
-    const title = await generateEventTitle(editForm.song_leader_id, editForm.event_type);
-    const proposalDueDate = calculateProposalDueDate(editForm.event_date, editForm.event_type);
+    if (!id || savingEventEdit) return;
+    setSavingEventEdit(true);
+    try {
+      const title = await generateEventTitle(editForm.song_leader_id, editForm.event_type);
+      const proposalDueDate = calculateProposalDueDate(editForm.event_date, editForm.event_type);
 
-    const { error } = await supabase.from('events').update({
-      title,
-      description: editForm.description || null,
-      event_type: editForm.event_type,
-      event_date: editForm.event_date,
-      start_time: editForm.start_time || null,
-      end_time: editForm.end_time || null,
-      song_leader_id: editForm.song_leader_id || null,
-      linked_event_id: editForm.linked_event_id || null,
-      proposal_due_date: proposalDueDate,
-    }).eq('id', id);
-    if (error) { toast('error', 'Failed to update event'); return; }
-    toast('success', 'Event updated');
-    setShowEditEvent(false);
-    fetchAll();
+      const { error } = await supabase.from('events').update({
+        title,
+        description: editForm.description || null,
+        event_type: editForm.event_type,
+        event_date: editForm.event_date,
+        start_time: editForm.start_time || null,
+        end_time: editForm.end_time || null,
+        song_leader_id: editForm.song_leader_id || null,
+        linked_event_id: editForm.linked_event_id || null,
+        proposal_due_date: proposalDueDate,
+      }).eq('id', id);
+      if (error) {
+        toast('error', getErrorMessage(error, 'Failed to update event'));
+        return;
+      }
+      toast('success', 'Event updated');
+      setShowEditEvent(false);
+      fetchAll();
+    } catch (error) {
+      toast('error', getErrorMessage(error, 'Failed to update event'));
+    } finally {
+      setSavingEventEdit(false);
+    }
   };
 
   if (loading) return <PageLoader />;
@@ -1547,7 +1564,7 @@ const openLyricsModal = (ss: SetlistSong) => {
       ? orderedSetlistSongs
       : linkedReferenceSongs;
   const serviceModeSong = serviceModeIndex === null ? null : serviceModeSongs[serviceModeIndex] || null;
-  const serviceModeSongKey = serviceModeSong?.performed_key || serviceModeSong?.songs?.song_key || '';
+  const serviceModeSongKey = serviceModeDisplayKey || serviceModeSong?.performed_key || serviceModeSong?.songs?.song_key || '';
   const serviceModeSourceLabel = event.event_type === 'Rehearsals' && linkedReferenceSongs.length > 0
     ? linkedServiceEvent?.title || 'linked Sunday Service'
     : orderedSetlistSongs.length > 0
@@ -1584,6 +1601,7 @@ const openLyricsModal = (ss: SetlistSong) => {
     setServiceArrangementOpen(false);
     setServiceAutoScrollEnabled(false);
     setServiceSongPickerOpen(false);
+    setServiceModeDisplayKey('');
     serviceTrackAnimation.current?.stop();
     serviceTrackX.set(0);
     setServiceModeEntering(true);
@@ -1617,6 +1635,7 @@ const openLyricsModal = (ss: SetlistSong) => {
     setServiceSongPickerOpen(false);
     setServiceCloseConfirmOpen(false);
     setServiceModeEntering(false);
+    setServiceModeDisplayKey('');
     setServiceModeIndex(null);
 
     const params = new URLSearchParams(location.search);
@@ -1652,6 +1671,7 @@ const openLyricsModal = (ss: SetlistSong) => {
       onComplete: () => {
         serviceTrackX.set(0);
         setServiceModeIndex(targetIndex);
+        setServiceModeDisplayKey('');
         serviceSwipeAnimating.current = false;
       },
     });
@@ -1669,6 +1689,7 @@ const openLyricsModal = (ss: SetlistSong) => {
     serviceTrackAnimation.current?.stop();
     serviceTrackX.set(0);
     setServiceModeIndex(targetIndex);
+    setServiceModeDisplayKey('');
   };
   const goToPreviousServiceSong = () => {
     goToServiceSong(-1);
@@ -1735,7 +1756,7 @@ const openLyricsModal = (ss: SetlistSong) => {
 
   const goBack = () => {
     setIsLeaving(true);
-    setTimeout(() => navigate('/events'), 300);
+    setTimeout(() => smartBack(), 300);
   };
 
   return (
@@ -1743,7 +1764,7 @@ const openLyricsModal = (ss: SetlistSong) => {
       <motion.div
         animate={isLeaving ? { opacity: 0, y: -12, filter: 'blur(8px)' } : { opacity: 1, y: 0, filter: 'blur(0px)' }}
         transition={{ duration: 0.28, ease: [0.4, 0, 1, 1] }}
-        className="max-w-2xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 space-y-5"
+        className="max-w-2xl lg:max-w-6xl xl:max-w-[1560px] mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-5 space-y-5"
       >
 
         {/* ── Back ─────────────────────────────────────── */}
@@ -3129,12 +3150,13 @@ const openLyricsModal = (ss: SetlistSong) => {
               sectionOrder={chartModalSong.arrangement_section_order}
               title={chartModalSong.songs.title}
               artist={chartModalSong.songs.artist}
-              songKey={chartModalSong.performed_key || chartModalSong.songs.song_key}
+              songKey={chartModalSong.songs.song_key}
+              performedKey={chartModalSong.performed_key}
               chordproText={getSetlistSongChartText(chartModalSong)}
               editable={canManageSetlist || canEditSetlist}
               saving={chartSaving}
               onClose={closeChartModal}
-              onSave={(text) => handleSaveChart(chartModalSong.song_id, text)}
+              onSave={(text, assignedSongKey) => handleSaveChart(chartModalSong.song_id, text, assignedSongKey)}
               onSaveSectionOrder={(order) => handleSaveSetlistSongSectionOrder(chartModalSong.id, order)}
             />
           )}
@@ -3477,7 +3499,8 @@ const openLyricsModal = (ss: SetlistSong) => {
                                   sectionOrder={song.arrangement_section_order}
                                   title={song.songs.title}
                                   artist={song.songs.artist}
-                                  songKey={song.performed_key || song.songs.song_key}
+                                  songKey={song.songs.song_key}
+                                  performedKey={song.performed_key}
                                   chordproText={getSetlistSongChartText(song)}
                                   editable={offset === 0 && (canManageSetlist || canEditSetlist)}
                                   fullBleed
@@ -3489,7 +3512,8 @@ const openLyricsModal = (ss: SetlistSong) => {
                                   autoScrollEnabled={offset === 0 ? serviceAutoScrollEnabled : false}
                                   onAutoScrollEnabledChange={offset === 0 ? setServiceAutoScrollEnabled : undefined}
                                   onEditingChange={offset === 0 ? setServiceChartEditing : undefined}
-                                  onSave={offset === 0 ? (text) => handleSaveChart(song.song_id, text) : undefined}
+                                  onDisplayKeyChange={offset === 0 ? setServiceModeDisplayKey : undefined}
+                                  onSave={offset === 0 ? (text, assignedSongKey) => handleSaveChart(song.song_id, text, assignedSongKey) : undefined}
                                   onSaveSectionOrder={offset === 0 ? (order) => handleSaveSetlistSongSectionOrder(song.id, order) : undefined}
                                   footerNavigation={offset === 0 ? {
                                     currentLabel: `${index + 1} of ${serviceModeSongs.length}`,
@@ -3952,8 +3976,8 @@ const openLyricsModal = (ss: SetlistSong) => {
               </div>
 
             <div className="flex justify-end gap-3 pt-4 mt-6">
-              <button type="button" onClick={() => setShowEditEvent(false)} className="btn-secondary">Cancel</button>
-              <button type="submit" className="btn-primary">Save Changes</button>
+              <button type="button" onClick={() => setShowEditEvent(false)} disabled={savingEventEdit} className="btn-secondary disabled:opacity-60">Cancel</button>
+              <button type="submit" disabled={savingEventEdit} className="btn-primary disabled:opacity-60">{savingEventEdit ? 'Saving...' : 'Save Changes'}</button>
             </div>
           </form>
         </Modal>

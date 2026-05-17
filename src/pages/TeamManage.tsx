@@ -12,6 +12,7 @@ import { DatePicker } from '../components/DatePicker';
 import { RoleBadge, sortRolesLeadershipFirst } from '../components/RoleBadge';
 import { Avatar } from '../components/Avatar';
 import { AttendanceMonitoring } from '../components/AttendanceMonitoring';
+import { LeadershipHeroCard } from '../components/LeadershipHeroCard';
 import { phoneHref } from '../lib/phone';
 import type { Profile, UserRole } from '../types';
 
@@ -284,33 +285,13 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
   const content = (
     <div className={embedded ? 'space-y-5' : 'space-y-5 sm:space-y-6'}>
       {!embedded && (
-        <motion.div
-          initial={{ opacity: 0, y: 14, filter: 'blur(6px)' }}
-          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          className="flex items-center gap-3.5"
-        >
-          <div className="relative shrink-0">
-            <div
-              className="absolute inset-0 rounded-2xl"
-              style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.35), transparent 70%)', filter: 'blur(10px)', transform: 'scale(1.5)' }}
-            />
-            <div
-              className="relative h-11 w-11 rounded-2xl flex items-center justify-center"
-              style={{ background: 'linear-gradient(145deg, #16a34a, #15803d)', boxShadow: '0 4px 14px rgba(22,163,74,0.35)' }}
-            >
-              <Users className="h-5 w-5 text-white" />
-            </div>
-          </div>
-          <div>
-            <p className="text-[10px] font-mono font-medium uppercase tracking-[0.22em] text-emerald-600 dark:text-emerald-400/80 mb-0.5">
-              Roles & roster
-            </p>
-            <h1 className="text-[1.5rem] sm:text-[1.75rem] font-black text-gray-900 dark:text-white leading-tight" style={{ letterSpacing: '-0.03em' }}>
-              Team.
-            </h1>
-          </div>
-        </motion.div>
+        <LeadershipHeroCard
+          tone="emerald"
+          icon={Users}
+          eyebrow="Roles & Roster"
+          title="Team."
+          description="Manage your member roster, roles, and attendance accountability from one shared leadership workspace."
+        />
       )}
 
       <motion.div
@@ -835,7 +816,7 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
 
   return (
     <div className="page-container page-bottom-pad">
-      <div className="max-w-5xl mx-auto px-1 sm:px-2 pt-6 sm:pt-8">
+      <div className="relative max-w-2xl lg:max-w-6xl xl:max-w-[1560px] mx-auto pt-4 sm:pt-5 pb-6 px-4 sm:px-6 lg:px-8">
         {content}
       </div>
     </div>

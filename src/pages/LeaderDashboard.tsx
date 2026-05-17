@@ -138,7 +138,7 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
       urgent: recentOffenses.length > 0,
       tone: { bg: 'bg-red-50 dark:bg-red-500/[0.12]', text: 'text-red-600 dark:text-red-400', dot: '#ef4444' },
       neutral: { bg: 'bg-emerald-50 dark:bg-emerald-500/[0.10]', text: 'text-emerald-600 dark:text-emerald-400', dot: '#22c55e' },
-      onClick: () => navigate(embedded ? '/leadership/team?tab=attendance' : '/manage?tab=attendance'),
+      onClick: () => navigate('/leadership/team?tab=attendance'),
     },
     {
       label: 'Discipline Open',
@@ -147,7 +147,7 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
       urgent: disciplineAlerts.length > 0,
       tone: { bg: 'bg-orange-50 dark:bg-orange-500/[0.12]', text: 'text-orange-600 dark:text-orange-400', dot: '#f97316' },
       neutral: { bg: 'bg-emerald-50 dark:bg-emerald-500/[0.10]', text: 'text-emerald-600 dark:text-emerald-400', dot: '#22c55e' },
-      onClick: () => navigate(embedded ? '/leadership/discipline' : '/discipline'),
+      onClick: () => navigate('/leadership/discipline'),
     },
     {
       label: 'Pending Leave',
@@ -156,7 +156,7 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
       urgent: pendingLeave > 0,
       tone: { bg: 'bg-amber-50 dark:bg-amber-500/[0.12]', text: 'text-amber-600 dark:text-amber-400', dot: '#f59e0b' },
       neutral: { bg: 'bg-gray-100 dark:bg-white/[0.06]', text: 'text-gray-500 dark:text-white/45', dot: 'rgba(156,163,175,0.7)' },
-      onClick: () => navigate(embedded ? '/leadership/leave' : '/requests'),
+      onClick: () => navigate('/leadership/leave'),
     },
     {
       label: 'Setlists to Review',
@@ -223,7 +223,7 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
   }
 
   const inner = (
-    <div className={embedded ? 'space-y-5' : 'px-4 sm:px-5 lg:px-6 py-5 sm:py-6 space-y-5'}>
+    <div className={embedded ? 'space-y-5' : 'space-y-5 sm:space-y-6'}>
 
         {!embedded && (
           <motion.div
@@ -287,7 +287,7 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
           <DashCard index="01" title="Attendance Alerts" icon={AlertTriangle} iconColor="text-amber-500"
             badge={recentOffenses.length}
             linkLabel="Full Report"
-            onLink={() => navigate(embedded ? '/leadership/team?tab=attendance' : '/manage?tab=attendance')}
+            onLink={() => navigate('/leadership/team?tab=attendance')}
           >
             <div className="divide-y divide-black/[0.03] dark:divide-white/[0.04]">
               {recentOffenses.length === 0 ? (
@@ -310,7 +310,7 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
           <DashCard index="02" title="Open Discipline" icon={Shield} iconColor="text-red-500"
             badge={disciplineAlerts.length}
             linkLabel="View All"
-            onLink={() => navigate(embedded ? '/leadership/discipline' : '/discipline')}
+            onLink={() => navigate('/leadership/discipline')}
           >
             <div className="divide-y divide-black/[0.03] dark:divide-white/[0.04]">
               {disciplineAlerts.length === 0 ? (
@@ -319,7 +319,7 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
                 disciplineAlerts.map(d => {
                   const sCfg = statusConfig[d.status] || statusConfig.open;
                   return (
-                    <button key={d.id} onClick={() => navigate(embedded ? '/leadership/discipline' : '/discipline')}
+                    <button key={d.id} onClick={() => navigate('/leadership/discipline')}
                       className="w-full flex items-center gap-3 px-5 py-3 hover:bg-gray-50/60 dark:hover:bg-white/[0.02] transition-colors text-left"
                     >
                       {d.profile && <Avatar src={d.profile.avatar_url} firstName={d.profile.first_name} lastName={d.profile.last_name} size="sm" className="ring-1 ring-black/[0.06] dark:ring-white/[0.08]" />}
@@ -368,7 +368,7 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
 
           <DashCard index="04" title="Special Status Members" icon={Users} iconColor="text-gray-400 dark:text-white/35"
             linkLabel="Manage"
-            onLink={() => navigate(embedded ? '/leadership/team' : '/manage')}
+            onLink={() => navigate('/leadership/team')}
           >
             <div className="divide-y divide-black/[0.03] dark:divide-white/[0.04]">
               {suspendedMembers.length === 0 ? (
@@ -413,7 +413,7 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
 
   return (
     <div className="page-container page-bottom-pad">
-      <div className="max-w-2xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8">
+      <div className="max-w-5xl mx-auto px-1 sm:px-2 pt-6 sm:pt-8">
         {inner}
       </div>
     </div>

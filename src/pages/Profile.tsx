@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { motion } from 'framer-motion';
 import {
-  Pencil, Save, LogOut, Bell, BellOff, X, Check, Crown,
+  Pencil, Save, LogOut, X, Check, Crown,
   Camera, Loader2, Shield, ChevronDown, Clock,
   MessageSquare, XCircle, CheckCircle, Eye, KeyRound,
   Phone, Cake, Calendar, AlertCircle
@@ -13,10 +13,9 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { DatePicker } from '../components/DatePicker';
 import { PageLoader } from '../components/LoadingSpinner';
+import { PushNotificationSetting } from '../components/PushNotificationSetting';
 import { RoleBadge, sortRolesLeadershipFirst } from '../components/RoleBadge';
-import { isIosDevice, isStandalonePwa } from '../lib/device';
 import { phoneHref } from '../lib/phone';
-import { VAPID_PUBLIC_KEY } from '../lib/push';
 import type { DisciplineRecord } from '../types';
 
 interface AccountabilitySummary {
@@ -76,8 +75,6 @@ export function Profile() {
   const [form, setForm] = useState({
     first_name: '', second_name: '', middle_name: '', last_name: '', nickname: '', phone: '', gender: '', birthday: '', official_join_date: '',
   });
-  const [pushEnabled, setPushEnabled] = useState(false);
-  const [pushLoading, setPushLoading] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [myDisciplineRecords, setMyDisciplineRecords] = useState<DisciplineRecord[]>([]);
   const [disciplineExpanded, setDisciplineExpanded] = useState<string | null>(null);
@@ -98,20 +95,6 @@ export function Profile() {
       });
     }
   }, [profile]);
-
-  useEffect(() => {
-    if (!user || !profile) return;
-    const checkPushStatus = async () => {
-      if ('serviceWorker' in navigator && 'PushManager' in window) {
-        try {
-          const reg = await navigator.serviceWorker.ready;
-          const sub = await reg.pushManager.getSubscription();
-          setPushEnabled(!!sub && Notification.permission === 'granted');
-        } catch { setPushEnabled(false); }
-      } else { setPushEnabled(false); }
-    };
-    checkPushStatus();
-  }, [user]);
 
   const fetchMyDiscipline = useCallback(async () => {
     if (!user || isLeader) return;
@@ -163,82 +146,6 @@ export function Profile() {
   };
 
   const handleSignOut = async () => { await signOut(); navigate('/'); };
-
-  const urlBase64ToUint8Array = (base64String: string) => {
-    const padding = '='.repeat((4 - base64String.length % 4) % 4);
-    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-    const rawData = window.atob(base64);
-    const outputArray = new Uint8Array(rawData.length);
-    for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
-    return outputArray;
-  };
-
-  const savePushSubscription = useCallback(async (subscription: PushSubscription) => {
-    if (!user) return;
-    const subJson = subscription.toJSON();
-    const { error } = await supabase.rpc('claim_push_subscription', {
-      p_endpoint: subJson.endpoint || '',
-      p_p256dh: subJson.keys?.p256dh || '',
-      p_auth_key: subJson.keys?.auth || '',
-    });
-    if (error) throw error;
-  }, [user]);
-
-  useEffect(() => {
-    if (!user || !pushEnabled) return;
-    let cancelled = false;
-
-    const syncExistingSubscription = async () => {
-      try {
-        const reg = await navigator.serviceWorker.ready;
-        const sub = await reg.pushManager.getSubscription();
-        if (!cancelled && sub && Notification.permission === 'granted') {
-          await savePushSubscription(sub);
-        }
-      } catch {
-        // Push sync is best-effort and should not block the profile screen.
-      }
-    };
-
-    syncExistingSubscription();
-    return () => { cancelled = true; };
-  }, [pushEnabled, savePushSubscription, user]);
-
-  const togglePush = async () => {
-    if (!user) return;
-    setPushLoading(true);
-    if (!pushEnabled) {
-      try {
-        if (!('serviceWorker' in navigator)) { toast('error', 'Service workers not supported'); setPushLoading(false); return; }
-        if (!('PushManager' in window)) {
-          toast('error', isIosDevice() && !isStandalonePwa() ? 'On iOS, add to Home Screen first.' : 'Push not supported in this browser');
-          setPushLoading(false); return;
-        }
-        if (!('Notification' in window)) { toast('error', 'Notifications unavailable'); setPushLoading(false); return; }
-        const permission = await Notification.requestPermission();
-        if (permission !== 'granted') { toast('error', 'Permission denied. Enable in settings.'); setPushLoading(false); return; }
-        const reg = await navigator.serviceWorker.ready;
-        const vapidPublicKey = VAPID_PUBLIC_KEY;
-        if (!vapidPublicKey) { toast('error', 'Push not configured'); setPushLoading(false); return; }
-        const sub = await reg.pushManager.getSubscription()
-          || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) });
-        await savePushSubscription(sub);
-        setPushEnabled(true);
-        toast('success', 'Push notifications enabled');
-      } catch (err) {
-        toast('error', err instanceof Error ? err.message : 'Failed to enable');
-      }
-    } else {
-      try {
-        const reg = await navigator.serviceWorker.ready;
-        const sub = await reg.pushManager.getSubscription();
-        if (sub) { await sub.unsubscribe(); await supabase.from('push_subscriptions').delete().eq('user_id', user.id).eq('endpoint', sub.endpoint); }
-        setPushEnabled(false);
-        toast('info', 'Push notifications disabled');
-      } catch { toast('error', 'Failed to disable'); }
-    }
-    setPushLoading(false);
-  };
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!user || !e.target.files?.[0]) return;
@@ -747,39 +654,7 @@ export function Profile() {
           animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
           transition={{ duration: 0.5, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
         >
-          <PremiumCard className="px-5 py-4 flex items-center gap-4">
-            <div
-              className={`relative flex items-center justify-center h-10 w-10 rounded-2xl shrink-0 ${pushEnabled ? '' : 'bg-gray-100 dark:bg-white/[0.06]'}`}
-              style={pushEnabled ? { background: 'linear-gradient(145deg, #16a34a, #15803d)', boxShadow: '0 3px 10px rgba(22,163,74,0.3)' } : undefined}
-            >
-              {pushEnabled
-                ? <Bell className="h-5 w-5 text-white" />
-                : <BellOff className="h-5 w-5 text-gray-400 dark:text-white/30" />}
-              {pushEnabled && <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#0d0d0f]" style={{ boxShadow: '0 0 8px rgba(34,197,94,0.6)' }} />}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[14px] font-bold text-gray-900 dark:text-white" style={{ letterSpacing: '-0.015em' }}>Push Notifications</p>
-              <p className="text-[12px] text-gray-500 dark:text-white/45 mt-0.5">
-                {pushEnabled
-                  ? 'Enabled — you will receive push notifications'
-                  : !('PushManager' in window) && isIosDevice() && !isStandalonePwa()
-                    ? 'Add to Home Screen to enable'
-                    : 'Tap Enable to receive notifications'}
-              </p>
-            </div>
-            <button
-              onClick={togglePush}
-              disabled={pushLoading}
-              className={`shrink-0 inline-flex items-center justify-center px-4 h-9 rounded-full text-[12px] font-semibold transition-all active:scale-[0.97] ${
-                pushEnabled
-                  ? 'bg-white/70 dark:bg-white/[0.04] text-gray-600 dark:text-white/55 border border-black/[0.06] dark:border-white/[0.07] hover:bg-white dark:hover:bg-white/[0.07]'
-                  : 'text-white'
-              }`}
-              style={!pushEnabled ? { background: 'linear-gradient(135deg, #16a34a, #15803d)', boxShadow: '0 4px 14px rgba(22,163,74,0.35)' } : undefined}
-            >
-              {pushLoading ? 'Processing…' : pushEnabled ? 'Disable' : 'Enable'}
-            </button>
-          </PremiumCard>
+          <PushNotificationSetting />
         </motion.section>
 
       </div>

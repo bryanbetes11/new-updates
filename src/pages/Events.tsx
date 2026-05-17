@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { format, parseISO, startOfDay, subWeeks, previousSunday, addDays, subDays, differenceInDays, eachDayOfInterval } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Calendar, Plus, Search, ChevronRight, Filter, Users, Trash2, CalendarOff, LayoutGrid, List, AlertCircle, Clock, X, PartyPopper, Heart, Sparkles } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -74,6 +74,64 @@ function EventTypeBadge({ type }: { type: string }) {
   );
 }
 
+function EventDateChip({
+  date,
+  dim = false,
+  tone = 'default',
+  approved = false,
+}: {
+  date: string;
+  dim?: boolean;
+  tone?: 'default' | 'warning' | 'danger';
+  approved?: boolean;
+}) {
+  const parsed = parseISO(date);
+
+  const surfaceClasses = dim
+    ? 'border-black/[0.06] bg-gray-100 dark:border-white/[0.06] dark:bg-[#202020]'
+    : tone === 'danger'
+    ? 'border-red-200/90 bg-[linear-gradient(145deg,#fff5f5,#ffe3e3)] dark:border-red-500/20 dark:bg-[linear-gradient(145deg,#3b1616,#241212)]'
+    : tone === 'warning'
+    ? 'border-amber-200/90 bg-[linear-gradient(145deg,#fff9eb,#ffedd5)] dark:border-amber-500/20 dark:bg-[linear-gradient(145deg,#36210b,#23170c)]'
+    : 'border-black/[0.08] bg-[linear-gradient(145deg,#ffffff,#eef2ef)] dark:border-white/[0.08] dark:bg-[linear-gradient(145deg,#262626,#1c1c1c)]';
+
+  const shadowStyle = dim
+    ? undefined
+    : tone === 'danger'
+    ? '0 10px 24px rgba(239,68,68,0.18)'
+    : tone === 'warning'
+    ? '0 10px 24px rgba(245,158,11,0.18)'
+    : '0 10px 24px rgba(15,23,42,0.12)';
+
+  const monthClasses = dim
+    ? 'text-gray-400 dark:text-white/28'
+    : tone === 'danger'
+    ? 'text-red-500 dark:text-red-300'
+    : tone === 'warning'
+    ? 'text-amber-600 dark:text-amber-300'
+    : 'text-[#1DB954]';
+
+  return (
+    <div
+      className={`relative flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-[0.7rem] border ${surfaceClasses}`}
+      style={shadowStyle ? { boxShadow: shadowStyle } : undefined}
+    >
+      <span className={`text-[9px] font-black uppercase tracking-widest leading-none ${monthClasses}`}>
+        {format(parsed, 'MMM')}
+      </span>
+      <span className={`mt-0.5 text-[24px] font-black leading-none ${dim ? 'text-gray-500 dark:text-white/58' : 'text-gray-900 dark:text-white'}`} style={{ letterSpacing: '-0.05em' }}>
+        {format(parsed, 'd')}
+      </span>
+      <span className={`mt-0.5 text-[8px] font-bold leading-none ${dim ? 'text-gray-400 dark:text-white/24' : 'text-gray-500 dark:text-white/42'}`}>
+        {format(parsed, 'EEE')}
+      </span>
+      {approved && !dim && (
+        <div className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-[#22c55e] ring-2 ring-white dark:ring-[#1c1b1e]" />
+      )}
+    </div>
+  );
+}
+
 function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEventClick, isPast }: {
   event: Event; calendarEntries: CalendarEntry[]; songLeaderMap?: Record<string, string>; setlistInfoMap?: Record<string, SetlistInfo>; onEventClick: (id: string) => void; isPast?: boolean;
 }) {
@@ -96,23 +154,6 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
   const showOverdueStyle = isOverdue && !hasApprovedSetlist && !isPast;
   const showDueSoonStyle = isDueSoon && !hasApprovedSetlist && !isPast;
 
-  // Date chip gradient encodes urgency directly
-  const chipGradient = isPast
-    ? null
-    : showOverdueStyle
-    ? 'linear-gradient(145deg,#ef4444,#b91c1c)'
-    : showDueSoonStyle
-    ? 'linear-gradient(145deg,#f59e0b,#b45309)'
-    : 'linear-gradient(145deg,#16a34a,#15803d)';
-
-  const chipShadow = isPast
-    ? undefined
-    : showOverdueStyle
-    ? '0 4px 14px rgba(220,38,38,0.45)'
-    : showDueSoonStyle
-    ? '0 4px 14px rgba(245,158,11,0.45)'
-    : '0 3px 10px rgba(22,163,74,0.3)';
-
   // Card tint — subtle full-card wash matching urgency / status
   const cardTint = isPast
     ? undefined
@@ -130,24 +171,12 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
     >
       <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.05] dark:via-white/[0.09] to-transparent" />
 
-      {/* Date chip — gradient encodes urgency */}
-      <div
-        className={`relative flex flex-col items-center justify-center h-[52px] w-11 rounded-xl shrink-0 ${isPast ? 'bg-gray-100 dark:bg-white/[0.05]' : ''}`}
-        style={isPast ? {} : { background: chipGradient!, boxShadow: chipShadow }}
-      >
-        <span className={`text-[9px] font-black uppercase tracking-widest leading-none ${isPast ? 'text-gray-400 dark:text-white/25' : 'text-white/65'}`}>
-          {format(parseISO(event.event_date), 'MMM')}
-        </span>
-        <span className={`text-[22px] font-black leading-none mt-0.5 ${isPast ? 'text-gray-500 dark:text-white/35' : 'text-white'}`} style={{ letterSpacing: '-0.04em' }}>
-          {format(parseISO(event.event_date), 'd')}
-        </span>
-        <span className={`text-[8px] font-bold leading-none mt-0.5 ${isPast ? 'text-gray-400 dark:text-white/20' : 'text-white/50'}`}>
-          {format(parseISO(event.event_date), 'EEE')}
-        </span>
-        {hasApprovedSetlist && !isPast && (
-          <div className="absolute -top-1 -right-1 h-3 w-3 rounded-full ring-2 ring-white dark:ring-[#1c1b1e]" style={{ background: '#22c55e' }} />
-        )}
-      </div>
+      <EventDateChip
+        date={event.event_date}
+        dim={!!isPast}
+        tone={showOverdueStyle ? 'danger' : showDueSoonStyle ? 'warning' : 'default'}
+        approved={hasApprovedSetlist}
+      />
 
       {/* Body */}
       <div className="min-w-0 flex-1">
@@ -290,15 +319,26 @@ function BirthdayCard({ name, date }: { name: string; date: string }) {
       {/* Subtle shimmer highlight */}
       <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-pink-300/30 to-transparent" />
 
-      {/* Birthday icon chip */}
+      {/* Birthday date chip */}
       <div
-        className="relative flex flex-col items-center justify-center h-[52px] w-11 rounded-xl shrink-0"
-        style={{ background: 'linear-gradient(145deg, #ec4899, #a855f7)', boxShadow: '0 3px 12px rgba(236,72,153,0.35)' }}
+        className="relative flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-[0.7rem] border border-pink-200/90"
+        style={{
+          background: 'linear-gradient(145deg, #fff4fb, #f7ebff)',
+          boxShadow: '0 10px 24px rgba(236,72,153,0.16)',
+        }}
       >
-        <span className="text-xl leading-none">🎂</span>
-        <span className="text-[8px] font-black uppercase tracking-widest text-white/70 mt-0.5">
+        <span className="text-[9px] font-black uppercase tracking-widest leading-none text-pink-500 dark:text-pink-300">
           {format(parseISO(date), 'MMM')}
         </span>
+        <span className="mt-0.5 text-[24px] font-black leading-none text-gray-900 dark:text-white" style={{ letterSpacing: '-0.05em' }}>
+          {format(parseISO(date), 'd')}
+        </span>
+        <span className="mt-0.5 text-[8px] font-bold leading-none text-gray-500 dark:text-white/42">
+          {format(parseISO(date), 'EEE')}
+        </span>
+        <div className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[linear-gradient(145deg,#ec4899,#a855f7)] text-[9px] shadow-[0_4px_10px_rgba(236,72,153,0.32)]">
+          <span className="leading-none">🎂</span>
+        </div>
       </div>
 
       {/* Info */}
@@ -714,7 +754,7 @@ export function Events() {
 
   return (
     <div className="page-container page-bottom-pad overflow-hidden">
-      <div className="max-w-2xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 pb-0 space-y-5 sm:space-y-6">
+      <div className="max-w-2xl lg:max-w-6xl xl:max-w-[1560px] mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-5 pb-0 space-y-5 sm:space-y-6">
 
         {/* ── Schedule Command Center ── */}
         <motion.section
@@ -787,7 +827,7 @@ export function Events() {
         {/* ── Toolbar ── */}
         <motion.div
           {...fadeUp(0.08)}
-          className="rounded-[1.6rem] border border-black/[0.05] bg-white/75 p-2 shadow-[0_16px_44px_-34px_rgba(15,23,42,0.65)] backdrop-blur-xl dark:border-white/[0.07] dark:bg-white/[0.035]"
+          className="relative z-20 rounded-[1.6rem] border border-black/[0.05] bg-white/75 p-2 shadow-[0_16px_44px_-34px_rgba(15,23,42,0.65)] backdrop-blur-xl dark:border-white/[0.07] dark:bg-white/[0.035]"
         >
           <div className="flex flex-col gap-2">
             <div className="flex gap-1 rounded-[1.25rem] bg-gray-100/80 p-1 dark:bg-black/20">
@@ -796,6 +836,7 @@ export function Events() {
                 const count = tab === 'upcoming' ? upcomingEvents.length : pastEvents.length;
                 return (
                   <button
+                    type="button"
                     key={tab}
                     onClick={() => {
                       if (tab !== activeTab) {
@@ -803,7 +844,7 @@ export function Events() {
                         setActiveTab(tab);
                       }
                     }}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-2xl text-[13px] font-black transition-all duration-200 ${
+                    className={`relative z-10 flex-1 touch-manipulation flex items-center justify-center gap-2 py-2.5 rounded-2xl text-[13px] font-black transition-all duration-200 ${
                       active
                         ? 'bg-white text-gray-950 shadow-sm ring-1 ring-black/[0.04] dark:bg-white/[0.09] dark:text-white dark:ring-white/[0.08]'
                         : 'text-gray-400 hover:bg-white/55 hover:text-gray-700 dark:text-white/35 dark:hover:bg-white/[0.045] dark:hover:text-white/70'
@@ -811,7 +852,7 @@ export function Events() {
                   >
                     {tab === 'upcoming' ? 'Upcoming' : 'Past events'}
                     {count > 0 && (
-                      <span className={`text-[11px] px-1.5 py-0.5 rounded-md font-black ${
+                      <span className={`pointer-events-none text-[11px] px-1.5 py-0.5 rounded-md font-black ${
                         active && tab === 'upcoming'
                           ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300'
                           : 'bg-black/[0.06] text-gray-500 dark:bg-white/[0.08] dark:text-white/35'
@@ -863,7 +904,7 @@ export function Events() {
       </div>
 
       {/* ── Content ── */}
-      <div className="max-w-2xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-5">
+      <div className="max-w-2xl lg:max-w-6xl xl:max-w-[1560px] mx-auto px-4 sm:px-6 lg:px-8 pt-5">
         {filtered.length === 0 ? (
           <EmptyState
             icon={<Calendar className="h-8 w-8" />}
@@ -889,23 +930,19 @@ export function Events() {
               )}
             </motion.div>
             <div className="lg:hidden overflow-hidden">
-              <AnimatePresence mode="wait" initial={false} custom={tabDir}>
-                <motion.div
-                  key={activeTab}
-                  custom={tabDir}
-                  variants={{
-                    initial: (dir: string) => ({ opacity: 0, x: dir === 'left' ? '55%' : '-55%' }),
-                    animate: { opacity: 1, x: 0 },
-                    exit: (dir: string) => ({ opacity: 0, x: dir === 'left' ? '-55%' : '55%' }),
-                  }}
-                  initial="initial"
-                  animate="animate"
-                  exit="exit"
-                  transition={{ type: 'spring', stiffness: 320, damping: 30, mass: 0.85 }}
-                >
-                  <EventList events={filtered} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={id => navigate(`/events/${id}`)} showPast={activeTab === 'past'} />
-                </motion.div>
-              </AnimatePresence>
+              <motion.div
+                key={activeTab}
+                custom={tabDir}
+                variants={{
+                  initial: (dir: string) => ({ opacity: 0, x: dir === 'left' ? 18 : -18 }),
+                  animate: { opacity: 1, x: 0 },
+                }}
+                initial="initial"
+                animate="animate"
+                transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <EventList events={filtered} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={id => navigate(`/events/${id}`)} showPast={activeTab === 'past'} />
+              </motion.div>
             </div>
           </>
         )}

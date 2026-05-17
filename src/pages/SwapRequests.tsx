@@ -7,6 +7,7 @@ import { useToast } from '../contexts/ToastContext';
 import { PageLoader } from '../components/LoadingSpinner';
 import { Avatar } from '../components/Avatar';
 import { Modal } from '../components/Modal';
+import { LeadershipHeroCard } from '../components/LeadershipHeroCard';
 import { formatTime12Hour } from '../lib/timeFormat';
 import type { SwapRequest } from '../types';
 
@@ -116,16 +117,16 @@ export function SwapRequests({ embedded }: Props) {
 
   return (
     <div className={embedded ? '' : 'page-container page-bottom-pad'}>
-      <div className={embedded ? '' : 'max-w-2xl mx-auto px-4 py-6 sm:py-8'}>
+      <div className={embedded ? '' : 'relative max-w-2xl lg:max-w-6xl xl:max-w-[1560px] mx-auto pt-4 sm:pt-5 pb-6 px-4 sm:px-6 lg:px-8'}>
 
         {!embedded && (
-          <div className="mb-6">
-            <p className="text-[10px] font-mono font-medium uppercase tracking-[0.22em] text-gray-500 dark:text-white/40 mb-2">Leadership</p>
-            <h1 className="text-[2rem] font-black text-gray-900 dark:text-white" style={{ letterSpacing: '-0.04em' }}>
-              Swap Requests
-            </h1>
-            <p className="mt-1 text-[13px] text-gray-500 dark:text-white/40">Schedule swaps awaiting leadership approval.</p>
-          </div>
+          <LeadershipHeroCard
+            tone="sky"
+            icon={ArrowLeftRight}
+            eyebrow="Leadership Flow"
+            title="Swap Requests."
+            description="Review schedule swaps and approve the handoff only when both assignments are safe to exchange."
+          />
         )}
 
         {loading ? (

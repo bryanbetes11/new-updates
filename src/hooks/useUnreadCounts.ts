@@ -9,11 +9,12 @@ export interface UnreadCounts {
   messages: number;
   pendingLeave: number;
   pendingSwaps: number;
+  pendingSetlists: number;
 }
 
 export function useUnreadCounts() {
   const { user } = useAuth();
-  const [counts, setCounts] = useState<UnreadCounts>({ announcements: 0, events: 0, messages: 0, pendingLeave: 0, pendingSwaps: 0 });
+  const [counts, setCounts] = useState<UnreadCounts>({ announcements: 0, events: 0, messages: 0, pendingLeave: 0, pendingSwaps: 0, pendingSetlists: 0 });
   const debounceRef = useRef<NodeJS.Timeout>();
   const channelId = useRef(`unread-counts-${Math.random().toString(36).substr(2, 9)}`);
 
@@ -52,6 +53,9 @@ export function useUnreadCounts() {
 
     if (isLeader) {
       queries.push(
+        supabase.from('setlists').select('id', { count: 'exact', head: true }).eq('status', 'pending_review').then(res => res)
+      );
+      queries.push(
         supabase.from('user_availability')
           .select('id', { count: 'exact', head: true })
           .in('request_type', ['sub', 'swap'])
@@ -64,7 +68,8 @@ export function useUnreadCounts() {
     const results = await Promise.all(queries) as unknown[];
     const [announcementRes, viewsRes, pendingAssignRes, membershipsRes] = results as [any, any, any, any];
     const pendingLeaveRes = canSeePendingLeave ? results[4] as any : null;
-    const pendingSwapsRes = isLeader ? results[canSeePendingLeave ? 5 : 4] as any : null;
+    const pendingSetlistsRes = isLeader ? results[canSeePendingLeave ? 5 : 4] as any : null;
+    const pendingSwapsRes = isLeader ? results[canSeePendingLeave ? 6 : 5] as any : null;
 
     // Calc announcement unread
     const viewedIds = new Set((viewsRes.data || []).map((v: any) => v.announcement_id));
@@ -90,6 +95,7 @@ export function useUnreadCounts() {
       announcements: Math.max(0, unreadAnnouncements),
       events: pendingAssignRes.count || 0,
       pendingLeave: pendingLeaveRes?.count || 0,
+      pendingSetlists: pendingSetlistsRes?.count || 0,
       pendingSwaps: pendingSwapsRes?.count || 0,
       messages: unreadMessages,
     });

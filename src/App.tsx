@@ -26,7 +26,13 @@ import { Messages } from './pages/Messages';
 import { MyAssignments } from './pages/MyAssignments';
 import { UnavailableMembers } from './pages/UnavailableMembers';
 import { Discipline } from './pages/Discipline';
-import { LeadershipWorkspace } from './pages/leadership/LeadershipWorkspace';
+import { LeaderDashboard } from './pages/LeaderDashboard';
+import { TeamManage } from './pages/TeamManage';
+import { Requests } from './pages/Requests';
+import { SwapRequests } from './pages/SwapRequests';
+import { SetlistDeadlines } from './pages/leadership/SetlistDeadlines';
+import { OrganizationSettings } from './pages/leadership/OrganizationSettings';
+import { OrganizationBilling } from './pages/leadership/OrganizationBilling';
 import { ChangePassword } from './pages/ChangePassword';
 import { ResetPassword } from './pages/ResetPassword';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -163,7 +169,14 @@ export default function App() {
                   <Route path="/messages/:conversationId?" element={<Messages />} />
                   <Route path="/more" element={<More />} />
                   <Route path="/leadership" element={<Navigate to="/leadership/overview" replace />} />
-                  <Route path="/leadership/:tab" element={<LeadershipWorkspace />} />
+                  <Route path="/leadership/overview" element={<LeaderDashboard />} />
+                  <Route path="/leadership/setlists" element={<SetlistDeadlines />} />
+                  <Route path="/leadership/leave" element={<Requests />} />
+                  <Route path="/leadership/swaps" element={<SwapRequests />} />
+                  <Route path="/leadership/discipline" element={<Discipline />} />
+                  <Route path="/leadership/team" element={<TeamManage />} />
+                  <Route path="/leadership/church" element={<OrganizationSettings />} />
+                  <Route path="/leadership/billing" element={<OrganizationBilling />} />
 
                   <Route path="/leader" element={<Navigate to="/leadership/overview" replace />} />
                   <Route path="/manage" element={<Navigate to="/leadership/team" replace />} />

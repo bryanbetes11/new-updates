@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
 import { CheckCircle, AlertTriangle, Info, X, XCircle } from 'lucide-react';
+import { createStableId } from '../lib/createStableId';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -46,7 +47,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addToast = useCallback((type: ToastType, message: string, options?: { actionLabel?: string; onClick?: () => void }) => {
-    const id = crypto.randomUUID();
+    const id = createStableId('toast');
     setToasts(prev => [...prev, { id, type, message, ...options }]);
     setTimeout(() => {
       removeToast(id);

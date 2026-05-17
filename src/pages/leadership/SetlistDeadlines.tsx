@@ -7,6 +7,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Avatar } from '../../components/Avatar';
+import { LeadershipHeroCard } from '../../components/LeadershipHeroCard';
 
 interface DeadlineEvent {
   id: string;
@@ -354,62 +355,67 @@ export function SetlistDeadlines() {
 
   if (loading) {
     return (
-      <div className="px-4 sm:px-5 lg:px-6 py-10 flex justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+      <div className="page-container page-bottom-pad">
+        <div className="relative max-w-2xl lg:max-w-6xl xl:max-w-[1560px] mx-auto pt-4 sm:pt-5 pb-6 px-4 sm:px-6 lg:px-8">
+          <div className="py-10 flex justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+          </div>
+        </div>
       </div>
     );
   }
 
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div className="flex items-baseline gap-2.5 px-0.5">
-          <span className="text-[10px] font-mono font-semibold tabular-nums text-gray-400/70 dark:text-white/25 tracking-widest">01</span>
-          <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-white/45 flex items-center gap-1.5">
-            <ListMusic className="h-3 w-3" /> Setlist Deadlines
-          </span>
-        </div>
-        <button
-          onClick={fetchDeadlines}
-          className="inline-flex items-center justify-center h-8 w-8 rounded-full text-gray-500 dark:text-white/45 bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] hover:bg-white dark:hover:bg-white/[0.07] active:scale-[0.95] transition-colors"
-          title="Refresh"
-        >
-          <RefreshCw className="h-3 w-3" />
-        </button>
-      </div>
-
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-        className="grid grid-cols-2 sm:grid-cols-4 gap-2.5"
+  const content = (
+    <div className="space-y-5 sm:space-y-6">
+      <LeadershipHeroCard
+        tone="emerald"
+        icon={ListMusic}
+        eyebrow="Setlist Oversight"
+        title="Setlist Deadlines."
+        description="Track proposal deadlines, follow overdue setlists, and send reminders before each service slips."
+        action={(
+          <button
+            onClick={fetchDeadlines}
+            className="inline-flex items-center justify-center h-11 w-11 rounded-full text-gray-600 dark:text-white/55 bg-white/78 dark:bg-white/[0.05] border border-black/[0.06] dark:border-white/[0.08] hover:bg-white dark:hover:bg-white/[0.08] active:scale-[0.95] transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw className="h-4 w-4" />
+          </button>
+        )}
       >
-        {[
-          { key: 'overdue', label: 'Overdue', count: countByStatus.overdue, dot: '#ef4444', tone: 'bg-red-50 dark:bg-red-500/[0.10] text-red-600 dark:text-red-400' },
-          { key: 'due_today', label: 'Due Today', count: countByStatus.due_today, dot: '#f59e0b', tone: 'bg-amber-50 dark:bg-amber-500/[0.10] text-amber-600 dark:text-amber-400' },
-          { key: 'upcoming', label: 'Upcoming', count: countByStatus.upcoming, dot: '#0ea5e9', tone: 'bg-sky-50 dark:bg-sky-500/[0.10] text-sky-600 dark:text-sky-400' },
-          { key: 'submitted', label: 'Submitted', count: countByStatus.submitted, dot: '#22c55e', tone: 'bg-emerald-50 dark:bg-emerald-500/[0.10] text-emerald-600 dark:text-emerald-400' },
-        ].map(stat => {
-          const active = filter === stat.key;
-          return (
-            <button
-              key={stat.key}
-              onClick={() => setFilter(filter === stat.key as StatusFilter ? 'all' : stat.key as StatusFilter)}
-              className={`relative rounded-3xl p-4 text-left bg-white dark:bg-white/[0.025] border transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.98] overflow-hidden ${
-                active ? 'border-current/40' : 'border-gray-200/80 dark:border-white/[0.06]'
-              } ${active ? stat.tone : ''}`}
-              style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 4px 14px -8px rgba(15,23,42,0.08)' }}
-            >
-              <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.05] dark:via-white/[0.08] to-transparent" />
-              <div className="flex items-center gap-1.5 mb-2.5">
-                <span className="h-1.5 w-1.5 rounded-full" style={{ background: stat.dot, boxShadow: `0 0 6px ${stat.dot}` }} />
-                <span className={`text-[9px] font-bold uppercase tracking-[0.14em] leading-none ${active ? '' : 'text-gray-500 dark:text-white/45'}`}>{stat.label}</span>
-              </div>
-              <p className={`text-[26px] font-black leading-none tabular-nums ${active ? '' : 'text-gray-900 dark:text-white'}`} style={{ letterSpacing: '-0.04em' }}>{stat.count}</p>
-            </button>
-          );
-        })}
-      </motion.div>
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+          className="grid grid-cols-2 sm:grid-cols-4 gap-2.5"
+        >
+          {[
+            { key: 'overdue', label: 'Overdue', count: countByStatus.overdue, dot: '#ef4444', tone: 'bg-red-50 dark:bg-red-500/[0.10] text-red-600 dark:text-red-400' },
+            { key: 'due_today', label: 'Due Today', count: countByStatus.due_today, dot: '#f59e0b', tone: 'bg-amber-50 dark:bg-amber-500/[0.10] text-amber-600 dark:text-amber-400' },
+            { key: 'upcoming', label: 'Upcoming', count: countByStatus.upcoming, dot: '#0ea5e9', tone: 'bg-sky-50 dark:bg-sky-500/[0.10] text-sky-600 dark:text-sky-400' },
+            { key: 'submitted', label: 'Submitted', count: countByStatus.submitted, dot: '#22c55e', tone: 'bg-emerald-50 dark:bg-emerald-500/[0.10] text-emerald-600 dark:text-emerald-400' },
+          ].map(stat => {
+            const active = filter === stat.key;
+            return (
+              <button
+                key={stat.key}
+                onClick={() => setFilter(filter === stat.key as StatusFilter ? 'all' : stat.key as StatusFilter)}
+                className={`relative rounded-3xl p-4 text-left bg-white dark:bg-white/[0.025] border transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.98] overflow-hidden ${
+                  active ? 'border-current/40' : 'border-gray-200/80 dark:border-white/[0.06]'
+                } ${active ? stat.tone : ''}`}
+                style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 4px 14px -8px rgba(15,23,42,0.08)' }}
+              >
+                <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.05] dark:via-white/[0.08] to-transparent" />
+                <div className="flex items-center gap-1.5 mb-2.5">
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: stat.dot, boxShadow: `0 0 6px ${stat.dot}` }} />
+                  <span className={`text-[9px] font-bold uppercase tracking-[0.14em] leading-none ${active ? '' : 'text-gray-500 dark:text-white/45'}`}>{stat.label}</span>
+                </div>
+                <p className={`text-[26px] font-black leading-none tabular-nums ${active ? '' : 'text-gray-900 dark:text-white'}`} style={{ letterSpacing: '-0.04em' }}>{stat.count}</p>
+              </button>
+            );
+          })}
+        </motion.div>
+      </LeadershipHeroCard>
 
       {filteredEvents.length === 0 ? (
         <div className="rounded-3xl bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] p-12 text-center" style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -12px rgba(15,23,42,0.10)' }}>
@@ -576,6 +582,14 @@ export function SetlistDeadlines() {
           })}
         </div>
       )}
+    </div>
+  );
+
+  return (
+    <div className="page-container page-bottom-pad">
+      <div className="relative max-w-2xl lg:max-w-6xl xl:max-w-[1560px] mx-auto pt-4 sm:pt-5 pb-6 px-4 sm:px-6 lg:px-8">
+        {content}
+      </div>
     </div>
   );
 }

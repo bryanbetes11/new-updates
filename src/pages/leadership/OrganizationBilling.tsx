@@ -257,23 +257,27 @@ export function OrganizationBilling() {
 
   if (!isOrgAdmin || !organization) {
     return (
-      <div className="flex items-center justify-center min-h-[40vh]">
-        <div className="text-center">
-          <div
-            className="relative h-14 w-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
-            style={{ background: 'linear-gradient(145deg, #94a3b8, #64748b)', boxShadow: '0 4px 14px rgba(100,116,139,0.25)' }}
-          >
-            <CreditCard className="h-6 w-6 text-white" />
+      <div className="page-container page-bottom-pad">
+        <div className="max-w-5xl mx-auto px-1 sm:px-2 pt-6 sm:pt-8">
+          <div className="flex items-center justify-center min-h-[40vh]">
+            <div className="text-center">
+              <div
+                className="relative h-14 w-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
+                style={{ background: 'linear-gradient(145deg, #94a3b8, #64748b)', boxShadow: '0 4px 14px rgba(100,116,139,0.25)' }}
+              >
+                <CreditCard className="h-6 w-6 text-white" />
+              </div>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white" style={{ letterSpacing: '-0.02em' }}>Access Restricted</h2>
+              <p className="text-sm text-gray-500 dark:text-white/45 mt-1">Only church admins can manage billing.</p>
+            </div>
           </div>
-          <h2 className="text-lg font-bold text-gray-900 dark:text-white" style={{ letterSpacing: '-0.02em' }}>Access Restricted</h2>
-          <p className="text-sm text-gray-500 dark:text-white/45 mt-1">Only church admins can manage billing.</p>
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="space-y-5">
+  const content = (
+    <div className="space-y-5 sm:space-y-6">
       {lockedFromRedirect && orgStatus === 'suspended' && (
         <div className="rounded-[26px] border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-900/10 px-4 py-4">
           <div className="flex items-start gap-3">
@@ -581,6 +585,14 @@ export function OrganizationBilling() {
             )}
           </div>
         </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="page-container page-bottom-pad">
+      <div className="max-w-5xl mx-auto px-1 sm:px-2 pt-6 sm:pt-8">
+        {content}
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
@@ -78,23 +78,19 @@ function compareAssignmentsByEventDateTime(a: EventAssignment, b: EventAssignmen
   return compareEventsByDateTime(a.events, b.events);
 }
 
-// Premium card — soft dual-shadow, theme-aware border, subtle inner top-edge highlight
-function Card({ children, className = '', interactive = false }: { children: React.ReactNode; className?: string; interactive?: boolean }) {
+function OpenSection({ children, className = '', accent = false }: { children: React.ReactNode; className?: string; accent?: boolean }) {
   return (
-    <div
-      className={`group relative overflow-hidden rounded-[1.75rem] border border-gray-200/80 bg-white transition-all duration-300 dark:border-white/[0.07] dark:bg-white/[0.028] ${
-        interactive ? 'hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-[0_28px_70px_-48px_rgba(15,23,42,0.75)] dark:hover:border-emerald-500/20' : ''
-      } ${className}`}
-      style={{
-        boxShadow: '0 18px 55px -42px rgba(15,23,42,0.65), 0 1px 2px rgba(15,23,42,0.04)',
-      }}
-    >
-      {/* Inner top-edge highlight — luminous in dark, faint in light */}
-      <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/90 to-transparent dark:via-white/[0.09]" />
-      {interactive && (
-        <div className="pointer-events-none absolute -right-20 -top-24 h-44 w-44 rounded-full bg-emerald-200/0 blur-3xl transition-colors duration-300 group-hover:bg-emerald-200/30 dark:group-hover:bg-emerald-500/10" />
+    <div className={`relative isolate overflow-hidden rounded-[1.5rem] border border-black/[0.06] bg-white/80 px-4 py-6 shadow-[0_18px_40px_rgba(15,23,42,0.10)] dark:border-white/[0.06] dark:bg-[#181818] dark:shadow-[0_18px_40px_rgba(0,0,0,0.34)] sm:px-5 sm:py-7 ${className}`}>
+      <div
+        className="pointer-events-none absolute inset-0 rounded-[1.5rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.55),rgba(255,255,255,0.14))] dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.01))]"
+        style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.35)' }}
+      />
+      <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.07] to-transparent dark:via-white/[0.08]" />
+      {accent && (
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-36 bg-[radial-gradient(circle_at_12%_0%,rgba(29,185,84,0.14),transparent_42%),radial-gradient(circle_at_88%_0%,rgba(29,185,84,0.08),transparent_34%)] dark:bg-[radial-gradient(circle_at_12%_0%,rgba(29,185,84,0.24),transparent_42%),radial-gradient(circle_at_88%_0%,rgba(29,185,84,0.14),transparent_34%)]" />
       )}
-      {children}
+      <div className="pointer-events-none absolute inset-y-8 left-0 w-px bg-gradient-to-b from-transparent via-[#1DB954]/28 to-transparent" />
+      <div className="relative">{children}</div>
     </div>
   );
 }
@@ -103,8 +99,8 @@ function SectionLabel({ index, children, action }: { index: string; children: Re
   return (
     <div className="flex items-end justify-between mb-3 px-0.5">
       <div className="flex items-baseline gap-2.5">
-        <span className="text-[10px] font-mono font-semibold tabular-nums text-gray-400/70 dark:text-white/25 tracking-widest">{index}</span>
-        <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-white/45">{children}</span>
+        <span className="text-[10px] font-mono font-semibold tabular-nums text-gray-400 tracking-widest dark:text-white/25">{index}</span>
+        <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-white/52">{children}</span>
       </div>
       {action}
     </div>
@@ -112,20 +108,20 @@ function SectionLabel({ index, children, action }: { index: string; children: Re
 }
 
 function DateChip({ date, dim = false }: { date: string | null; dim?: boolean }) {
-  if (!date) return <div className="h-[52px] w-11 rounded-xl shrink-0 bg-gray-100 dark:bg-white/[0.04]" />;
+  if (!date) return <div className="h-14 w-14 rounded-[0.7rem] shrink-0 bg-gray-100 dark:bg-[#222]" />;
   const parsed = parseISO(date);
   return (
     <div
-      className={`relative flex flex-col items-center justify-center h-[52px] w-11 rounded-xl shrink-0 ${dim ? 'bg-gray-100 dark:bg-white/[0.05]' : ''}`}
-      style={dim ? {} : { background: 'linear-gradient(145deg,#16a34a,#15803d)', boxShadow: '0 3px 10px rgba(22,163,74,0.3)' }}
+      className={`relative flex flex-col items-center justify-center h-14 w-14 rounded-[0.7rem] shrink-0 border ${dim ? 'border-black/[0.06] bg-gray-100 dark:border-white/[0.06] dark:bg-[#202020]' : 'border-black/[0.08] bg-[linear-gradient(145deg,#ffffff,#eef2ef)] dark:border-white/[0.08] dark:bg-[linear-gradient(145deg,#262626,#1c1c1c)]'}`}
+      style={dim ? {} : { boxShadow: '0 10px 24px rgba(15,23,42,0.12)' }}
     >
-      <span className={`text-[9px] font-black uppercase tracking-widest leading-none ${dim ? 'text-gray-400 dark:text-white/25' : 'text-white/65'}`}>
+      <span className={`text-[9px] font-black uppercase tracking-widest leading-none ${dim ? 'text-gray-400 dark:text-white/28' : 'text-[#1DB954]'}`}>
         {format(parsed, 'MMM')}
       </span>
-      <span className={`text-[22px] font-black leading-none mt-0.5 ${dim ? 'text-gray-500 dark:text-white/35' : 'text-white'}`} style={{ letterSpacing: '-0.04em' }}>
+      <span className={`text-[24px] font-black leading-none mt-0.5 ${dim ? 'text-gray-500 dark:text-white/58' : 'text-gray-900 dark:text-white'}`} style={{ letterSpacing: '-0.05em' }}>
         {format(parsed, 'd')}
       </span>
-      <span className={`text-[8px] font-bold leading-none mt-0.5 ${dim ? 'text-gray-400 dark:text-white/20' : 'text-white/50'}`}>
+      <span className={`text-[8px] font-bold leading-none mt-0.5 ${dim ? 'text-gray-400 dark:text-white/24' : 'text-gray-500 dark:text-white/42'}`}>
         {format(parsed, 'EEE')}
       </span>
     </div>
@@ -150,60 +146,15 @@ export function Dashboard() {
   const [now, setNow] = useState(new Date());
   const [pullRefreshDistance, setPullRefreshDistance] = useState(0);
   const [isRefreshingApp, setIsRefreshingApp] = useState(false);
+  const pullRefreshDistanceRef = useRef(0);
+  const refreshInFlightRef = useRef(false);
 
   const todayVerse = verses[new Date().getDay() % verses.length];
 
   useEffect(() => {
     document.body.classList.add('allow-native-pull-refresh');
-    return () => document.body.classList.remove('allow-native-pull-refresh');
-  }, []);
-
-  useEffect(() => {
-    let startY = 0;
-    let tracking = false;
-    const triggerDistance = 108;
-
-    const isMobile = () => window.matchMedia('(max-width: 1023px)').matches;
-
-    const handleTouchStart = (event: TouchEvent) => {
-      if (!isMobile() || window.scrollY > 0 || event.touches.length !== 1) return;
-      startY = event.touches[0].clientY;
-      tracking = true;
-    };
-
-    const handleTouchMove = (event: TouchEvent) => {
-      if (!tracking) return;
-      const distance = event.touches[0].clientY - startY;
-      if (distance <= 0 || window.scrollY > 0) {
-        setPullRefreshDistance(0);
-        return;
-      }
-      setPullRefreshDistance(Math.min(distance, 132));
-    };
-
-    const handleTouchEnd = () => {
-      if (!tracking) return;
-      tracking = false;
-      setPullRefreshDistance(current => {
-        if (current >= triggerDistance) {
-          setIsRefreshingApp(true);
-          window.setTimeout(() => window.location.reload(), 80);
-          return triggerDistance;
-        }
-        return 0;
-      });
-    };
-
-    window.addEventListener('touchstart', handleTouchStart, { passive: true });
-    window.addEventListener('touchmove', handleTouchMove, { passive: true });
-    window.addEventListener('touchend', handleTouchEnd);
-    window.addEventListener('touchcancel', handleTouchEnd);
-
     return () => {
-      window.removeEventListener('touchstart', handleTouchStart);
-      window.removeEventListener('touchmove', handleTouchMove);
-      window.removeEventListener('touchend', handleTouchEnd);
-      window.removeEventListener('touchcancel', handleTouchEnd);
+      document.body.classList.remove('allow-native-pull-refresh');
     };
   }, []);
 
@@ -228,6 +179,71 @@ export function Dashboard() {
       .order('created_at', { ascending: false });
     setIncomingSwapRequests((swapData || []) as any[]);
   }, [user]);
+
+  const loadDashboardData = useCallback(async (options?: { silent?: boolean }) => {
+    if (!user) return;
+    const today = getManilaTodayKey();
+    const silent = options?.silent ?? false;
+
+    if (!silent) setLoading(true);
+
+    try {
+      const emptyList = { data: [] };
+      const [eventsRes, assignRes, setlistsRes, announcementsRes, unavailableRes, pendingLeaveRes] = await Promise.all([
+        withDashboardTimeout(
+          supabase.from('events').select('*').gte('event_date', today).order('event_date').limit(5),
+          emptyList,
+          'Upcoming events',
+        ),
+        withDashboardTimeout(
+          supabase.from('event_assignments').select('*, events(*), roles(*)').eq('user_id', user.id).order('created_at', { ascending: false }),
+          emptyList,
+          'My assignments',
+        ),
+        isLeader
+          ? withDashboardTimeout(
+              supabase.from('setlists').select('*, events(title, event_date)').eq('status', 'pending_review').order('created_at', { ascending: false }),
+              emptyList,
+              'Pending setlists',
+            )
+          : Promise.resolve(emptyList),
+        withDashboardTimeout(
+          supabase.from('announcements').select('*, profiles!announcements_created_by_fkey(first_name, last_name)').order('created_at', { ascending: false }).limit(3),
+          emptyList,
+          'Recent announcements',
+        ),
+        withDashboardTimeout(
+          supabase.from('user_availability').select('*, profiles!user_availability_user_id_fkey(first_name, last_name, nickname, avatar_url)').eq('status', 'approved').or(`unavailable_date.gte.${today},end_date.gte.${today}`).order('created_at', { ascending: true }),
+          emptyList,
+          'Unavailable members',
+        ),
+        isLeader
+          ? withDashboardTimeout(
+              supabase.from('user_availability').select('id', { count: 'exact', head: true }).eq('status', 'pending').eq('request_type', 'leave'),
+              { count: 0 },
+              'Pending leave count',
+            )
+          : Promise.resolve({ count: 0 }),
+      ]);
+
+      const events = ((eventsRes.data || []) as Event[]).slice().sort(compareEventsByDateTime);
+      setUpcomingEvents(events);
+
+      const assignments = (assignRes.data || []) as EventAssignment[];
+      const nowForAssignments = new Date();
+      const upcomingAssignments = assignments.filter(a => a.events && getManilaEventDateTime(a.events.event_date, a.events.start_time) >= nowForAssignments);
+      upcomingAssignments.sort(compareAssignmentsByEventDateTime);
+      setMyAssignments(upcomingAssignments);
+      setPendingSetlists((setlistsRes.data || []) as Setlist[]);
+      setRecentAnnouncements((announcementsRes.data || []) as Announcement[]);
+      setUnavailableMembers((unavailableRes.data || []) as UserAvailability[]);
+      setPendingLeaveCount(pendingLeaveRes.count || 0);
+      const upcoming = assignments.filter(a => a.events && getManilaEventDateTime(a.events.event_date, a.events.start_time) >= nowForAssignments);
+      setStats({ total: upcoming.length, confirmed: upcoming.filter(a => a.status === 'confirmed').length, pending: upcoming.filter(a => a.status === 'pending').length });
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }, [isLeader, user]);
 
   useEffect(() => {
     if (!user) return;
@@ -255,69 +271,76 @@ export function Dashboard() {
 
   useEffect(() => {
     if (!user) return;
-    const today = getManilaTodayKey();
-    const load = async () => {
-      setLoading(true);
+    loadDashboardData();
+  }, [loadDashboardData, user]);
 
-      try {
-        const emptyList = { data: [] };
-        const [eventsRes, assignRes, setlistsRes, announcementsRes, unavailableRes, pendingLeaveRes] = await Promise.all([
-          withDashboardTimeout(
-            supabase.from('events').select('*').gte('event_date', today).order('event_date').limit(5),
-            emptyList,
-            'Upcoming events',
-          ),
-          withDashboardTimeout(
-            supabase.from('event_assignments').select('*, events(*), roles(*)').eq('user_id', user.id).order('created_at', { ascending: false }),
-            emptyList,
-            'My assignments',
-          ),
-          isLeader
-            ? withDashboardTimeout(
-                supabase.from('setlists').select('*, events(title, event_date)').eq('status', 'pending_review').order('created_at', { ascending: false }),
-                emptyList,
-                'Pending setlists',
-              )
-            : Promise.resolve(emptyList),
-          withDashboardTimeout(
-            supabase.from('announcements').select('*, profiles!announcements_created_by_fkey(first_name, last_name)').order('created_at', { ascending: false }).limit(3),
-            emptyList,
-            'Recent announcements',
-          ),
-          withDashboardTimeout(
-            supabase.from('user_availability').select('*, profiles!user_availability_user_id_fkey(first_name, last_name, nickname, avatar_url)').eq('status', 'approved').or(`unavailable_date.gte.${today},end_date.gte.${today}`).order('created_at', { ascending: true }),
-            emptyList,
-            'Unavailable members',
-          ),
-          isLeader
-            ? withDashboardTimeout(
-                supabase.from('user_availability').select('id', { count: 'exact', head: true }).eq('status', 'pending').eq('request_type', 'leave'),
-                { count: 0 },
-                'Pending leave count',
-              )
-            : Promise.resolve({ count: 0 }),
-        ]);
+  useEffect(() => {
+    let startY = 0;
+    let tracking = false;
+    const triggerDistance = 108;
 
-        const events = ((eventsRes.data || []) as Event[]).slice().sort(compareEventsByDateTime);
-        setUpcomingEvents(events);
+    const isMobile = () => window.matchMedia('(max-width: 1023px)').matches;
 
-        const assignments = (assignRes.data || []) as EventAssignment[];
-        const nowForAssignments = new Date();
-        const upcomingAssignments = assignments.filter(a => a.events && getManilaEventDateTime(a.events.event_date, a.events.start_time) >= nowForAssignments);
-        upcomingAssignments.sort(compareAssignmentsByEventDateTime);
-        setMyAssignments(upcomingAssignments);
-        setPendingSetlists((setlistsRes.data || []) as Setlist[]);
-        setRecentAnnouncements((announcementsRes.data || []) as Announcement[]);
-        setUnavailableMembers((unavailableRes.data || []) as UserAvailability[]);
-        setPendingLeaveCount(pendingLeaveRes.count || 0);
-        const upcoming = assignments.filter(a => a.events && getManilaEventDateTime(a.events.event_date, a.events.start_time) >= nowForAssignments);
-        setStats({ total: upcoming.length, confirmed: upcoming.filter(a => a.status === 'confirmed').length, pending: upcoming.filter(a => a.status === 'pending').length });
-      } finally {
-        setLoading(false);
-      }
+    const handleTouchStart = (event: TouchEvent) => {
+      if (!isMobile() || window.scrollY > 0 || event.touches.length !== 1) return;
+      startY = event.touches[0].clientY;
+      tracking = true;
     };
-    load();
-  }, [user, isLeader]);
+
+    const handleTouchMove = (event: TouchEvent) => {
+      if (!tracking) return;
+      const distance = event.touches[0].clientY - startY;
+      if (distance <= 0 || window.scrollY > 0) {
+        pullRefreshDistanceRef.current = 0;
+        setPullRefreshDistance(0);
+        return;
+      }
+      const nextDistance = Math.min(distance, 132);
+      pullRefreshDistanceRef.current = nextDistance;
+      setPullRefreshDistance(nextDistance);
+    };
+
+    const handleTouchEnd = () => {
+      if (!tracking) return;
+      tracking = false;
+      if (pullRefreshDistanceRef.current < triggerDistance || refreshInFlightRef.current) {
+        pullRefreshDistanceRef.current = 0;
+        setPullRefreshDistance(0);
+        return;
+      }
+
+      pullRefreshDistanceRef.current = triggerDistance;
+      refreshInFlightRef.current = true;
+      setPullRefreshDistance(triggerDistance);
+      setIsRefreshingApp(true);
+
+      window.setTimeout(async () => {
+        try {
+          await Promise.all([
+            loadDashboardData({ silent: true }),
+            fetchIncomingSwaps(),
+          ]);
+        } finally {
+          pullRefreshDistanceRef.current = 0;
+          refreshInFlightRef.current = false;
+          setIsRefreshingApp(false);
+          setPullRefreshDistance(0);
+        }
+      }, 80);
+    };
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    window.addEventListener('touchend', handleTouchEnd);
+    window.addEventListener('touchcancel', handleTouchEnd);
+
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+      window.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, [fetchIncomingSwaps, loadDashboardData]);
 
   const handleSwapResponse = async (req: any, accepted: boolean) => {
     if (!user || !profile?.org_id) return;
@@ -430,10 +453,13 @@ export function Dashboard() {
         : { label: 'No service', value: 'Clear', caption: 'scheduled' };
 
   return (
-    <div className="page-container page-bottom-pad relative">
+    <div className="page-container page-bottom-pad relative overflow-hidden bg-[#f6f4ef] text-gray-900 dark:bg-[#121212] dark:text-white">
+      <div
+        className="pointer-events-none fixed inset-0 -z-10 bg-[#f6f4ef] dark:bg-[#121212] [background-image:radial-gradient(circle_at_top_left,rgba(29,185,84,0.10),transparent_24%),radial-gradient(circle_at_top_right,rgba(255,255,255,0.45),transparent_20%),linear-gradient(180deg,#fbfaf6_0%,#f6f4ef_18%,#f1eee7_100%)] dark:[background-image:radial-gradient(circle_at_top_left,rgba(29,185,84,0.14),transparent_26%),radial-gradient(circle_at_top_right,rgba(255,255,255,0.04),transparent_18%),linear-gradient(180deg,#1a1a1a_0%,#121212_18%,#121212_100%)]"
+      />
       {createPortal(
         <motion.div
-          className="pointer-events-none fixed left-1/2 top-[calc(3.5rem+env(safe-area-inset-top)+0.85rem)] z-[9999] flex -translate-x-1/2 items-center gap-2 rounded-full border border-emerald-200/70 bg-white/88 px-3 py-2 text-[12px] font-bold text-emerald-700 shadow-[0_18px_45px_-24px_rgba(6,95,70,0.65)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#111013]/88 dark:text-emerald-300 lg:hidden"
+          className="pointer-events-none fixed inset-x-0 top-[calc(3.5rem+env(safe-area-inset-top)+0.85rem)] z-[9999] flex justify-center px-4 lg:hidden"
           initial={false}
           animate={{
             opacity: pullRefreshDistance > 18 || isRefreshingApp ? 1 : 0,
@@ -442,8 +468,10 @@ export function Dashboard() {
           }}
           transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
         >
-          <RefreshCw className={`h-3.5 w-3.5 ${isRefreshingApp ? 'animate-spin' : ''}`} />
-          <span>{isRefreshingApp ? 'Refreshing...' : pullRefreshDistance >= 108 ? 'Release to refresh' : 'Pull to refresh'}</span>
+          <div className="flex items-center gap-2 rounded-full border border-black/[0.08] bg-white/92 px-3 py-2 text-[12px] font-bold text-gray-900 shadow-[0_18px_45px_-24px_rgba(15,23,42,0.22)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#222222]/92 dark:text-white dark:shadow-[0_18px_45px_-24px_rgba(0,0,0,0.65)]">
+            <RefreshCw className={`h-3.5 w-3.5 ${isRefreshingApp ? 'animate-spin' : ''}`} />
+            <span>{isRefreshingApp ? 'Refreshing...' : pullRefreshDistance >= 108 ? 'Release to refresh' : 'Pull to refresh'}</span>
+          </div>
         </motion.div>,
         document.body
       )}
@@ -451,22 +479,22 @@ export function Dashboard() {
         variants={container}
         initial="initial"
         animate="animate"
-        className="max-w-2xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto pt-7 sm:pt-10 pb-4 px-4 sm:px-6 lg:px-8 space-y-5 sm:space-y-6"
+        className="relative max-w-2xl lg:max-w-6xl xl:max-w-[1560px] mx-auto pt-4 sm:pt-5 pb-6 px-4 sm:px-6 lg:px-8 space-y-5 sm:space-y-6"
       >
 
         {/* ── 01 · Home Command Center ── */}
         <motion.section
           variants={item}
-          className="relative overflow-hidden rounded-[2rem] border border-emerald-200/70 bg-[radial-gradient(circle_at_18%_20%,rgba(52,211,153,0.24),transparent_34%),radial-gradient(circle_at_86%_24%,rgba(52,211,153,0.16),transparent_36%),linear-gradient(135deg,#f0fdf4_0%,#ffffff_48%,#f8fafc_100%)] p-5 shadow-[0_24px_80px_-46px_rgba(6,95,70,0.72)] dark:border-white/[0.08] dark:bg-[radial-gradient(circle_at_16%_18%,rgba(16,185,129,0.18),transparent_34%),radial-gradient(circle_at_86%_24%,rgba(16,185,129,0.12),transparent_36%),linear-gradient(135deg,#071c14_0%,#0d1110_46%,#070807_100%)] sm:p-6"
+          className="relative overflow-hidden rounded-[1.9rem] border border-emerald-200/70 bg-[radial-gradient(circle_at_18%_20%,rgba(52,211,153,0.24),transparent_34%),radial-gradient(circle_at_86%_24%,rgba(52,211,153,0.16),transparent_36%),linear-gradient(135deg,#f0fdf4_0%,#ffffff_48%,#f8fafc_100%)] p-5 shadow-[0_24px_80px_-46px_rgba(6,95,70,0.72)] dark:border-white/[0.08] dark:bg-[radial-gradient(circle_at_16%_18%,rgba(16,185,129,0.18),transparent_34%),radial-gradient(circle_at_86%_24%,rgba(16,185,129,0.12),transparent_36%),linear-gradient(135deg,#071c14_0%,#0d1110_46%,#070807_100%)] dark:shadow-[0_28px_80px_-44px_rgba(0,0,0,0.88)] sm:p-6"
         >
           <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/90 to-transparent dark:via-white/[0.09]" />
           <button
             onClick={() => navigate(heroPulse.label === 'Requests' ? '/my-assignments' : heroPulse.label === 'Needs reply' ? '/my-assignments?status=pending' : '/events')}
-            className="absolute right-5 top-[2.65rem] z-10 hidden w-[calc((100%-4rem)/3)] rounded-2xl border border-white bg-white px-3 py-2.5 text-center shadow-[0_14px_38px_-28px_rgba(6,95,70,0.8)] transition-all hover:-translate-y-0.5 active:scale-[0.98] dark:border-white/[0.08] dark:bg-white/[0.055] min-[390px]:block lg:hidden"
+            className="absolute right-5 top-[2.65rem] z-10 hidden w-[calc((100%-4rem)/3)] rounded-2xl border border-white bg-white px-3 py-2.5 text-center shadow-sm transition-all hover:-translate-y-0.5 active:scale-[0.98] dark:border-white/[0.06] dark:bg-[#1f1f1f] dark:shadow-[0_14px_38px_-28px_rgba(0,0,0,0.8)] min-[390px]:block lg:hidden"
           >
-            <p className="text-[8px] font-black uppercase tracking-[0.18em] text-emerald-700/55 dark:text-emerald-300/45">{heroPulse.label}</p>
-            <p className="mt-1 truncate text-[1.35rem] font-black leading-none text-gray-950 dark:text-white" style={{ letterSpacing: '-0.055em' }}>{heroPulse.value}</p>
-            <p className="mt-1 truncate text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400 dark:text-white/32">{heroPulse.caption}</p>
+            <p className="text-[8px] font-black uppercase tracking-[0.18em] text-gray-400 dark:text-white/42">{heroPulse.label}</p>
+            <p className="mt-1 truncate text-[1.35rem] font-black leading-none text-gray-900 dark:text-white" style={{ letterSpacing: '-0.055em' }}>{heroPulse.value}</p>
+            <p className="mt-1 truncate text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400 dark:text-white/28">{heroPulse.caption}</p>
           </button>
 
           <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
@@ -482,7 +510,7 @@ export function Dashboard() {
                   </p>
                 </div>
 
-                <p className="mt-3 text-sm font-semibold text-gray-500 dark:text-white/45">{greeting},</p>
+                <p className="mt-3 text-sm font-semibold text-gray-500 dark:text-white/44">{greeting},</p>
                 <h1
                   className="mt-1 text-[2.35rem] font-black leading-none text-gray-950 dark:text-white sm:text-[3.15rem] lg:text-[3.65rem]"
                   style={{ letterSpacing: '-0.065em' }}
@@ -501,10 +529,10 @@ export function Dashboard() {
                 <button
                   key={stat.label}
                   onClick={() => navigate(`/my-assignments?status=${stat.status}`)}
-                  className="rounded-2xl border border-white bg-white px-3 py-3 text-center shadow-sm transition-all hover:-translate-y-0.5 active:scale-[0.98] dark:border-white/[0.08] dark:bg-white/[0.05] dark:hover:bg-white/[0.075]"
+                  className="rounded-2xl border border-white bg-white px-3 py-3 text-center shadow-sm transition-all hover:-translate-y-0.5 active:scale-[0.98] dark:border-white/[0.08] dark:bg-white/[0.05]"
                 >
                   <p className="text-lg font-black leading-none text-gray-950 dark:text-white">{stat.value}</p>
-                  <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400 dark:text-white/32">{stat.label}</p>
+                  <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-gray-500 dark:text-white/34">{stat.label}</p>
                 </button>
               ))}
             </div>
@@ -514,19 +542,19 @@ export function Dashboard() {
             <div className="min-w-0">
               {nextEvent ? (
                 <>
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700/70 dark:text-emerald-300/80">Coming Up</p>
-                  <p className="mt-1 truncate text-sm font-extrabold text-gray-800 dark:text-white">
-                    {nextEvent.title} <span className="font-mono text-xs font-semibold text-gray-400 dark:text-emerald-100/55">· {format(parseISO(nextEvent.event_date), 'MMM d')}</span>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-white/46">Coming Up</p>
+                  <p className="mt-1 truncate text-sm font-extrabold text-gray-950 dark:text-white">
+                    {nextEvent.title} <span className="font-mono text-xs font-semibold text-gray-500 dark:text-white/34">· {format(parseISO(nextEvent.event_date), 'MMM d')}</span>
                   </p>
                 </>
               ) : (
-                <p className="text-sm font-semibold text-gray-500 dark:text-white/70">No upcoming service is scheduled yet.</p>
+                <p className="text-sm font-semibold text-gray-500 dark:text-white/58">No upcoming service is scheduled yet.</p>
               )}
             </div>
             <button
               onClick={() => navigate('/events')}
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full px-5 text-[12px] font-black text-white shadow-[0_12px_28px_-16px_rgba(6,95,70,0.9)] transition-all active:scale-[0.97]"
-              style={{ background: 'linear-gradient(135deg, #10b981, #047857)' }}
+              className="inline-flex h-11 items-center justify-center gap-1.5 rounded-full px-5 text-[12px] font-black text-white shadow-[0_16px_34px_-18px_rgba(29,185,84,0.8)] transition-all hover:scale-[1.02] active:scale-[0.97]"
+              style={{ background: '#1DB954' }}
             >
               Open calendar <ArrowUpRight className="h-3.5 w-3.5" />
             </button>
@@ -535,21 +563,21 @@ export function Dashboard() {
 
         {/* ── 02 · Verse ── */}
         <motion.section variants={item}>
-          <Card className="p-7 sm:p-9">
+          <OpenSection accent className="px-1 pt-8 sm:pt-10">
             <SectionLabel index="02">Daily Verse</SectionLabel>
-            <div className="relative pl-5 sm:pl-7">
-            <div className="absolute left-0 top-1 bottom-1 w-[2px] rounded-full" style={{ background: 'linear-gradient(180deg, rgba(34,197,94,0.7), rgba(34,197,94,0.05))' }} />
-            <p
-              className="text-[20px] sm:text-[26px] lg:text-[30px] font-light leading-[1.35] text-gray-800 dark:text-white/85"
-              style={{ letterSpacing: '-0.025em', fontFeatureSettings: '"ss01", "kern"' }}
-            >
-              "{todayVerse.text}"
-            </p>
-            <p className="mt-4 text-[11px] font-mono uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-400/70">
-              — {todayVerse.ref}
-            </p>
+            <div className="relative max-w-4xl pl-5 sm:pl-7">
+              <div className="absolute left-0 top-1 bottom-1 w-[2px] rounded-full" style={{ background: 'linear-gradient(180deg, rgba(34,197,94,0.7), rgba(34,197,94,0.05))' }} />
+              <p
+                className="text-[22px] sm:text-[28px] lg:text-[34px] font-light leading-[1.28] text-gray-900 dark:text-white"
+                style={{ letterSpacing: '-0.03em', fontFeatureSettings: '"ss01", "kern"' }}
+              >
+                "{todayVerse.text}"
+              </p>
+              <p className="mt-4 text-[11px] font-mono uppercase tracking-[0.2em] text-[#1DB954]/82">
+                — {todayVerse.ref}
+              </p>
             </div>
-          </Card>
+          </OpenSection>
         </motion.section>
 
         {/* ── Incoming Swap Requests ── */}
@@ -563,38 +591,38 @@ export function Dashboard() {
                 return (
                   <div
                     key={req.id}
-                    className="relative overflow-hidden rounded-3xl border border-indigo-200 dark:border-indigo-500/25 bg-white dark:bg-white/[0.025]"
-                    style={{ boxShadow: '0 4px 24px -8px rgba(99,102,241,0.2), 0 1px 2px rgba(15,23,42,0.04)' }}
+                    className="relative overflow-hidden rounded-[1.5rem] border border-black/[0.06] bg-white/82 dark:border-white/[0.06] dark:bg-[#181818]"
+                    style={{ boxShadow: '0 18px 40px rgba(15,23,42,0.10)' }}
                   >
-                    <div className="absolute inset-0 pointer-events-none hidden dark:block" style={{ background: 'linear-gradient(135deg, rgba(49,46,129,0.25) 0%, transparent 60%)' }} />
+                    <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(135deg, rgba(29,185,84,0.1) 0%, transparent 60%)' }} />
                     <div className="relative px-4 py-4 sm:px-5">
                       <div className="flex items-center gap-2 mb-3">
-                        <div className="h-6 w-6 rounded-lg flex items-center justify-center bg-indigo-100 dark:bg-indigo-500/20 shrink-0">
-                          <ArrowLeftRight className="h-3 w-3 text-indigo-600 dark:text-indigo-400" />
+                        <div className="h-6 w-6 rounded-lg flex items-center justify-center bg-black/[0.05] dark:bg-[#1f1f1f] shrink-0">
+                          <ArrowLeftRight className="h-3 w-3 text-[#1DB954]" />
                         </div>
-                        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-indigo-600 dark:text-indigo-400">
+                        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-white/54">
                           {isSub ? 'Sub Request' : 'Swap Request'}
                         </p>
                       </div>
 
-                      <p className="text-[14px] font-bold text-gray-900 dark:text-white mb-0.5" style={{ letterSpacing: '-0.02em' }}>
+                      <p className="text-[14px] font-bold text-gray-950 dark:text-white mb-0.5" style={{ letterSpacing: '-0.02em' }}>
                         {requesterName} {isSub ? 'needs a sub' : 'wants to swap schedules'}
                       </p>
 
                       <div className={`grid ${isSub ? 'grid-cols-1' : 'grid-cols-2'} gap-2 my-3`}>
-                        <div className="rounded-xl bg-gray-50 dark:bg-white/[0.04] border border-gray-100 dark:border-white/[0.06] px-3 py-2.5">
-                          <p className="text-[9px] font-mono font-bold uppercase tracking-[0.15em] text-gray-400 dark:text-white/25 mb-1">Their assignment</p>
+                        <div className="rounded-xl bg-black/[0.03] border border-black/[0.05] px-3 py-2.5 dark:bg-[#202020] dark:border-white/[0.05]">
+                          <p className="text-[9px] font-mono font-bold uppercase tracking-[0.15em] text-gray-400 dark:text-white/28 mb-1">Their assignment</p>
                           <p className="text-[12px] font-bold text-gray-900 dark:text-white truncate leading-tight">{req.requester_assignment?.events?.title}</p>
-                          <p className="text-[10px] text-gray-500 dark:text-white/35 font-mono mt-0.5">
+                          <p className="text-[10px] text-gray-500 dark:text-white/34 font-mono mt-0.5">
                             {req.requester_assignment?.events?.event_date && format(parseISO(req.requester_assignment.events.event_date), 'MMM d')}
                             {req.requester_assignment?.roles?.name && ` · ${req.requester_assignment.roles.name}`}
                           </p>
                         </div>
                         {!isSub && (
-                          <div className="rounded-xl bg-indigo-50 dark:bg-indigo-500/[0.08] border border-indigo-100 dark:border-indigo-500/20 px-3 py-2.5">
-                            <p className="text-[9px] font-mono font-bold uppercase tracking-[0.15em] text-indigo-500 dark:text-indigo-400 mb-1">Your assignment</p>
+                          <div className="rounded-xl bg-black/[0.03] border border-black/[0.05] px-3 py-2.5 dark:bg-[#202020] dark:border-white/[0.05]">
+                            <p className="text-[9px] font-mono font-bold uppercase tracking-[0.15em] text-[#1DB954] mb-1">Your assignment</p>
                             <p className="text-[12px] font-bold text-gray-900 dark:text-white truncate leading-tight">{req.target_assignment?.events?.title}</p>
-                            <p className="text-[10px] text-gray-500 dark:text-white/35 font-mono mt-0.5">
+                            <p className="text-[10px] text-gray-500 dark:text-white/34 font-mono mt-0.5">
                               {req.target_assignment?.events?.event_date && format(parseISO(req.target_assignment.events.event_date), 'MMM d')}
                               {req.target_assignment?.roles?.name && ` · ${req.target_assignment.roles.name}`}
                             </p>
@@ -610,14 +638,14 @@ export function Dashboard() {
                         <button
                           onClick={() => handleSwapResponse(req, false)}
                           disabled={isResponding}
-                          className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-[12px] font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/[0.10] border border-red-200 dark:border-red-500/20 hover:bg-red-100 dark:hover:bg-red-500/[0.16] transition-colors disabled:opacity-50"
+                          className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-[12px] font-bold text-gray-900 bg-black/[0.05] border border-black/[0.06] hover:bg-black/[0.08] transition-colors disabled:opacity-50 dark:text-white dark:bg-[#232323] dark:border-white/[0.06] dark:hover:bg-[#2a2a2a]"
                         >
                           <X className="h-3.5 w-3.5" /> Decline
                         </button>
                         <button
                           onClick={() => handleSwapResponse(req, true)}
                           disabled={isResponding}
-                          className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-[12px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-500/[0.10] border border-emerald-200 dark:border-emerald-500/20 hover:bg-emerald-100 dark:hover:bg-emerald-500/[0.16] transition-colors disabled:opacity-50"
+                          className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-[12px] font-bold text-[#191414] bg-[#1DB954] border border-[#1DB954] hover:brightness-105 transition-colors disabled:opacity-50"
                         >
                           <Check className="h-3.5 w-3.5" /> Accept
                         </button>
@@ -639,32 +667,19 @@ export function Dashboard() {
               className="group w-full text-left"
             >
               <div
-                className={`relative overflow-hidden rounded-3xl px-5 py-4 sm:px-6 transition-all duration-500 group-hover:-translate-y-0.5 border ${
-                  nextAssignment.status === 'confirmed'
-                    ? 'border-emerald-200 dark:border-emerald-500/22'
-                    : 'border-amber-200 dark:border-amber-500/22'
-                }`}
+                className="relative overflow-hidden rounded-[1.6rem] px-5 py-4 sm:px-6 transition-all duration-500 group-hover:-translate-y-0.5 border border-black/[0.06] dark:border-white/[0.06]"
                 style={{
                   background: nextAssignment.status === 'confirmed'
-                    ? 'linear-gradient(135deg, rgba(236,253,245,1) 0%, rgba(255,255,255,0.98) 45%, rgba(209,250,229,0.9) 100%)'
-                    : 'linear-gradient(135deg, rgba(255,251,235,1) 0%, rgba(255,255,255,0.98) 45%, rgba(254,243,199,0.92) 100%)',
-                  boxShadow: nextAssignment.status === 'confirmed'
-                    ? '0 28px 60px -24px rgba(16,185,129,0.48), 0 0 0 1px rgba(16,185,129,0.04), 0 1px 2px rgba(15,23,42,0.05)'
-                    : '0 28px 60px -24px rgba(245,158,11,0.5), 0 0 0 1px rgba(245,158,11,0.05), 0 1px 2px rgba(15,23,42,0.05)',
+                    ? 'linear-gradient(135deg, #eff8f2 0%, #f8fcf9 45%, #edf5ef 100%)'
+                    : 'linear-gradient(135deg, #fff7e8 0%, #fdf8ef 45%, #f5efe2 100%)',
+                  boxShadow: '0 20px 46px -26px rgba(15,23,42,0.14), 0 1px 2px rgba(15,23,42,0.08)',
                 }}
               >
-                {/* Dark mode gradient overlay */}
-                <div className="absolute inset-0 hidden dark:block pointer-events-none" style={{
-                  background: nextAssignment.status === 'confirmed'
-                    ? 'linear-gradient(135deg, #073b2d 0%, #06261d 48%, #03150f 100%)'
-                    : 'linear-gradient(135deg, #3a2508 0%, #231706 48%, #120b03 100%)',
-                }} />
-                {/* Radial glow */}
                 <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full pointer-events-none"
                   style={{
                     background: nextAssignment.status === 'confirmed'
-                      ? 'radial-gradient(circle, rgba(34,197,94,0.18), transparent 70%)'
-                      : 'radial-gradient(circle, rgba(245,158,11,0.2), transparent 70%)',
+                      ? 'radial-gradient(circle, rgba(29,185,84,0.26), transparent 70%)'
+                      : 'radial-gradient(circle, rgba(255,164,43,0.18), transparent 70%)',
                     filter: 'blur(16px)', opacity: 0.7,
                   }}
                 />
@@ -674,9 +689,7 @@ export function Dashboard() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 mb-0.5">
                       <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${nextAssignment.status === 'confirmed' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-                      <p className={`text-[10px] font-mono uppercase tracking-[0.18em] ${
-                        nextAssignment.status === 'confirmed' ? 'text-emerald-700/70 dark:text-white/50' : 'text-amber-700/75 dark:text-white/50'
-                      }`}>
+                      <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-gray-500 dark:text-white/48">
                         {nextAssignment.status === 'confirmed' ? 'Confirmed' : 'Pending Confirmation'}
                       </p>
                     </div>
@@ -685,79 +698,20 @@ export function Dashboard() {
                     </p>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       {nextAssignment.roles?.name && (
-                        <span className="text-[11px] text-gray-600 dark:text-white/45 font-mono">{nextAssignment.roles.name}</span>
+                        <span className="text-[11px] text-gray-500 dark:text-white/42 font-mono">{nextAssignment.roles.name}</span>
                       )}
                       {nextAssignment.events.start_time && (
                         <>
-                          <span className="text-gray-300 dark:text-white/20">·</span>
-                          <span className="text-[11px] text-gray-600 dark:text-white/45 font-mono">{formatTime12Hour(nextAssignment.events.start_time)}</span>
+                          <span className="text-gray-300 dark:text-white/18">·</span>
+                          <span className="text-[11px] text-gray-500 dark:text-white/42 font-mono">{formatTime12Hour(nextAssignment.events.start_time)}</span>
                         </>
                       )}
                     </div>
                   </div>
-                  <ChevronRight className="h-4 w-4 text-gray-400 dark:text-white/30 group-hover:translate-x-0.5 group-hover:text-gray-600 dark:group-hover:text-white/60 transition-all shrink-0" />
+                  <ChevronRight className="h-4 w-4 text-white/26 group-hover:translate-x-0.5 group-hover:text-white/58 transition-all shrink-0" />
                 </div>
               </div>
             </button>
-          </motion.section>
-        )}
-
-        {/* ── 04 · Leadership Quick Access ── */}
-        {isLeader && (
-          <motion.section variants={item}>
-            <Card>
-              <div className="flex items-center gap-2 px-5 py-3.5 border-b border-gray-100 dark:border-white/[0.06]">
-                <span className="text-[10px] font-mono font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-white/30">04</span>
-                <div className="h-3 w-px bg-gray-200 dark:bg-white/[0.08]" />
-                <Shield className="h-3 w-3 text-gray-400 dark:text-white/30" />
-                <span className="text-[10px] font-mono font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-white/30">Leadership</span>
-              </div>
-              <div className="grid grid-cols-2 divide-x divide-y divide-gray-100 dark:divide-white/[0.05]">
-                {[
-                  { label: 'Overview',        icon: LayoutDashboard, path: '/leadership/overview',  badges: [] },
-                  { label: 'Manage Team',     icon: Users,           path: '/leadership/team',       badges: [] },
-                  { label: 'Leave Requests',  icon: ClipboardCheck,  path: '/leadership/leave',      badges: [{ count: pendingLeaveCount, variant: 'red' }] },
-                  { label: 'Setlist Reviews', icon: ListChecks,      path: '/leadership/setlists',   badges: [{ count: pendingSetlists.length, variant: 'red' }] },
-                  { label: 'Unavailable',     icon: UserX,           path: '/unavailable-members',   badges: [
-                    { count: pendingLeaveCount, variant: 'red' },
-                    { count: unavailableMembers.length, variant: 'amber' }
-                  ]},
-                  ...(isProductionDirector ? [{ label: 'Discipline', icon: Shield, path: '/discipline', badges: [] }] : []),
-                ].map((action, i, arr) => {
-                  const Icon = action.icon;
-                  const isLastOdd = arr.length % 2 !== 0 && i === arr.length - 1;
-                  return (
-                    <button
-                      key={action.label}
-                      onClick={() => navigate(action.path)}
-                      className={`group relative flex items-center gap-2.5 px-4 py-2.5 w-full text-left hover:bg-gray-50 dark:hover:bg-white/[0.03] transition-colors duration-150 ${isLastOdd ? 'col-span-2' : ''}`}
-                    >
-                      <div className="h-7 w-7 rounded-lg flex items-center justify-center bg-emerald-50 dark:bg-emerald-500/[0.10] text-emerald-600 dark:text-emerald-400 shrink-0">
-                        <Icon className="h-[13px] w-[13px]" />
-                      </div>
-                      <span className="flex-1 text-[12px] font-semibold text-gray-800 dark:text-white/75 truncate" style={{ letterSpacing: '-0.01em' }}>
-                        {action.label}
-                      </span>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {action.badges.map((badge, bi) => badge.count > 0 && (
-                          <span
-                            key={bi}
-                            className={`flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-black shrink-0 ring-1 ${
-                              badge.variant === 'red'
-                                ? 'bg-red-500 text-white ring-red-400/50 dark:bg-red-500/20 dark:text-red-400 dark:ring-red-500/30'
-                                : 'bg-amber-400 text-amber-950 ring-amber-300/50 dark:bg-amber-400/20 dark:text-amber-300 dark:ring-amber-500/30'
-                            }`}
-                          >
-                            {badge.count > 9 ? '9+' : badge.count}
-                          </span>
-                        ))}
-                      </div>
-                      <ChevronRight className="h-3 w-3 text-gray-300 dark:text-white/20 group-hover:text-gray-500 dark:group-hover:text-white/40 transition-colors shrink-0" />
-                    </button>
-                  );
-                })}
-              </div>
-            </Card>
           </motion.section>
         )}
 
@@ -765,11 +719,11 @@ export function Dashboard() {
         <div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3 lg:gap-6">
 
           <motion.section variants={item}>
-            <Card className="p-5 sm:p-6 h-full">
+            <OpenSection className="h-full pt-7">
             <SectionLabel
               index="05"
               action={
-                <button onClick={() => navigate('/events')} className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400/80 hover:text-emerald-500 dark:hover:text-emerald-300 flex items-center gap-1 transition-colors">
+                <button onClick={() => navigate('/events')} className="text-[11px] font-semibold text-[#1DB954] hover:text-[#48d67c] flex items-center gap-1 transition-colors">
                   All <ArrowUpRight className="h-3 w-3" />
                 </button>
               }
@@ -778,36 +732,36 @@ export function Dashboard() {
             </SectionLabel>
 
             {upcomingEvents.length === 0 ? (
-              <p className="text-[13px] text-gray-400 dark:text-white/30 py-6">No upcoming events.</p>
+              <p className="text-[13px] text-gray-500 dark:text-white/34 py-6">No upcoming events.</p>
             ) : (
-              <div className="divide-y divide-gray-200 dark:divide-white/[0.05]">
+              <div className="divide-y divide-white/[0.06]">
                 {upcomingEvents.slice(0, 3).map(event => (
                   <button
                     key={event.id}
                     onClick={() => navigate(`/events/${event.id}`)}
-                    className="group flex items-center gap-3.5 py-3.5 w-full text-left transition-all duration-200 hover:pl-1"
+                    className="group flex items-center gap-3.5 rounded-[1.1rem] px-2.5 py-3.5 -mx-2.5 w-[calc(100%+1.25rem)] text-left transition-all duration-200 hover:bg-black/[0.04] dark:hover:bg-[#212121]"
                   >
                     <DateChip date={event.event_date} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-[14px] font-semibold text-gray-900 dark:text-white/90 truncate leading-tight tracking-tight">{event.title}</p>
-                      <p className="text-[11px] text-gray-500 dark:text-white/40 mt-0.5 font-mono">
+                      <p className="text-[14px] font-semibold text-gray-900 dark:text-white truncate leading-tight tracking-tight">{event.title}</p>
+                      <p className="text-[11px] text-gray-500 dark:text-white/36 mt-0.5 font-mono">
                         {event.event_type}{event.start_time && ` · ${formatTime12Hour(event.start_time)}`}
                       </p>
                     </div>
-                    <ChevronRight className="h-4 w-4 text-gray-300 dark:text-white/15 shrink-0 transition-all group-hover:translate-x-0.5 group-hover:text-gray-500 dark:group-hover:text-white/40" />
+                    <ChevronRight className="h-4 w-4 text-gray-400 dark:text-white/18 shrink-0 transition-all group-hover:translate-x-0.5 group-hover:text-gray-700 dark:group-hover:text-white/42" />
                   </button>
                 ))}
               </div>
             )}
-            </Card>
+            </OpenSection>
           </motion.section>
 
           <motion.section variants={item}>
-            <Card className="p-5 sm:p-6 h-full">
+            <OpenSection className="h-full pt-7">
             <SectionLabel
               index="06"
               action={
-                <button onClick={() => navigate('/my-assignments')} className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400/80 hover:text-emerald-500 dark:hover:text-emerald-300 flex items-center gap-1 transition-colors">
+                <button onClick={() => navigate('/my-assignments')} className="text-[11px] font-semibold text-[#1DB954] hover:text-[#48d67c] flex items-center gap-1 transition-colors">
                   All <ArrowUpRight className="h-3 w-3" />
                 </button>
               }
@@ -816,19 +770,19 @@ export function Dashboard() {
             </SectionLabel>
 
             {myAssignments.length === 0 ? (
-              <p className="text-[13px] text-gray-400 dark:text-white/30 py-6">No current assignments.</p>
+              <p className="text-[13px] text-gray-500 dark:text-white/34 py-6">No current assignments.</p>
             ) : (
-              <div className="divide-y divide-gray-200 dark:divide-white/[0.05]">
+              <div className="divide-y divide-white/[0.06]">
                 {myAssignments.slice(0, 3).map(a => (
                   <button
                     key={a.id}
                     onClick={() => navigate(`/events/${a.event_id}`)}
-                    className="group flex items-center gap-3.5 py-3.5 w-full text-left transition-all duration-200 hover:pl-1"
+                    className="group flex items-center gap-3.5 rounded-[1.1rem] px-2.5 py-3.5 -mx-2.5 w-[calc(100%+1.25rem)] text-left transition-all duration-200 hover:bg-black/[0.04] dark:hover:bg-[#212121]"
                   >
                     <DateChip date={a.events?.event_date ?? null} dim={a.status === 'declined'} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-[14px] font-semibold text-gray-900 dark:text-white/90 truncate leading-tight tracking-tight">{a.events?.title}</p>
-                      <p className="text-[11px] text-gray-500 dark:text-white/40 mt-0.5 font-mono">
+                      <p className="text-[14px] font-semibold text-gray-900 dark:text-white truncate leading-tight tracking-tight">{a.events?.title}</p>
+                      <p className="text-[11px] text-gray-500 dark:text-white/36 mt-0.5 font-mono">
                         {a.roles?.name}{a.events?.start_time && ` · ${formatTime12Hour(a.events.start_time)}`}
                       </p>
                     </div>
@@ -843,17 +797,17 @@ export function Dashboard() {
                 ))}
               </div>
             )}
-            </Card>
+            </OpenSection>
           </motion.section>
 
         {/* ── 07 · Announcements ── */}
         {recentAnnouncements.length > 0 && (
           <motion.section variants={item} className="lg:col-span-2 xl:col-span-1">
-            <Card className="p-5 sm:p-6 h-full">
+            <OpenSection className="h-full pt-7">
             <SectionLabel
               index="07"
               action={
-                <button onClick={() => navigate('/announcements')} className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400/80 hover:text-emerald-500 dark:hover:text-emerald-300 flex items-center gap-1 transition-colors">
+                <button onClick={() => navigate('/announcements')} className="text-[11px] font-semibold text-[#1DB954] hover:text-[#48d67c] flex items-center gap-1 transition-colors">
                   All <ArrowUpRight className="h-3 w-3" />
                 </button>
               }
@@ -861,7 +815,7 @@ export function Dashboard() {
               <span className="flex items-center gap-1.5"><Megaphone className="h-3 w-3" /> Announcements</span>
             </SectionLabel>
 
-            <div className="divide-y divide-gray-200 dark:divide-white/[0.05]">
+            <div className="divide-y divide-white/[0.06]">
               {recentAnnouncements.map(a => {
                 const blocks = (a as Announcement & { content_blocks?: { type: string; content: string }[] }).content_blocks;
                 const hasPhotos = blocks?.some(b => b.type === 'image');
@@ -870,27 +824,27 @@ export function Dashboard() {
                   <button
                     key={a.id}
                     onClick={() => navigate(`/announcements/${a.id}`)}
-                    className="group flex items-start gap-4 py-4 w-full text-left transition-all duration-200 hover:pl-1"
+                    className="group flex items-start gap-4 rounded-[1.1rem] px-2.5 py-4 -mx-2.5 w-[calc(100%+1.25rem)] text-left transition-all duration-200 hover:bg-black/[0.04] dark:hover:bg-[#212121]"
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <p className="text-[14px] font-semibold text-gray-900 dark:text-white/90 truncate leading-tight tracking-tight">{a.title}</p>
+                        <p className="text-[14px] font-semibold text-gray-900 dark:text-white truncate leading-tight tracking-tight">{a.title}</p>
                         {a.priority === 'urgent' && (
                           <span className="text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0 bg-red-50 dark:bg-red-500/[0.14] text-red-600 dark:text-red-300 border border-red-200 dark:border-red-500/25">Urgent</span>
                         )}
-                        {hasPhotos && <ImageIcon className="h-3 w-3 text-gray-400 dark:text-white/30 shrink-0" />}
+                        {hasPhotos && <ImageIcon className="h-3 w-3 text-gray-400 dark:text-white/28 shrink-0" />}
                       </div>
-                      {previewText && <p className="text-[12px] text-gray-500 dark:text-white/45 line-clamp-1 leading-relaxed">{previewText}</p>}
-                      <p className="text-[10px] font-mono text-gray-400 dark:text-white/25 mt-1.5 tracking-wide">
+                      {previewText && <p className="text-[12px] text-gray-500 dark:text-white/42 line-clamp-1 leading-relaxed">{previewText}</p>}
+                      <p className="text-[10px] font-mono text-gray-400 dark:text-white/24 mt-1.5 tracking-wide">
                         {a.profiles?.first_name} {a.profiles?.last_name} · {format(parseISO(a.created_at), 'MMM d')}
                       </p>
                     </div>
-                    <ChevronRight className="h-4 w-4 text-gray-300 dark:text-white/15 shrink-0 mt-1 transition-all group-hover:translate-x-0.5 group-hover:text-gray-500 dark:group-hover:text-white/40" />
+                    <ChevronRight className="h-4 w-4 text-gray-400 dark:text-white/18 shrink-0 mt-1 transition-all group-hover:translate-x-0.5 group-hover:text-gray-700 dark:group-hover:text-white/42" />
                   </button>
                 );
               })}
             </div>
-            </Card>
+            </OpenSection>
           </motion.section>
         )}
         </div>

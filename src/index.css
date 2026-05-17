@@ -11,6 +11,10 @@
     scroll-behavior: smooth;
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    overscroll-behavior-x: none;
   }
 
   :root {
@@ -43,11 +47,40 @@
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    overscroll-behavior-x: none;
     overscroll-behavior-y: none;
+  }
+
+  #root {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  @supports not (overflow-x: clip) {
+    #root {
+      overflow-x: hidden;
+    }
   }
 
   body.allow-native-pull-refresh {
     overscroll-behavior-y: auto;
+  }
+
+  html.dashboard-active,
+  html.dashboard-active body,
+  body.dashboard-active {
+    overscroll-behavior-y: contain !important;
+  }
+
+  html.mobile-menu-active,
+  html.mobile-menu-active body,
+  body.mobile-menu-active {
+    overflow: hidden !important;
+    overscroll-behavior: none !important;
   }
 
   html.service-mode-active,

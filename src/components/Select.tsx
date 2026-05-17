@@ -84,7 +84,7 @@ export function Select({ value, onChange, options, placeholder, className = '', 
         <div
           ref={dropdownRef}
           className="fixed rounded-xl bg-white dark:bg-gray-800 shadow-xl ring-1 ring-gray-200 dark:ring-gray-700 py-1.5 overflow-auto max-h-60 animate-scale-in"
-          style={{ top: pos.top, left: pos.left, width: pos.width, zIndex: 99999 }}
+          style={{ top: pos.top, left: pos.left, width: pos.width, zIndex: 2147483647 }}
         >
           {options.map(option => {
             const isSelected = option.value === value;

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+import { createTransientSupabaseClient, supabase } from '../lib/supabase';
+import { readSavedAccounts, removeSavedAccount, upsertSavedAccount, type SavedAccount } from '../lib/savedAccounts';
 import type { Organization, Profile, Role, UserRole } from '../types';
 
 interface AuthContextValue {
@@ -10,6 +11,7 @@ interface AuthContextValue {
   organization: Organization | null;
   userRoles: UserRole[];
   roles: Role[];
+  savedAccounts: SavedAccount[];
   loading: boolean;
   hasOrganization: boolean;
   isOrgAdmin: boolean;
@@ -27,6 +29,9 @@ interface AuthContextValue {
   signUp: (email: string, password: string, firstName: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
+  addSavedAccount: (email: string, password: string) => Promise<{ error: Error | null }>;
+  switchAccount: (userId: string) => Promise<{ error: Error | null }>;
+  forgetSavedAccount: (userId: string) => void;
   refreshProfile: () => Promise<void>;
 }
 
@@ -90,6 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [userRoles, setUserRoles] = useState<UserRole[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
+  const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>(() => readSavedAccounts());
   const [loading, setLoading] = useState(true);
 
   const clearUserContext = () => {
@@ -161,19 +167,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setRoles(data || []);
   };
 
-  const hydrateUserContext = async (userId: string) => {
+  const syncSavedAccount = (activeSession: Session | null, profileData?: Profile | null) => {
+    if (!activeSession?.user?.id || !activeSession.access_token || !activeSession.refresh_token) return;
+
+    const fullName = `${profileData?.first_name || ''} ${profileData?.last_name || ''}`.trim();
+    const displayName = profileData?.nickname || fullName || activeSession.user.email || 'Account';
+
+    setSavedAccounts(upsertSavedAccount({
+      userId: activeSession.user.id,
+      email: profileData?.email || activeSession.user.email || '',
+      displayName,
+      avatarUrl: profileData?.avatar_url || null,
+      lastUsedAt: new Date().toISOString(),
+      session: {
+        accessToken: activeSession.access_token,
+        refreshToken: activeSession.refresh_token,
+      },
+    }));
+  };
+
+  const hydrateUserContext = async (userId: string, activeSession?: Session | null) => {
     const [profileData] = await Promise.all([
       fetchProfile(userId),
       fetchUserRoles(userId),
       fetchRoles(),
     ]);
     await fetchOrganization(profileData?.org_id);
+    syncSavedAccount(activeSession ?? null, profileData);
   };
 
   const refreshProfile = async () => {
     if (user) {
       const [profileData] = await Promise.all([fetchProfile(user.id), fetchUserRoles(user.id)]);
       await fetchOrganization(profileData?.org_id);
+      syncSavedAccount(session, profileData);
     }
   };
 
@@ -199,8 +226,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setSession(s);
         setUser(s?.user ?? null);
+        syncSavedAccount(s);
         if (s?.user) {
-          hydrateUserContext(s.user.id).finally(() => setLoading(false));
+          hydrateUserContext(s.user.id, s).finally(() => setLoading(false));
         } else {
           fetchRoles().finally(() => {
             setOrganization(null);
@@ -227,6 +255,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (event === 'TOKEN_REFRESHED') {
         setSession(s);
         setUser(s?.user ?? null);
+        syncSavedAccount(s, profile);
         return;
       }
 
@@ -235,7 +264,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(s?.user ?? null);
       if (s?.user) {
         (async () => {
-          await hydrateUserContext(s.user.id);
+          await hydrateUserContext(s.user.id, s);
         })().finally(() => setLoading(false));
       } else {
         setProfile(null);
@@ -297,20 +326,113 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: 'local' });
     setProfile(null);
     setOrganization(null);
     setUserRoles([]);
+  };
+
+  const addSavedAccount = async (email: string, password: string) => {
+    const normalizedEmail = email.trim().toLowerCase();
+    const currentEmail = (profile?.email || user?.email || '').trim().toLowerCase();
+
+    if (normalizedEmail && normalizedEmail === currentEmail) {
+      syncSavedAccount(session, profile);
+      return { error: null };
+    }
+
+    const tempClient = createTransientSupabaseClient();
+    const { data, error } = await tempClient.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+
+    if (error) {
+      return { error: error as Error | null };
+    }
+
+    const tempSession = data.session;
+    const tempUser = data.user;
+    if (!tempSession || !tempUser) {
+      return { error: new Error('Failed to save that account on this device.') };
+    }
+
+    const { data: tempProfile } = await tempClient
+      .from('profiles')
+      .select('*')
+      .eq('id', tempUser.id)
+      .maybeSingle();
+
+    const fullName = `${tempProfile?.first_name || ''} ${tempProfile?.last_name || ''}`.trim();
+    const displayName = tempProfile?.nickname || fullName || tempUser.email || email.trim();
+
+    setSavedAccounts(upsertSavedAccount({
+      userId: tempUser.id,
+      email: tempProfile?.email || tempUser.email || email.trim(),
+      displayName,
+      avatarUrl: tempProfile?.avatar_url || null,
+      lastUsedAt: new Date().toISOString(),
+      session: {
+        accessToken: tempSession.access_token,
+        refreshToken: tempSession.refresh_token,
+      },
+    }));
+
+    return { error: null };
+  };
+
+  const switchAccount = async (userId: string) => {
+    const targetAccount = savedAccounts.find(account => account.userId === userId);
+    if (!targetAccount) return { error: new Error('Saved account not found.') };
+
+    setLoading(true);
+
+    const { data: { session: currentSession } } = await supabase.auth.getSession();
+    if (currentSession?.user?.id && currentSession.user.id !== targetAccount.userId) {
+      syncSavedAccount(currentSession, profile);
+    }
+
+    const { data, error } = await supabase.auth.setSession({
+      access_token: targetAccount.session.accessToken,
+      refresh_token: targetAccount.session.refreshToken,
+    });
+
+    if (error) {
+      setLoading(false);
+      if (isInvalidRefreshTokenError(error)) {
+        setSavedAccounts(removeSavedAccount(userId));
+        return { error: new Error('This saved account expired on this device. Sign in again once to restore it.') };
+      }
+      return { error: error as Error | null };
+    }
+
+    const nextSession = data.session ?? null;
+    if (!nextSession?.user) {
+      setLoading(false);
+      return { error: new Error('Saved account could not be restored. Sign in again once to save it back.') };
+    }
+
+    setSession(nextSession);
+    setUser(nextSession.user);
+    await hydrateUserContext(nextSession.user.id, nextSession);
+    setLoading(false);
+
+    return { error: null };
+  };
+
+  const forgetSavedAccount = (userId: string) => {
+    setSavedAccounts(removeSavedAccount(userId));
   };
 
   return (
     <AuthContext.Provider
       value={{
         session, user, profile, organization, userRoles, roles, loading,
+        savedAccounts,
         hasOrganization, isOrgAdmin, isPlatformOwner,
         isLeader, isAdmin, isAdminCoordinator, isProductionDirector, isMusicDirector, isStageDirector, isSetlistCoordinator,
         canApproveLeave, canManageDiscipline, canManageMembers,
-        signUp, signIn, signOut, refreshProfile,
+        signUp, signIn, signOut, addSavedAccount, switchAccount, forgetSavedAccount, refreshProfile,
       }}
     >
       {children}

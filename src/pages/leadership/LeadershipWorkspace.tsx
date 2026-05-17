@@ -117,7 +117,7 @@ export function LeadershipWorkspace() {
 
             <div className="grid grid-cols-3 gap-2 sm:min-w-[23rem]">
               {[
-                { label: 'Tools', value: visibleTabs.length },
+                { label: 'Setlists', value: unread.pendingSetlists || 0 },
                 { label: 'Leave', value: unread.pendingLeave || 0 },
                 { label: 'Swaps', value: unread.pendingSwaps || 0 },
               ].map(stat => (
@@ -161,6 +161,11 @@ export function LeadershipWorkspace() {
                   <span className="relative z-10 text-[12px] sm:text-[13px] font-black leading-none">
                     {t.label}
                   </span>
+                  {t.id === 'setlists' && unread.pendingSetlists > 0 && (
+                    <span className="relative z-10 flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold leading-none" style={{ boxShadow: '0 0 8px rgba(239,68,68,0.5)' }}>
+                      {unread.pendingSetlists > 9 ? '9+' : unread.pendingSetlists}
+                    </span>
+                  )}
                   {t.id === 'leave' && unread.pendingLeave > 0 && (
                     <span className="relative z-10 flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold leading-none" style={{ boxShadow: '0 0 8px rgba(239,68,68,0.5)' }}>
                       {unread.pendingLeave > 9 ? '9+' : unread.pendingLeave}

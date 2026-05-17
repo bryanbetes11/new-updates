@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { Eye, EyeOff, ArrowRight, ChevronLeft, Users } from 'lucide-react';
+import { Eye, EyeOff, ArrowRight, ChevronLeft, Users, RefreshCw, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -18,7 +18,8 @@ export function Login() {
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSent, setForgotSent] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
-  const { signIn, user } = useAuth();
+  const [switchingAccountId, setSwitchingAccountId] = useState<string | null>(null);
+  const { signIn, user, savedAccounts, switchAccount, forgetSavedAccount } = useAuth();
   const { toast } = useToast();
   const { theme } = useTheme();
   const navigate = useNavigate();
@@ -70,6 +71,16 @@ export function Login() {
     }
   };
 
+  const handleQuickSwitch = async (targetUserId: string) => {
+    setSwitchingAccountId(targetUserId);
+    const { error } = await switchAccount(targetUserId);
+    setSwitchingAccountId(null);
+
+    if (error) {
+      toast('error', error.message);
+    }
+  };
+
   const inputClass = `w-full h-12 px-4 rounded-xl text-[14px]
     bg-gray-50 dark:bg-white/[0.05]
     border border-gray-200 dark:border-white/[0.08]
@@ -82,7 +93,13 @@ export function Login() {
     <div className="min-h-screen flex overflow-x-hidden bg-[#f5f5f7] dark:bg-[#0d0d0f] transition-colors duration-300">
 
       {/* Theme toggle — fixed top-right, always visible */}
-      <div className="fixed top-4 right-4 z-30">
+      <div
+        className="fixed z-30"
+        style={{
+          top: 'calc(env(safe-area-inset-top) + 1rem)',
+          right: 'max(1rem, calc(env(safe-area-inset-right) + 1rem))',
+        }}
+      >
         <div className="bg-white/90 dark:bg-white/[0.07] backdrop-blur-md rounded-xl border border-gray-200/70 dark:border-white/[0.09] shadow-sm transition-colors duration-300">
           <ThemeToggle />
         </div>
@@ -213,6 +230,51 @@ export function Login() {
                         Sign in to your ServeSync account to continue.
                       </p>
                     </div>
+
+                    {savedAccounts.length > 0 && (
+                      <div className="mb-6 rounded-2xl border border-gray-200/80 bg-gray-50/80 p-3.5 dark:border-white/[0.08] dark:bg-white/[0.03]">
+                        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-gray-500 dark:text-white/35">
+                          Saved on this device
+                        </p>
+                        <div className="mt-3 space-y-2">
+                          {savedAccounts.map((account) => {
+                            const isSwitching = switchingAccountId === account.userId;
+
+                            return (
+                              <div
+                                key={account.userId}
+                                className="flex items-center gap-2 rounded-xl border border-gray-200/70 bg-white px-2.5 py-2 dark:border-white/[0.08] dark:bg-white/[0.03]"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickSwitch(account.userId)}
+                                  disabled={isSwitching}
+                                  className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:opacity-60"
+                                >
+                                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-[12px] font-bold text-emerald-700 dark:text-emerald-300">
+                                    {(account.displayName || account.email || '?').slice(0, 1).toUpperCase()}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{account.displayName}</p>
+                                    <p className="truncate text-[11px] font-mono text-gray-500 dark:text-white/35">{account.email}</p>
+                                  </div>
+                                  <RefreshCw className={`h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-300 ${isSwitching ? 'animate-spin' : ''}`} />
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => forgetSavedAccount(account.userId)}
+                                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 transition-colors hover:text-red-500 dark:text-white/25 dark:hover:text-red-400"
+                                  title="Forget saved account"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
 
                     <form onSubmit={handleSubmit} className="space-y-4">
                       <div>

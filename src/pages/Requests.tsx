@@ -8,6 +8,7 @@ import { useToast } from '../contexts/ToastContext';
 import { PageLoader } from '../components/LoadingSpinner';
 import { Avatar } from '../components/Avatar';
 import { Modal } from '../components/Modal';
+import { LeadershipHeroCard } from '../components/LeadershipHeroCard';
 import type { Profile } from '../types';
 
 interface UnavailabilityRequest {
@@ -103,7 +104,7 @@ export function Requests({ embedded }: RequestsProps = {}) {
   if (!canApproveLeave) {
     return (
       <div className={embedded ? '' : 'page-container page-bottom-pad'}>
-        <div className={embedded ? '' : 'max-w-5xl mx-auto px-1 sm:px-2 pt-6 sm:pt-8'}>
+        <div className={embedded ? '' : 'relative max-w-2xl lg:max-w-6xl xl:max-w-[1560px] mx-auto pt-4 sm:pt-5 pb-6 px-4 sm:px-6 lg:px-8'}>
           <div className="rounded-3xl border border-gray-200/80 dark:border-white/[0.06] bg-white dark:bg-white/[0.025] p-12 text-center" style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -12px rgba(15,23,42,0.10)' }}>
             <div
               className="relative h-14 w-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
@@ -123,42 +124,22 @@ export function Requests({ embedded }: RequestsProps = {}) {
     <>
     <div className={embedded ? 'space-y-5' : 'space-y-5 sm:space-y-6'}>
         {!embedded && (
-          <motion.div
-            initial={{ opacity: 0, y: 14, filter: 'blur(6px)' }}
-            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-            className="flex items-start justify-between gap-3"
-          >
-            <div className="flex items-center gap-3.5">
-              <div className="relative shrink-0">
-                <div
-                  className="absolute inset-0 rounded-2xl"
-                  style={{ background: 'radial-gradient(circle, rgba(245,158,11,0.35), transparent 70%)', filter: 'blur(10px)', transform: 'scale(1.5)' }}
-                />
-                <div
-                  className="relative h-11 w-11 rounded-2xl flex items-center justify-center"
-                  style={{ background: 'linear-gradient(145deg, #f59e0b, #d97706)', boxShadow: '0 4px 14px rgba(245,158,11,0.35)' }}
-                >
-                  <ClipboardCheck className="h-5 w-5 text-white" />
-                </div>
-              </div>
-              <div>
-                <p className="text-[10px] font-mono font-medium uppercase tracking-[0.22em] text-amber-600 dark:text-amber-400/80 mb-0.5">
-                  Pending review
-                </p>
-                <h1 className="text-[1.5rem] sm:text-[1.75rem] font-black text-gray-900 dark:text-white leading-tight" style={{ letterSpacing: '-0.03em' }}>
-                  Leave Requests.
-                </h1>
-              </div>
-            </div>
-            <button
-              onClick={fetchRequests}
-              className="inline-flex items-center justify-center h-9 w-9 rounded-full text-gray-600 dark:text-white/55 bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] hover:bg-white dark:hover:bg-white/[0.07] active:scale-[0.95] transition-colors shrink-0"
-              title="Refresh"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-            </button>
-          </motion.div>
+          <LeadershipHeroCard
+            tone="amber"
+            icon={ClipboardCheck}
+            eyebrow="Pending Review"
+            title="Leave Requests."
+            description="Review member leave requests and respond quickly so the team can plan ahead."
+            action={(
+              <button
+                onClick={fetchRequests}
+                className="inline-flex items-center justify-center h-11 w-11 rounded-full text-gray-600 dark:text-white/55 bg-white/78 dark:bg-white/[0.05] border border-black/[0.06] dark:border-white/[0.08] hover:bg-white dark:hover:bg-white/[0.08] active:scale-[0.95] transition-colors shrink-0"
+                title="Refresh"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </button>
+            )}
+          />
         )}
         {embedded && (
           <div className="flex items-center justify-between">
@@ -334,7 +315,7 @@ export function Requests({ embedded }: RequestsProps = {}) {
 
   return (
     <div className="page-container page-bottom-pad">
-      <div className="max-w-5xl mx-auto px-1 sm:px-2 pt-6 sm:pt-8">
+      <div className="relative max-w-2xl lg:max-w-6xl xl:max-w-[1560px] mx-auto pt-4 sm:pt-5 pb-6 px-4 sm:px-6 lg:px-8">
         {content}
       </div>
     </div>

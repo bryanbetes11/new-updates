@@ -7,6 +7,7 @@ import { useToast } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
 import { DatePicker } from '../components/DatePicker';
 import { ThemeToggle } from '../components/ThemeToggle';
+import { useSmartBack } from '../lib/navigationHistory';
 
 const inputClass = `w-full h-12 px-4 rounded-xl text-[14px]
   bg-gray-50 dark:bg-white/[0.05]
@@ -26,6 +27,7 @@ export function Register() {
   const { signUp, user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const smartBack = useSmartBack('/login');
   const location = useLocation();
   const params = new URLSearchParams(location.search);
   const redirectTo = params.get('redirect') || '/onboarding';
@@ -82,7 +84,7 @@ export function Register() {
       {/* Back button — fixed top-left */}
       <div className="fixed top-4 left-4 z-30">
         <button
-          onClick={() => navigate(-1)}
+          onClick={smartBack}
           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium text-gray-500 dark:text-white/40 bg-white/90 dark:bg-white/[0.07] backdrop-blur-md border border-gray-200/70 dark:border-white/[0.09] shadow-sm hover:text-gray-800 dark:hover:text-white/70 transition-all duration-200"
         >
           <ArrowLeft className="h-3.5 w-3.5" />

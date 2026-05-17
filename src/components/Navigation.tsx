@@ -1167,7 +1167,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
             className={`relative flex ${useDockedMobileNav ? 'justify-stretch px-0' : 'justify-center px-8'}`}
           >
             <nav
-              className={`pointer-events-auto relative flex ${useDockedMobileNav ? 'w-full items-start overflow-visible px-2 pt-2' : 'w-full max-w-[480px] items-center overflow-hidden bg-white p-1.5 rounded-full dark:bg-[#151517]'}`}
+              className={`pointer-events-auto relative flex ${useDockedMobileNav ? 'w-full items-start overflow-visible px-2 pt-2' : 'w-full max-w-[480px] items-center overflow-hidden bg-white/95 p-1.5 rounded-full dark:bg-[#17171a]'}`}
               style={{
                 height: useDockedMobileNav ? 'calc(64px + env(safe-area-inset-bottom))' : undefined,
                 background: useDockedMobileNav ? 'transparent' : undefined,
@@ -1176,14 +1176,14 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
                 border: useDockedMobileNav ? undefined : '1px solid var(--nav-border)',
                 boxShadow: useDockedMobileNav
                   ? 'none'
-                  : '0 18px 42px -14px rgba(0,0,0,0.24), 0 2px 10px -4px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.72)',
+                  : '0 14px 30px -18px rgba(0,0,0,0.22), 0 2px 8px -5px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.28)',
                 paddingBottom: useDockedMobileNav ? 'env(safe-area-inset-bottom)' : undefined,
               }}
             >
               {!useDockedMobileNav && (
                 <>
-                  <span className="pointer-events-none absolute inset-0 rounded-full bg-[radial-gradient(circle_at_20%_10%,rgba(255,255,255,0.55),transparent_34%),linear-gradient(135deg,rgba(255,255,255,0.30),rgba(255,255,255,0.06))] dark:bg-[radial-gradient(circle_at_20%_10%,rgba(255,255,255,0.10),transparent_34%),linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))]" />
-                  <span className="pointer-events-none absolute inset-x-3 top-0 h-px bg-gradient-to-r from-transparent via-white/75 to-transparent dark:via-white/20" />
+                  <span className="pointer-events-none absolute inset-0 rounded-full bg-[linear-gradient(180deg,rgba(255,255,255,0.12),rgba(255,255,255,0.03))] dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.012))]" />
+                  <span className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-white/38 to-transparent dark:via-white/10" />
                 </>
               )}
 

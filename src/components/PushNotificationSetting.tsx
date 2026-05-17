@@ -168,7 +168,7 @@ export function PushNotificationSetting({ surface = 'profile' }: PushNotificatio
   return (
     <div
       className={isDrawer
-        ? 'rounded-[1.4rem] border border-white/[0.08] bg-white/[0.045] px-3.5 py-3.5'
+        ? 'rounded-[1.4rem] border border-black/[0.06] bg-white/72 px-3.5 py-3.5 dark:border-white/[0.08] dark:bg-white/[0.045]'
         : 'relative overflow-hidden rounded-3xl border border-gray-200/80 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_6px_20px_-12px_rgba(15,23,42,0.10)] dark:border-white/[0.06] dark:bg-white/[0.025]'}
     >
       {!isDrawer && (
@@ -178,21 +178,21 @@ export function PushNotificationSetting({ surface = 'profile' }: PushNotificatio
       <div className="flex items-center gap-3">
         <div
           className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${
-            pushEnabled ? '' : isDrawer ? 'bg-white/[0.06]' : 'bg-gray-100 dark:bg-white/[0.06]'
+            pushEnabled ? '' : isDrawer ? 'bg-gray-100 dark:bg-white/[0.06]' : 'bg-gray-100 dark:bg-white/[0.06]'
           }`}
           style={pushEnabled ? { background: 'linear-gradient(145deg, #16a34a, #15803d)', boxShadow: '0 3px 10px rgba(22,163,74,0.3)' } : undefined}
         >
           {pushEnabled
             ? <Bell className="h-5 w-5 text-white" />
-            : <BellOff className={isDrawer ? 'h-5 w-5 text-white/38' : 'h-5 w-5 text-gray-400 dark:text-white/30'} />}
+            : <BellOff className={isDrawer ? 'h-5 w-5 text-gray-400 dark:text-white/38' : 'h-5 w-5 text-gray-400 dark:text-white/30'} />}
           {pushEnabled && <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#0d0d0f]" style={{ boxShadow: '0 0 8px rgba(34,197,94,0.6)' }} />}
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className={isDrawer ? 'text-[14px] font-black text-white' : 'text-[14px] font-bold text-gray-900 dark:text-white'} style={{ letterSpacing: '-0.015em' }}>
+          <p className={isDrawer ? 'text-[14px] font-black text-gray-900 dark:text-white' : 'text-[14px] font-bold text-gray-900 dark:text-white'} style={{ letterSpacing: '-0.015em' }}>
             Push Notifications
           </p>
-          <p className={isDrawer ? 'mt-0.5 text-[11px] font-semibold text-white/45' : 'mt-0.5 text-[12px] text-gray-500 dark:text-white/45'}>
+          <p className={isDrawer ? 'mt-0.5 text-[11px] font-semibold text-gray-500 dark:text-white/45' : 'mt-0.5 text-[12px] text-gray-500 dark:text-white/45'}>
             {statusText}
           </p>
         </div>
@@ -204,7 +204,7 @@ export function PushNotificationSetting({ surface = 'profile' }: PushNotificatio
           className={`inline-flex h-9 shrink-0 items-center justify-center rounded-full px-3.5 text-[12px] font-black transition-all active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60 ${
             pushEnabled
               ? isDrawer
-                ? 'border border-white/[0.10] bg-white/[0.06] text-white/68 hover:bg-white/[0.09]'
+                ? 'border border-black/[0.07] bg-white/82 text-gray-600 hover:bg-white dark:border-white/[0.10] dark:bg-white/[0.06] dark:text-white/68 dark:hover:bg-white/[0.09]'
                 : 'border border-black/[0.06] bg-white/70 text-gray-600 hover:bg-white dark:border-white/[0.07] dark:bg-white/[0.04] dark:text-white/55 dark:hover:bg-white/[0.07]'
               : 'text-white'
           }`}

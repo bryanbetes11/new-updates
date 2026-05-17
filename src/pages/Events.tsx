@@ -308,24 +308,14 @@ function BirthdayCard({ name, date }: { name: string; date: string }) {
 
   return (
     <div
-      className="relative flex items-center gap-4 px-4 py-4 overflow-hidden"
-      style={{
-        borderRadius: '1.5rem',
-        background: 'linear-gradient(135deg, rgba(236,72,153,0.08) 0%, rgba(168,85,247,0.05) 60%, transparent 100%)',
-        border: '1px solid rgba(236,72,153,0.2)',
-        boxShadow: '0 1px 3px rgba(236,72,153,0.08), 0 4px 16px -8px rgba(236,72,153,0.12)',
-      }}
+      className="relative flex items-center gap-4 overflow-hidden rounded-[1.5rem] border border-pink-200/40 bg-[linear-gradient(135deg,rgba(236,72,153,0.08)_0%,rgba(168,85,247,0.05)_60%,transparent_100%)] px-4 py-4 shadow-[0_1px_3px_rgba(236,72,153,0.08),0_4px_16px_-8px_rgba(236,72,153,0.12)] dark:border-pink-400/8 dark:bg-[linear-gradient(135deg,rgba(236,72,153,0.08)_0%,rgba(168,85,247,0.05)_42%,rgba(255,255,255,0.01)_100%)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.22),0_8px_22px_-16px_rgba(236,72,153,0.10)]"
     >
       {/* Subtle shimmer highlight */}
       <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-pink-300/30 to-transparent" />
 
       {/* Birthday date chip */}
       <div
-        className="relative flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-[0.7rem] border border-pink-200/90"
-        style={{
-          background: 'linear-gradient(145deg, #fff4fb, #f7ebff)',
-          boxShadow: '0 10px 24px rgba(236,72,153,0.16)',
-        }}
+        className="relative flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-[0.7rem] border border-pink-200/90 bg-[linear-gradient(145deg,#fff4fb,#f7ebff)] shadow-[0_10px_24px_rgba(236,72,153,0.16)] dark:border-pink-400/12 dark:bg-[linear-gradient(145deg,#25151d,#1b151b)] dark:shadow-[0_8px_18px_rgba(236,72,153,0.10)]"
       >
         <span className="text-[9px] font-black uppercase tracking-widest leading-none text-pink-500 dark:text-pink-300">
           {format(parseISO(date), 'MMM')}

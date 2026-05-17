@@ -667,20 +667,21 @@ export function Dashboard() {
               className="group w-full text-left"
             >
               <div
-                className="relative overflow-hidden rounded-[1.6rem] px-5 py-4 sm:px-6 transition-all duration-500 group-hover:-translate-y-0.5 border border-black/[0.06] dark:border-white/[0.06]"
+                className={`relative overflow-hidden rounded-[1.6rem] px-5 py-4 sm:px-6 transition-all duration-500 group-hover:-translate-y-0.5 border ${
+                  nextAssignment.status === 'confirmed'
+                    ? 'border-black/[0.06] bg-[linear-gradient(135deg,#eff8f2_0%,#f8fcf9_45%,#edf5ef_100%)] dark:border-white/[0.07] dark:bg-[linear-gradient(135deg,#17261d_0%,#1b221e_45%,#151a17_100%)]'
+                    : 'border-black/[0.06] bg-[linear-gradient(135deg,#fff7e8_0%,#fdf8ef_45%,#f5efe2_100%)] dark:border-white/[0.07] dark:bg-[linear-gradient(135deg,#3a2e1b_0%,#302819_45%,#241f16_100%)]'
+                }`}
                 style={{
-                  background: nextAssignment.status === 'confirmed'
-                    ? 'linear-gradient(135deg, #eff8f2 0%, #f8fcf9 45%, #edf5ef 100%)'
-                    : 'linear-gradient(135deg, #fff7e8 0%, #fdf8ef 45%, #f5efe2 100%)',
                   boxShadow: '0 20px 46px -26px rgba(15,23,42,0.14), 0 1px 2px rgba(15,23,42,0.08)',
                 }}
               >
-                <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full pointer-events-none"
+                <div className="absolute right-[-2.5rem] top-1/2 h-32 w-32 -translate-y-1/2 rounded-full pointer-events-none"
                   style={{
                     background: nextAssignment.status === 'confirmed'
-                      ? 'radial-gradient(circle, rgba(29,185,84,0.26), transparent 70%)'
-                      : 'radial-gradient(circle, rgba(255,164,43,0.18), transparent 70%)',
-                    filter: 'blur(16px)', opacity: 0.7,
+                      ? 'radial-gradient(circle, rgba(29,185,84,0.18), transparent 68%)'
+                      : 'radial-gradient(circle, rgba(255,196,92,0.22), transparent 68%)',
+                    filter: 'blur(14px)', opacity: 0.62,
                   }}
                 />
 
@@ -708,7 +709,7 @@ export function Dashboard() {
                       )}
                     </div>
                   </div>
-                  <ChevronRight className="h-4 w-4 text-white/26 group-hover:translate-x-0.5 group-hover:text-white/58 transition-all shrink-0" />
+                  <ChevronRight className="h-4 w-4 text-gray-300 group-hover:translate-x-0.5 group-hover:text-gray-500 transition-all shrink-0 dark:text-white/26 dark:group-hover:text-white/58" />
                 </div>
               </div>
             </button>

@@ -242,7 +242,9 @@ function BirthdayCard({ name, date }: { name: string; date: string }) {
   const [announcementId, setAnnouncementId] = useState<string | null>(null);
 
   const firstName = name.split(' ')[0];
-  const isToday = date === format(new Date(), 'yyyy-MM-dd');
+  const today = startOfDay(new Date());
+  const isToday = date === format(today, 'yyyy-MM-dd');
+  const daysUntilBirthday = differenceInDays(parseISO(date), today);
 
   // On mount, check if a birthday announcement already exists today
   // and whether this user has already wished
@@ -308,16 +310,19 @@ function BirthdayCard({ name, date }: { name: string; date: string }) {
 
   return (
     <div
-      className="relative flex items-center gap-4 overflow-hidden rounded-[1.5rem] border border-pink-200/40 bg-[linear-gradient(135deg,rgba(236,72,153,0.08)_0%,rgba(168,85,247,0.05)_60%,transparent_100%)] px-4 py-4 shadow-[0_1px_3px_rgba(236,72,153,0.08),0_4px_16px_-8px_rgba(236,72,153,0.12)] dark:border-pink-400/8 dark:bg-[linear-gradient(135deg,rgba(236,72,153,0.08)_0%,rgba(168,85,247,0.05)_42%,rgba(255,255,255,0.01)_100%)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.22),0_8px_22px_-16px_rgba(236,72,153,0.10)]"
+      className="relative flex items-center gap-4 overflow-hidden rounded-[1.5rem] border border-black/[0.06] bg-white px-4 py-4 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_4px_16px_-10px_rgba(15,23,42,0.08)] dark:border-white/[0.07] dark:bg-[#1e1e21]"
+      style={{
+        backgroundImage: 'linear-gradient(135deg, rgba(236,72,153,0.07) 0%, rgba(168,85,247,0.035) 42%, transparent 78%)',
+      }}
     >
       {/* Subtle shimmer highlight */}
-      <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-pink-300/30 to-transparent" />
+      <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-pink-300/16 to-transparent dark:via-pink-300/10" />
 
       {/* Birthday date chip */}
       <div
-        className="relative flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-[0.7rem] border border-pink-200/90 bg-[linear-gradient(145deg,#fff4fb,#f7ebff)] shadow-[0_10px_24px_rgba(236,72,153,0.16)] dark:border-pink-400/12 dark:bg-[linear-gradient(145deg,#25151d,#1b151b)] dark:shadow-[0_8px_18px_rgba(236,72,153,0.10)]"
+        className="relative flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-[0.7rem] border border-black/[0.08] bg-[linear-gradient(145deg,#ffffff,#faf2fb)] shadow-[0_10px_24px_rgba(15,23,42,0.10)] dark:border-white/[0.08] dark:bg-[linear-gradient(145deg,#2a1a22,#1d171d)] dark:shadow-[0_10px_22px_rgba(0,0,0,0.28)]"
       >
-        <span className="text-[9px] font-black uppercase tracking-widest leading-none text-pink-500 dark:text-pink-300">
+        <span className="text-[9px] font-black uppercase tracking-widest leading-none text-pink-500 dark:text-pink-300/88">
           {format(parseISO(date), 'MMM')}
         </span>
         <span className="mt-0.5 text-[24px] font-black leading-none text-gray-900 dark:text-white" style={{ letterSpacing: '-0.05em' }}>
@@ -326,7 +331,7 @@ function BirthdayCard({ name, date }: { name: string; date: string }) {
         <span className="mt-0.5 text-[8px] font-bold leading-none text-gray-500 dark:text-white/42">
           {format(parseISO(date), 'EEE')}
         </span>
-        <div className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[linear-gradient(145deg,#ec4899,#a855f7)] text-[9px] shadow-[0_4px_10px_rgba(236,72,153,0.32)]">
+        <div className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[linear-gradient(145deg,#f3a8c9,#d8b4fe)] text-[9px] shadow-[0_3px_8px_rgba(236,72,153,0.12)] dark:bg-[linear-gradient(145deg,#8f496c,#7c5aa4)] dark:shadow-[0_3px_8px_rgba(236,72,153,0.08)]">
           <span className="leading-none">🎂</span>
         </div>
       </div>
@@ -378,7 +383,7 @@ function BirthdayCard({ name, date }: { name: string; date: string }) {
           title={`Greetings open on ${format(parseISO(date), 'MMMM d')}`}
         >
           <PartyPopper className="h-3.5 w-3.5" />
-          {format(parseISO(date), 'MMM d')}
+          {daysUntilBirthday === 1 ? '1 day' : `${daysUntilBirthday} days`}
         </div>
       )}
     </div>

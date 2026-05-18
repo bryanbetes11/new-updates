@@ -270,6 +270,17 @@
     touch-action: pan-y;
   }
 
+  .mobile-vertical-scroll-page :where(
+    section,
+    article,
+    div,
+    button,
+    a,
+    [role="button"]
+  ) {
+    touch-action: pan-y;
+  }
+
   @supports not (overflow-x: clip) {
     .mobile-vertical-scroll-page {
       overflow-x: hidden;

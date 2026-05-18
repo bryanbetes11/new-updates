@@ -357,7 +357,6 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
     { icon: Video, label: 'Videos', desc: 'Training and reference videos', path: '/videos', show: true, color: '#0ea5e9' },
     { icon: ListChecks, label: 'Sets', desc: 'Past event sets', path: '/sets', show: true, color: '#10b981' },
     { icon: Calendar, label: 'Request Leave', desc: 'Submit unavailability', path: '/request-leave', show: true, color: '#f59e0b' },
-    { icon: Bell, label: 'Notifications', desc: 'View all notifications', path: '/notifications', show: true, color: '#ec4899' },
   ];
 
   const leadershipMenuItems: typeof baseProfileMenuItems = [

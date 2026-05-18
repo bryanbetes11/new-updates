@@ -20,7 +20,8 @@ export function Layout() {
   const staticHideNav = ['/', '/login', '/register', '/onboarding', '/reset-password', '/create-church'].includes(location.pathname)
     || /^\/invite\/[^/]+$/.test(location.pathname);
   const isEventDetail = /^\/events\/[^/]+$/.test(location.pathname);
-  const isAnnouncementDetail = /^\/announcements\/[^/]+$/.test(location.pathname);
+  const isAnnouncementCreate = location.pathname === '/announcements/new';
+  const isAnnouncementDetail = /^\/announcements\/[^/]+$/.test(location.pathname) && !isAnnouncementCreate;
   const isMessagesPage = location.pathname.startsWith('/messages');
   const isMessagesConversation = /^\/messages\/[^/]+$/.test(location.pathname);
   const isDashboardPage = location.pathname === '/dashboard';
@@ -38,6 +39,7 @@ export function Layout() {
     || isEventsPage
     || isEventDetail
     || isAnnouncementsPage
+    || isAnnouncementCreate
     || isAnnouncementDetail
     || isSongsPage
     || isVideosPage

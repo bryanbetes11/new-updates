@@ -157,7 +157,7 @@ export function DatePicker({ value, onChange, placeholder = 'Select date', requi
         <div
           ref={panelRef}
           className="fixed w-72 rounded-xl bg-white dark:bg-gray-800 shadow-xl ring-1 ring-gray-200 dark:ring-gray-700 p-4 animate-scale-in"
-          style={{ top: pos.top, left: pos.left, zIndex: 99999 }}
+          style={{ top: pos.top, left: pos.left, zIndex: 2147483647 }}
         >
           {pickerMode === 'days' && (
             <>

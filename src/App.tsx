@@ -14,6 +14,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Events } from './pages/Events';
 import { EventDetail } from './pages/EventDetail';
 import { Announcements } from './pages/Announcements';
+import { AnnouncementCreate } from './pages/AnnouncementCreate';
 import { AnnouncementDetail } from './pages/AnnouncementDetail';
 import { Songs } from './pages/Songs';
 import { Videos } from './pages/Videos';
@@ -154,6 +155,7 @@ export default function App() {
                   <Route path="/events" element={<Events />} />
                   <Route path="/events/:id" element={<EventDetail />} />
                   <Route path="/announcements" element={<Announcements />} />
+                  <Route path="/announcements/new" element={<AnnouncementCreate />} />
                   <Route path="/announcements/:id" element={<AnnouncementDetail />} />
                   <Route path="/library" element={<Navigate to="/songs" replace />} />
                   <Route path="/songs" element={<Songs />} />

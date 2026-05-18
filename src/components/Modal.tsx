@@ -24,20 +24,64 @@ const desktopSizes = {
 };
 
 const MODAL_LOCK_ATTR = 'data-modal-lock-count';
+const MODAL_LOCK_PREVIOUS_STYLES_ATTR = 'data-modal-lock-previous-styles';
+
+interface ScrollLockSnapshot {
+  htmlOverflow: string;
+  htmlOverscrollBehavior: string;
+  bodyOverflow: string;
+  bodyOverscrollBehavior: string;
+}
+
+function readScrollLockSnapshot(): ScrollLockSnapshot | null {
+  const rawSnapshot = document.body.getAttribute(MODAL_LOCK_PREVIOUS_STYLES_ATTR);
+  if (!rawSnapshot) return null;
+
+  try {
+    return JSON.parse(rawSnapshot) as ScrollLockSnapshot;
+  } catch {
+    return null;
+  }
+}
+
+function writeScrollLockSnapshot(snapshot: ScrollLockSnapshot) {
+  document.body.setAttribute(MODAL_LOCK_PREVIOUS_STYLES_ATTR, JSON.stringify(snapshot));
+}
 
 function lockBodyScroll() {
+  const root = document.documentElement;
   const body = document.body;
   const nextCount = Number(body.getAttribute(MODAL_LOCK_ATTR) || '0') + 1;
+
+  if (nextCount === 1) {
+    writeScrollLockSnapshot({
+      htmlOverflow: root.style.overflow,
+      htmlOverscrollBehavior: root.style.overscrollBehavior,
+      bodyOverflow: body.style.overflow,
+      bodyOverscrollBehavior: body.style.overscrollBehavior,
+    });
+  }
+
   body.setAttribute(MODAL_LOCK_ATTR, String(nextCount));
+  root.style.overflow = 'hidden';
+  root.style.overscrollBehavior = 'none';
   body.style.overflow = 'hidden';
+  body.style.overscrollBehavior = 'none';
 
   return () => {
     const currentCount = Number(body.getAttribute(MODAL_LOCK_ATTR) || '1');
     const nextCount = Math.max(0, currentCount - 1);
 
     if (nextCount === 0) {
+      const snapshot = readScrollLockSnapshot();
+
       body.removeAttribute(MODAL_LOCK_ATTR);
-      body.style.overflow = '';
+      body.removeAttribute(MODAL_LOCK_PREVIOUS_STYLES_ATTR);
+
+      root.style.overflow = snapshot?.htmlOverflow || '';
+      root.style.overscrollBehavior = snapshot?.htmlOverscrollBehavior || '';
+      body.style.overflow = snapshot?.bodyOverflow || '';
+      body.style.overscrollBehavior = snapshot?.bodyOverscrollBehavior || '';
     } else {
       body.setAttribute(MODAL_LOCK_ATTR, String(nextCount));
     }
@@ -150,7 +194,7 @@ export function Modal({
           <div className="absolute top-3 left-1/2 -translate-x-1/2 w-8 h-1 rounded-full bg-gray-200 dark:bg-gray-700 sm:hidden z-10" />
         )}
         <div
-          className={`overflow-y-auto overflow-x-hidden flex-1 px-5 py-5 scrollbar-thin overscroll-contain ${bodyClassName}`}
+          className={`overflow-y-auto overflow-x-hidden flex-1 px-5 py-5 scrollbar-thin overscroll-contain touch-action-pan-y ${bodyClassName}`}
           style={isMobilePage ? { paddingBottom: 'calc(env(safe-area-inset-bottom) + 1.25rem)' } : undefined}
           data-modal-body
         >

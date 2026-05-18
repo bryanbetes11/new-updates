@@ -1,8 +1,8 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import {
-  Megaphone, Plus, Eye, AlertTriangle, AlertCircle, Image, X, Type, Camera, Trash2,
+  Megaphone, Plus, Eye, AlertTriangle, AlertCircle,
   Pin, Lock, MessageCircle, Smile, ChevronRight,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -10,17 +10,15 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { Modal } from '../components/Modal';
-import { Select } from '../components/Select';
 import { AnnouncementsSkeleton } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
 import { Avatar } from '../components/Avatar';
-import { MentionTextarea } from '../components/MentionTextarea';
+import { AnnouncementComposerForm } from '../components/AnnouncementComposerForm';
 import type { Announcement, AnnouncementReaction, AnnouncementPin } from '../types';
 import { withRequestTimeout } from '../lib/requestTimeout';
 
-interface ContentBlock { type: 'text' | 'image'; content: string; }
 type AnnouncementWithBlocks = Announcement & {
-  content_blocks?: ContentBlock[];
+  content_blocks?: { type: 'text' | 'image'; content: string }[];
   is_leaders_only?: boolean;
   announcement_reactions?: AnnouncementReaction[];
   announcement_pins?: AnnouncementPin[];
@@ -82,15 +80,30 @@ export function Announcements() {
   const [announcements, setAnnouncements] = useState<AnnouncementWithBlocks[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [formTitle, setFormTitle] = useState('');
-  const [formPriority, setFormPriority] = useState<'normal' | 'high' | 'urgent'>('normal');
-  const [formLeadersOnly, setFormLeadersOnly] = useState(false);
-  const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([{ type: 'text', content: '' }]);
-  const [uploading, setUploading] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(() => typeof window === 'undefined' ? true : window.matchMedia('(min-width: 1024px)').matches);
   const [emojiPickerId, setEmojiPickerId] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mediaQuery = window.matchMedia('(min-width: 1024px)');
+    const update = () => setIsDesktop(mediaQuery.matches);
+
+    update();
+    mediaQuery.addEventListener('change', update);
+    return () => mediaQuery.removeEventListener('change', update);
+  }, []);
+
+  const openCreateAnnouncement = () => {
+    const shouldUseDesktopModal = typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches;
+
+    if (shouldUseDesktopModal) {
+      setShowCreate(true);
+      return;
+    }
+
+    setShowCreate(false);
+    navigate('/announcements/new');
+  };
 
   const fetchAnnouncements = useCallback(async () => {
     const emptyList = { data: [], error: null };
@@ -149,50 +162,6 @@ export function Announcements() {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [fetchAnnouncements]);
-
-  const uploadImage = async (file: File): Promise<string | null> => {
-    if (!user) return null;
-    const ext = file.name.split('.').pop();
-    const path = `${user.id}/${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from('announcements').upload(path, file);
-    if (error) { toast('error', 'Failed to upload image'); return null; }
-    const { data: urlData } = supabase.storage.from('announcements').getPublicUrl(path);
-    return urlData.publicUrl;
-  };
-
-  const handleFileSelect = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    setUploading(true);
-    for (const file of Array.from(files)) {
-      if (!file.type.startsWith('image/')) continue;
-      const url = await uploadImage(file);
-      if (url) setContentBlocks(prev => [...prev, { type: 'image', content: url }]);
-    }
-    setUploading(false);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-    if (cameraInputRef.current) cameraInputRef.current.value = '';
-  };
-
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
-    const blocks = contentBlocks.filter(b => b.content.trim());
-    if (blocks.length === 0) { toast('error', 'Please add some content'); return; }
-    setCreating(true);
-    const plainContent = blocks.filter(b => b.type === 'text').map(b => b.content).join('\n');
-    const firstImage = blocks.find(b => b.type === 'image');
-    const { error } = await supabase.from('announcements').insert({
-      title: formTitle, content: plainContent || ' ', priority: formPriority, created_by: user.id,
-      media_url: firstImage?.content || '', content_blocks: blocks, is_leaders_only: formLeadersOnly,
-    });
-    setCreating(false);
-    if (error) { toast('error', 'Failed to create announcement'); return; }
-    toast('success', 'Announcement posted');
-    setShowCreate(false);
-    setFormTitle(''); setFormPriority('normal'); setFormLeadersOnly(false);
-    setContentBlocks([{ type: 'text', content: '' }]);
-    fetchAnnouncements();
-  };
 
   const handleReact = async (e: React.MouseEvent, announcementId: string, emoji: string) => {
     e.stopPropagation();
@@ -322,7 +291,7 @@ export function Announcements() {
             </div>
             {isLeader && (
               <button
-                onClick={() => setShowCreate(true)}
+                onClick={openCreateAnnouncement}
                 className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full px-5 text-[12px] font-black text-white shadow-[0_12px_28px_-16px_rgba(180,83,9,0.9)] transition-all active:scale-[0.97]"
                 style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}
               >
@@ -338,7 +307,7 @@ export function Announcements() {
             icon={<Megaphone className="h-8 w-8" />}
             title="No announcements"
             description="Be the first to share something with the team."
-            action={isLeader ? <button onClick={() => setShowCreate(true)} className="btn-primary"><Plus className="h-4 w-4" /> Post Announcement</button> : undefined}
+            action={isLeader ? <button onClick={openCreateAnnouncement} className="btn-primary"><Plus className="h-4 w-4" /> Post Announcement</button> : undefined}
           />
         ) : (
           <motion.div
@@ -504,67 +473,14 @@ export function Announcements() {
       </div>
 
       {/* ── Create Modal ──────────────────────────────── */}
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="New Announcement" size="lg">
-        <form onSubmit={handleCreate} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Title</label>
-            <input type="text" value={formTitle} onChange={e => setFormTitle(e.target.value)} className="input-field" required />
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Priority</label>
-              <Select value={formPriority} onChange={v => setFormPriority(v as 'normal' | 'high' | 'urgent')} options={[{ value: 'normal', label: 'Normal' }, { value: 'high', label: 'High' }, { value: 'urgent', label: 'Urgent' }]} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Visibility</label>
-              <button type="button" onClick={() => setFormLeadersOnly(s => !s)}
-                className={`inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-medium border transition-colors ${formLeadersOnly ? 'bg-brand-50 dark:bg-brand-900/20 border-brand-300 dark:border-brand-700 text-brand-700 dark:text-brand-300' : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400'}`}
-              >
-                <Lock className="h-4 w-4" />{formLeadersOnly ? 'Leaders Only' : 'All Members'}
-              </button>
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Content</label>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">Format: **bold**, *italic*, ~~strikethrough~~, `code`, @mention</p>
-            <div className="space-y-3">
-              {contentBlocks.map((block, index) => (
-                <div key={index} className="relative group">
-                  {block.type === 'text' ? (
-                    <div className="relative">
-                      <MentionTextarea
-                        value={block.content}
-                        onChange={v => setContentBlocks(prev => prev.map((b, i) => i === index ? { ...b, content: v } : b))}
-                        className="input-field min-h-[180px] pr-8"
-                        placeholder="Write something… (type @ to mention someone)"
-                        rows={7}
-                      />
-                      {contentBlocks.length > 1 && (
-                        <button type="button" onClick={() => setContentBlocks(prev => prev.filter((_, i) => i !== index))} className="absolute top-2 right-2 p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-gray-800 opacity-0 group-hover:opacity-100 transition-all"><X className="h-3.5 w-3.5" /></button>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="relative rounded-xl overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700">
-                      <img src={block.content} alt="" className="w-full max-h-60 object-contain bg-gray-100 dark:bg-gray-800" />
-                      <button type="button" onClick={() => setContentBlocks(prev => prev.filter((_, i) => i !== index))} className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/50 text-white hover:bg-black/70 transition-colors"><Trash2 className="h-3.5 w-3.5" /></button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="flex items-center gap-2 pt-1">
-            <button type="button" onClick={() => setContentBlocks(prev => [...prev, { type: 'text', content: '' }])} className="btn-ghost text-xs"><Type className="h-3.5 w-3.5" /> Add Text</button>
-            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="btn-ghost text-xs"><Image className="h-3.5 w-3.5" /> {uploading ? 'Uploading…' : 'Add Photo'}</button>
-            <button type="button" onClick={() => cameraInputRef.current?.click()} disabled={uploading} className="btn-ghost text-xs"><Camera className="h-3.5 w-3.5" /> Take Photo</button>
-            <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={e => handleFileSelect(e.target.files)} />
-            <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={e => handleFileSelect(e.target.files)} />
-          </div>
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={() => setShowCreate(false)} className="btn-secondary">Cancel</button>
-            <button type="submit" disabled={creating} className="btn-primary">{creating ? 'Posting…' : 'Post Announcement'}</button>
-          </div>
-        </form>
+      <Modal open={showCreate && isDesktop} onClose={() => setShowCreate(false)} title="New Announcement" size="lg">
+        <AnnouncementComposerForm
+          onCancel={() => setShowCreate(false)}
+          onSuccess={async () => {
+            setShowCreate(false);
+            await fetchAnnouncements();
+          }}
+        />
       </Modal>
     </div>
   );

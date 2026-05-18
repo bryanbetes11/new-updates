@@ -1327,70 +1327,76 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.05, ease: [0.16, 1, 0.3, 1] }}
-        className="relative"
+        className="flex items-center gap-2"
       >
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-        <input
-          type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search songs by title or artist…"
-          className="w-full h-10 pl-10 pr-9 rounded-2xl text-[13px] bg-white dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.08] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/30 outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 dark:focus:border-emerald-500/50 transition-all"
-        />
-        {search && (
-          <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
-            <X className="h-4 w-4" />
-          </button>
-        )}
+        <div className="relative flex-1">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search songs by title or artist…"
+            className="w-full h-10 pl-10 pr-9 rounded-2xl text-[13px] bg-white dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.08] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/30 outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 dark:focus:border-emerald-500/50 transition-all"
+          />
+          {search && (
+            <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            if (selectModeSongs) {
+              setSelectModeSongs(false);
+              setSelectedSongs(new Set());
+            } else {
+              setSelectModeSongs(true);
+            }
+          }}
+          aria-label={selectModeSongs ? 'Exit selection mode' : 'Select songs'}
+          className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border transition-colors active:scale-[0.97] ${
+            selectModeSongs
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/25 dark:bg-emerald-500/[0.12] dark:text-emerald-300'
+              : 'border-black/[0.06] bg-white/70 text-gray-600 hover:bg-white dark:border-white/[0.07] dark:bg-white/[0.04] dark:text-white/55 dark:hover:bg-white/[0.07]'
+          }`}
+        >
+          {selectModeSongs ? <X className="h-4 w-4" /> : <CheckSquare className="h-4 w-4" />}
+        </button>
       </motion.div>
 
       {/* ── Bulk action bar ── */}
-      {filteredSongs.length > 0 && (
+      {filteredSongs.length > 0 && selectModeSongs && (
         <div className="flex items-center gap-2">
-          {selectModeSongs ? (
-            <>
+          <button
+            onClick={toggleAllSongs}
+            className="flex items-center gap-2 text-[12px] font-semibold text-gray-500 dark:text-white/45 hover:text-gray-800 dark:hover:text-white/80 transition-colors"
+          >
+            {selectedSongs.size === filteredSongs.length && filteredSongs.length > 0
+              ? <CheckSquare className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              : <Square className="h-4 w-4 text-gray-300 dark:text-white/20" />}
+            <span>{selectedSongs.size > 0 ? `${selectedSongs.size} selected` : 'Select all'}</span>
+          </button>
+          <div className="flex-1" />
+          {selectedSongs.size > 0 ? (
+            <div className="flex items-center gap-2 animate-fade-in">
+              <button onClick={() => setSelectedSongs(new Set())} className="text-[11px] font-semibold text-gray-400 dark:text-white/35 hover:text-gray-600 dark:hover:text-white/55 transition-colors">Clear</button>
               <button
-                onClick={toggleAllSongs}
-                className="flex items-center gap-2 text-[12px] font-semibold text-gray-500 dark:text-white/45 hover:text-gray-800 dark:hover:text-white/80 transition-colors"
+                onClick={() => setShowDeleteConfirm('songs')}
+                className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-semibold text-white bg-red-600 hover:bg-red-700 transition-colors active:scale-[0.97]"
+                style={{ boxShadow: '0 3px 10px rgba(220,38,38,0.3)' }}
               >
-                {selectedSongs.size === filteredSongs.length && filteredSongs.length > 0
-                  ? <CheckSquare className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                  : <Square className="h-4 w-4 text-gray-300 dark:text-white/20" />}
-                <span>{selectedSongs.size > 0 ? `${selectedSongs.size} selected` : 'Select all'}</span>
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete ({selectedSongs.size})
               </button>
-              <div className="flex-1" />
-              {selectedSongs.size > 0 ? (
-                <div className="flex items-center gap-2 animate-fade-in">
-                  <button onClick={() => setSelectedSongs(new Set())} className="text-[11px] font-semibold text-gray-400 dark:text-white/35 hover:text-gray-600 dark:hover:text-white/55 transition-colors">Clear</button>
-                  <button
-                    onClick={() => setShowDeleteConfirm('songs')}
-                    className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-semibold text-white bg-red-600 hover:bg-red-700 transition-colors active:scale-[0.97]"
-                    style={{ boxShadow: '0 3px 10px rgba(220,38,38,0.3)' }}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    Delete ({selectedSongs.size})
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => { setSelectModeSongs(false); setSelectedSongs(new Set()); }}
-                  className="text-[11px] font-semibold text-gray-400 dark:text-white/35 hover:text-gray-600 dark:hover:text-white/55 transition-colors"
-                >
-                  Cancel
-                </button>
-              )}
-            </>
+            </div>
           ) : (
-            <>
-              <div className="flex-1" />
-              <button
-                onClick={() => setSelectModeSongs(true)}
-                className="inline-flex items-center gap-1.5 px-3 h-8 text-[11px] font-semibold text-gray-600 dark:text-white/55 rounded-full bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-md hover:bg-white dark:hover:bg-white/[0.07] transition-colors active:scale-[0.97]"
-              >
-                <CheckSquare className="h-3.5 w-3.5" />
-                Select
-              </button>
-            </>
+            <button
+              onClick={() => { setSelectModeSongs(false); setSelectedSongs(new Set()); }}
+              className="text-[11px] font-semibold text-gray-400 dark:text-white/35 hover:text-gray-600 dark:hover:text-white/55 transition-colors"
+            >
+              Cancel
+            </button>
           )}
         </div>
       )}

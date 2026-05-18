@@ -748,7 +748,7 @@ export function Events() {
   if (loading) return <div className="page-container"><EventsSkeleton /></div>;
 
   return (
-    <div className="page-container page-bottom-pad overflow-x-hidden">
+    <div className="page-container page-bottom-pad mobile-vertical-scroll-page">
       <div className="max-w-2xl lg:max-w-6xl xl:max-w-[1560px] mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-5 pb-0 space-y-5 sm:space-y-6">
 
         {/* ── Schedule Command Center ── */}

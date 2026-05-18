@@ -250,7 +250,9 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
   const fullName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim();
   const useDockedMobileNav = mobileNavStyle === 'docked';
   const hideMobileChrome = mobileChromeHidden && !mobileOpen;
+  const hideDockedMobileNav = useDockedMobileNav && hideMobileChrome;
   const mobileMenuTranslateX = mobileOpen ? 'translateX(min(82vw, 340px))' : 'translateX(0)';
+  const mobileNavTransform = `${mobileMenuTranslateX} ${hideDockedMobileNav ? 'translateY(calc(100% + 10px))' : 'translateY(0)'}`;
   const mobileHeaderTransform = mobileMenuTranslateX;
 
   const sidebarWidth = collapsed ? 72 : 256;
@@ -1143,11 +1145,12 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
             backdropFilter: useDockedMobileNav ? 'blur(18px) saturate(160%) contrast(104%)' : undefined,
             borderTop: useDockedMobileNav ? '1px solid var(--sidebar-border)' : undefined,
             boxShadow: useDockedMobileNav ? '0 -18px 42px -34px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.08)' : undefined,
-            transform: mobileMenuTranslateX,
+            transform: mobileNavTransform,
             filter: mobileOpen ? 'blur(1.25px) brightness(0.78)' : 'blur(0px) brightness(1)',
+            opacity: hideDockedMobileNav ? 0 : 1,
             pointerEvents: hideMobileChrome ? 'none' : undefined,
-            transition: 'transform 260ms cubic-bezier(0.22, 1, 0.36, 1), filter 260ms cubic-bezier(0.22, 1, 0.36, 1)',
-            willChange: 'transform',
+            transition: 'transform 360ms cubic-bezier(0.16, 1, 0.3, 1), opacity 180ms cubic-bezier(0.4, 0, 0.2, 1), filter 260ms cubic-bezier(0.22, 1, 0.36, 1)',
+            willChange: 'transform, opacity',
           }}
         >
           <motion.div
@@ -1194,7 +1197,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
                   <button
                     key={item.path}
                     onClick={() => navigate(item.path)}
-                    className={`relative flex flex-1 items-center justify-center min-w-[44px] ${useDockedMobileNav ? 'h-[56px]' : 'h-12'}`}
+                    className={`relative flex flex-1 min-w-[44px] flex-col items-center justify-center gap-0.5 ${useDockedMobileNav ? 'h-[56px] pt-1' : 'h-12'}`}
                     style={{ WebkitTapHighlightColor: 'transparent' }}
                   >
                     {active && !useDockedMobileNav && (
@@ -1215,6 +1218,13 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
                       />
                       <MobileBadge count={badge} color={item.badgeColor} />
                     </div>
+                    <span
+                      className={`relative max-w-[4.25rem] truncate font-black leading-none transition-colors ${
+                        useDockedMobileNav ? 'text-[10px]' : 'text-[9px]'
+                      } ${active ? 'text-brand-600 dark:text-brand-400' : 'text-black/45 dark:text-white/42'}`}
+                    >
+                      {item.label}
+                    </span>
                   </button>
                 );
               })}

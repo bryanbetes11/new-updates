@@ -152,13 +152,6 @@ export function Dashboard() {
   const todayVerse = verses[new Date().getDay() % verses.length];
 
   useEffect(() => {
-    document.body.classList.add('allow-native-pull-refresh');
-    return () => {
-      document.body.classList.remove('allow-native-pull-refresh');
-    };
-  }, []);
-
-  useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(id);
   }, []);

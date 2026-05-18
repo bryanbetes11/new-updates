@@ -166,7 +166,7 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
   return (
     <button
       onClick={() => onEventClick(event.id)}
-      className="card-hover group relative w-full flex items-center gap-3.5 px-4 py-3.5 text-left overflow-hidden"
+      className="card-hover touch-action-pan-y group relative w-full flex items-center gap-3.5 px-4 py-3.5 text-left overflow-hidden"
       style={{ borderRadius: '1.5rem', opacity: isPast ? 0.6 : 1, backgroundImage: cardTint }}
     >
       <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.05] dark:via-white/[0.09] to-transparent" />
@@ -310,7 +310,7 @@ function BirthdayCard({ name, date }: { name: string; date: string }) {
 
   return (
     <div
-      className="relative flex items-center gap-4 overflow-hidden rounded-[1.5rem] border border-black/[0.06] bg-white px-4 py-4 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_4px_16px_-10px_rgba(15,23,42,0.08)] dark:border-white/[0.07] dark:bg-[#1e1e21]"
+      className="touch-action-pan-y relative flex items-center gap-4 overflow-hidden rounded-[1.5rem] border border-black/[0.06] bg-white px-4 py-4 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_4px_16px_-10px_rgba(15,23,42,0.08)] dark:border-white/[0.07] dark:bg-[#1e1e21]"
       style={{
         backgroundImage: 'linear-gradient(135deg, rgba(236,72,153,0.07) 0%, rgba(168,85,247,0.035) 42%, transparent 78%)',
       }}
@@ -362,7 +362,7 @@ function BirthdayCard({ name, date }: { name: string; date: string }) {
         <button
           onClick={handleWish}
           disabled={wishing || wished}
-          className="shrink-0 inline-flex items-center gap-1.5 px-3.5 h-8 rounded-full text-[12px] font-semibold transition-all active:scale-95 disabled:opacity-60"
+          className="touch-action-pan-y shrink-0 inline-flex items-center gap-1.5 px-3.5 h-8 rounded-full text-[12px] font-semibold transition-all active:scale-95 disabled:opacity-60"
           style={wished
             ? { background: 'rgba(22,163,74,0.12)', color: '#16a34a', border: '1px solid rgba(22,163,74,0.25)' }
             : { background: 'linear-gradient(135deg, #ec4899, #a855f7)', color: '#fff', boxShadow: '0 3px 10px rgba(236,72,153,0.3)' }
@@ -378,7 +378,7 @@ function BirthdayCard({ name, date }: { name: string; date: string }) {
         </button>
       ) : (
         <div
-          className="shrink-0 inline-flex items-center gap-1.5 px-3.5 h-8 rounded-full text-[12px] font-semibold cursor-not-allowed select-none"
+          className="touch-action-pan-y shrink-0 inline-flex items-center gap-1.5 px-3.5 h-8 rounded-full text-[12px] font-semibold cursor-not-allowed select-none"
           style={{ background: 'rgba(236,72,153,0.08)', color: 'rgba(236,72,153,0.4)', border: '1px solid rgba(236,72,153,0.15)' }}
           title={`Greetings open on ${format(parseISO(date), 'MMMM d')}`}
         >
@@ -390,7 +390,7 @@ function BirthdayCard({ name, date }: { name: string; date: string }) {
   );
 }
 
-const itemAnim = { hidden: { opacity: 0, y: 10, filter: 'blur(4px)' }, show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] as [number,number,number,number] } } };
+const itemAnim = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] as [number,number,number,number] } } };
 
 const createEmptyEventForm = (eventDate = ''): EventFormState => ({
   title: '',
@@ -403,8 +403,8 @@ const createEmptyEventForm = (eventDate = ''): EventFormState => ({
   linked_event_id: '',
 });
 
-function EventList({ events, calendarEntries, songLeaderMap, setlistInfoMap, onEventClick, showPast }: {
-  events: Event[]; calendarEntries: CalendarEntry[]; songLeaderMap?: Record<string, string>; setlistInfoMap?: Record<string, SetlistInfo>; onEventClick: (id: string) => void; showPast?: boolean;
+function EventList({ events, calendarEntries, songLeaderMap, setlistInfoMap, onEventClick, showPast, animateItems = true }: {
+  events: Event[]; calendarEntries: CalendarEntry[]; songLeaderMap?: Record<string, string>; setlistInfoMap?: Record<string, SetlistInfo>; onEventClick: (id: string) => void; showPast?: boolean; animateItems?: boolean;
 }) {
   const today = startOfDay(new Date());
 
@@ -435,20 +435,43 @@ function EventList({ events, calendarEntries, songLeaderMap, setlistInfoMap, onE
 
   if (merged.length === 0) return null;
 
+  const renderItem = (item: ListItem) => (
+    item.kind === 'event' ? (
+      <EventCard event={item.event} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={onEventClick} isPast={showPast} />
+    ) : (
+      <BirthdayCard name={item.entry.name} date={item.entry.date} />
+    )
+  );
+
+  if (!animateItems) {
+    return (
+      <div className="touch-action-pan-y space-y-2.5">
+        {merged.map((item) => (
+          <div
+            key={item.kind === 'event' ? item.event.id : `bday-${item.entry.name}-${item.entry.date}`}
+            className="touch-action-pan-y"
+          >
+            {renderItem(item)}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <motion.div
       initial="hidden"
       animate="show"
       variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}
-      className="space-y-2.5"
+      className="touch-action-pan-y space-y-2.5"
     >
       {merged.map((item) => (
-        <motion.div key={item.kind === 'event' ? item.event.id : `bday-${item.entry.name}-${item.entry.date}`} variants={itemAnim}>
-          {item.kind === 'event' ? (
-            <EventCard event={item.event} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={onEventClick} isPast={showPast} />
-          ) : (
-            <BirthdayCard name={item.entry.name} date={item.entry.date} />
-          )}
+        <motion.div
+          key={item.kind === 'event' ? item.event.id : `bday-${item.entry.name}-${item.entry.date}`}
+          variants={itemAnim}
+          className="touch-action-pan-y"
+        >
+          {renderItem(item)}
         </motion.div>
       ))}
     </motion.div>
@@ -493,13 +516,6 @@ export function Events() {
   const [form, setForm] = useState<EventFormState>(() => createEmptyEventForm());
   const [customName, setCustomName] = useState('');
   const [sundayServices, setSundayServices] = useState<Event[]>([]);
-
-  useEffect(() => {
-    document.body.classList.add('allow-native-pull-refresh');
-    return () => {
-      document.body.classList.remove('allow-native-pull-refresh');
-    };
-  }, []);
 
   const fetchEvents = async () => {
     const emptyList = { data: [], error: null };
@@ -923,18 +939,11 @@ export function Events() {
                   onEventDateChange={isLeader ? handleEventDateChange : undefined}
                 />
               ) : (
-                <EventList events={filtered} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={id => navigate(`/events/${id}`)} showPast={activeTab === 'past'} />
+                <EventList events={filtered} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={id => navigate(`/events/${id}`)} showPast={activeTab === 'past'} animateItems />
               )}
             </motion.div>
-            <div className="lg:hidden">
-              <motion.div
-                key={activeTab}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-              >
-                <EventList events={filtered} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={id => navigate(`/events/${id}`)} showPast={activeTab === 'past'} />
-              </motion.div>
+            <div className="touch-action-pan-y lg:hidden">
+              <EventList events={filtered} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={id => navigate(`/events/${id}`)} showPast={activeTab === 'past'} animateItems={false} />
             </div>
           </>
         )}

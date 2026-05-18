@@ -86,10 +86,19 @@ export function Layout() {
     || isLeadershipPage;
   const hideNavMobile = staticHideNav || isAnnouncementDetail;
   const shouldShiftForMobileMenu = user && !staticHideNav && !isMessagesConversation && mobileOpen;
+  const shouldAllowNativePullRefresh =
+    isDashboardPage || isEventsPage || isEventDetail || isAnnouncementsPage || isAnnouncementDetail;
 
   useEffect(() => {
     rememberRoute(buildAppRoute(location.pathname, location.search, location.hash));
   }, [location.hash, location.pathname, location.search]);
+
+  useEffect(() => {
+    document.body.classList.toggle('allow-native-pull-refresh', shouldAllowNativePullRefresh);
+    return () => {
+      document.body.classList.remove('allow-native-pull-refresh');
+    };
+  }, [shouldAllowNativePullRefresh]);
 
   useEffect(() => {
     if (staticHideNav || isMessagesConversation || mobileOpen) {

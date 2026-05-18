@@ -472,7 +472,6 @@ export function Events() {
   const navigate = useNavigate();
   const location = useLocation();
   const isDesktop = useIsDesktop();
-  const [tabDir, setTabDir] = useState<'left' | 'right'>('left');
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -748,8 +747,11 @@ export function Events() {
   if (loading) return <div className="page-container"><EventsSkeleton /></div>;
 
   return (
-    <div className="page-container page-bottom-pad mobile-vertical-scroll-page">
-      <div className="max-w-2xl lg:max-w-6xl xl:max-w-[1560px] mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-5 pb-0 space-y-5 sm:space-y-6">
+    <div className="page-container page-bottom-pad relative overflow-hidden bg-[#f6f4ef] text-gray-900 dark:bg-[#121212] dark:text-white">
+      <div
+        className="pointer-events-none fixed inset-0 -z-10 bg-[#f6f4ef] dark:bg-[#121212]"
+      />
+      <div className="relative max-w-2xl lg:max-w-6xl xl:max-w-[1560px] mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-5 pb-6 space-y-5 sm:space-y-6">
 
         {/* ── Schedule Command Center ── */}
         <motion.section
@@ -833,12 +835,7 @@ export function Events() {
                   <button
                     type="button"
                     key={tab}
-                    onClick={() => {
-                      if (tab !== activeTab) {
-                        setTabDir(tab === 'past' ? 'left' : 'right');
-                        setActiveTab(tab);
-                      }
-                    }}
+                    onClick={() => setActiveTab(tab)}
                     className={`relative z-10 flex-1 touch-manipulation flex items-center justify-center gap-2 py-2.5 rounded-2xl text-[13px] font-black transition-all duration-200 ${
                       active
                         ? 'bg-white text-gray-950 shadow-sm ring-1 ring-black/[0.04] dark:bg-white/[0.09] dark:text-white dark:ring-white/[0.08]'
@@ -896,10 +893,8 @@ export function Events() {
             </div>
           </div>
         </motion.div>
-      </div>
-
-      {/* ── Content ── */}
-      <div className="max-w-2xl lg:max-w-6xl xl:max-w-[1560px] mx-auto px-4 sm:px-6 lg:px-8 pt-5">
+        {/* ── Content ── */}
+        <div>
         {filtered.length === 0 ? (
           <EmptyState
             icon={<Calendar className="h-8 w-8" />}
@@ -924,16 +919,11 @@ export function Events() {
                 <EventList events={filtered} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={id => navigate(`/events/${id}`)} showPast={activeTab === 'past'} />
               )}
             </motion.div>
-            <div className="lg:hidden overflow-x-hidden">
+            <div className="lg:hidden">
               <motion.div
                 key={activeTab}
-                custom={tabDir}
-                variants={{
-                  initial: (dir: string) => ({ opacity: 0, x: dir === 'left' ? 18 : -18 }),
-                  animate: { opacity: 1, x: 0 },
-                }}
-                initial="initial"
-                animate="animate"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
                 transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
               >
                 <EventList events={filtered} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={id => navigate(`/events/${id}`)} showPast={activeTab === 'past'} />
@@ -941,6 +931,7 @@ export function Events() {
             </div>
           </>
         )}
+        </div>
       </div>
 
       {/* ── Create Modal ── */}

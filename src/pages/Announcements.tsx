@@ -240,8 +240,11 @@ export function Announcements() {
   if (loading) return <div className="page-container"><AnnouncementsSkeleton /></div>;
 
   return (
-    <div className="page-container page-bottom-pad mobile-vertical-scroll-page">
-      <div className="max-w-2xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 space-y-5 sm:space-y-6">
+    <div className="page-container page-bottom-pad relative overflow-hidden bg-[#f6f4ef] text-gray-900 dark:bg-[#121212] dark:text-white">
+      <div
+        className="pointer-events-none fixed inset-0 -z-10 bg-[#f6f4ef] dark:bg-[#121212]"
+      />
+      <div className="relative max-w-2xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 pb-6 space-y-5 sm:space-y-6">
 
         {/* ── Header ───────────────────────────────────── */}
         <motion.div

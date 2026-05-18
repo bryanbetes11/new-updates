@@ -20,31 +20,6 @@ const wheelContainmentSelectors = [
   '.chat-container',
   '.service-mode-overlay',
 ].join(',');
-const touchScrollIgnoreSelectors = [
-  'input',
-  'textarea',
-  'select',
-  '[contenteditable="true"]',
-  '[data-modal-sheet]',
-  '[data-mobile-menu-scroll]',
-  '.chat-container',
-  '.messages-scroll-area',
-  '.service-mode-overlay',
-  '.service-mode-chart-scroll',
-  '.service-mode-edit-scroll',
-].join(',');
-
-function repairDocumentScrollSurface() {
-  const root = document.documentElement;
-  const body = document.body;
-  const scrollingElement = document.scrollingElement as HTMLElement | null;
-  const currentTop = Math.max(0, window.scrollY || scrollingElement?.scrollTop || root.scrollTop || body.scrollTop || 0);
-
-  if (scrollingElement) scrollingElement.scrollLeft = 0;
-  root.scrollLeft = 0;
-  body.scrollLeft = 0;
-  if (window.scrollX !== 0) window.scrollTo({ top: currentTop, left: 0, behavior: 'instant' as ScrollBehavior });
-}
 
 function canScrollElementWithWheel(element: HTMLElement, deltaY: number) {
   const style = window.getComputedStyle(element);
@@ -54,16 +29,6 @@ function canScrollElementWithWheel(element: HTMLElement, deltaY: number) {
   const atTop = element.scrollTop <= 0;
   const atBottom = element.scrollTop + element.clientHeight >= element.scrollHeight - 1;
   return (deltaY < 0 && !atTop) || (deltaY > 0 && !atBottom);
-}
-
-function canScrollElementWithTouch(element: HTMLElement, deltaY: number) {
-  const style = window.getComputedStyle(element);
-  if (!scrollableOverflowValues.has(style.overflowY)) return false;
-  if (element.scrollHeight <= element.clientHeight + 1) return false;
-
-  const atTop = element.scrollTop <= 0;
-  const atBottom = element.scrollTop + element.clientHeight >= element.scrollHeight - 1;
-  return (deltaY > 0 && !atTop) || (deltaY < 0 && !atBottom);
 }
 
 function hasNativeWheelScroller(target: HTMLElement | null, deltaY: number) {
@@ -78,18 +43,6 @@ function hasNativeWheelScroller(target: HTMLElement | null, deltaY: number) {
   return false;
 }
 
-function hasNativeTouchScroller(target: HTMLElement | null, deltaY: number) {
-  if (target?.closest(wheelContainmentSelectors)) return true;
-
-  let element = target;
-  while (element && element !== document.body && element !== document.documentElement) {
-    if (element.matches(nativeWheelScrollSelectors) && canScrollElementWithTouch(element, deltaY)) return true;
-    if (canScrollElementWithTouch(element, deltaY)) return true;
-    element = element.parentElement;
-  }
-  return false;
-}
-
 export function Layout() {
   const { user } = useAuth();
   const location = useLocation();
@@ -99,7 +52,6 @@ export function Layout() {
   const lastScrollYRef = useRef(0);
   const revealDistanceRef = useRef(0);
   const scrollTickingRef = useRef(false);
-  const touchScrollGestureRef = useRef<{ startX: number; startY: number; lastY: number } | null>(null);
 
   const staticHideNav = ['/', '/login', '/register', '/onboarding', '/reset-password', '/create-church'].includes(location.pathname)
     || /^\/invite\/[^/]+$/.test(location.pathname);
@@ -138,39 +90,6 @@ export function Layout() {
   useEffect(() => {
     rememberRoute(buildAppRoute(location.pathname, location.search, location.hash));
   }, [location.hash, location.pathname, location.search]);
-
-  useEffect(() => {
-    const repair = () => {
-      repairDocumentScrollSurface();
-      const root = document.documentElement;
-      const body = document.body;
-      const activeScrollLock =
-        body.hasAttribute('data-modal-lock-count')
-        || root.classList.contains('mobile-menu-active')
-        || root.classList.contains('service-mode-active')
-        || root.classList.contains('messages-chat-active');
-
-      if (!activeScrollLock) {
-        if (root.style.overflow === 'hidden') root.style.overflow = '';
-        if (body.style.overflow === 'hidden') body.style.overflow = '';
-        if (root.style.overscrollBehavior === 'none') root.style.overscrollBehavior = '';
-        if (body.style.overscrollBehavior === 'none') body.style.overscrollBehavior = '';
-      }
-    };
-
-    setMobileChromeHidden(false);
-    revealDistanceRef.current = 0;
-    scrollTickingRef.current = false;
-    touchScrollGestureRef.current = null;
-    repair();
-    const frame = window.requestAnimationFrame(repair);
-    const timeout = window.setTimeout(repair, 80);
-
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.clearTimeout(timeout);
-    };
-  }, [location.pathname]);
 
   useEffect(() => {
     if (staticHideNav || isMessagesConversation || mobileOpen) {
@@ -221,99 +140,13 @@ export function Layout() {
 
   useEffect(() => {
     const clampHorizontalScroll = () => {
-      if (
-        window.scrollX === 0
-        && document.documentElement.scrollLeft === 0
-        && document.body.scrollLeft === 0
-        && (!document.scrollingElement || (document.scrollingElement as HTMLElement).scrollLeft === 0)
-      ) return;
-      repairDocumentScrollSurface();
+      if (window.scrollX === 0) return;
+      window.scrollTo(0, window.scrollY);
     };
 
     window.addEventListener('scroll', clampHorizontalScroll, { passive: true });
     return () => window.removeEventListener('scroll', clampHorizontalScroll);
   }, []);
-
-  useEffect(() => {
-    const shouldRepairAndroidTouchScroll =
-      (isEventsPage || isAnnouncementsPage)
-      && !mobileOpen
-      && /Android/i.test(window.navigator.userAgent);
-
-    if (!shouldRepairAndroidTouchScroll) return;
-
-    const handleTouchStart = (event: TouchEvent) => {
-      if (!window.matchMedia('(max-width: 1023px)').matches || event.touches.length !== 1) {
-        touchScrollGestureRef.current = null;
-        return;
-      }
-
-      const target = event.target instanceof HTMLElement ? event.target : null;
-      if (target?.closest(touchScrollIgnoreSelectors)) {
-        touchScrollGestureRef.current = null;
-        return;
-      }
-
-      const touch = event.touches[0];
-      touchScrollGestureRef.current = {
-        startX: touch.clientX,
-        startY: touch.clientY,
-        lastY: touch.clientY,
-      };
-    };
-
-    const handleTouchMove = (event: TouchEvent) => {
-      const gesture = touchScrollGestureRef.current;
-      if (!gesture || event.defaultPrevented || event.touches.length !== 1) return;
-
-      const target = event.target instanceof HTMLElement ? event.target : null;
-      if (target?.closest(touchScrollIgnoreSelectors)) {
-        touchScrollGestureRef.current = null;
-        return;
-      }
-
-      const touch = event.touches[0];
-      const totalX = touch.clientX - gesture.startX;
-      const totalY = touch.clientY - gesture.startY;
-      const deltaY = touch.clientY - gesture.lastY;
-      gesture.lastY = touch.clientY;
-
-      if (Math.abs(totalY) < 6 || Math.abs(deltaY) < 0.5) return;
-      if (Math.abs(totalX) > Math.abs(totalY) * 1.35) return;
-      if (hasNativeTouchScroller(target, deltaY)) return;
-
-      const scrollingElement = (document.scrollingElement || document.documentElement) as HTMLElement;
-      const maxScroll = Math.max(0, scrollingElement.scrollHeight - window.innerHeight);
-      if (maxScroll <= 0) return;
-
-      const currentTop = scrollingElement.scrollTop;
-      const nextTop = Math.min(maxScroll, Math.max(0, currentTop - deltaY));
-      if (nextTop === currentTop) return;
-
-      event.preventDefault();
-      scrollingElement.scrollTop = nextTop;
-      lastScrollYRef.current = nextTop;
-      repairDocumentScrollSurface();
-    };
-
-    const clearTouchGesture = () => {
-      touchScrollGestureRef.current = null;
-      repairDocumentScrollSurface();
-    };
-
-    window.addEventListener('touchstart', handleTouchStart, { passive: true, capture: true });
-    window.addEventListener('touchmove', handleTouchMove, { passive: false, capture: true });
-    window.addEventListener('touchend', clearTouchGesture, { capture: true });
-    window.addEventListener('touchcancel', clearTouchGesture, { capture: true });
-
-    return () => {
-      window.removeEventListener('touchstart', handleTouchStart, true);
-      window.removeEventListener('touchmove', handleTouchMove, true);
-      window.removeEventListener('touchend', clearTouchGesture, true);
-      window.removeEventListener('touchcancel', clearTouchGesture, true);
-      touchScrollGestureRef.current = null;
-    };
-  }, [isAnnouncementsPage, isEventsPage, mobileOpen]);
 
   const handlePageWheelCapture = (event: ReactWheelEvent<HTMLElement>) => {
     if (event.defaultPrevented) return;

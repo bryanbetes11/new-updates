@@ -84,6 +84,13 @@ export function Announcements() {
   const [emojiPickerId, setEmojiPickerId] = useState<string | null>(null);
 
   useEffect(() => {
+    document.body.classList.add('allow-native-pull-refresh');
+    return () => {
+      document.body.classList.remove('allow-native-pull-refresh');
+    };
+  }, []);
+
+  useEffect(() => {
     if (typeof window === 'undefined') return;
     const mediaQuery = window.matchMedia('(min-width: 1024px)');
     const update = () => setIsDesktop(mediaQuery.matches);

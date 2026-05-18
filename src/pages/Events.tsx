@@ -494,6 +494,13 @@ export function Events() {
   const [customName, setCustomName] = useState('');
   const [sundayServices, setSundayServices] = useState<Event[]>([]);
 
+  useEffect(() => {
+    document.body.classList.add('allow-native-pull-refresh');
+    return () => {
+      document.body.classList.remove('allow-native-pull-refresh');
+    };
+  }, []);
+
   const fetchEvents = async () => {
     const emptyList = { data: [], error: null };
 

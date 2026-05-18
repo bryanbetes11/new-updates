@@ -1316,29 +1316,10 @@ function ConvInfoPanel({
 
     const fetchPeople = async () => {
       try {
-        let userIds: string[] | null = null;
-
-        if (conv.type === 'event' && conv.event_id) {
-          const [{ data: assigned }, { data: attending }] = await Promise.all([
-            supabase.from('event_assignments').select('user_id').eq('event_id', conv.event_id),
-            supabase.from('event_attendance').select('user_id').eq('event_id', conv.event_id),
-          ]);
-          userIds = [...new Set([
-            ...(assigned || []).map(a => a.user_id as string),
-            ...(attending || []).map(a => a.user_id as string),
-          ])];
-        }
-
-        let query = supabase.from('profiles').select('id, first_name, last_name, nickname, avatar_url').order('first_name');
-        if (userIds !== null) {
-          if (userIds.length === 0) {
-            if (!cancelled) { setAvailablePeople([]); setLoadingAvailablePeople(false); }
-            return;
-          }
-          query = query.in('id', userIds);
-        }
-
-        const { data, error } = await query;
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name, nickname, avatar_url')
+          .order('first_name');
         if (cancelled) return;
         if (error) {
           setAvailablePeople([]);

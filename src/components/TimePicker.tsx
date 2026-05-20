@@ -26,6 +26,7 @@ function to24(h12: number, period: string) {
 
 const HOURS = Array.from({ length: 12 }, (_, i) => i + 1);
 const MINUTES = Array.from({ length: 12 }, (_, i) => i * 5);
+const FLOATING_LAYER_Z_INDEX = 2147483647;
 
 export function TimePicker({ value, onChange, placeholder = 'Select time', required }: TimePickerProps) {
   const [open, setOpen] = useState(false);
@@ -131,7 +132,7 @@ export function TimePicker({ value, onChange, placeholder = 'Select time', requi
         <div
           ref={panelRef}
           className="fixed w-56 rounded-xl bg-white dark:bg-gray-800 shadow-xl ring-1 ring-gray-200 dark:ring-gray-700 p-3 animate-scale-in"
-          style={{ top: pos.top, left: pos.left, zIndex: 99999 }}
+          style={{ top: pos.top, left: pos.left, zIndex: FLOATING_LAYER_Z_INDEX }}
         >
           <div className="flex items-center justify-center gap-1 mb-3">
             <div className="flex items-center gap-1 rounded-lg bg-gray-100 dark:bg-gray-700 p-1">

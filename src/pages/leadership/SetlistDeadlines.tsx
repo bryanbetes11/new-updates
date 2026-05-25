@@ -11,6 +11,7 @@ import { LeadershipHeroCard } from '../../components/LeadershipHeroCard';
 
 interface DeadlineEvent {
   id: string;
+  org_id: string;
   title: string;
   event_date: string;
   proposal_due_date: string;
@@ -28,6 +29,7 @@ interface DeadlineEvent {
 
 interface DeadlineEventRow {
   id: string;
+  org_id: string;
   title: string;
   event_date: string;
   proposal_due_date: string;
@@ -183,7 +185,7 @@ export function SetlistDeadlines() {
     const { data: eventsData, error } = await supabase
       .from('events')
       .select(`
-        id, title, event_date, proposal_due_date,
+        id, org_id, title, event_date, proposal_due_date,
         song_leader:profiles!events_song_leader_id_fkey(id, first_name, last_name, nickname, avatar_url),
         setlists(status)
       `)
@@ -229,6 +231,7 @@ export function SetlistDeadlines() {
 
       return {
         id: e.id,
+        org_id: e.org_id,
         title: e.title,
         event_date: e.event_date,
         proposal_due_date: e.proposal_due_date,
@@ -276,6 +279,7 @@ export function SetlistDeadlines() {
 
     const { error: notifError } = await supabase.from('notifications').insert({
       user_id: event.song_leader.id,
+      org_id: event.org_id,
       type: 'proposal_reminder',
       title: 'Setlist Reminder',
       body,
@@ -291,6 +295,7 @@ export function SetlistDeadlines() {
     const { error: trackError } = await supabase.from('setlist_reminders').insert({
       event_id: event.id,
       user_id: event.song_leader.id,
+      org_id: event.org_id,
       sent_by: user!.id,
     });
 

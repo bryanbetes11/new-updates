@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type WheelEvent as ReactWheelEvent } from 'react';
+import { useState, useEffect, useRef, type CSSProperties, type WheelEvent as ReactWheelEvent } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Navigation } from './Navigation';
@@ -87,6 +87,11 @@ export function Layout() {
     || isLeadershipPage;
   const hideNavMobile = staticHideNav || isAnnouncementDetail;
   const shouldShiftForMobileMenu = user && !staticHideNav && !isMessagesConversation && mobileOpen;
+  const desktopSidebarWidth = user && !staticHideNav ? (collapsed ? 92 : 300) : 0;
+  const mainStyle = {
+    pointerEvents: shouldShiftForMobileMenu ? 'none' : undefined,
+    '--desktop-sidebar-width': `${desktopSidebarWidth}px`,
+  } as CSSProperties;
   const shouldAllowNativePullRefresh =
     isDashboardPage || isEventsPage || isEventDetail || isAnnouncementsPage || isAnnouncementDetail || isSetlistDeadlinesPage;
 
@@ -308,8 +313,8 @@ export function Layout() {
           filter: shouldShiftForMobileMenu ? 'blur(1.25px) brightness(0.78)' : 'blur(0px) brightness(1)',
         }}
         transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
-        className={`overflow-x-hidden ${isMessagesPage ? 'box-border flex flex-col min-h-[100dvh] overflow-hidden bg-white dark:bg-[#111013] lg:fixed lg:inset-0 lg:h-[100dvh] lg:pt-24' : ''}`}
-        style={{ pointerEvents: shouldShiftForMobileMenu ? 'none' : undefined }}
+        className={`desktop-sidebar-main overflow-x-hidden ${isMessagesPage ? 'box-border flex flex-col min-h-[100dvh] overflow-hidden bg-white dark:bg-[#111013] lg:fixed lg:inset-0 lg:h-[100dvh]' : ''}`}
+        style={mainStyle}
       >
         {isMessagesPage ? (
           <div className="flex flex-col flex-1 min-h-0 h-full">
@@ -321,16 +326,8 @@ export function Layout() {
               staticHideNav
                 ? ''
                 : isWideShellPage
-                  ? 'bg-[#f6f4ef] dark:bg-[#121212] lg:pt-24'
-                  : 'px-4 sm:px-6 lg:px-8 mobile-layout-padding lg:pt-24'
-            }
-            style={
-              isWideShellPage
-                ? {
-                    paddingTop: 'calc(3.5rem + env(safe-area-inset-top))',
-                    paddingBottom: 'calc(64px + env(safe-area-inset-bottom) + 1rem)',
-                  }
-                : undefined
+                  ? 'wide-shell-spacing bg-[#f6f4ef] dark:bg-[#121212]'
+                  : 'px-4 sm:px-6 lg:px-8 mobile-layout-padding'
             }
           >
             {!staticHideNav && !isWideShellPage && (
@@ -338,7 +335,7 @@ export function Layout() {
                 <BillingStatusBanner />
               </div>
             )}
-            <div className={`relative ${isWideShellPage ? 'min-h-[calc(100dvh-(3.5rem+env(safe-area-inset-top)+64px+1rem))] lg:min-h-[calc(100dvh-6rem)]' : ''}`}>
+            <div className={`relative ${isWideShellPage ? 'min-h-[calc(100dvh-(3.5rem+env(safe-area-inset-top)+64px+1rem))] lg:min-h-[calc(100dvh-4rem)]' : ''}`}>
               <AnimatePresence mode="popLayout" initial={false}>
                 <motion.div
                   key={location.pathname}

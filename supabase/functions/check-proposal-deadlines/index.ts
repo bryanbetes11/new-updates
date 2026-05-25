@@ -20,6 +20,16 @@ interface EventAssignment {
   roles: { name: string } | null;
 }
 
+interface ProfileName {
+  first_name: string | null;
+  last_name: string | null;
+}
+
+interface SongLeaderRecipient {
+  user_id: string;
+  profiles?: ProfileName | null;
+}
+
 interface SetlistRecord {
   status: string;
   submitted_at: string | null;
@@ -29,6 +39,8 @@ interface EventRecord {
   id: string;
   org_id: string;
   title: string;
+  song_leader_id: string | null;
+  song_leader?: ProfileName | ProfileName[] | null;
   proposal_due_date: string | null;
   event_date: string;
   event_assignments: EventAssignment[];
@@ -174,6 +186,24 @@ function getReminderDefinition(now: Date, dueDate: Date, slot: ReminderSlot): {
     };
   }
 
+  if (daysUntilDue === 0) {
+    return {
+      key: `due_today_${formatManilaYmd(now)}_${slot}`,
+      title:
+        slot === "morning"
+          ? "Setlist Proposal Due Today"
+          : slot === "midday"
+          ? "Setlist Proposal Due Today"
+          : "Final Reminder: Setlist Proposal Due Tonight",
+      bodyPrefix:
+        slot === "morning"
+          ? "The setlist proposal is due today."
+          : slot === "midday"
+          ? "This is another reminder that the setlist proposal is due today."
+          : "Final reminder before the setlist proposal becomes overdue tonight.",
+    };
+  }
+
   return null;
 }
 
@@ -181,9 +211,31 @@ function buildReminderBody(prefix: string, eventTitle: string, eventDate: string
   return `${prefix} Submit the proposal for "${eventTitle}" on ${eventDate} before 11:59 PM.`;
 }
 
-function buildSongLeaderName(assignment: EventAssignment | undefined): string {
-  const first = assignment?.profiles?.first_name?.trim() || "";
-  const last = assignment?.profiles?.last_name?.trim() || "";
+function normalizeProfile(profile: ProfileName | ProfileName[] | null | undefined): ProfileName | null {
+  if (Array.isArray(profile)) return profile[0] || null;
+  return profile || null;
+}
+
+function getSongLeaderRecipient(event: EventRecord): SongLeaderRecipient | null {
+  const assignment = event.event_assignments?.find(
+    (eventAssignment) => eventAssignment.roles?.name === "Song Leader",
+  );
+
+  if (event.song_leader_id) {
+    return {
+      user_id: event.song_leader_id,
+      profiles: normalizeProfile(event.song_leader) || assignment?.profiles || null,
+    };
+  }
+
+  return assignment
+    ? { user_id: assignment.user_id, profiles: assignment.profiles || null }
+    : null;
+}
+
+function buildSongLeaderName(songLeader: SongLeaderRecipient | null): string {
+  const first = songLeader?.profiles?.first_name?.trim() || "";
+  const last = songLeader?.profiles?.last_name?.trim() || "";
   return `${first} ${last}`.trim() || "A Song Leader";
 }
 
@@ -236,7 +288,7 @@ Deno.serve(async (req: Request) => {
 
     let eventsQuery = supabase
       .from("events")
-      .select("id, org_id, title, proposal_due_date, event_date, event_assignments(user_id, profiles(first_name, last_name), roles(name)), setlists(status, submitted_at)")
+      .select("id, org_id, title, song_leader_id, song_leader:profiles!events_song_leader_id_fkey(first_name, last_name), proposal_due_date, event_date, event_assignments(user_id, profiles(first_name, last_name), roles(name)), setlists(status, submitted_at)")
       .not("proposal_due_date", "is", null)
       .gte("event_date", phToday);
 
@@ -258,10 +310,8 @@ Deno.serve(async (req: Request) => {
       const reminderDefinition = getReminderDefinition(phNow, dueDate, slot);
       if (!reminderDefinition) continue;
 
-      const songLeaderAssignment = event.event_assignments?.find(
-        (assignment) => assignment.roles?.name === "Song Leader",
-      );
-      if (!songLeaderAssignment) continue;
+      const songLeader = getSongLeaderRecipient(event);
+      if (!songLeader) continue;
 
       const shouldAlertLeadership =
         reminderDefinition.key.startsWith("overdue_") && slot === "morning";
@@ -269,30 +319,31 @@ Deno.serve(async (req: Request) => {
       const existingNotification = await supabase
         .from("notifications")
         .select("id")
-        .eq("user_id", songLeaderAssignment.user_id)
+        .eq("user_id", songLeader.user_id)
         .eq("type", "proposal_reminder")
         .eq("data->>event_id", event.id)
         .eq("data->>reminder_key", reminderDefinition.key)
         .maybeSingle();
 
-      if (existingNotification.data) continue;
-
-      notifications.push({
-        user_id: songLeaderAssignment.user_id,
-        type: "proposal_reminder",
-        title: reminderDefinition.title,
-        body: buildReminderBody(
-          reminderDefinition.bodyPrefix,
-          event.title,
-          formatDateLong(event.event_date),
-        ),
-        data: {
-          event_id: event.id,
-          url: `/events/${event.id}`,
-          reminder_key: reminderDefinition.key,
-          slot,
-        },
-      });
+      if (!existingNotification.data) {
+        notifications.push({
+          user_id: songLeader.user_id,
+          org_id: event.org_id,
+          type: "proposal_reminder",
+          title: reminderDefinition.title,
+          body: buildReminderBody(
+            reminderDefinition.bodyPrefix,
+            event.title,
+            formatDateLong(event.event_date),
+          ),
+          data: {
+            event_id: event.id,
+            url: `/events/${event.id}`,
+            reminder_key: reminderDefinition.key,
+            slot,
+          },
+        });
+      }
 
       if (shouldAlertLeadership) {
         const { data: orgAdmins, error: orgAdminsError } = await supabase
@@ -321,8 +372,8 @@ Deno.serve(async (req: Request) => {
             ...(leadershipRoles || []).map((recipient) => recipient.user_id),
           ]),
         ];
-        const songLeaderName = buildSongLeaderName(songLeaderAssignment);
-        const leadershipKey = `proposal_overdue_alert_${event.id}_${songLeaderAssignment.user_id}`;
+        const songLeaderName = buildSongLeaderName(songLeader);
+        const leadershipKey = `proposal_overdue_alert_${reminderDefinition.key}_${event.id}_${songLeader.user_id}`;
 
         for (const recipientId of recipientIds) {
           const leadershipExisting = await supabase
@@ -344,9 +395,9 @@ Deno.serve(async (req: Request) => {
             body: `${songLeaderName} still has not submitted the setlist proposal for "${event.title}". Please follow up with them.`,
             data: {
               event_id: event.id,
-              url: `/leadership/setlist-deadlines`,
+              url: `/leadership/setlists`,
               reminder_key: leadershipKey,
-              song_leader_id: songLeaderAssignment.user_id,
+              song_leader_id: songLeader.user_id,
             },
           });
         }

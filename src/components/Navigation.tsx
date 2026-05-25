@@ -244,8 +244,6 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
       ? [{ path: '/platform', label: 'Platform', icon: ShieldNavIcon }]
       : []),
   ];
-  const desktopTabItems = [...sidebarMainItems, ...sidebarManagementItems];
-
   const displayName = profile?.nickname || profile?.first_name || '';
   const fullName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim();
   const useDockedMobileNav = mobileNavStyle === 'docked';
@@ -255,7 +253,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
   const mobileNavTransform = `${mobileMenuTranslateX} ${hideDockedMobileNav ? 'translateY(calc(100% + 10px))' : 'translateY(0)'}`;
   const mobileHeaderTransform = mobileMenuTranslateX;
 
-  const sidebarWidth = collapsed ? 72 : 256;
+  const sidebarWidth = collapsed ? 92 : 300;
 
   const handleNav = (path: string) => {
     navigate(path);
@@ -403,21 +401,21 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
         <Tooltip key={item.path} label={item.label}>
           <button
             onClick={() => handleNav(item.path)}
-            className={`relative flex h-9 w-full items-center justify-center rounded-xl transition-all duration-150 ${
+            className={`group relative flex h-11 w-full items-center justify-center rounded-[1.15rem] border transition-all duration-200 ${
               active
-                ? 'text-brand-600 dark:text-brand-400'
-                : 'text-gray-500 dark:text-gray-400 hover:bg-black/[0.05] dark:hover:bg-white/[0.06] hover:text-gray-900 dark:hover:text-gray-100'
+                ? 'border-slate-200/80 bg-slate-50 text-slate-950 shadow-[0_12px_24px_-20px_rgba(15,23,42,0.55),0_2px_8px_-7px_rgba(15,23,42,0.22),inset_0_1px_0_rgba(255,255,255,0.9)] dark:border-white/[0.10] dark:bg-white/[0.08] dark:text-white dark:shadow-[0_14px_24px_-18px_rgba(0,0,0,0.85)]'
+                : 'border-transparent text-slate-500 hover:border-slate-200/70 hover:bg-white/80 hover:text-slate-950 hover:shadow-[0_10px_22px_-20px_rgba(15,23,42,0.5)] dark:text-white/58 dark:hover:border-white/[0.08] dark:hover:bg-white/[0.055] dark:hover:text-white'
             }`}
           >
             {active && (
               <motion.div
                 layoutId="activeNavBg"
-                className="absolute inset-0 rounded-xl bg-brand-600/10 dark:bg-brand-400/10"
-                transition={{ type: 'spring', stiffness: 400, damping: 35 }}
+                className="absolute inset-0 rounded-[1.15rem]"
+                transition={{ type: 'spring', stiffness: 460, damping: 38 }}
               />
             )}
             <div className="relative">
-              <Icon active={active} className="h-[17px] w-[17px] shrink-0" style={{ width: '17px', height: '17px' }} />
+              <Icon active={active} className="h-[18px] w-[18px] shrink-0" style={{ width: '18px', height: '18px', strokeWidth: 2 }} />
               {badge > 0 && (
                 <span className={`absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full text-white text-[8px] font-bold leading-none ${item.badgeColor === 'blue' ? 'bg-blue-500' : item.badgeColor === 'amber' ? 'bg-amber-500' : 'bg-red-500'}`}>
                   {badge > 9 ? '9+' : badge}
@@ -433,78 +431,26 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
       <button
         key={item.path}
         onClick={() => handleNav(item.path)}
-        className={`relative group flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] transition-all duration-200 ${
+        className={`relative group flex h-12 w-full items-center gap-3 rounded-[1.15rem] border px-3.5 text-[13px] transition-all duration-200 ${
           active
-            ? 'text-gray-900 dark:text-white font-semibold'
-            : 'text-gray-500 dark:text-gray-400 font-medium hover:bg-black/[0.035] dark:hover:bg-white/[0.04] hover:text-gray-900 dark:hover:text-gray-100'
+            ? 'border-slate-200/80 bg-slate-50/95 font-bold text-slate-950 shadow-[0_14px_28px_-24px_rgba(15,23,42,0.55),0_2px_8px_-7px_rgba(15,23,42,0.25),inset_0_1px_0_rgba(255,255,255,0.95)] dark:border-white/[0.10] dark:bg-white/[0.08] dark:text-white dark:shadow-[0_16px_32px_-24px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.12)]'
+            : 'border-transparent font-semibold text-slate-600 hover:border-slate-200/70 hover:bg-white/78 hover:text-slate-950 hover:shadow-[0_10px_22px_-20px_rgba(15,23,42,0.48)] dark:text-white/62 dark:hover:border-white/[0.08] dark:hover:bg-white/[0.055] dark:hover:text-white'
         }`}
       >
         {active && (
           <motion.div
             layoutId="activeNavBg"
-            className="absolute inset-0 rounded-xl border border-emerald-500/20 dark:border-emerald-400/20"
-            style={{
-              background: 'linear-gradient(180deg, rgba(16,185,129,0.10) 0%, rgba(16,185,129,0.04) 100%)',
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.4), 0 1px 2px rgba(16,185,129,0.06)',
-            }}
-            transition={{ type: 'spring', stiffness: 400, damping: 35 }}
-          />
-        )}
-        {active && (
-          <span
-            className="absolute left-1.5 top-1/2 -translate-y-1/2 h-4 w-[2px] rounded-full bg-emerald-500 dark:bg-emerald-400"
-            style={{ boxShadow: '0 0 6px rgba(16,185,129,0.6)' }}
+            className="absolute inset-0 rounded-[1.15rem]"
+            transition={{ type: 'spring', stiffness: 460, damping: 38 }}
           />
         )}
         <Icon
           active={active}
-          className={`relative shrink-0 h-[17px] w-[17px] transition-colors ${active ? 'text-emerald-600 dark:text-emerald-400' : ''}`}
-          style={{ width: '17px', height: '17px', strokeWidth: 2 }}
+          className={`relative shrink-0 h-[18px] w-[18px] transition-colors ${active ? 'text-slate-950 dark:text-white' : 'text-slate-500 group-hover:text-slate-900 dark:text-white/58 dark:group-hover:text-white'}`}
+          style={{ width: '18px', height: '18px', strokeWidth: 2 }}
         />
-        <span className="relative flex-1 text-left truncate" style={{ letterSpacing: '-0.01em' }}>{item.label}</span>
+        <span className="relative flex-1 truncate text-left">{item.label}</span>
         {badge > 0 && <SidebarBadge count={badge} color={item.badgeColor} />}
-      </button>
-    );
-  };
-
-  const renderDesktopTab = (item: NavItem) => {
-    const active = isActive(item);
-    const Icon = item.icon;
-    const badge = getBadgeCount(item);
-
-    return (
-      <button
-        key={item.path}
-        onClick={() => handleNav(item.path)}
-        className={`group relative flex h-11 items-center gap-2 rounded-full px-4 text-[13px] font-bold transition-all duration-300 ${
-          active
-            ? 'text-gray-950 dark:text-white'
-            : 'text-gray-500 hover:text-gray-950 dark:text-gray-300 dark:hover:text-white'
-        }`}
-      >
-        {active && (
-          <motion.div
-            layoutId="desktopTabActive"
-            className="absolute inset-0 rounded-full border border-white/70 bg-gray-100/95 shadow-[0_16px_38px_-24px_rgba(15,23,42,0.32),inset_0_1px_0_rgba(255,255,255,0.82),inset_0_-1px_0_rgba(15,23,42,0.08)] dark:border-white/[0.12] dark:bg-white/[0.14] dark:shadow-[0_16px_38px_-24px_rgba(0,0,0,0.65),inset_0_1px_0_rgba(255,255,255,0.16),inset_0_-1px_0_rgba(0,0,0,0.22)]"
-            transition={{ type: 'spring', stiffness: 520, damping: 42, mass: 0.8 }}
-          />
-        )}
-        <span className="absolute inset-0 rounded-full bg-white/55 opacity-0 transition-opacity duration-300 group-hover:opacity-100 dark:bg-white/[0.055]" />
-        <Icon
-          active={active}
-          className={`relative h-[17px] w-[17px] shrink-0 transition-all duration-300 ${
-            active ? 'scale-110 text-gray-900 dark:text-white' : 'group-hover:scale-110'
-          }`}
-          style={{ width: '17px', height: '17px', strokeWidth: 2 }}
-        />
-        <span className="relative whitespace-nowrap tracking-[-0.01em]">{item.label}</span>
-        {badge > 0 && (
-          <span className={`relative flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-black leading-none text-white shadow-sm ${
-            item.badgeColor === 'blue' ? 'bg-blue-500' : item.badgeColor === 'amber' ? 'bg-amber-500' : 'bg-red-500'
-          }`}>
-            {badge > 9 ? '9+' : badge}
-          </span>
-        )}
       </button>
     );
   };
@@ -666,96 +612,6 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
 
   return (
     <>
-      {/* ── Desktop premium tab bar ── */}
-      <motion.header
-        initial={{ opacity: 0, y: -18, filter: 'blur(8px)' }}
-        animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-        transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
-        className="fixed left-0 right-0 top-0 z-[100] hidden px-5 pt-4 lg:block"
-      >
-        <div className="pointer-events-none absolute inset-x-8 top-2 -z-10 h-24 rounded-[2rem] bg-emerald-300/10 blur-2xl dark:bg-emerald-950/18" />
-        <div
-          className="relative mx-auto flex h-[4.6rem] max-w-[118rem] items-center gap-4 overflow-hidden rounded-[1.7rem] border border-white/40 px-4 backdrop-blur-[55px] backdrop-saturate-[1.9] dark:border-white/[0.10]"
-          style={{
-            background: 'color-mix(in srgb, var(--sidebar-bg) 90%, transparent)',
-            boxShadow: [
-              '0 14px 34px -30px rgba(0,0,0,0.55)',
-              '0 8px 32px rgba(0,0,0,0.08)',
-              'inset 0 1px 0 rgba(255,255,255,0.42)',
-              'inset 0 -1px 0 rgba(255,255,255,0.08)',
-              'inset 0 0 46px 20px rgba(255,255,255,0.16)',
-            ].join(', '),
-            WebkitBackdropFilter: 'blur(55px) saturate(190%) contrast(108%)',
-            backdropFilter: 'blur(55px) saturate(190%) contrast(108%)',
-          }}
-        >
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/80 to-transparent" />
-          <div className="pointer-events-none absolute bottom-0 left-0 top-0 w-px bg-gradient-to-b from-white/80 via-transparent to-white/30" />
-          <div className="pointer-events-none absolute inset-0 bg-white/28 dark:bg-black/20" />
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(16,185,129,0.10),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.44),rgba(255,255,255,0.18)_52%,rgba(255,255,255,0.08))] dark:bg-[radial-gradient(circle_at_18%_20%,rgba(16,185,129,0.14),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.035)_52%,rgba(255,255,255,0.015))]" />
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-white/52 to-transparent dark:from-black/24" />
-          <div className="pointer-events-none absolute right-24 top-0 h-full w-28 skew-x-[-18deg] bg-white/[0.09] blur-sm dark:bg-white/[0.035]" />
-          <button
-            onClick={() => handleNav('/dashboard')}
-            className="group relative flex min-w-[13.5rem] items-center gap-3 rounded-2xl px-2 py-2 text-left transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.04]"
-          >
-            <div
-              className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-[1rem] overflow-hidden"
-              style={{ background: 'linear-gradient(145deg, #111c15 0%, #06100b 100%)', boxShadow: '0 14px 28px -18px rgba(0,0,0,0.85)' }}
-            >
-              <div className="absolute inset-0 bg-emerald-400/10 opacity-0 transition-opacity group-hover:opacity-100" />
-              <Music2 className="relative text-emerald-300" style={{ width: '18px', height: '18px' }} />
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-[14px] font-black leading-tight tracking-[-0.035em] text-gray-950 dark:text-white">ServeSync</p>
-              <p className="truncate text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-400">Team Management</p>
-            </div>
-          </button>
-
-          <nav className="relative flex min-w-0 flex-1 items-center justify-center">
-            <div
-              className="relative flex max-w-full items-center gap-1 overflow-x-auto rounded-full border border-white/35 p-1.5 backdrop-blur-[50px] dark:border-white/[0.10] scrollbar-none"
-              style={{
-                background: 'color-mix(in srgb, var(--nav-bg) 84%, transparent)',
-                boxShadow: '0 18px 42px -28px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.30), inset 0 -1px 0 rgba(255,255,255,0.08), inset 0 -12px 26px rgba(255,255,255,0.035)',
-                WebkitBackdropFilter: 'blur(50px) saturate(200%) contrast(108%)',
-                backdropFilter: 'blur(50px) saturate(200%) contrast(108%)',
-              }}
-            >
-              <span className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-white/70 to-transparent" />
-              {desktopTabItems.map(renderDesktopTab)}
-            </div>
-          </nav>
-
-          <div className="relative flex min-w-[13.5rem] items-center justify-end gap-1.5">
-            <ThemeToggle />
-            <NotificationBell />
-            <button
-              onClick={() => navigate('/profile')}
-              className="group ml-1 flex items-center gap-2 rounded-full border border-black/[0.05] bg-white/70 py-1.5 pl-1.5 pr-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:bg-white dark:border-white/[0.07] dark:bg-white/[0.045] dark:hover:bg-white/[0.075]"
-            >
-              <Avatar
-                src={profile?.avatar_url}
-                firstName={profile?.first_name || '?'}
-                lastName={profile?.last_name}
-                size="sm"
-                className="ring-1 ring-black/10 dark:ring-white/10"
-              />
-              <span className="max-w-[7rem] truncate text-[12px] font-black text-gray-800 dark:text-gray-100">
-                {displayName || fullName || 'Profile'}
-              </span>
-            </button>
-            <button
-              onClick={signOut}
-              className="flex h-10 w-10 items-center justify-center rounded-full text-gray-400 transition-all hover:-translate-y-0.5 hover:bg-red-50 hover:text-red-500 dark:text-gray-400 dark:hover:bg-red-500/10 dark:hover:text-red-300"
-              aria-label="Sign out"
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      </motion.header>
-
       {/* ── Mobile top bar ── */}
       <div
         className={`fixed top-0 left-0 right-0 z-30 flex items-end justify-between overflow-hidden px-4 lg:hidden ${hideMobileAll ? 'hidden' : ''}`}
@@ -982,138 +838,137 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
         )}
       </AnimatePresence>
 
-      {/* ── Legacy desktop sidebar, replaced by desktop tab bar ── */}
+      {/* ── Desktop sidebar ── */}
       <motion.aside
         animate={{ width: sidebarWidth }}
-        transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-        className="hidden fixed left-0 top-0 h-screen z-40 flex-col p-3"
+        transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+        className={`fixed left-0 top-0 z-40 hidden h-screen flex-col ${collapsed ? 'p-3' : 'p-4'} lg:flex`}
         style={{ overflow: 'visible' }}
       >
-        {/* Inner card */}
         <div
-          className="flex flex-col h-full rounded-2xl overflow-hidden"
+          className="flex h-full flex-col overflow-hidden rounded-[1.7rem] border border-slate-200/75 bg-white/96 shadow-[0_24px_60px_-44px_rgba(15,23,42,0.55),0_6px_22px_-18px_rgba(15,23,42,0.22),inset_0_1px_0_rgba(255,255,255,0.96)] dark:border-white/[0.08] dark:bg-[#151519]/96 dark:shadow-[0_26px_62px_-42px_rgba(0,0,0,0.92),inset_0_1px_0_rgba(255,255,255,0.08)]"
           style={{
-            background: 'var(--sidebar-bg)',
-            WebkitBackdropFilter: 'blur(24px)',
-            backdropFilter: 'blur(24px)',
-            border: '1px solid var(--sidebar-border)',
-            boxShadow: '0 20px 60px -10px rgba(0,0,0,0.1), 0 4px 16px -4px rgba(0,0,0,0.06)',
+            WebkitBackdropFilter: 'blur(24px) saturate(145%)',
+            backdropFilter: 'blur(24px) saturate(145%)',
           }}
         >
-          {/* Brand header */}
-          <div
-            className={`h-[58px] flex shrink-0 ${collapsed ? 'flex-col items-center justify-center gap-1.5 py-3 px-2' : 'flex-row items-center gap-2.5 px-3.5'}`}
-          >
-            <div
-              className="shrink-0 rounded-[22%] flex items-center justify-center"
-              style={{
-                width: '22px',
-                height: '22px',
-                background: 'linear-gradient(145deg, #1e2a1e 0%, #0d1a0d 100%)',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
-              }}
+          <div className={`${collapsed ? 'p-2.5' : 'p-3'}`}>
+            <button
+              type="button"
+              onClick={() => handleNav('/dashboard')}
+              className={`group flex w-full rounded-[1.35rem] border border-slate-200/75 bg-white text-left shadow-[0_14px_30px_-26px_rgba(15,23,42,0.48),0_1px_4px_rgba(15,23,42,0.035),inset_0_1px_0_rgba(255,255,255,0.95)] transition-all hover:-translate-y-0.5 hover:border-slate-300/80 dark:border-white/[0.08] dark:bg-white/[0.055] dark:hover:border-white/[0.14] dark:hover:bg-white/[0.075] ${
+                collapsed ? 'flex-col items-center justify-center gap-2 px-2 py-3' : 'items-center gap-3 px-3 py-3'
+              }`}
+              aria-label="Go to dashboard"
             >
-              <Music2 className="text-emerald-400" style={{ width: '12px', height: '12px' }} />
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[1.05rem] bg-slate-950 shadow-[0_14px_28px_-20px_rgba(15,23,42,0.85)] dark:bg-white/[0.11]">
+                <Music2 className="text-emerald-300" style={{ width: '19px', height: '19px' }} />
+              </span>
+
+              {!collapsed && (
+                <motion.span
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.16 }}
+                  className="min-w-0 flex-1"
+                >
+                  <span className="block truncate text-[14px] font-black leading-tight text-slate-950 dark:text-white">ServeSync</span>
+                  <span className="mt-0.5 block truncate text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 dark:text-white/42">Team Management</span>
+                </motion.span>
+              )}
+            </button>
+
+            <div className={`mt-2 flex ${collapsed ? 'justify-center' : 'justify-end'}`}>
+              <button
+                type="button"
+                onClick={() => onCollapsedChange(!collapsed)}
+                className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200/70 bg-white/80 text-slate-400 shadow-[0_8px_18px_-16px_rgba(15,23,42,0.45)] transition-all hover:-translate-y-0.5 hover:border-slate-300/80 hover:text-slate-700 dark:border-white/[0.08] dark:bg-white/[0.045] dark:text-white/46 dark:hover:border-white/[0.14] dark:hover:text-white"
+                aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              >
+                {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+              </button>
             </div>
-
-            {!collapsed && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.15, delay: 0.05 }}
-                className="flex-1 min-w-0"
-              >
-                <p className="text-[13px] font-semibold text-gray-900 dark:text-white leading-tight truncate">ServeSync</p>
-                <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight mt-px truncate">Team Management</p>
-              </motion.div>
-            )}
-
-            {!collapsed && (
-              <button
-                onClick={() => onCollapsedChange(true)}
-                className="ml-auto h-7 w-7 flex items-center justify-center rounded-lg text-gray-400 dark:text-gray-500 hover:bg-black/[0.05] dark:hover:bg-white/[0.06] hover:text-gray-600 dark:hover:text-gray-300 transition-colors shrink-0"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-            )}
-
-            {collapsed && (
-              <button
-                onClick={() => onCollapsedChange(false)}
-                className="h-7 w-7 flex items-center justify-center rounded-lg text-gray-400 dark:text-gray-500 hover:bg-black/[0.05] dark:hover:bg-white/[0.06] hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-              >
-                <ChevronRight className="h-3.5 w-3.5" />
-              </button>
-            )}
           </div>
 
-          {/* Main nav */}
-          <div className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5 scrollbar-thin">
+          <div className={`flex-1 overflow-y-auto ${collapsed ? 'px-2 pb-2 pt-1' : 'px-3 pb-3 pt-1'} scrollbar-thin`}>
             {!collapsed && (
-              <p className="px-3 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 dark:text-gray-500">Main</p>
+              <p className="px-2.5 pb-2 pt-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-white/36">Main</p>
             )}
             {collapsed && <div className="pt-1" />}
 
-            {sidebarMainItems.map(item => renderNavItem(item, collapsed))}
+            <div className="space-y-1.5">
+              {sidebarMainItems.map(item => renderNavItem(item, collapsed))}
+            </div>
 
             {sidebarManagementItems.length > 0 && (
-              <>
+              <div className="mt-5">
                 {!collapsed && (
-                  <p className="px-3 pt-5 pb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 dark:text-gray-500">Management</p>
+                  <div className="mb-2 flex items-center gap-3 px-2.5">
+                    <span className="h-px flex-1 bg-slate-200/85 dark:bg-white/[0.08]" />
+                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-white/36">Management</p>
+                    <span className="h-px flex-1 bg-slate-200/85 dark:bg-white/[0.08]" />
+                  </div>
                 )}
                 {collapsed && <div className="h-3" />}
-                {sidebarManagementItems.map(item => renderNavItem(item, collapsed))}
-              </>
+                <div className="space-y-1.5">
+                  {sidebarManagementItems.map(item => renderNavItem(item, collapsed))}
+                </div>
+              </div>
             )}
           </div>
 
-          {/* Footer / user profile */}
-          <div className="shrink-0 px-2 pt-2 pb-2 space-y-1.5">
+          <div className={`shrink-0 border-t border-slate-200/70 dark:border-white/[0.07] ${collapsed ? 'space-y-2 px-2 py-2.5' : 'space-y-2.5 p-3'}`}>
             {!collapsed ? (
               <>
-                <div className="flex items-center gap-1 px-1 pb-0.5">
+                <div className="flex items-center justify-between rounded-[1.2rem] border border-slate-200/70 bg-slate-50/70 px-2 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.92)] dark:border-white/[0.07] dark:bg-white/[0.035]">
                   <ThemeToggle />
-                  <div className="h-4 w-px bg-gray-200 dark:bg-gray-700 mx-0.5" />
+                  <div className="h-5 w-px bg-slate-200 dark:bg-white/[0.08]" />
                   <NotificationBell />
                 </div>
 
                 <button
                   onClick={() => navigate('/profile')}
-                  className="flex items-center gap-2.5 w-full px-3 py-2 rounded-xl hover:bg-black/[0.04] dark:hover:bg-white/[0.05] transition-colors group"
+                  className="group flex w-full items-center gap-2.5 rounded-[1.2rem] border border-slate-200/70 bg-white px-2.5 py-2.5 text-left shadow-[0_12px_24px_-22px_rgba(15,23,42,0.42),0_1px_3px_rgba(15,23,42,0.035)] transition-all hover:-translate-y-0.5 hover:border-slate-300/80 dark:border-white/[0.08] dark:bg-white/[0.045] dark:hover:border-white/[0.14] dark:hover:bg-white/[0.075]"
                 >
-                  <Avatar src={profile?.avatar_url} firstName={profile?.first_name || '?'} lastName={profile?.last_name} size="sm" />
-                  <div className="flex-1 min-w-0 text-left">
-                    <p className="text-[12px] font-bold text-gray-900 dark:text-white truncate leading-tight" style={{ letterSpacing: '-0.02em' }}>
-                      {displayName || fullName}
+                  <Avatar
+                    src={profile?.avatar_url}
+                    firstName={profile?.first_name || '?'}
+                    lastName={profile?.last_name}
+                    size="sm"
+                    className="ring-1 ring-black/10 dark:ring-white/10"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[12px] font-black leading-tight text-slate-900 dark:text-white">
+                      {displayName || fullName || 'Profile'}
                     </p>
-                    <p className="text-[10px] text-gray-400 dark:text-gray-500 truncate leading-tight mt-px">{profile?.email}</p>
+                    <p className="mt-0.5 truncate text-[10px] font-semibold leading-tight text-slate-400 dark:text-white/40">{profile?.email}</p>
                   </div>
                 </button>
 
                 <button
                   onClick={signOut}
-                  className="flex items-center gap-2 w-full px-3 py-1.5 rounded-xl text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                  className="flex h-10 w-full items-center gap-2 rounded-[1rem] px-3 text-left text-red-500 transition-colors hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-500/10"
                 >
-                  <LogOut className="h-3.5 w-3.5 shrink-0" />
-                  <span className="text-[12px] font-semibold" style={{ letterSpacing: '-0.01em' }}>Sign out</span>
+                  <LogOut className="h-4 w-4 shrink-0" />
+                  <span className="text-[12px] font-bold">Sign out</span>
                 </button>
               </>
             ) : (
               <>
                 <Tooltip label="Theme">
-                  <div className="flex justify-center w-full">
+                  <div className="flex w-full justify-center rounded-[1.05rem] border border-slate-200/70 bg-white/75 py-1.5 shadow-[0_10px_20px_-18px_rgba(15,23,42,0.45)] dark:border-white/[0.08] dark:bg-white/[0.045]">
                     <ThemeToggle />
                   </div>
                 </Tooltip>
                 <Tooltip label="Notifications">
-                  <div className="flex justify-center w-full">
+                  <div className="flex w-full justify-center rounded-[1.05rem] border border-slate-200/70 bg-white/75 py-1.5 shadow-[0_10px_20px_-18px_rgba(15,23,42,0.45)] dark:border-white/[0.08] dark:bg-white/[0.045]">
                     <NotificationBell />
                   </div>
                 </Tooltip>
                 <Tooltip label={displayName || fullName || 'Profile'}>
                   <button
                     onClick={() => navigate('/profile')}
-                    className="flex h-9 w-full items-center justify-center rounded-xl hover:bg-black/[0.04] dark:hover:bg-white/[0.05] transition-colors"
+                    className="flex h-11 w-full items-center justify-center rounded-[1.05rem] border border-slate-200/70 bg-white/75 shadow-[0_10px_20px_-18px_rgba(15,23,42,0.45)] transition-colors hover:border-slate-300/80 dark:border-white/[0.08] dark:bg-white/[0.045] dark:hover:border-white/[0.14]"
                   >
                     <Avatar src={profile?.avatar_url} firstName={profile?.first_name || '?'} lastName={profile?.last_name} size="sm" />
                   </button>
@@ -1121,7 +976,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
                 <Tooltip label="Sign out">
                   <button
                     onClick={signOut}
-                    className="flex h-9 w-full items-center justify-center rounded-xl text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                    className="flex h-11 w-full items-center justify-center rounded-[1.05rem] text-red-500 transition-colors hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-500/10"
                   >
                     <LogOut className="h-4 w-4" />
                   </button>

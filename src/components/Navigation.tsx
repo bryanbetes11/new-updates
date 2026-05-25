@@ -479,7 +479,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
         className={`group relative flex h-11 items-center gap-2 rounded-full px-4 text-[13px] font-bold transition-all duration-300 ${
           active
             ? 'text-gray-950 dark:text-white'
-            : 'text-gray-500 hover:text-gray-950 dark:text-white/52 dark:hover:text-white'
+            : 'text-gray-500 hover:text-gray-950 dark:text-gray-300 dark:hover:text-white'
         }`}
       >
         {active && (
@@ -516,19 +516,19 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
           <button
             type="button"
             onClick={() => setDrawerPanel('menu')}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.08] text-gray-500 transition-colors hover:bg-black/[0.04] hover:text-gray-900 dark:border-white/[0.08] dark:text-white/58 dark:hover:bg-white/[0.06] dark:hover:text-white"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.08] text-gray-500 transition-colors hover:bg-black/[0.04] hover:text-gray-900 dark:border-white/[0.08] dark:text-gray-300 dark:hover:bg-white/[0.06] dark:hover:text-white"
             aria-label="Back to menu"
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
           <div className="min-w-0 flex-1">
             <p className="text-[20px] font-black leading-tight text-gray-900 dark:text-white">Settings</p>
-            <p className="mt-0.5 truncate text-[12px] font-semibold text-gray-500 dark:text-white/45">Navigation, accounts, notifications</p>
+            <p className="mt-0.5 truncate text-[12px] font-semibold text-gray-500 dark:text-gray-300">Navigation, accounts, notifications</p>
           </div>
           <button
             type="button"
             onClick={() => onMobileOpenChange(false)}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.08] text-gray-500 transition-colors hover:bg-black/[0.04] hover:text-gray-900 dark:border-white/[0.08] dark:text-white/48 dark:hover:bg-white/[0.06] dark:hover:text-white"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.08] text-gray-500 transition-colors hover:bg-black/[0.04] hover:text-gray-900 dark:border-white/[0.08] dark:text-gray-300 dark:hover:bg-white/[0.06] dark:hover:text-white"
             aria-label="Close menu"
           >
             <X className="h-4 w-4" />
@@ -545,7 +545,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
         <div className="space-y-4">
           <section className="rounded-[1.55rem] border border-black/[0.06] bg-black/[0.02] p-3.5 dark:border-white/[0.08] dark:bg-white/[0.035]">
             <div className="mb-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-white/36">Navigation Look</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Navigation Look</p>
               <h3 className="mt-1 text-[15px] font-black tracking-[-0.02em] text-gray-900 dark:text-white">Choose bottom nav style.</h3>
             </div>
             <div className="grid grid-cols-2 gap-2">
@@ -563,13 +563,13 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
                     className={`rounded-2xl border px-3 py-3 text-left transition-all disabled:cursor-not-allowed disabled:opacity-60 ${
                       active
                         ? 'border-emerald-400/45 bg-emerald-400/[0.13] text-emerald-950 dark:text-white shadow-[0_0_30px_-20px_rgba(16,185,129,0.75)]'
-                        : 'border-black/[0.08] bg-white/70 text-gray-700 hover:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white/68 dark:hover:bg-white/[0.07]'
+                        : 'border-black/[0.08] bg-white/70 text-gray-700 hover:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-white/[0.07]'
                     }`}
                   >
                     <span className="flex items-center justify-between gap-2">
                       <span>
                         <span className="block text-[12px] font-black">{option.label}</span>
-                        <span className="mt-0.5 block text-[10px] font-semibold text-gray-500 dark:text-white/38">{option.hint}</span>
+                        <span className="mt-0.5 block text-[10px] font-semibold text-gray-500 dark:text-gray-400">{option.hint}</span>
                       </span>
                       {active && <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_0_5px_rgba(52,211,153,0.12)]" />}
                     </span>
@@ -577,7 +577,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
                 );
               })}
             </div>
-            <p className="mt-2 text-[10px] font-semibold text-gray-500 dark:text-white/34">
+            <p className="mt-2 text-[10px] font-semibold text-gray-500 dark:text-gray-400">
               Default on this device: {getDefaultMobileNavStyle() === 'floating' ? 'Floating' : 'Docked'}
             </p>
           </section>
@@ -585,7 +585,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
           <section className="rounded-[1.55rem] border border-black/[0.06] bg-black/[0.02] p-3.5 dark:border-white/[0.08] dark:bg-white/[0.035]">
             <div className="mb-3 flex items-start justify-between gap-3">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-white/36">Account Switcher</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Account Switcher</p>
                 <h3 className="mt-1 text-[15px] font-black tracking-[-0.02em] text-gray-900 dark:text-white">Saved on this device.</h3>
               </div>
               <button
@@ -615,7 +615,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
                     />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[13px] font-black text-gray-900 dark:text-white">{account.displayName || 'Saved account'}</p>
-                      <p className="truncate text-[10px] font-mono font-semibold text-gray-500 dark:text-white/38">{account.email}</p>
+                      <p className="truncate text-[10px] font-mono font-semibold text-gray-500 dark:text-gray-400">{account.email}</p>
                     </div>
                     {isCurrent ? (
                       <span className="rounded-full bg-emerald-400/[0.13] px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-emerald-800 dark:text-emerald-200">
@@ -635,7 +635,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
                     <button
                       type="button"
                       onClick={() => handleForgetSavedAccount(account.userId)}
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-red-500/10 hover:text-red-500 dark:text-white/28 dark:hover:text-red-300"
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-red-500/10 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-300"
                       aria-label="Forget saved account"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -648,7 +648,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
             <button
               type="button"
               onClick={handleAddAnotherAccount}
-              className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-2xl border border-black/[0.08] bg-white/70 text-[12px] font-black text-gray-700 transition-colors hover:bg-white dark:border-white/[0.08] dark:bg-white/[0.045] dark:text-white/76 dark:hover:bg-white/[0.075]"
+              className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-2xl border border-black/[0.08] bg-white/70 text-[12px] font-black text-gray-700 transition-colors hover:bg-white dark:border-white/[0.08] dark:bg-white/[0.045] dark:text-gray-100 dark:hover:bg-white/[0.075]"
             >
               <Plus className="h-4 w-4" />
               Save another login
@@ -656,7 +656,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
           </section>
 
           <section>
-            <p className="mb-2 px-1 text-[10px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-white/36">Device Alerts</p>
+            <p className="mb-2 px-1 text-[10px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Device Alerts</p>
             <PushNotificationSetting surface="drawer" />
           </section>
         </div>
@@ -708,7 +708,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
             </div>
             <div className="min-w-0">
               <p className="truncate text-[14px] font-black leading-tight tracking-[-0.035em] text-gray-950 dark:text-white">ServeSync</p>
-              <p className="truncate text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-white/30">Team Management</p>
+              <p className="truncate text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-400">Team Management</p>
             </div>
           </button>
 
@@ -741,13 +741,13 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
                 size="sm"
                 className="ring-1 ring-black/10 dark:ring-white/10"
               />
-              <span className="max-w-[7rem] truncate text-[12px] font-black text-gray-800 dark:text-white/78">
+              <span className="max-w-[7rem] truncate text-[12px] font-black text-gray-800 dark:text-gray-100">
                 {displayName || fullName || 'Profile'}
               </span>
             </button>
             <button
               onClick={signOut}
-              className="flex h-10 w-10 items-center justify-center rounded-full text-gray-400 transition-all hover:-translate-y-0.5 hover:bg-red-50 hover:text-red-500 dark:text-white/35 dark:hover:bg-red-500/10 dark:hover:text-red-300"
+              className="flex h-10 w-10 items-center justify-center rounded-full text-gray-400 transition-all hover:-translate-y-0.5 hover:bg-red-50 hover:text-red-500 dark:text-gray-400 dark:hover:bg-red-500/10 dark:hover:text-red-300"
               aria-label="Sign out"
             >
               <LogOut className="h-4 w-4" />
@@ -795,7 +795,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
               <p className="truncate text-[13px] font-black leading-tight text-gray-900 dark:text-white">
                 {displayName || fullName || 'Profile'}
               </p>
-              <p className="truncate text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400 dark:text-white/30">
+              <p className="truncate text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400 dark:text-gray-400">
                 Menu
               </p>
             </div>
@@ -881,14 +881,14 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
                           <p className="truncate text-[21px] font-black leading-tight text-gray-900 dark:text-white">{displayName || fullName || 'Profile'}</p>
                           <button
                             onClick={() => handleNav('/profile')}
-                            className="mt-1 text-left text-[14px] font-semibold text-gray-500 transition-colors hover:text-gray-900 dark:text-white/52 dark:hover:text-white/78"
+                            className="mt-1 text-left text-[14px] font-semibold text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-300 dark:hover:text-white"
                           >
                             View profile
                           </button>
                         </div>
                         <button
                           onClick={() => onMobileOpenChange(false)}
-                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.08] text-gray-500 transition-colors hover:bg-black/[0.04] hover:text-gray-900 dark:border-white/[0.08] dark:text-white/48 dark:hover:bg-white/[0.06] dark:hover:text-white"
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.08] text-gray-500 transition-colors hover:bg-black/[0.04] hover:text-gray-900 dark:border-white/[0.08] dark:text-gray-300 dark:hover:bg-white/[0.06] dark:hover:text-white"
                           aria-label="Close menu"
                         >
                           <X className="h-4 w-4" />
@@ -920,9 +920,9 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
                             </span>
                             <span className="min-w-0 flex-1">
                               <span className="block truncate text-[16px] font-bold text-gray-900 dark:text-white">{item.label}</span>
-                              <span className="mt-0.5 block truncate text-[11px] font-semibold text-gray-500 dark:text-white/42">{item.desc}</span>
+                              <span className="mt-0.5 block truncate text-[11px] font-semibold text-gray-500 dark:text-gray-300">{item.desc}</span>
                             </span>
-                            <ChevronRight className="h-[18px] w-[18px] shrink-0 text-gray-400 transition-colors group-hover:text-gray-700 dark:text-white/28 dark:group-hover:text-white/64" />
+                            <ChevronRight className="h-[18px] w-[18px] shrink-0 text-gray-400 transition-colors group-hover:text-gray-700 dark:text-gray-500 dark:group-hover:text-gray-200" />
                           </button>
                         );
                       })}
@@ -930,7 +930,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
                       {leadershipMenuItems.length > 0 && (
                         <div className="pt-3">
                           <div className="px-3 pb-2">
-                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-gray-400 dark:text-white/30">Leadership</p>
+                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-gray-400 dark:text-gray-400">Leadership</p>
                           </div>
                           {leadershipMenuItems.map((item) => {
                             const Icon = item.icon;
@@ -950,9 +950,9 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
                                 </span>
                                 <span className="min-w-0 flex-1">
                                   <span className="block truncate text-[16px] font-bold text-gray-900 dark:text-white">{item.label}</span>
-                                  <span className="mt-0.5 block truncate text-[11px] font-semibold text-gray-500 dark:text-white/42">{item.desc}</span>
+                                  <span className="mt-0.5 block truncate text-[11px] font-semibold text-gray-500 dark:text-gray-300">{item.desc}</span>
                                 </span>
-                                <ChevronRight className="h-[18px] w-[18px] shrink-0 text-gray-400 transition-colors group-hover:text-gray-700 dark:text-white/28 dark:group-hover:text-white/64" />
+                                <ChevronRight className="h-[18px] w-[18px] shrink-0 text-gray-400 transition-colors group-hover:text-gray-700 dark:text-gray-500 dark:group-hover:text-gray-200" />
                               </button>
                             );
                           })}
@@ -1193,12 +1193,16 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
                 const active = isActive(item);
                 const Icon = item.icon;
                 const badge = getBadgeCount(item);
+                const navItemColor = active ? 'var(--mobile-nav-active-color)' : 'var(--mobile-nav-inactive-color)';
                 return (
                   <button
                     key={item.path}
                     onClick={() => navigate(item.path)}
+                    data-mobile-nav-item="true"
+                    data-active={active ? 'true' : 'false'}
+                    aria-current={active ? 'page' : undefined}
                     className={`relative flex flex-1 min-w-[44px] flex-col items-center justify-center gap-0.5 ${useDockedMobileNav ? 'h-[56px] pt-1' : 'h-12'}`}
-                    style={{ WebkitTapHighlightColor: 'transparent' }}
+                    style={{ WebkitTapHighlightColor: 'transparent', color: navItemColor }}
                   >
                     {active && !useDockedMobileNav && (
                       <motion.div
@@ -1214,14 +1218,14 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
                     <div className="relative">
                       <Icon
                         active={active}
-                        className={`transition-colors duration-200 ${active ? 'text-brand-600 dark:text-brand-400' : 'text-black/50 dark:text-white/55'}`}
+                        className="transition-colors duration-200"
                       />
                       <MobileBadge count={badge} color={item.badgeColor} />
                     </div>
                     <span
                       className={`relative max-w-[4.25rem] truncate font-black leading-none transition-colors ${
                         useDockedMobileNav ? 'text-[10px]' : 'text-[9px]'
-                      } ${active ? 'text-brand-600 dark:text-brand-400' : 'text-black/45 dark:text-white/42'}`}
+                      }`}
                     >
                       {item.label}
                     </span>
@@ -1246,7 +1250,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
             <h3 className="text-[24px] font-black tracking-[-0.03em] text-gray-900 dark:text-white">
               Add another login to Settings.
             </h3>
-            <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-gray-500 dark:text-white/45">
+            <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-gray-500 dark:text-gray-300">
               Enter the second account once. It will be saved on this device so you can switch from the avatar menu anytime.
             </p>
           </div>
@@ -1259,7 +1263,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
                 </div>
                 <div className="min-w-0">
                   <p className="text-[12px] font-black text-emerald-900 dark:text-emerald-200">Your current account stays active.</p>
-                  <p className="mt-1 text-[11px] leading-relaxed text-emerald-800/75 dark:text-emerald-200/65">
+                  <p className="mt-1 text-[11px] leading-relaxed text-emerald-800/75 dark:text-emerald-200/75">
                     This only stores the other account on this device. It does not log you out of the one you are using now.
                   </p>
                 </div>
@@ -1267,7 +1271,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
             </div>
 
             <div>
-              <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.14em] text-gray-500 dark:text-white/35">
+              <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">
                 Email address
               </label>
               <input
@@ -1282,7 +1286,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
             </div>
 
             <div>
-              <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.14em] text-gray-500 dark:text-white/35">
+              <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">
                 Password
               </label>
               <div className="relative">
@@ -1298,7 +1302,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
                 <button
                   type="button"
                   onClick={() => setShowAddPassword(value => !value)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-xl p-1.5 text-gray-400 transition-colors hover:text-gray-600 dark:text-white/30 dark:hover:text-white/55"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-xl p-1.5 text-gray-400 transition-colors hover:text-gray-600 dark:text-gray-400 dark:hover:text-white"
                 >
                   {showAddPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -1393,7 +1397,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
               <h2 className="mt-2 text-3xl font-black tracking-[-0.05em] text-white">
                 Moving into {switchingAccountMeta.name}.
               </h2>
-              <p className="mx-auto mt-3 max-w-[18rem] text-sm font-semibold leading-relaxed text-white/52">
+              <p className="mx-auto mt-3 max-w-[18rem] text-sm font-semibold leading-relaxed text-white/70">
                 Loading profile, roles, and live data for
                 <span className="block">{switchingAccountMeta.email}.</span>
               </p>

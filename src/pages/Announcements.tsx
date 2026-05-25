@@ -260,7 +260,7 @@ export function Announcements() {
                   Team updates
                 </p>
                 <h1 className="mt-1 text-[2rem] font-black leading-none text-gray-950 dark:text-white sm:text-[2.55rem]" style={{ letterSpacing: '-0.065em' }}>
-                  Newsroom.
+                  Announcements
                 </h1>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600 dark:text-white/52">
                   The latest ministry updates, pinned reminders, and team-wide notes in one calm place.
@@ -476,7 +476,7 @@ export function Announcements() {
       </div>
 
       {/* ── Create Modal ──────────────────────────────── */}
-      <Modal open={showCreate && isDesktop} onClose={() => setShowCreate(false)} title="New Announcement" size="lg">
+      <Modal open={showCreate && isDesktop} onClose={() => setShowCreate(false)} title="Creating Announcement" size="lg">
         <AnnouncementComposerForm
           onCancel={() => setShowCreate(false)}
           onSuccess={async () => {

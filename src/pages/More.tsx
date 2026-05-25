@@ -204,17 +204,17 @@ export function More() {
             </div>
 
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] font-mono font-medium uppercase tracking-[0.18em] text-gray-400 dark:text-white/35">
+              <p className="text-[10px] font-mono font-medium uppercase tracking-[0.18em] text-gray-400 dark:text-gray-400">
                 {isLeader ? 'Leader' : 'Member'}
               </p>
               <h2 className="text-[15px] font-black text-gray-900 dark:text-white truncate leading-tight" style={{ letterSpacing: '-0.02em' }}>
                 {displayName}
               </h2>
-              <p className="text-[11px] text-gray-500 dark:text-white/40 truncate font-mono">{profile?.email}</p>
+              <p className="text-[11px] text-gray-500 dark:text-gray-300 truncate font-mono">{profile?.email}</p>
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
-              <ChevronRight className="h-4 w-4 text-gray-300 dark:text-white/20 group-hover:text-gray-500 dark:group-hover:text-white/40 transition-colors" />
+              <ChevronRight className="h-4 w-4 text-gray-300 dark:text-gray-500 group-hover:text-gray-500 dark:group-hover:text-gray-300 transition-colors" />
               <button
                 onClick={e => { e.stopPropagation(); handleSignOut(); }}
                 className="h-8 w-8 rounded-xl flex items-center justify-center text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-500/[0.1] border border-red-200 dark:border-red-500/20 hover:bg-red-100 dark:hover:bg-red-500/[0.16] active:scale-95 transition-all"
@@ -256,7 +256,7 @@ export function More() {
                   </span>
                 )}
               </div>
-              <p className="text-[11px] font-semibold text-gray-700 dark:text-white/75 text-center leading-tight" style={{ letterSpacing: '-0.01em' }}>
+              <p className="text-[11px] font-semibold text-gray-700 dark:text-gray-100 text-center leading-tight" style={{ letterSpacing: '-0.01em' }}>
                 {item.label}
               </p>
             </motion.button>
@@ -274,7 +274,7 @@ export function More() {
             <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.12] to-transparent" />
             <div className="space-y-3.5">
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-white/45">Leadership</p>
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Leadership</p>
                 <h3 className="text-[16px] font-black text-gray-900 dark:text-white mt-1" style={{ letterSpacing: '-0.025em' }}>Open each leadership page directly.</h3>
               </div>
 
@@ -298,7 +298,7 @@ export function More() {
                     </div>
                     <span className="min-w-0 flex-1">
                       <span className="block text-[12px] font-bold text-gray-900 dark:text-white leading-tight">{item.label}</span>
-                      <span className="mt-1 block text-[10px] font-semibold text-gray-500 dark:text-white/40 leading-snug">{item.desc}</span>
+                      <span className="mt-1 block text-[10px] font-semibold text-gray-500 dark:text-gray-300 leading-snug">{item.desc}</span>
                     </span>
                   </button>
                 ))}
@@ -318,9 +318,9 @@ export function More() {
 
           <div className="space-y-3.5">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-white/45">Mobile Navigation</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Mobile Navigation</p>
               <h3 className="text-[16px] font-black text-gray-900 dark:text-white mt-1" style={{ letterSpacing: '-0.025em' }}>Choose your mobile nav look.</h3>
-              <p className="text-[12px] text-gray-500 dark:text-white/40 mt-1.5 leading-snug">
+              <p className="text-[12px] text-gray-500 dark:text-gray-300 mt-1.5 leading-snug">
                 Floating works like iOS. Docked sits flush at the bottom like Android.
               </p>
             </div>
@@ -344,7 +344,7 @@ export function More() {
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="text-[13px] font-bold text-gray-900 dark:text-white">{option.label}</p>
-                        <p className="text-[11px] text-gray-500 dark:text-white/40 mt-1">{option.hint}</p>
+                        <p className="text-[11px] text-gray-500 dark:text-gray-300 mt-1">{option.hint}</p>
                       </div>
                       {active && (
                         <div className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_0_6px_rgba(16,185,129,0.12)]" />
@@ -355,7 +355,7 @@ export function More() {
               })}
             </div>
 
-            <p className="text-[11px] text-gray-500 dark:text-white/38">
+            <p className="text-[11px] text-gray-500 dark:text-gray-400">
               Current default: {getDefaultMobileNavStyle() === 'floating' ? 'Floating' : 'Docked'}
             </p>
           </div>
@@ -372,9 +372,9 @@ export function More() {
 
           <div className="space-y-3.5">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-white/45">Account Switcher</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Account Switcher</p>
               <h3 className="text-[16px] font-black text-gray-900 dark:text-white mt-1" style={{ letterSpacing: '-0.025em' }}>Jump between saved accounts.</h3>
-              <p className="text-[12px] text-gray-500 dark:text-white/40 mt-1.5 leading-snug">
+              <p className="text-[12px] text-gray-500 dark:text-gray-300 mt-1.5 leading-snug">
                 Sign into each account on this device once. After that, you can switch here without typing the password again.
               </p>
             </div>
@@ -398,7 +398,7 @@ export function More() {
 
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[13px] font-bold text-gray-900 dark:text-white">{account.displayName}</p>
-                      <p className="truncate text-[11px] font-mono text-gray-500 dark:text-white/40">{account.email}</p>
+                      <p className="truncate text-[11px] font-mono text-gray-500 dark:text-gray-300">{account.email}</p>
                     </div>
 
                     {isCurrent ? (
@@ -418,7 +418,7 @@ export function More() {
 
                     <button
                       onClick={() => forgetSavedAccount(account.userId)}
-                      className="shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-400 transition-colors hover:text-red-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/30 dark:hover:text-red-400"
+                      className="shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-400 transition-colors hover:text-red-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-gray-400 dark:hover:text-red-400"
                       title="Forget saved account"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -430,7 +430,7 @@ export function More() {
 
             <button
               onClick={handleAddAnotherAccount}
-              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-gray-200/80 bg-white text-[12px] font-bold text-gray-700 transition-all hover:bg-gray-50 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/75 dark:hover:bg-white/[0.05]"
+              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-gray-200/80 bg-white text-[12px] font-bold text-gray-700 transition-all hover:bg-gray-50 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-gray-100 dark:hover:bg-white/[0.05]"
             >
               <Plus className="h-4 w-4" />
               Save another account on this device
@@ -449,11 +449,11 @@ export function More() {
 
           <div className="space-y-3">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-white/45">App Version</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">App Version</p>
               <h3 className="mt-1 text-[16px] font-black text-gray-900 dark:text-white" style={{ letterSpacing: '-0.025em' }}>
                 {APP_VERSION_LABEL}
               </h3>
-              <p className="mt-1.5 text-[12px] leading-snug text-gray-500 dark:text-white/40">
+              <p className="mt-1.5 text-[12px] leading-snug text-gray-500 dark:text-gray-300">
                 Installed PWA version: {pwaVersionLabel}
               </p>
             </div>
@@ -482,7 +482,7 @@ export function More() {
         <div className="space-y-5">
           <div>
             <h3 className="text-[24px] font-black tracking-[-0.03em] text-gray-900 dark:text-white">Add another login without leaving More.</h3>
-            <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-gray-500 dark:text-white/45">
+            <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-gray-500 dark:text-gray-300">
               Enter the second account once. It will be saved on this device so you can switch back here anytime.
             </p>
           </div>
@@ -495,7 +495,7 @@ export function More() {
                 </div>
                 <div className="min-w-0">
                   <p className="text-[12px] font-black text-emerald-900 dark:text-emerald-200">Your current account stays active.</p>
-                  <p className="mt-1 text-[11px] leading-relaxed text-emerald-800/75 dark:text-emerald-200/65">
+                  <p className="mt-1 text-[11px] leading-relaxed text-emerald-800/75 dark:text-emerald-200/75">
                     This only stores the other account on this device. It does not log you out of the one you are using now.
                   </p>
                 </div>
@@ -503,7 +503,7 @@ export function More() {
             </div>
 
             <div>
-              <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.14em] text-gray-500 dark:text-white/35">
+              <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">
                 Email address
               </label>
               <input
@@ -518,7 +518,7 @@ export function More() {
             </div>
 
             <div>
-              <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.14em] text-gray-500 dark:text-white/35">
+              <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">
                 Password
               </label>
               <div className="relative">
@@ -534,7 +534,7 @@ export function More() {
                 <button
                   type="button"
                   onClick={() => setShowAddPassword(value => !value)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-xl p-1.5 text-gray-400 transition-colors hover:text-gray-600 dark:text-white/30 dark:hover:text-white/55"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-xl p-1.5 text-gray-400 transition-colors hover:text-gray-600 dark:text-gray-400 dark:hover:text-white"
                 >
                   {showAddPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -629,7 +629,7 @@ export function More() {
               <h2 className="mt-2 text-3xl font-black tracking-[-0.05em] text-gray-950 dark:text-white">
                 Moving into {switchingAccountMeta.name}.
               </h2>
-              <p className="mx-auto mt-3 max-w-[18rem] text-sm font-semibold leading-relaxed text-gray-500 dark:text-white/50">
+              <p className="mx-auto mt-3 max-w-[18rem] text-sm font-semibold leading-relaxed text-gray-500 dark:text-gray-300">
                 Loading your dashboard, permissions, and live data for
                 <span className="block">{switchingAccountMeta.email}.</span>
               </p>
@@ -657,7 +657,7 @@ export function More() {
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block text-xs font-black text-gray-900 dark:text-white">{step.label}</span>
-                        <span className="block truncate text-[11px] font-semibold text-gray-500 dark:text-white/45">{step.detail}</span>
+                        <span className="block truncate text-[11px] font-semibold text-gray-500 dark:text-gray-300">{step.detail}</span>
                       </span>
                       <motion.span
                         className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_14px_rgba(16,185,129,0.75)]"
@@ -685,7 +685,7 @@ export function More() {
                   />
                 </motion.div>
               </div>
-              <p className="mt-3 text-[11px] font-bold text-emerald-700/70 dark:text-emerald-200/55">
+              <p className="mt-3 text-[11px] font-bold text-emerald-700/70 dark:text-emerald-200/75">
                 Preparing everything before the workspace opens...
               </p>
             </div>

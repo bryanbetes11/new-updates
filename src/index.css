@@ -21,6 +21,8 @@
     --nav-bg: rgba(255,255,255,0.40);
     --nav-border: rgba(0,0,0,0.05);
     --nav-indicator: rgba(0,0,0,0.07);
+    --mobile-nav-active-color: #16a34a;
+    --mobile-nav-inactive-color: rgba(75,85,99,0.92);
     --sidebar-bg: rgba(255,255,255,0.97);
     --sidebar-border: rgba(0,0,0,0.06);
     --service-mode-viewport-height: 100dvh;
@@ -38,6 +40,8 @@
     --nav-bg: rgba(22,22,24,0.55);
     --nav-border: rgba(255,255,255,0.12);
     --nav-indicator: rgba(255,255,255,0.12);
+    --mobile-nav-active-color: #4ade80;
+    --mobile-nav-inactive-color: rgba(255,255,255,0.82);
     --sidebar-bg: rgba(17,16,19,0.98);
     --sidebar-border: rgba(255,255,255,0.07);
   }
@@ -99,6 +103,9 @@
     background: #0c0f0d !important;
   }
 
+  html.messages-page-active,
+  html.messages-page-active body,
+  body.messages-page-active,
   html.messages-chat-active,
   html.messages-chat-active body,
   body.messages-chat-active {
@@ -106,6 +113,9 @@
     overscroll-behavior-x: none;
   }
 
+  html.dark.messages-page-active,
+  html.dark.messages-page-active body,
+  html.dark body.messages-page-active,
   html.dark.messages-chat-active,
   html.dark.messages-chat-active body,
   html.dark body.messages-chat-active {

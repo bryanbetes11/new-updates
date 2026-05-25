@@ -355,7 +355,7 @@ export function SetlistDeadlines() {
 
   if (loading) {
     return (
-      <div className="page-container page-bottom-pad">
+      <div className="page-container page-bottom-pad touch-action-pan-y">
         <div className="relative max-w-2xl lg:max-w-6xl xl:max-w-[1560px] mx-auto pt-4 sm:pt-5 pb-6 px-4 sm:px-6 lg:px-8">
           <div className="py-10 flex justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
@@ -366,7 +366,7 @@ export function SetlistDeadlines() {
   }
 
   const content = (
-    <div className="space-y-5 sm:space-y-6">
+    <div className="touch-action-pan-y space-y-5 sm:space-y-6">
       <LeadershipHeroCard
         tone="emerald"
         icon={ListMusic}
@@ -400,7 +400,7 @@ export function SetlistDeadlines() {
               <button
                 key={stat.key}
                 onClick={() => setFilter(filter === stat.key as StatusFilter ? 'all' : stat.key as StatusFilter)}
-                className={`relative rounded-3xl p-4 text-left bg-white dark:bg-white/[0.025] border transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.98] overflow-hidden ${
+                className={`touch-action-pan-y relative rounded-3xl p-4 text-left bg-white dark:bg-white/[0.025] border transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.98] overflow-hidden ${
                   active ? 'border-current/40' : 'border-gray-200/80 dark:border-white/[0.06]'
                 } ${active ? stat.tone : ''}`}
                 style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 4px 14px -8px rgba(15,23,42,0.08)' }}
@@ -418,7 +418,7 @@ export function SetlistDeadlines() {
       </LeadershipHeroCard>
 
       {filteredEvents.length === 0 ? (
-        <div className="rounded-3xl bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] p-12 text-center" style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -12px rgba(15,23,42,0.10)' }}>
+        <div className="touch-action-pan-y rounded-3xl bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] p-12 text-center" style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -12px rgba(15,23,42,0.10)' }}>
           <div
             className="relative h-14 w-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
             style={{ background: 'linear-gradient(145deg,#16a34a,#15803d)', boxShadow: '0 4px 14px rgba(22,163,74,0.3)' }}
@@ -431,7 +431,7 @@ export function SetlistDeadlines() {
           </p>
         </div>
       ) : (
-        <div className="space-y-2.5">
+        <div className="touch-action-pan-y space-y-2.5">
           {filteredEvents.map(event => {
             const status = getDeadlineStatus(event.proposal_due_date, event.setlist_status);
             const { text: daysText, urgent: daysUrgent } = getDaysLabel(event.proposal_due_date, event.setlist_status);
@@ -452,7 +452,7 @@ export function SetlistDeadlines() {
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/events/${event.id}`); } }}
-                className={`relative rounded-3xl overflow-hidden bg-white dark:bg-white/[0.025] border p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 cursor-pointer transition-all duration-200 hover:-translate-y-0.5 ${
+                className={`touch-action-pan-y relative rounded-3xl overflow-hidden bg-white dark:bg-white/[0.025] border p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 cursor-pointer transition-all duration-200 hover:-translate-y-0.5 ${
                   isOverdueEvent ? 'border-red-200 dark:border-red-500/25' : isDueTodayEvent ? 'border-amber-200 dark:border-amber-500/25' : 'border-gray-200/80 dark:border-white/[0.06]'
                 }`}
                 style={{
@@ -586,8 +586,8 @@ export function SetlistDeadlines() {
   );
 
   return (
-    <div className="page-container page-bottom-pad">
-      <div className="relative max-w-2xl lg:max-w-6xl xl:max-w-[1560px] mx-auto pt-4 sm:pt-5 pb-6 px-4 sm:px-6 lg:px-8">
+    <div className="page-container page-bottom-pad touch-action-pan-y">
+      <div className="touch-action-pan-y relative max-w-2xl lg:max-w-6xl xl:max-w-[1560px] mx-auto pt-4 sm:pt-5 pb-6 px-4 sm:px-6 lg:px-8">
         {content}
       </div>
     </div>

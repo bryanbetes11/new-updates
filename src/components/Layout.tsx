@@ -63,6 +63,7 @@ export function Layout() {
   const isDashboardPage = location.pathname === '/dashboard';
   const isEventsPage = location.pathname === '/events';
   const isAnnouncementsPage = location.pathname === '/announcements';
+  const isSetlistDeadlinesPage = location.pathname === '/leadership/setlists' || location.pathname === '/approve-setlist';
   const isSongsPage = location.pathname === '/songs';
   const isVideosPage = location.pathname === '/videos';
   const isSetsPage = location.pathname === '/sets';
@@ -87,7 +88,7 @@ export function Layout() {
   const hideNavMobile = staticHideNav || isAnnouncementDetail;
   const shouldShiftForMobileMenu = user && !staticHideNav && !isMessagesConversation && mobileOpen;
   const shouldAllowNativePullRefresh =
-    isDashboardPage || isEventsPage || isEventDetail || isAnnouncementsPage || isAnnouncementDetail;
+    isDashboardPage || isEventsPage || isEventDetail || isAnnouncementsPage || isAnnouncementDetail || isSetlistDeadlinesPage;
 
   useEffect(() => {
     rememberRoute(buildAppRoute(location.pathname, location.search, location.hash));
@@ -307,7 +308,7 @@ export function Layout() {
           filter: shouldShiftForMobileMenu ? 'blur(1.25px) brightness(0.78)' : 'blur(0px) brightness(1)',
         }}
         transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
-        className={`overflow-x-hidden ${isMessagesPage ? 'box-border flex flex-col min-h-[100dvh] overflow-hidden lg:fixed lg:inset-0 lg:h-[100dvh] lg:pt-24' : ''}`}
+        className={`overflow-x-hidden ${isMessagesPage ? 'box-border flex flex-col min-h-[100dvh] overflow-hidden bg-white dark:bg-[#111013] lg:fixed lg:inset-0 lg:h-[100dvh] lg:pt-24' : ''}`}
         style={{ pointerEvents: shouldShiftForMobileMenu ? 'none' : undefined }}
       >
         {isMessagesPage ? (

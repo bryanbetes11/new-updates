@@ -3761,6 +3761,15 @@ export function Messages() {
   const showConversationList = isDesktop || !mobileChatIsOpen;
   const showChatPane = isDesktop || mobileChatIsOpen;
 
+  useEffect(() => {
+    document.documentElement.classList.add('messages-page-active');
+    document.body.classList.add('messages-page-active');
+    return () => {
+      document.documentElement.classList.remove('messages-page-active');
+      document.body.classList.remove('messages-page-active');
+    };
+  }, []);
+
   useLayoutEffect(() => {
     if (!isDesktop) return;
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });

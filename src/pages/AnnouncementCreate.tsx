@@ -39,7 +39,7 @@ export function AnnouncementCreate() {
                     className="mt-1 text-[2.3rem] font-black leading-none text-gray-950 dark:text-white sm:text-[3rem]"
                     style={{ letterSpacing: '-0.065em' }}
                   >
-                    New announcement.
+                    Creating Announcement
                   </h1>
                   <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600 dark:text-white/52">
                     Write the update once, add photos if needed, and send it to the team from a cleaner full-page flow on mobile.

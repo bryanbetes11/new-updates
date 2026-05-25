@@ -25,6 +25,24 @@ const stepVariants = {
 };
 const stepTransition = { type: 'tween', duration: 0.22, ease: [0.25, 0.46, 0.45, 0.94] } as const;
 
+function formatRequestError(error: unknown, isSub: boolean) {
+  const fallback = isSub ? 'Failed to send sub request' : 'Failed to send swap request';
+  if (!error || typeof error !== 'object' || !('message' in error)) return fallback;
+
+  const message = String((error as { message?: unknown }).message || '');
+  const lower = message.toLowerCase();
+  if (lower.includes('duplicate') || lower.includes('unique')) {
+    return 'You already have a request saved for this assignment date.';
+  }
+  if (lower.includes('row-level security') || lower.includes('permission')) {
+    return 'This request could not be saved because of a permission check.';
+  }
+  if (lower.includes('has_date') || lower.includes('unavailable_date')) {
+    return 'This assignment is missing an event date, so the request could not be saved.';
+  }
+  return message || fallback;
+}
+
 export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
   const { user, profile } = useAuth();
   const { toast } = useToast();
@@ -109,6 +127,10 @@ export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
           if (!roleData) { setLoadingMembers(false); return; }
 
           const eventId = myAssignment.event_id || (myAssignment as any).events?.id;
+          if (!eventId) {
+            setLoadingMembers(false);
+            return;
+          }
 
           const [{ data: urData }, { data: evtData }] = await Promise.all([
             supabase
@@ -153,6 +175,7 @@ export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
         const upcoming = ((data || []) as EventAssignment[])
           .filter(a =>
             a.events &&
+            a.event_id !== myAssignment.event_id &&
             isAfter(parseISO(a.events.event_date), startOfToday()) &&
             a.roles?.name === myRoleName
           )
@@ -179,6 +202,12 @@ export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
   const handleSubmit = async () => {
     if (!user || !myAssignment || !selectedMember || !reason.trim()) return;
     if (!isSub && !selectedTarget) return;
+    const eventDate = myAssignment.events?.event_date;
+    if (!eventDate) {
+      toast('error', 'This assignment is missing an event date.');
+      return;
+    }
+
     setSubmitting(true);
     try {
       const { data: sr, error } = await supabase
@@ -192,7 +221,7 @@ export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
           status: 'pending',
           request_type: isSub ? 'sub' : 'swap',
           leave_type: 'single',
-          unavailable_date: myAssignment.events?.event_date,
+          unavailable_date: eventDate,
         })
         .select()
         .single();
@@ -209,7 +238,7 @@ export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
         ? `They need someone to cover their ${myRoleName} spot at ${myEventTitle}. Tap to respond.`
         : `They're offering their spot at ${myEventTitle} in exchange for your spot at ${selectedTarget!.events?.title || 'an event'}. Tap to respond.`;
 
-      await supabase.from('notifications').insert({
+      const { error: notificationError } = await supabase.from('notifications').insert({
         user_id: selectedMember.id,
         type: isSub ? 'sub_request' : 'swap_request',
         title: notifTitle,
@@ -217,10 +246,17 @@ export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
         data: { swap_request_id: sr.id, url: '/dashboard' },
       });
 
-      toast('success', isSub ? 'Sub request sent!' : 'Swap request sent!');
+      if (notificationError) {
+        console.warn('[SwapRequestModal] Request was saved but notification insert failed:', notificationError);
+      }
+
+      toast('success', notificationError
+        ? `${isSub ? 'Sub' : 'Swap'} request saved. The member can still respond from the Dashboard.`
+        : isSub ? 'Sub request sent!' : 'Swap request sent!');
       handleClose();
-    } catch {
-      toast('error', isSub ? 'Failed to send sub request' : 'Failed to send swap request');
+    } catch (error) {
+      console.error('[SwapRequestModal] Failed to create request:', error);
+      toast('error', formatRequestError(error, isSub));
     } finally {
       setSubmitting(false);
     }

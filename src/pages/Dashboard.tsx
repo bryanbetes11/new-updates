@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { Calendar, Music, ChevronRight, Megaphone, Image as ImageIcon, UserX, Trash2, ArrowUpRight, LayoutDashboard, Users, ClipboardCheck, ListChecks, Shield, ArrowLeftRight, Check, X, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { DashboardSkeleton } from '../components/LoadingSpinner';
 import { formatTime12Hour } from '../lib/timeFormat';
 import { Modal } from '../components/Modal';
@@ -130,6 +131,7 @@ function DateChip({ date, dim = false }: { date: string | null; dim?: boolean })
 
 export function Dashboard() {
   const { user, profile, isLeader, isProductionDirector } = useAuth();
+  const { toast } = useToast();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([]);
@@ -167,6 +169,7 @@ export function Dashboard() {
         target_assignment:target_assignment_id(*, events(*), roles(*))
       `)
       .eq('target_id', user.id)
+      .in('request_type', ['sub', 'swap'])
       .eq('status', 'pending')
       .is('target_response_at', null)
       .order('created_at', { ascending: false });
@@ -339,20 +342,23 @@ export function Dashboard() {
     if (!user || !profile?.org_id) return;
     setRespondingSwap(req.id);
     try {
-      await supabase.from('user_availability').update({
+      const { error: updateError } = await supabase.from('user_availability').update({
         status: accepted ? 'pending' : 'rejected',
         target_response_at: new Date().toISOString(),
       }).eq('id', req.id);
+      if (updateError) throw updateError;
 
       const targetName = profile?.nickname || `${profile?.first_name} ${profile?.last_name}`.trim();
+      const isSub = req.request_type === 'sub';
+      const typeLabel = isSub ? 'sub' : 'swap';
 
       if (accepted) {
         // 1. Notify requester that target accepted
         const requesterNotif = supabase.from('notifications').insert({
           user_id: req.user_id,
-          type: req.request_type === 'sub' ? 'sub_approved' : 'swap_approved',
-          title: `${targetName} accepted your ${req.request_type === 'sub' ? 'sub' : 'swap'} request`,
-          body: `Your ${req.request_type === 'sub' ? 'sub' : 'swap'} request is now pending leadership approval.`,
+          type: isSub ? 'sub_approved' : 'swap_approved',
+          title: `${targetName} accepted your ${typeLabel} request`,
+          body: `Your ${typeLabel} request is now pending leadership approval.`,
           data: { swap_request_id: req.id, url: '/my-assignments' },
         });
 
@@ -380,10 +386,10 @@ export function Dashboard() {
           .filter(id => id !== user.id) // Don't notify self
           .map(id => ({
             user_id: id,
-            type: req.request_type === 'sub' ? 'sub_request' : 'swap_request',
-            title: req.request_type === 'sub' ? 'New sub request for review' : 'New swap request for review',
-            body: `${targetName} agreed to ${req.request_type === 'sub' ? 'sub' : 'swap'} with ${req.requester?.nickname || req.requester?.first_name}. Needs your approval.`,
-            data: { url: '/leadership/overview', swap_request_id: req.id }
+            type: isSub ? 'sub_request' : 'swap_request',
+            title: isSub ? 'New sub request for review' : 'New swap request for review',
+            body: `${targetName} agreed to ${typeLabel} with ${req.requester?.nickname || req.requester?.first_name}. Needs your approval.`,
+            data: { url: '/leadership/swaps', swap_request_id: req.id }
           }));
 
         const ops = [requesterNotif];
@@ -391,21 +397,31 @@ export function Dashboard() {
           ops.push(supabase.from('notifications').insert(leaderNotifs));
         }
 
-        await Promise.all(ops);
+        const notificationResults = await Promise.all(ops);
+        notificationResults.forEach(result => {
+          if (result.error) {
+            console.warn('[Dashboard] Swap/sub notification failed:', result.error);
+          }
+        });
       } else {
         // Notify requester that target declined
-        await supabase.from('notifications').insert({
+        const { error: notificationError } = await supabase.from('notifications').insert({
           user_id: req.user_id,
-          type: 'swap_declined',
-          title: `${targetName} declined your swap request`,
-          body: 'Your schedule swap request was declined.',
+          type: isSub ? 'sub_declined' : 'swap_declined',
+          title: `${targetName} declined your ${typeLabel} request`,
+          body: `Your schedule ${typeLabel} request was declined.`,
           data: { swap_request_id: req.id, url: '/my-assignments' },
         });
+        if (notificationError) {
+          console.warn('[Dashboard] Swap/sub decline notification failed:', notificationError);
+        }
       }
 
       setIncomingSwapRequests(prev => prev.filter(r => r.id !== req.id));
-    } catch {
-      // silently fail — user can try again
+      toast('success', accepted ? `${typeLabel[0].toUpperCase()}${typeLabel.slice(1)} request accepted` : `${typeLabel[0].toUpperCase()}${typeLabel.slice(1)} request declined`);
+    } catch (error) {
+      console.error('[Dashboard] Failed to respond to swap/sub request:', error);
+      toast('error', 'Could not update this request. Please try again.');
     } finally {
       setRespondingSwap(null);
     }

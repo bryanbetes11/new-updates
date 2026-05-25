@@ -463,15 +463,17 @@ export interface AnnouncementPin {
 
 export interface SwapRequest {
   id: string;
-  requester_id: string;
-  target_id: string;
-  requester_assignment_id: string;
-  target_assignment_id: string;
+  user_id: string;
+  target_id: string | null;
+  requester_assignment_id: string | null;
+  target_assignment_id: string | null;
   reason: string;
-  status: 'pending_target' | 'pending_leadership' | 'approved' | 'declined_by_target' | 'declined_by_leadership' | 'cancelled';
+  status: 'pending' | 'approved' | 'rejected' | 'withdrawn';
+  request_type: 'sub' | 'swap';
   target_response_at: string | null;
-  leadership_response_at: string | null;
-  reviewed_by: string | null;
+  approved_by: string | null;
+  reviewed_at: string | null;
+  approval_notes: string | null;
   review_note: string | null;
   created_at: string;
   requester?: Profile;

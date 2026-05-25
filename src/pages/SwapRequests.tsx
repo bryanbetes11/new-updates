@@ -36,6 +36,7 @@ export function SwapRequests({ embedded }: Props) {
       `)
       .in('request_type', ['sub', 'swap'])
       .eq('status', 'pending')
+      .not('target_response_at', 'is', null)
       .order('created_at', { ascending: true });
 
     setRequests((data || []) as any[]);
@@ -58,18 +59,30 @@ export function SwapRequests({ embedded }: Props) {
     setSaving(true);
     try {
       const { request, approved } = reviewModal;
+      const isSub = request.request_type === 'sub';
+      const typeLabel = isSub ? 'sub' : 'swap';
+      if (!request.target_id) {
+        throw new Error('This request is missing a target member.');
+      }
 
       if (approved) {
+        if (!request.requester_assignment_id) {
+          throw new Error('This request is missing assignment details.');
+        }
+        if (!isSub && !request.target_assignment_id) {
+          throw new Error('This swap is missing the target assignment.');
+        }
+
         const ops = [
           supabase.from('event_assignments')
             .update({ user_id: request.target_id, status: 'confirmed' })
             .eq('id', request.requester_assignment_id)
         ];
-        if (request.request_type === 'swap') {
+        if (!isSub) {
           ops.push(
             supabase.from('event_assignments')
               .update({ user_id: request.user_id, status: 'confirmed' })
-              .eq('id', request.target_assignment_id)
+              .eq('id', request.target_assignment_id!)
           );
         }
         const results = await Promise.all(ops);
@@ -77,18 +90,17 @@ export function SwapRequests({ embedded }: Props) {
         if (firstError) throw firstError;
       }
 
-      await supabase.from('user_availability').update({
+      const { error: requestUpdateError } = await supabase.from('user_availability').update({
         status: approved ? 'approved' : 'rejected',
         approved_by: user.id,
         approval_notes: reviewNote.trim() || null,
         reviewed_at: new Date().toISOString(),
       }).eq('id', request.id);
+      if (requestUpdateError) throw requestUpdateError;
 
       const requesterName = request.requester?.nickname || `${request.requester?.first_name} ${request.requester?.last_name}`.trim();
       const targetName = request.target?.nickname || `${request.target?.first_name} ${request.target?.last_name}`.trim();
       const noteSnippet = reviewNote.trim() ? ` Note: ${reviewNote.trim()}` : '';
-      const isSub = request.request_type === 'sub';
-      const typeLabel = isSub ? 'sub' : 'swap';
 
       const notifications = approved
         ? [
@@ -100,20 +112,27 @@ export function SwapRequests({ embedded }: Props) {
             { user_id: request.target_id, type: isSub ? 'sub_declined' : 'swap_declined', title: `Schedule ${typeLabel} declined`, body: `The ${typeLabel} request between you and ${requesterName} was not approved.${noteSnippet}`, data: { url: '/my-assignments', swap_request_id: request.id } },
           ];
 
-      await supabase.from('notifications').insert(notifications);
+      const { error: notificationError } = await supabase.from('notifications').insert(notifications);
+      if (notificationError) {
+        console.warn('[SwapRequests] Review notification failed:', notificationError);
+      }
 
-      toast('success', approved ? 'Swap approved — assignments updated!' : 'Swap declined');
+      toast('success', approved ? `${isSub ? 'Sub' : 'Swap'} approved — assignments updated!` : `${isSub ? 'Sub' : 'Swap'} declined`);
       setReviewModal(null);
       setReviewNote('');
       fetchRequests();
-    } catch {
-      toast('error', 'Failed to process swap request');
+    } catch (error) {
+      console.error('[SwapRequests] Failed to process swap/sub request:', error);
+      toast('error', 'Failed to process request');
     } finally {
       setSaving(false);
     }
   };
 
   if (loading && !embedded) return <PageLoader />;
+
+  const reviewKind = reviewModal?.request.request_type === 'sub' ? 'Sub' : 'Swap';
+  const reviewKindLower = reviewKind.toLowerCase();
 
   return (
     <div className={embedded ? '' : 'page-container page-bottom-pad'}>
@@ -124,8 +143,8 @@ export function SwapRequests({ embedded }: Props) {
             tone="sky"
             icon={ArrowLeftRight}
             eyebrow="Leadership Flow"
-            title="Swap Requests."
-            description="Review schedule swaps and approve the handoff only when both assignments are safe to exchange."
+            title="Sub & Swap Requests."
+            description="Review schedule coverage changes once both members have agreed to the handoff."
           />
         )}
 
@@ -136,14 +155,16 @@ export function SwapRequests({ embedded }: Props) {
             <div className="h-12 w-12 rounded-2xl bg-gray-100 dark:bg-white/[0.06] flex items-center justify-center mx-auto mb-4">
               <ArrowLeftRight className="h-5 w-5 text-gray-400 dark:text-white/25" />
             </div>
-            <p className="text-[14px] font-medium text-gray-500 dark:text-white/40">No pending swap requests</p>
-            <p className="text-[12px] text-gray-400 dark:text-white/25 mt-1">Swaps that both parties agree to will appear here.</p>
+            <p className="text-[14px] font-medium text-gray-500 dark:text-white/40">No pending sub or swap requests</p>
+            <p className="text-[12px] text-gray-400 dark:text-white/25 mt-1">Requests that both members agree to will appear here.</p>
           </div>
         ) : (
           <div className="space-y-3">
             {requests.map(req => {
               const requesterName = req.requester?.nickname || `${req.requester?.first_name} ${req.requester?.last_name}`.trim();
               const targetName = req.target?.nickname || `${req.target?.first_name} ${req.target?.last_name}`.trim();
+              const isSub = req.request_type === 'sub';
+              const targetDisplayAssignment = isSub ? req.requester_assignment : req.target_assignment;
               return (
                 <div
                   key={req.id}
@@ -169,9 +190,9 @@ export function SwapRequests({ embedded }: Props) {
                   {/* Assignments grid */}
                   <div className="grid grid-cols-2 divide-x divide-gray-100 dark:divide-white/[0.06]">
                     {[
-                      { person: req.requester, assignment: req.requester_assignment, label: requesterName },
-                      { person: req.target, assignment: req.target_assignment, label: targetName },
-                    ].map(({ person, assignment, label }) => (
+                      { person: req.requester, assignment: req.requester_assignment, label: requesterName, caption: isSub ? 'Needs cover for' : 'Gives up' },
+                      { person: req.target, assignment: targetDisplayAssignment, label: targetName, caption: isSub ? 'Will cover' : 'Gives up' },
+                    ].map(({ person, assignment, label, caption }) => (
                       <div key={label} className="px-4 py-4">
                         <div className="flex items-center gap-2 mb-2.5">
                           <Avatar src={person?.avatar_url} firstName={person?.first_name || '?'} lastName={person?.last_name} size="xs" className="rounded-lg shrink-0" />
@@ -180,6 +201,7 @@ export function SwapRequests({ embedded }: Props) {
                         <p className="text-[13px] font-bold text-gray-900 dark:text-white truncate leading-tight" style={{ letterSpacing: '-0.01em' }}>
                           {assignment?.events?.title}
                         </p>
+                        <p className="text-[9px] font-mono uppercase tracking-[0.14em] text-gray-400 dark:text-white/25 mt-1">{caption}</p>
                         <div className="flex flex-col gap-0.5 mt-1.5">
                           {assignment?.events?.event_date && (
                             <span className="flex items-center gap-1 text-[10px] text-gray-500 dark:text-white/35 font-mono">
@@ -219,7 +241,7 @@ export function SwapRequests({ embedded }: Props) {
                       onClick={() => { setReviewModal({ request: req, approved: true }); setReviewNote(''); }}
                       className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-[12px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-500/[0.10] border border-emerald-200 dark:border-emerald-500/20 hover:bg-emerald-100 dark:hover:bg-emerald-500/[0.16] transition-colors"
                     >
-                      <Check className="h-3.5 w-3.5" /> Approve Swap
+                      <Check className="h-3.5 w-3.5" /> Approve {isSub ? 'Sub' : 'Swap'}
                     </button>
                   </div>
                 </div>
@@ -233,15 +255,17 @@ export function SwapRequests({ embedded }: Props) {
       <Modal
         open={!!reviewModal}
         onClose={() => setReviewModal(null)}
-        title={reviewModal?.approved ? 'Approve Swap' : 'Decline Swap'}
+        title={reviewModal?.approved ? `Approve ${reviewKind}` : `Decline ${reviewKind}`}
         size="sm"
       >
         {reviewModal && (
           <>
             <p className="text-[13px] text-gray-600 dark:text-white/55 mb-4 leading-relaxed">
               {reviewModal.approved
-                ? 'This will swap the assignments between both members and notify them. This cannot be undone.'
-                : 'Both members will be notified that the swap was not approved.'}
+                ? reviewModal.request.request_type === 'sub'
+                  ? 'This will move the assignment to the covering member and notify both members. This cannot be undone.'
+                  : 'This will swap the assignments between both members and notify them. This cannot be undone.'
+                : `Both members will be notified that the ${reviewKindLower} was not approved.`}
             </p>
             <div className="mb-4">
               <label className="block text-[11px] font-bold uppercase tracking-[0.14em] text-gray-500 dark:text-white/40 mb-1.5">
@@ -266,7 +290,7 @@ export function SwapRequests({ embedded }: Props) {
                     : 'bg-red-600 hover:bg-red-700 text-white'
                 }`}
               >
-                {saving ? 'Processing…' : reviewModal.approved ? 'Approve & Swap' : 'Decline'}
+                {saving ? 'Processing…' : reviewModal.approved ? reviewModal.request.request_type === 'sub' ? 'Approve Sub' : 'Approve & Swap' : 'Decline'}
               </button>
             </div>
           </>

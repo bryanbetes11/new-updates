@@ -263,7 +263,7 @@ export function MyAssignments() {
           <div className="space-y-3">
             <div className="flex items-center gap-2 px-0.5">
               <ArrowLeftRight className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-400" />
-              <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-white/45">Your Swap Requests</span>
+              <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-white/45">Your Sub & Swap Requests</span>
               <span className="text-[10px] font-mono text-gray-400 dark:text-white/25 tabular-nums ml-auto">{sentSwapRequests.length}</span>
             </div>
 
@@ -275,6 +275,7 @@ export function MyAssignments() {
                 {sentSwapRequests.map(req => {
                   const targetName = req.target?.nickname || `${req.target?.first_name} ${req.target?.last_name}`.trim();
                   const isTargetResponded = !!req.target_response_at;
+                  const isSub = req.request_type === 'sub';
                   const statusConfig: Record<string, { label: string; dot: string; bg: string; text: string; ring: string }> = {
                     pending:      isTargetResponded 
                                     ? { label: 'Pending Approval',  dot: '#f59e0b', bg: 'bg-amber-950/60',  text: 'text-amber-400',  ring: 'ring-amber-700/40'  }
@@ -293,12 +294,16 @@ export function MyAssignments() {
                       {/* Details */}
                       <div className="flex-1 min-w-0">
                         <p className="text-[13px] font-semibold text-gray-900 dark:text-white truncate leading-tight" style={{ letterSpacing: '-0.01em' }}>
-                          Swap with {targetName}
+                          {isSub ? `Sub request to ${targetName}` : `Swap with ${targetName}`}
                         </p>
                         <p className="text-[11px] text-gray-500 dark:text-white/40 font-mono mt-0.5 truncate">
                           {req.requester_assignment?.events?.title}
-                          <span className="text-gray-300 dark:text-white/20 mx-1">↔</span>
-                          {req.target_assignment?.events?.title}
+                          {!isSub && (
+                            <>
+                              <span className="text-gray-300 dark:text-white/20 mx-1">↔</span>
+                              {req.target_assignment?.events?.title}
+                            </>
+                          )}
                         </p>
                         <p className="text-[10px] text-gray-400 dark:text-white/25 font-mono mt-0.5">
                           {format(parseISO(req.created_at), 'MMM d, yyyy')}

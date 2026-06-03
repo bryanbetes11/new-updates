@@ -63,7 +63,6 @@ export function Layout() {
   const isDashboardPage = location.pathname === '/dashboard';
   const isEventsPage = location.pathname === '/events';
   const isAnnouncementsPage = location.pathname === '/announcements';
-  const isSetlistDeadlinesPage = location.pathname === '/leadership/setlists' || location.pathname === '/approve-setlist';
   const isSongsPage = location.pathname === '/songs';
   const isVideosPage = location.pathname === '/videos';
   const isSetsPage = location.pathname === '/sets';
@@ -93,7 +92,7 @@ export function Layout() {
     '--desktop-sidebar-width': `${desktopSidebarWidth}px`,
   } as CSSProperties;
   const shouldAllowNativePullRefresh =
-    isDashboardPage || isEventsPage || isEventDetail || isAnnouncementsPage || isAnnouncementDetail || isSetlistDeadlinesPage;
+    isDashboardPage || isEventsPage || isEventDetail || isAnnouncementsPage || isAnnouncementDetail || isLeadershipPage;
 
   useEffect(() => {
     rememberRoute(buildAppRoute(location.pathname, location.search, location.hash));

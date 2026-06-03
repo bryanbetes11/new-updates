@@ -963,16 +963,21 @@ export function EventDetail() {
 
   const handleUpdateSetlistSong = async () => {
     if (!editingSongId) return;
+    const originalSong = setlistSongs.find(song => song.id === editingSongId);
+    const categoryChanged = (originalSong?.song_category || '') !== editSongForm.category;
+    const videoChanged = (originalSong?.youtube_url || '') !== editSongForm.youtube_url;
+    const isKeyOnlyChange = !categoryChanged && !videoChanged;
+
     const { error } = await supabase.from('setlist_songs').update({
       song_category: editSongForm.category,
       youtube_url: editSongForm.youtube_url,
       performed_key: editSongForm.performed_key,
     }).eq('id', editingSongId);
     if (error) { toast('error', error.message); return; }
-    if (setlist?.status === 'approved') {
+    if (setlist?.status === 'approved' && !isKeyOnlyChange) {
       await markSetlistNeedsReapproval();
     } else {
-      toast('success', 'Song updated');
+      toast('success', isKeyOnlyChange ? 'Key updated' : 'Song updated');
     }
     setEditingSongId(null);
     fetchAll();
@@ -1538,6 +1543,7 @@ const openLyricsModal = (ss: SetlistSong) => {
   const heroIsDueSoon = heroDaysUntilDue !== null && heroDaysUntilDue >= 0 && heroDaysUntilDue <= 3 && !heroHasApprovedSetlist && !heroIsPast;
   const isApprovedSetlist = setlist?.status === 'approved';
   const showSetlistEditControls = !isApprovedSetlist || setlistEditMode;
+  const canEditSetlistSongDetails = showSetlistEditControls && (canManageSetlist || canEditSetlist);
   const showLinkedSetlistReference = !setlist && event.event_type === 'Rehearsals' && !!event.linked_event_id && !!linkedSetlist;
   const linkedSetlistStatus = linkedSetlist?.status || 'draft';
   const canShowPrimaryModeButton = event.event_type === 'Rehearsals' || isApprovedSetlist;
@@ -2531,6 +2537,8 @@ const openLyricsModal = (ss: SetlistSong) => {
                         const displayKey = ss.performed_key || ss.songs?.song_key || '';
                         const keyChanged = ss.performed_key && ss.songs?.song_key && ss.performed_key !== ss.songs.song_key;
                         const lyricsMissing = !ss.songs?.lyrics?.trim();
+                        const keyBadgeClass = `text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${keyChanged ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'}`;
+                        const editableKeyBadgeClass = `inline-flex items-center gap-1 text-[10px] font-black px-1.5 py-0.5 rounded shrink-0 transition-colors ${keyChanged ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/45' : 'bg-brand-50 text-brand-700 ring-1 ring-brand-200/70 hover:bg-brand-100 dark:bg-brand-950/40 dark:text-brand-300 dark:ring-brand-700/40 dark:hover:bg-brand-950/60'}`;
                         return (
                           <div key={ss.id} className="px-4 py-2.5">
                             {/* Desktop: original single-row layout */}
@@ -2546,11 +2554,20 @@ const openLyricsModal = (ss: SetlistSong) => {
                                       Lyrics needed
                                     </span>
                                   )}
-                                  {displayKey && (
-                                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${keyChanged ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'}`}>
-                                      {displayKey}
-                                    </span>
-                                  )}
+                                  {displayKey && (canEditSetlistSongDetails ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => openEditSong(ss)}
+                                      className={editableKeyBadgeClass}
+                                      aria-label={`Edit key for ${ss.songs?.title || 'song'}`}
+                                      title="Edit key"
+                                    >
+                                      <span>{displayKey}</span>
+                                      <span className="font-semibold">Edit</span>
+                                    </button>
+                                  ) : (
+                                    <span className={keyBadgeClass}>{displayKey}</span>
+                                  ))}
                                 </div>
                                 <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{ss.songs?.artist}</p>
                               </div>
@@ -2593,7 +2610,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                 <Music className="h-4 w-4" />
                                 <span>{ss.arrangement_section_order?.length ? 'Arranged' : getSetlistSongChartText(ss) ? 'Chart' : 'Add Chart'}</span>
                               </button>}
-                              {showSetlistEditControls && canEditSetlist && (
+                              {canEditSetlistSongDetails && (
                                 <button onClick={() => openEditSong(ss)} className="p-1 text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">
                                   <Edit className="h-4 w-4" />
                                 </button>
@@ -2644,7 +2661,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                     <Music className="h-3.5 w-3.5" />
                                     <span>{ss.arrangement_section_order?.length ? 'Arranged' : 'Chart'}</span>
                                   </button>}
-                                  {showSetlistEditControls && canEditSetlist && (
+                                  {canEditSetlistSongDetails && (
                                     <button onClick={() => openEditSong(ss)} className="p-1.5 text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">
                                       <Edit className="h-3.5 w-3.5" />
                                     </button>
@@ -2662,11 +2679,20 @@ const openLyricsModal = (ss: SetlistSong) => {
                               )}
                               {/* Line 3: key + category + usage + video */}
                               <div className="flex items-center flex-wrap gap-1.5 mt-1 ml-[34px]">
-                                {displayKey && (
-                                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${keyChanged ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'}`}>
-                                    {displayKey}
-                                  </span>
-                                )}
+                                {displayKey && (canEditSetlistSongDetails ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditSong(ss)}
+                                    className={editableKeyBadgeClass}
+                                    aria-label={`Edit key for ${ss.songs?.title || 'song'}`}
+                                    title="Edit key"
+                                  >
+                                    <span>{displayKey}</span>
+                                    <span className="font-semibold">Edit</span>
+                                  </button>
+                                ) : (
+                                  <span className={keyBadgeClass}>{displayKey}</span>
+                                ))}
                                 {ss.song_category && <span className="badge-blue text-[10px]">{ss.song_category}</span>}
                                 {showSetlistEditControls && (usage ? (
                                   <span className={`inline-flex items-center gap-0.5 text-[10px] font-medium ${isSafe ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>

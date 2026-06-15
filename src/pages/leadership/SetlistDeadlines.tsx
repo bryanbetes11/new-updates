@@ -8,6 +8,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Avatar } from '../../components/Avatar';
 import { LeadershipHeroCard } from '../../components/LeadershipHeroCard';
+import { describeSetlistReviewAge } from '../../lib/setlistReviewAge';
 
 interface DeadlineEvent {
   id: string;
@@ -23,6 +24,7 @@ interface DeadlineEvent {
     avatar_url: string;
   } | null;
   setlist_status: string | null;
+  setlist_submitted_at: string | null;
   reminder_count: number;
   last_reminder_at: string | null;
 }
@@ -34,7 +36,7 @@ interface DeadlineEventRow {
   event_date: string;
   proposal_due_date: string;
   song_leader: DeadlineEvent['song_leader'] | DeadlineEvent['song_leader'][];
-  setlists: Array<{ status: string | null }> | null;
+  setlists: Array<{ status: string | null; submitted_at: string | null; created_at: string | null }> | null;
 }
 
 type StatusFilter = 'all' | 'overdue' | 'due_today' | 'upcoming' | 'submitted';
@@ -187,7 +189,7 @@ export function SetlistDeadlines() {
       .select(`
         id, org_id, title, event_date, proposal_due_date,
         song_leader:profiles!events_song_leader_id_fkey(id, first_name, last_name, nickname, avatar_url),
-        setlists(status)
+        setlists(status, submitted_at, created_at)
       `)
       .not('proposal_due_date', 'is', null)
       .gte('event_date', today)
@@ -228,6 +230,7 @@ export function SetlistDeadlines() {
       if (statuses.includes('approved')) setlistStatus = 'approved';
       else if (statuses.includes('pending_review')) setlistStatus = 'pending_review';
       else if (statuses.length > 0) setlistStatus = statuses[0];
+      const selectedSetlist = (e.setlists || []).find((s) => s.status === setlistStatus) || null;
 
       return {
         id: e.id,
@@ -237,6 +240,7 @@ export function SetlistDeadlines() {
         proposal_due_date: e.proposal_due_date,
         song_leader: Array.isArray(e.song_leader) ? e.song_leader[0] || null : e.song_leader || null,
         setlist_status: setlistStatus,
+        setlist_submitted_at: selectedSetlist?.submitted_at || selectedSetlist?.created_at || null,
         reminder_count: reminderCounts[e.id]?.count ?? 0,
         last_reminder_at: reminderCounts[e.id]?.last_sent ?? null,
       };
@@ -440,6 +444,9 @@ export function SetlistDeadlines() {
           {filteredEvents.map(event => {
             const status = getDeadlineStatus(event.proposal_due_date, event.setlist_status);
             const { text: daysText, urgent: daysUrgent } = getDaysLabel(event.proposal_due_date, event.setlist_status);
+            const pendingReviewAge = event.setlist_status === 'pending_review'
+              ? describeSetlistReviewAge(event.setlist_submitted_at)
+              : null;
             const isSending = sendingId === event.id;
             const canSendReminder = !event.setlist_status || (event.setlist_status !== 'approved' && event.setlist_status !== 'pending_review');
             const recentlySent = event.last_reminder_at
@@ -516,6 +523,16 @@ export function SetlistDeadlines() {
                             : 'bg-gray-100 dark:bg-white/[0.06] text-gray-600 dark:text-gray-400'
                         }`}>
                           {daysText}
+                        </span>
+                      )}
+
+                      {pendingReviewAge && (
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                          (pendingReviewAge.pendingDays ?? 0) > 1
+                            ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                            : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+                        }`}>
+                          Submitted {pendingReviewAge.submittedDateLabel} · {pendingReviewAge.pendingDaysLabel}
                         </span>
                       )}
 

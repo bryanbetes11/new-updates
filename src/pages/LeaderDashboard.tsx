@@ -10,6 +10,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Avatar } from '../components/Avatar';
 import { PageLoader } from '../components/LoadingSpinner';
+import { describeSetlistReviewAge } from '../lib/setlistReviewAge';
 import type { Setlist, UserAvailability, DisciplineRecord, Profile } from '../types';
 
 interface RecentOffense {
@@ -391,18 +392,28 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
             badge={pendingSetlists.length}
           >
             <div className="divide-y divide-black/[0.03] dark:divide-white/[0.04]">
-              {pendingSetlists.map(s => (
-                <button key={s.id} onClick={() => navigate(`/events/${s.event_id}`)}
-                  className="flex items-center gap-3 px-5 py-3.5 w-full text-left hover:bg-gray-50/60 dark:hover:bg-white/[0.02] transition-colors"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[13px] font-bold text-gray-900 dark:text-white" style={{ letterSpacing: '-0.01em' }}>{s.events?.title}</p>
-                    <p className="text-[11px] font-mono text-gray-400 dark:text-white/30 mt-0.5 tracking-wide">{s.events?.event_date && format(parseISO(s.events.event_date), 'MMM d, yyyy')}</p>
-                  </div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-amber-50 dark:bg-amber-500/[0.12] text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/25 shrink-0">Needs Review</span>
-                  <ChevronRight className="h-3.5 w-3.5 text-gray-400 dark:text-white/25 shrink-0" />
-                </button>
-              ))}
+              {pendingSetlists.map(s => {
+                const reviewAge = describeSetlistReviewAge(s.submitted_at || s.created_at);
+                const isAging = (reviewAge.pendingDays ?? 0) > 1;
+
+                return (
+                  <button key={s.id} onClick={() => navigate(`/events/${s.event_id}`)}
+                    className="flex items-center gap-3 px-5 py-3.5 w-full text-left hover:bg-gray-50/60 dark:hover:bg-white/[0.02] transition-colors"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] font-bold text-gray-900 dark:text-white" style={{ letterSpacing: '-0.01em' }}>{s.events?.title}</p>
+                      <p className="text-[11px] font-mono text-gray-400 dark:text-white/30 mt-0.5 tracking-wide">{s.events?.event_date && format(parseISO(s.events.event_date), 'MMM d, yyyy')}</p>
+                      <p className="text-[11px] text-gray-500 dark:text-white/42 mt-1">
+                        Submitted {reviewAge.submittedDateLabel} · {reviewAge.pendingDaysLabel}
+                      </p>
+                    </div>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border shrink-0 ${isAging ? 'bg-red-50 dark:bg-red-500/[0.12] text-red-700 dark:text-red-300 border-red-200 dark:border-red-500/25' : 'bg-amber-50 dark:bg-amber-500/[0.12] text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/25'}`}>
+                      {isAging ? reviewAge.pendingDaysLabel : 'Needs Review'}
+                    </span>
+                    <ChevronRight className="h-3.5 w-3.5 text-gray-400 dark:text-white/25 shrink-0" />
+                  </button>
+                );
+              })}
             </div>
           </DashCard>
         )}

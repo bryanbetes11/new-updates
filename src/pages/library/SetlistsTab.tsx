@@ -16,6 +16,7 @@ import { Avatar } from '../../components/Avatar';
 import { SongChartViewer } from '../../components/SongChartViewer';
 import { parseChordProMetadata } from '../../lib/chordPro';
 import { withSaveTimeout } from '../../lib/saveTimeout';
+import { filterSetlistsBySearch } from '../../lib/setlistSearch';
 
 interface SetlistWithEvent {
   id: string;
@@ -832,7 +833,9 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
     return true;
   });
 
-  const sortedSetlists = [...setlists].sort((a, b) => {
+  const filteredSetlists = filterSetlistsBySearch(setlists, search, songLeaderMap);
+
+  const sortedSetlists = [...filteredSetlists].sort((a, b) => {
     if (sortKey === 'date_asc') return (a.events?.event_date ?? '').localeCompare(b.events?.event_date ?? '');
     if (sortKey === 'songs_desc') return (b.setlist_songs?.length ?? 0) - (a.setlist_songs?.length ?? 0);
     return (b.events?.event_date ?? '').localeCompare(a.events?.event_date ?? '');
@@ -898,6 +901,45 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
           />
         ) : (
           <>
+            {/* ── Search bar ── */}
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+              className="flex flex-col gap-2 sm:flex-row sm:items-center"
+            >
+              <div className="relative flex-1">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={e => {
+                    setSearch(e.target.value);
+                    setSelectedSetlists(new Set());
+                  }}
+                  placeholder="Search sets by song, leader, event, artist…"
+                  className="w-full h-10 pl-10 pr-9 rounded-2xl text-[13px] bg-white dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.08] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/30 outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 dark:focus:border-emerald-500/50 transition-all"
+                />
+                {search && (
+                  <button
+                    onClick={() => {
+                      setSearch('');
+                      setSelectedSetlists(new Set());
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                    aria-label="Clear set search"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              {search.trim() && (
+                <span className="text-[11px] font-mono text-gray-400 dark:text-white/30 sm:shrink-0">
+                  {sortedSetlists.length} set{sortedSetlists.length !== 1 ? 's' : ''} found
+                </span>
+              )}
+            </motion.div>
+
             {/* ── Toolbar ── */}
             <div className="flex items-center gap-2 flex-wrap">
               {selectMode ? (
@@ -968,7 +1010,15 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
               animate="show"
               className="space-y-2.5"
             >
-              {sortedSetlists.map(sl => {
+              {sortedSetlists.length === 0 ? (
+                <div className="rounded-3xl border border-gray-200/80 dark:border-white/[0.06] bg-white dark:bg-white/[0.025] px-5 py-10 text-center">
+                  <Search className="mx-auto h-6 w-6 text-gray-300 dark:text-white/20" />
+                  <p className="mt-3 text-sm font-bold text-gray-900 dark:text-white">No sets found</p>
+                  <p className="mt-1 text-xs text-gray-400 dark:text-white/35">
+                    Try another song title, artist, event, or song leader.
+                  </p>
+                </div>
+              ) : sortedSetlists.map(sl => {
                 const isExpanded = expandedSetlist === sl.id;
                 const eventDate = sl.events?.event_date;
                 const daysSinceEvent = eventDate ? differenceInDays(new Date(), parseISO(eventDate)) : null;

@@ -19,6 +19,7 @@ import { SongChartViewer } from '../components/SongChartViewer';
 import { withSaveTimeout } from '../lib/saveTimeout';
 import { clearActiveServiceMode, getActiveServiceMode, saveActiveServiceMode } from '../lib/serviceModeResume';
 import { useSmartBack } from '../lib/navigationHistory';
+import { describeSetlistReviewAge, getSetlistPendingMessage } from '../lib/setlistReviewAge';
 
 import type { Event, EventAssignment, Setlist, SetlistSong, Song, ServiceFormat, SetlistCheckReport } from '../types';
 import { inferServiceFormat, SERVICE_FORMAT_LABELS } from '../lib/setlistCheckerEngine';
@@ -1509,6 +1510,10 @@ const openLyricsModal = (ss: SetlistSong) => {
   const isSetlistCreator = setlist ? setlist.created_by === user?.id : false;
   const canReviewSetlist = isLeader || userRoles.some(ur => ['Admin', 'Production Director', 'Music Director', 'Setlist Coordinator'].includes(ur.roles?.name || ''));
   const canSubmitSetlist = isSetlistCreator || canManageSetlist;
+  const pendingReviewAge = setlist?.status === 'pending_review'
+    ? describeSetlistReviewAge(setlist.submitted_at || setlist.created_at)
+    : null;
+  const pendingReviewMessage = pendingReviewAge ? getSetlistPendingMessage(pendingReviewAge, isSetlistCreator) : null;
 
   const statusColors: Record<string, string> = {
     draft: 'badge-blue',
@@ -2370,10 +2375,19 @@ const openLyricsModal = (ss: SetlistSong) => {
               <div className="border-b border-gray-100 dark:border-gray-800">
                 {/* Mobile: stacked two-row layout */}
                 <div className="flex flex-col gap-2 px-4 py-3 lg:hidden">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Music className="h-4 w-4 text-brand-600 dark:text-brand-400 shrink-0" />
                     <h2 className="text-base font-semibold text-gray-900 dark:text-white">Setlist</h2>
                     <span className={statusColors[setlist.status] || 'badge-blue'}>{statusLabels[setlist.status] || setlist.status}</span>
+                    {pendingReviewMessage && (
+                      <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-lg ${
+                        (pendingReviewAge?.pendingDays ?? 0) > 1
+                          ? 'bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400'
+                          : 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400'
+                      }`}>
+                        <Clock className="h-3 w-3" /> {pendingReviewMessage}
+                      </span>
+                    )}
                     {isApprovedSetlist && (canManageSetlist || canEditSetlist) && (
                       <button
                         onClick={() => setSetlistEditMode(value => !value)}
@@ -2424,10 +2438,19 @@ const openLyricsModal = (ss: SetlistSong) => {
                 </div>
                 {/* Desktop: single-row layout */}
                 <div className="hidden lg:flex lg:items-center lg:justify-between lg:px-5 lg:py-3.5">
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
                     <Music className="h-4 w-4 text-brand-600 dark:text-brand-400 shrink-0" />
                     <h2 className="text-base font-semibold text-gray-900 dark:text-white">Setlist</h2>
                     <span className={statusColors[setlist.status] || 'badge-blue'}>{statusLabels[setlist.status] || setlist.status}</span>
+                    {pendingReviewMessage && (
+                      <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-lg ${
+                        (pendingReviewAge?.pendingDays ?? 0) > 1
+                          ? 'bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400'
+                          : 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400'
+                      }`}>
+                        <Clock className="h-3 w-3" /> {pendingReviewMessage}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {canShowPrimaryModeButton && setlistSongs.length > 0 && (
@@ -2718,7 +2741,9 @@ const openLyricsModal = (ss: SetlistSong) => {
                   )}
 
                   <div className="px-4 py-3.5 border-t border-gray-100 dark:border-gray-800">
-                    <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-2.5">{statusDescriptions[setlist.status]}</p>
+                    <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-2.5">
+                      {pendingReviewMessage || statusDescriptions[setlist.status]}
+                    </p>
                     <div className="flex flex-wrap gap-2">
                       {/* Song editing — creator/editor when not finalized */}
                       {showSetlistEditControls && ((canManageSetlist && !['approved', 'rejected'].includes(setlist.status)) || (canEditSetlist && setlist.status === 'approved')) ? (

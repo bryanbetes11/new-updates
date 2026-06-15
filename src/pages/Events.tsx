@@ -16,6 +16,7 @@ import { EmptyState } from '../components/EmptyState';
 import { CalendarGrid } from '../components/CalendarGrid';
 import { formatTime12Hour } from '../lib/timeFormat';
 import { withRequestTimeout } from '../lib/requestTimeout';
+import { describeSetlistReviewAge, getSetlistPendingMessage } from '../lib/setlistReviewAge';
 import type { Event } from '../types';
 
 const eventTypes = ['Sunday Service', 'Prayer Meeting', 'LGTF (Midweek)', 'Rehearsals', 'Online Devotion', 'Equipping', 'Revamp Session', 'Youth Recharge', 'Custom'];
@@ -145,6 +146,10 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
   const isDueSoon = daysUntilDue !== null && daysUntilDue >= 0 && daysUntilDue <= 3;
   const isOverdue = daysUntilDue !== null && daysUntilDue < 0;
   const setlistSubmittedAt = setlistInfo?.submitted_at ? parseISO(setlistInfo.submitted_at) : (setlistInfo?.created_at ? parseISO(setlistInfo.created_at) : null);
+  const pendingReviewAge = setlistInfo?.status === 'pending_review'
+    ? describeSetlistReviewAge(setlistInfo.submitted_at || setlistInfo.created_at)
+    : null;
+  const pendingReviewMessage = pendingReviewAge ? getSetlistPendingMessage(pendingReviewAge, false) : null;
   const wasSubmittedLate = hasApprovedSetlist && proposalDueDate && setlistSubmittedAt && setlistSubmittedAt > proposalDueDate;
   const wasSubmittedOnTime = hasApprovedSetlist && proposalDueDate && setlistSubmittedAt && setlistSubmittedAt <= proposalDueDate;
   const daysOverdueWhenSubmitted = wasSubmittedLate && proposalDueDate && setlistSubmittedAt
@@ -193,6 +198,15 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
           {showDueSoonStyle && (
             <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-lg bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400">
               <AlertCircle className="h-3 w-3" /> Due in {daysUntilDue}d
+            </span>
+          )}
+          {pendingReviewMessage && (
+            <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-lg ${
+              (pendingReviewAge?.pendingDays ?? 0) > 1
+                ? 'bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400'
+                : 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400'
+            }`}>
+              <Clock className="h-3 w-3" /> {pendingReviewMessage}
             </span>
           )}
         </div>

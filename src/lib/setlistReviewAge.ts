@@ -32,3 +32,16 @@ export function describeSetlistReviewAge(submittedAt: string | null | undefined,
     pendingDays,
   };
 }
+
+export function getSetlistPendingMessage(reviewAge: SetlistReviewAge, isCurrentUserSubmitter = false): string | null {
+  if (reviewAge.pendingDays === null) return null;
+
+  if (reviewAge.pendingDays === 0) {
+    return isCurrentUserSubmitter ? 'Your setlist is pending today' : 'Setlist pending today';
+  }
+
+  const daysLabel = `${reviewAge.pendingDays} ${reviewAge.pendingDays === 1 ? 'day' : 'days'}`;
+  return isCurrentUserSubmitter
+    ? `Your setlist has been pending for ${daysLabel}`
+    : `Setlist pending for ${daysLabel}`;
+}

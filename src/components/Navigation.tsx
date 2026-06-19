@@ -11,13 +11,11 @@ import {
   Download,
   Eye,
   EyeOff,
-  Home,
   ListChecks,
   LogOut,
   ChevronLeft,
   ChevronRight,
   Layers3,
-  Library,
   MessageCircle,
   Music2,
   Plus,
@@ -69,7 +67,7 @@ const SongsNavIcon: NavIcon = ({ className, style }) => <BookOpen className={cla
 const VideosNavIcon: NavIcon = ({ className, style }) => <Video className={className} style={style} />;
 const SetsNavIcon: NavIcon = ({ className, style }) => <ListChecks className={className} style={style} />;
 const SearchNavIcon: NavIcon = ({ className, style }) => <Search className={className} style={style} />;
-const LibraryNavIcon: NavIcon = ({ className, style }) => <Library className={className} style={style} />;
+const LibraryNavIcon: NavIcon = ({ className, style }) => <Layers3 className={className} style={style} />;
 const CreateNavIcon: NavIcon = ({ className, style }) => <Plus className={className} style={style} />;
 
 const mobileNavItems: NavItem[] = [
@@ -663,7 +661,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[0.65rem] border border-white/[0.08] bg-white/[0.08] text-white transition-colors hover:bg-white/[0.13]"
           aria-label="Home"
         >
-          <Home className="h-5 w-5 fill-current" />
+          <HomeIcon active className="h-5 w-5" />
         </button>
 
         <label className="flex h-11 max-w-[560px] flex-1 items-center gap-3 rounded-[0.65rem] border border-white/[0.10] bg-[#151515] px-3.5 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">

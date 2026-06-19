@@ -90,6 +90,7 @@ export { default as LockKeyhole } from '../../node_modules/lucide-react/dist/esm
 export { default as LogIn } from '../../node_modules/lucide-react/dist/esm/icons/log-in.js';
 export { default as LogOut } from '../../node_modules/lucide-react/dist/esm/icons/log-out.js';
 export { default as Mail } from '../../node_modules/lucide-react/dist/esm/icons/mail.js';
+export { default as MapPin } from '../../node_modules/lucide-react/dist/esm/icons/map-pin.js';
 export { default as Megaphone } from '../../node_modules/lucide-react/dist/esm/icons/megaphone.js';
 export { default as MessageCircle } from '../../node_modules/lucide-react/dist/esm/icons/message-circle.js';
 export { default as MessageSquare } from '../../node_modules/lucide-react/dist/esm/icons/message-square.js';

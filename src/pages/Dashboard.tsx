@@ -3,13 +3,14 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { motion } from 'framer-motion';
-import { Calendar, Music, ChevronRight, Megaphone, Trash2, ListChecks, ArrowLeftRight, Check, X, RefreshCw, Heart, MoreHorizontal, Edit3, Upload, UserPlus, MapPin, MessageCircle, UserX, ClipboardCheck, Shield } from 'lucide-react';
+import { Calendar, Music, ChevronRight, Megaphone, Trash2, ListChecks, ArrowLeftRight, Check, X, RefreshCw, Heart, MoreHorizontal, Edit3, Upload, UserPlus, MessageCircle, UserX, ClipboardCheck, Shield } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { DashboardSkeleton } from '../components/LoadingSpinner';
 import { formatTime12Hour } from '../lib/timeFormat';
 import { Modal } from '../components/Modal';
+import { EventArtwork } from '../components/EventArtwork';
 import type { Event, EventAssignment, Setlist, Announcement, UserAvailability, SwapRequest } from '../types';
 
 const verses = [
@@ -37,6 +38,39 @@ const item = {
 const MANILA_TIMEZONE = 'Asia/Manila';
 const DASHBOARD_REQUEST_TIMEOUT_MS = 8000;
 type DashboardEventCard = Pick<Event, 'title' | 'event_date' | 'start_time' | 'event_type' | 'id'> & { location?: string };
+type DashboardHubFilter = 'all' | 'week' | 'serving' | 'team';
+type DashboardMemberSummary = { id: string; first_name?: string | null; last_name?: string | null; gender?: string | null };
+type DashboardSongArtwork = {
+  id: string;
+  song_id?: string | null;
+  position?: number | null;
+  youtube_url?: string | null;
+  songs?: {
+    id?: string | null;
+    title?: string | null;
+    artist?: string | null;
+    youtube_url?: string | null;
+  } | Array<{
+    id?: string | null;
+    title?: string | null;
+    artist?: string | null;
+    youtube_url?: string | null;
+  }> | null;
+};
+type DashboardArtworkSongRecord = {
+  id?: string | null;
+  title?: string | null;
+  artist?: string | null;
+  youtube_url?: string | null;
+};
+type DashboardSetlistArtwork = {
+  event_id?: string | null;
+  setlist_songs?: DashboardSongArtwork[] | null;
+};
+type PendingReviewSetlist = Setlist & {
+  events?: Pick<Event, 'id' | 'title' | 'event_date' | 'event_type'>;
+  setlist_songs?: Array<DashboardSongArtwork>;
+};
 
 async function withDashboardTimeout<T>(request: PromiseLike<T>, fallback: T, label: string): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -80,14 +114,134 @@ function compareAssignmentsByEventDateTime(a: EventAssignment, b: EventAssignmen
   return compareEventsByDateTime(a.events, b.events);
 }
 
+function formatDashboardLeaderName(profile: { first_name?: string | null; last_name?: string | null; gender?: string | null }) {
+  const firstName = profile.first_name?.trim();
+  const lastName = profile.last_name?.trim();
+  if (!firstName && !lastName) return '';
+
+  const prefix = profile.gender === 'male' ? 'Bro.' : profile.gender === 'female' ? 'Sis.' : '';
+  const name = [firstName, lastName].filter(Boolean).join(' ');
+  return prefix ? `${prefix} ${name}` : name;
+}
+
+function getYouTubeThumbnailUrl(url?: string | null) {
+  if (!url) return null;
+
+  const trimmed = url.trim();
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([A-Za-z0-9_-]{11})/,
+    /youtube\.com\/.*[?&]v=([A-Za-z0-9_-]{11})/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = trimmed.match(pattern);
+    if (match?.[1]) return `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg`;
+  }
+
+  return null;
+}
+
+function normalizeArtworkUrl(url?: string | null) {
+  if (!url) return null;
+  return url.replace(/\/\d+x\d+bb\./, '/300x300bb.');
+}
+
+function getDashboardArtworkSong(song: DashboardSongArtwork) {
+  if (!song.songs) return null;
+  return Array.isArray(song.songs) ? song.songs[0] || null : song.songs;
+}
+
+function hydrateDashboardArtworkSongs(setlistSongs: DashboardSongArtwork[] | null | undefined, songsById: Map<string, DashboardArtworkSongRecord>) {
+  return (setlistSongs || []).map((song) => {
+    if (getDashboardArtworkSong(song) || !song.song_id) return song;
+    const fallbackSong = songsById.get(song.song_id);
+    return fallbackSong ? { ...song, songs: fallbackSong } : song;
+  });
+}
+
+async function fetchPublicSongArtwork(song: DashboardSongArtwork) {
+  const nestedSong = getDashboardArtworkSong(song);
+  const title = nestedSong?.title?.trim();
+  const artist = nestedSong?.artist?.trim();
+  if (!title && !artist) return null;
+
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 1800);
+
+  try {
+    const searchTerm = [title, artist].filter(Boolean).join(' ');
+    const deezerParams = new URLSearchParams({ q: searchTerm, limit: '1' });
+    const deezerResponse = await fetch(`https://api.deezer.com/search?${deezerParams.toString()}`, {
+      signal: controller.signal,
+    });
+    if (deezerResponse.ok) {
+      const deezerData = await deezerResponse.json() as {
+        data?: Array<{ album?: { cover_big?: string; cover_medium?: string; cover_xl?: string } }>;
+      };
+      const deezerArtwork = deezerData.data?.[0]?.album?.cover_big || deezerData.data?.[0]?.album?.cover_medium || deezerData.data?.[0]?.album?.cover_xl;
+      if (deezerArtwork) return deezerArtwork;
+    }
+
+    const iTunesParams = new URLSearchParams({
+      term: searchTerm,
+      entity: 'song',
+      media: 'music',
+      limit: '1',
+    });
+    const iTunesResponse = await fetch(`https://itunes.apple.com/search?${iTunesParams.toString()}`, {
+      signal: controller.signal,
+    });
+    if (!iTunesResponse.ok) return null;
+    const iTunesData = await iTunesResponse.json() as { results?: Array<{ artworkUrl100?: string; artworkUrl60?: string }> };
+    return normalizeArtworkUrl(iTunesData.results?.[0]?.artworkUrl100 || iTunesData.results?.[0]?.artworkUrl60);
+  } catch {
+    return null;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+async function getSongArtworkUrls(setlistSongs?: DashboardSongArtwork[] | null) {
+  if (!setlistSongs) return [];
+
+  const seen = new Set<string>();
+  const orderedSongs = setlistSongs
+    .slice()
+    .sort((a, b) => (a.position ?? 999) - (b.position ?? 999))
+    .slice(0, 4);
+
+  const youtubeUrls = orderedSongs
+    .map(song => getYouTubeThumbnailUrl(song.youtube_url || getDashboardArtworkSong(song)?.youtube_url))
+    .filter((url): url is string => {
+      if (!url || seen.has(url)) return false;
+      seen.add(url);
+      return true;
+    });
+
+  if (youtubeUrls.length >= 4) return youtubeUrls;
+
+  const publicUrls = await Promise.all(orderedSongs.map(fetchPublicSongArtwork));
+  publicUrls.forEach((url) => {
+    if (url && !seen.has(url)) {
+      seen.add(url);
+      youtubeUrls.push(url);
+    }
+  });
+
+  return youtubeUrls.slice(0, 4);
+}
+
 export function Dashboard() {
   const { user, profile, isLeader, isProductionDirector } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([]);
+  const [eventLeaderMap, setEventLeaderMap] = useState<Record<string, string>>({});
+  const [eventArtworkMap, setEventArtworkMap] = useState<Record<string, string[]>>({});
+  const [eventArtworkSongsMap, setEventArtworkSongsMap] = useState<Record<string, DashboardSongArtwork[]>>({});
   const [myAssignments, setMyAssignments] = useState<EventAssignment[]>([]);
-  const [pendingSetlists, setPendingSetlists] = useState<Setlist[]>([]);
+  const [pendingSetlists, setPendingSetlists] = useState<PendingReviewSetlist[]>([]);
   const [recentAnnouncements, setRecentAnnouncements] = useState<Announcement[]>([]);
   const [unavailableMembers, setUnavailableMembers] = useState<UserAvailability[]>([]);
   const [pendingLeaveCount, setPendingLeaveCount] = useState(0);
@@ -99,6 +253,7 @@ export function Dashboard() {
   const [now, setNow] = useState(new Date());
   const [pullRefreshDistance, setPullRefreshDistance] = useState(0);
   const [isRefreshingApp, setIsRefreshingApp] = useState(false);
+  const [activeHubFilter, setActiveHubFilter] = useState<DashboardHubFilter>('all');
   const pullRefreshDistanceRef = useRef(0);
   const refreshInFlightRef = useRef(false);
 
@@ -136,7 +291,7 @@ export function Dashboard() {
 
     try {
       const emptyList = { data: [] } as any;
-      const [eventsRes, assignRes, setlistsRes, announcementsRes, unavailableRes, pendingLeaveRes] = await Promise.all([
+      const [eventsRes, assignRes, setlistsRes, announcementsRes, unavailableRes, pendingLeaveRes, songLeadersRes, membersRes] = await Promise.all([
         withDashboardTimeout(
           supabase.from('events').select('*').gte('event_date', today).order('event_date').limit(5),
           emptyList,
@@ -147,13 +302,15 @@ export function Dashboard() {
           emptyList,
           'My assignments',
         ),
-        isLeader
-          ? withDashboardTimeout(
-              supabase.from('setlists').select('*, events(title, event_date)').eq('status', 'pending_review').order('created_at', { ascending: false }),
-              emptyList,
-              'Pending setlists',
-            )
-          : Promise.resolve(emptyList),
+        withDashboardTimeout(
+          supabase
+            .from('setlists')
+            .select('*, events(id, title, event_date, event_type), setlist_songs(id, song_id, position, youtube_url, songs(id, title, artist, youtube_url))')
+            .eq('status', 'pending_review')
+            .order('created_at', { ascending: false }),
+          emptyList,
+          'Pending setlists',
+        ),
         withDashboardTimeout(
           supabase.from('announcements').select('*, profiles!announcements_created_by_fkey(first_name, last_name)').order('created_at', { ascending: false }).limit(3),
           emptyList,
@@ -171,17 +328,124 @@ export function Dashboard() {
               'Pending leave count',
             )
           : Promise.resolve({ count: 0 }),
+        withDashboardTimeout(
+          supabase.from('event_assignments').select('event_id, profiles(first_name, last_name, gender), roles!inner(name)').eq('roles.name', 'Song Leader'),
+          emptyList,
+          'Dashboard song leaders',
+        ),
+        withDashboardTimeout(
+          supabase.from('profiles').select('id, first_name, last_name, gender'),
+          emptyList,
+          'Dashboard member names',
+        ),
       ]);
 
       const events = ((eventsRes.data || []) as Event[]).slice().sort(compareEventsByDateTime);
       setUpcomingEvents(events);
+
+      const artworkEventIds = Array.from(new Set(
+        events
+          .flatMap(event => [event.id, event.linked_event_id])
+          .filter((id): id is string => Boolean(id))
+      ));
+      const eventSetlistsRes = artworkEventIds.length > 0
+        ? await withDashboardTimeout(
+            supabase
+              .from('setlists')
+              .select('event_id, setlist_songs(id, song_id, position, youtube_url, songs(id, title, artist, youtube_url))')
+              .in('event_id', artworkEventIds),
+            emptyList,
+            'Dashboard event song artwork',
+          )
+        : emptyList;
+
+      const eventSetlistRows = (eventSetlistsRes.data || []) as DashboardSetlistArtwork[];
+      const artworkSongIds = Array.from(new Set(
+        eventSetlistRows.flatMap((setlist) =>
+          (setlist.setlist_songs || [])
+            .map((song) => song.song_id)
+            .filter((id): id is string => Boolean(id))
+        )
+      ));
+      const artworkSongsById = new Map<string, DashboardArtworkSongRecord>();
+      if (artworkSongIds.length > 0) {
+        const artworkSongsRes = await withDashboardTimeout(
+          supabase.from('songs').select('id, title, artist, youtube_url').in('id', artworkSongIds),
+          emptyList,
+          'Dashboard artwork song fallback',
+        );
+        ((artworkSongsRes.data || []) as DashboardArtworkSongRecord[]).forEach((song) => {
+          if (song.id) artworkSongsById.set(song.id, song);
+        });
+      }
+
+      const artworkByEventId: Record<string, string[]> = {};
+      const artworkSongsByEventId: Record<string, DashboardSongArtwork[]> = {};
+      await Promise.all(eventSetlistRows.map(async (setlist) => {
+        if (!setlist.event_id) return;
+        const hydratedSongs = hydrateDashboardArtworkSongs(setlist.setlist_songs, artworkSongsById);
+        const orderedSongs = hydratedSongs
+          .slice()
+          .sort((a, b) => (a.position ?? 999) - (b.position ?? 999))
+          .slice(0, 4);
+        const urls = await getSongArtworkUrls(hydratedSongs);
+        if (urls.length > 0 && (!artworkByEventId[setlist.event_id] || artworkByEventId[setlist.event_id].length < urls.length)) {
+          artworkByEventId[setlist.event_id] = urls;
+        }
+        if (orderedSongs.length > 0 && (!artworkSongsByEventId[setlist.event_id] || artworkSongsByEventId[setlist.event_id].length < orderedSongs.length)) {
+          artworkSongsByEventId[setlist.event_id] = orderedSongs;
+        }
+      }));
+      events.forEach(event => {
+        if (
+          event.linked_event_id &&
+          artworkByEventId[event.linked_event_id] &&
+          (!artworkByEventId[event.id] || artworkByEventId[event.id].length < artworkByEventId[event.linked_event_id].length)
+        ) {
+          artworkByEventId[event.id] = artworkByEventId[event.linked_event_id];
+        }
+        if (
+          event.linked_event_id &&
+          artworkSongsByEventId[event.linked_event_id] &&
+          (!artworkSongsByEventId[event.id] || artworkSongsByEventId[event.id].length < artworkSongsByEventId[event.linked_event_id].length)
+        ) {
+          artworkSongsByEventId[event.id] = artworkSongsByEventId[event.linked_event_id];
+        }
+      });
+      setEventArtworkMap(artworkByEventId);
+      setEventArtworkSongsMap(artworkSongsByEventId);
+
+      const leaderMap: Record<string, string> = {};
+      (songLeadersRes.data || []).forEach((assignment: any) => {
+        const profile = Array.isArray(assignment.profiles) ? assignment.profiles[0] : assignment.profiles;
+        const name = profile ? formatDashboardLeaderName(profile) : '';
+        if (name) leaderMap[assignment.event_id] = name;
+      });
+
+      const memberNameById = new Map(
+        ((membersRes.data || []) as DashboardMemberSummary[])
+          .map(member => [member.id, formatDashboardLeaderName(member)])
+          .filter((entry): entry is [string, string] => Boolean(entry[1]))
+      );
+      events.forEach(event => {
+        if (!leaderMap[event.id] && event.song_leader_id) {
+          const directLeaderName = memberNameById.get(event.song_leader_id);
+          if (directLeaderName) leaderMap[event.id] = directLeaderName;
+        }
+      });
+      events.forEach(event => {
+        if (!leaderMap[event.id] && event.linked_event_id && leaderMap[event.linked_event_id]) {
+          leaderMap[event.id] = leaderMap[event.linked_event_id];
+        }
+      });
+      setEventLeaderMap(leaderMap);
 
       const assignments = (assignRes.data || []) as EventAssignment[];
       const nowForAssignments = new Date();
       const upcomingAssignments = assignments.filter(a => a.events && getManilaEventDateTime(a.events.event_date, a.events.start_time) >= nowForAssignments);
       upcomingAssignments.sort(compareAssignmentsByEventDateTime);
       setMyAssignments(upcomingAssignments);
-      setPendingSetlists((setlistsRes.data || []) as Setlist[]);
+      setPendingSetlists((setlistsRes.data || []) as PendingReviewSetlist[]);
       setRecentAnnouncements((announcementsRes.data || []) as Announcement[]);
       setUnavailableMembers((unavailableRes.data || []) as UserAvailability[]);
       setPendingLeaveCount(pendingLeaveRes.count || 0);
@@ -395,14 +659,6 @@ export function Dashboard() {
     return 'Good evening';
   })();
 
-  const quickTiles = [
-    { title: 'Worship with Bry', subtitle: 'Ministry Hub', tone: 'from-amber-500/80 via-zinc-800 to-black', path: '/sets' },
-    { title: 'Liked Songs', subtitle: '89 songs', tone: 'from-indigo-400 via-violet-500 to-emerald-300', path: '/songs', icon: Heart },
-    { title: 'Top 50 - Philippines', subtitle: 'Charts', tone: 'from-blue-500 via-blue-900 to-slate-950', path: '/events' },
-    { title: 'KEN', subtitle: 'Artist', tone: 'from-zinc-200 via-zinc-700 to-black', path: '/messages' },
-    { title: 'Best Praise Songs', subtitle: 'Playlist', tone: 'from-yellow-400 via-amber-800 to-black', path: '/songs' },
-    { title: 'Upbeat Mix', subtitle: 'Playlist', tone: 'from-sky-400 via-violet-700 to-black', path: '/videos' },
-  ];
   const fallbackEvents: DashboardEventCard[] = [
     { title: 'Sunday Morning Service', event_date: '2025-06-22', start_time: '09:00:00', event_type: 'Sunday Service', location: 'Main Auditorium', id: 'sample-1' },
     { title: 'Youth Night', event_date: '2025-06-20', start_time: '19:00:00', event_type: 'Friday Service', location: 'Main Auditorium', id: 'sample-2' },
@@ -411,11 +667,8 @@ export function Dashboard() {
   const displayEvents: DashboardEventCard[] = (upcomingEvents.length > 0 ? upcomingEvents : fallbackEvents)
     .slice(0, 3)
     .map(event => ({ ...event, location: (event as { location?: string }).location }));
-  const reviewSets = (pendingSetlists.length > 0 ? pendingSetlists : [
-    { id: 'sample-set-1', title: 'Sunday Morning Set', events: { event_date: '2025-06-22' }, songs_count: 7 },
-    { id: 'sample-set-2', title: 'Youth Night Set', events: { event_date: '2025-06-20' }, songs_count: 6 },
-    { id: 'sample-set-3', title: 'Prayer & Worship Night', events: { event_date: '2025-06-27' }, songs_count: 6 },
-  ] as any[]).slice(0, 4);
+  const assignedEventIds = new Set(myAssignments.map(assignment => assignment.event_id));
+  const reviewSets = pendingSetlists.slice(0, 4);
   const announcementRows = (recentAnnouncements.length > 0 ? recentAnnouncements : [
     { id: 'sample-ann-1', title: 'Leadership Meeting this Saturday', content: 'We will be discussing service flow, volunteer updates, and upcoming events.', created_at: new Date().toISOString() },
     { id: 'sample-ann-2', title: 'New Training: In-Ear Monitor Basics', content: 'Join us this Sunday after the morning service at the Media Room.', created_at: new Date().toISOString() },
@@ -436,6 +689,53 @@ export function Dashboard() {
   ];
   const assignmentRows = myAssignments.slice(0, 3);
   const teamAvailabilityRows = unavailableMembers.slice(0, 3);
+  const hubFilters: { id: DashboardHubFilter; label: string }[] = [
+    { id: 'all', label: 'All' },
+    { id: 'week', label: 'This Week' },
+    { id: 'serving', label: 'Serving' },
+    { id: 'team', label: 'Team' },
+  ];
+  const quickTileGroups: Record<DashboardHubFilter, {
+    title: string;
+    subtitle: string;
+    tone: string;
+    path: string;
+    icon?: typeof Heart;
+  }[]> = {
+    all: [
+      { title: 'My Assignments', subtitle: `${stats.total} upcoming`, tone: 'from-emerald-400 via-green-700 to-black', path: '/my-assignments', icon: Check },
+      { title: 'Upcoming Services', subtitle: `${displayEvents.length} services`, tone: 'from-blue-500 via-blue-900 to-slate-950', path: '/events', icon: Calendar },
+      { title: 'Team Chat', subtitle: 'Messages', tone: 'from-zinc-200 via-zinc-700 to-black', path: '/messages', icon: MessageCircle },
+      { title: 'My Sets', subtitle: 'Setlists', tone: 'from-indigo-400 via-violet-500 to-emerald-300', path: '/sets', icon: ListChecks },
+      { title: 'Request Leave', subtitle: 'Availability', tone: 'from-yellow-400 via-amber-800 to-black', path: '/request-leave', icon: UserX },
+      { title: 'Announcements', subtitle: `${announcementRows.length} latest`, tone: 'from-sky-400 via-violet-700 to-black', path: '/announcements', icon: Megaphone },
+    ],
+    week: [
+      { title: 'This Week', subtitle: 'Calendar', tone: 'from-blue-500 via-blue-900 to-slate-950', path: '/events', icon: Calendar },
+      { title: 'My Assignments', subtitle: `${stats.total} scheduled`, tone: 'from-emerald-400 via-green-700 to-black', path: '/my-assignments', icon: Check },
+      { title: 'Service Updates', subtitle: 'Announcements', tone: 'from-sky-400 via-violet-700 to-black', path: '/announcements', icon: Megaphone },
+      { title: 'Team Availability', subtitle: `${teamAvailabilityRows.length} upcoming`, tone: 'from-yellow-400 via-amber-800 to-black', path: '/request-leave', icon: UserX },
+      { title: 'Songs to Learn', subtitle: 'Library', tone: 'from-orange-200 via-stone-700 to-black', path: '/songs', icon: Music },
+      { title: 'Service Recordings', subtitle: 'Videos', tone: 'from-zinc-300 via-zinc-700 to-black', path: '/videos', icon: Upload },
+    ],
+    serving: [
+      { title: 'Confirm Status', subtitle: `${stats.confirmed}/${stats.total} confirmed`, tone: 'from-emerald-400 via-green-700 to-black', path: '/my-assignments', icon: Check },
+      { title: 'My Service Sets', subtitle: 'Ready songs', tone: 'from-indigo-400 via-violet-500 to-emerald-300', path: '/sets', icon: ListChecks },
+      { title: 'Find a Sub', subtitle: 'Swap or cover', tone: 'from-cyan-400 via-blue-800 to-black', path: '/my-assignments', icon: ArrowLeftRight },
+      { title: 'Team Chat', subtitle: 'Coordinate', tone: 'from-zinc-200 via-zinc-700 to-black', path: '/messages', icon: MessageCircle },
+      { title: 'Request Leave', subtitle: 'Update availability', tone: 'from-yellow-400 via-amber-800 to-black', path: '/request-leave', icon: UserX },
+      { title: 'Service Videos', subtitle: 'Review media', tone: 'from-sky-400 via-violet-700 to-black', path: '/videos', icon: Upload },
+    ],
+    team: [
+      { title: 'Team Chat', subtitle: 'Messages', tone: 'from-zinc-200 via-zinc-700 to-black', path: '/messages', icon: MessageCircle },
+      { title: 'Announcements', subtitle: 'Updates', tone: 'from-sky-400 via-violet-700 to-black', path: '/announcements', icon: Megaphone },
+      { title: 'Team Availability', subtitle: `${teamAvailabilityRows.length} away soon`, tone: 'from-yellow-400 via-amber-800 to-black', path: '/request-leave', icon: UserX },
+      { title: 'People', subtitle: isLeader || isProductionDirector ? 'Team roster' : 'Profile', tone: 'from-emerald-400 via-green-700 to-black', path: isLeader || isProductionDirector ? '/leadership/team' : '/profile', icon: UserPlus },
+      { title: 'Songs', subtitle: 'Shared library', tone: 'from-orange-200 via-stone-700 to-black', path: '/songs', icon: Music },
+      { title: 'Setlists', subtitle: 'Shared plans', tone: 'from-indigo-400 via-violet-500 to-emerald-300', path: '/sets', icon: ListChecks },
+    ],
+  };
+  const quickTiles = quickTileGroups[activeHubFilter];
 
   return (
     <div className="dark page-container page-bottom-pad relative overflow-hidden bg-[#050505] text-white">
@@ -478,18 +778,24 @@ export function Dashboard() {
             </div>
 
             <div className="flex gap-2 overflow-x-auto no-scrollbar lg:mt-5">
-            {['All', 'This Week', 'Serving', 'Leadership'].map((chip, index) => (
+            {hubFilters.map((chip) => {
+              const active = activeHubFilter === chip.id;
+              return (
               <button
-                key={chip}
+                key={chip.id}
+                type="button"
+                onClick={() => setActiveHubFilter(chip.id)}
+                aria-pressed={active}
                 className={`h-9 shrink-0 rounded-full px-4 text-[12px] font-black transition-colors ${
-                  index === 0
+                  active
                     ? 'bg-[#22c55e] text-black'
                     : 'bg-[#2a2a2a] text-white hover:bg-[#353535]'
                 }`}
               >
-                {chip}
+                {chip.label}
               </button>
-            ))}
+            );
+            })}
             </div>
 
             <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-3 xl:grid-cols-6">
@@ -501,7 +807,11 @@ export function Dashboard() {
               >
                 <div className={`relative flex h-full w-[68px] shrink-0 items-center justify-center bg-gradient-to-br ${tile.tone} lg:w-[86px]`}>
                   <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_25%,rgba(255,255,255,0.24),transparent_28%)]" />
-                  {'icon' in tile && tile.icon ? <tile.icon className="relative h-8 w-8 fill-white text-white" /> : null}
+                  {'icon' in tile && tile.icon ? (
+                    <span className="relative flex h-10 w-10 items-center justify-center rounded-full border border-white/60 bg-black/50 text-white shadow-[0_10px_24px_-14px_rgba(0,0,0,0.95),0_0_0_3px_rgba(255,255,255,0.10),inset_0_1px_0_rgba(255,255,255,0.26)] ring-1 ring-black/40 backdrop-blur-sm">
+                      <tile.icon className="h-5 w-5" strokeWidth={2.5} />
+                    </span>
+                  ) : null}
                 </div>
                 <div className="min-w-0 flex-1 px-3">
                   <p className="line-clamp-2 text-[13px] font-black leading-tight text-white">{tile.title}</p>
@@ -513,61 +823,130 @@ export function Dashboard() {
         </motion.section>
 
         <motion.section variants={item} className="grid gap-5 xl:grid-cols-[1.95fr_1fr]">
-              <section className="rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-3 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)] sm:p-4">
+              <section className="self-start lg:flex lg:flex-col lg:rounded-[0.75rem] lg:border lg:border-white/[0.08] lg:bg-[#181818] lg:p-4 lg:shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)]">
                 <div className="mb-3 flex items-center justify-between">
                   <h2 className="text-[18px] font-black text-white">Upcoming services</h2>
                   <button onClick={() => navigate('/events')} className="text-[12px] font-bold text-[#22c55e]">See all</button>
                 </div>
-                <div className="space-y-2">
-                  {displayEvents.map((event, index) => (
+                <div className="flex gap-3 overflow-x-auto pb-1 no-scrollbar lg:hidden">
+                  {displayEvents.map((event) => {
+                    const eventTitle = eventLeaderMap[event.id] || event.title;
+                    const artworkUrls = eventArtworkMap[event.id] || [];
+                    const artworkSongs = eventArtworkSongsMap[event.id] || [];
+                    return (
+                      <button
+                        key={event.id}
+                        onClick={() => navigate(event.id.startsWith('sample') ? '/events' : `/events/${event.id}`)}
+                        className="min-w-[132px] max-w-[132px] text-left"
+                      >
+                        <div className="relative">
+                          <EventArtwork
+                            eventType={event.event_type}
+                            title={event.title}
+                            artworkUrls={artworkUrls}
+                            songs={artworkSongs}
+                            className="aspect-square w-full rounded-[0.45rem]"
+                          />
+                          <span className="absolute left-2 top-2 rounded bg-white px-1.5 py-0.5 text-[7px] font-black uppercase text-black">
+                            {format(parseISO(event.event_date), 'MMM dd')}
+                          </span>
+                        </div>
+                        <p className="mt-2 line-clamp-2 text-[12px] font-bold leading-tight text-white">{eventTitle}</p>
+                        <p className="mt-0.5 truncate text-[11px] font-semibold text-white/50">
+                          {event.event_type} · {event.start_time ? formatTime12Hour(event.start_time) : 'TBA'}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="hidden space-y-2 lg:block">
+                  {displayEvents.map((event) => {
+                    const isAssignedToEvent = assignedEventIds.has(event.id);
+                    const eventTitle = eventLeaderMap[event.id] || event.title;
+                    const artworkUrls = eventArtworkMap[event.id] || [];
+                    const artworkSongs = eventArtworkSongsMap[event.id] || [];
+                    return (
                     <button
                       key={event.id}
                       onClick={() => navigate(event.id.startsWith('sample') ? '/events' : `/events/${event.id}`)}
                       className="group flex w-full items-center gap-3 rounded-[0.55rem] bg-[#242424] p-2.5 text-left transition-colors hover:bg-[#2d2d2d]"
                     >
+                      <EventArtwork
+                        eventType={event.event_type}
+                        title={event.title}
+                        artworkUrls={artworkUrls}
+                        songs={artworkSongs}
+                        className="h-16 w-16 rounded-[0.35rem]"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[14px] font-black text-white">{eventTitle}</p>
+                        <p className="mt-1 truncate text-[12px] font-semibold text-white/58">{event.event_type} · {event.start_time ? formatTime12Hour(event.start_time) : 'TBA'}</p>
+                      </div>
                       <div className="w-12 shrink-0 text-center">
                         <p className="text-[11px] font-black uppercase leading-none text-[#22c55e]">{format(parseISO(event.event_date), 'EEE')}</p>
                         <p className="mt-1 text-[18px] font-black leading-none text-white">{format(parseISO(event.event_date), 'MMM')}</p>
-                        <p className="text-[22px] font-black leading-none text-white">{format(parseISO(event.event_date), 'd')}</p>
+                        <p className="text-[22px] font-black leading-none text-white">{format(parseISO(event.event_date), 'dd')}</p>
                       </div>
-                      <div className={`h-16 w-28 shrink-0 overflow-hidden rounded-[0.35rem] bg-gradient-to-br ${quickTiles[index % quickTiles.length].tone}`}>
-                        <div className="h-full w-full bg-[radial-gradient(circle_at_50%_18%,rgba(255,255,255,0.28),transparent_24%),linear-gradient(180deg,transparent,rgba(0,0,0,0.35))]" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[14px] font-black text-white">{event.title}</p>
-                        <p className="mt-1 truncate text-[12px] font-semibold text-white/58">{event.event_type} · {event.start_time ? formatTime12Hour(event.start_time) : 'TBA'}</p>
-                        <p className="mt-0.5 flex items-center gap-1 truncate text-[11px] font-semibold text-white/42"><MapPin className="h-3 w-3" /> {event.location || 'Main Auditorium'}</p>
-                      </div>
-                      <span className={`hidden shrink-0 rounded-full border px-4 py-2 text-[12px] font-bold sm:inline-flex ${index < 2 ? 'border-[#22c55e]/20 bg-[#22c55e]/10 text-[#22c55e]' : 'border-white/[0.08] text-white/62'}`}>
-                        {index < 2 ? "You're serving" : 'Not serving'}
+                      <span className={`hidden shrink-0 rounded-full border px-4 py-2 text-[12px] font-bold sm:inline-flex ${isAssignedToEvent ? 'border-[#22c55e]/20 bg-[#22c55e]/10 text-[#22c55e]' : 'border-white/[0.08] text-white/62'}`}>
+                        {isAssignedToEvent ? 'Serving' : 'Not assigned'}
                       </span>
                       <MoreHorizontal className="hidden h-5 w-5 text-white/70 lg:block" />
                     </button>
-                  ))}
+                  );
+                })}
                 </div>
               </section>
 
-              <section className="rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-3 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)] sm:p-4">
+              <section className={`${reviewSets.length === 0 ? 'hidden lg:block' : ''} rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-3 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)] sm:p-4`}>
                 <div className="mb-3 flex items-center justify-between">
-                  <h2 className="text-[17px] font-black text-white">Setlists ready for review</h2>
-                  <button onClick={() => navigate('/leadership/setlists')} className="text-[12px] font-bold text-[#22c55e]">See all</button>
+                  <h2 className="text-[17px] font-black text-white">Setlists awaiting approval</h2>
+                  <button onClick={() => navigate(isLeader ? '/leadership/setlists' : '/events')} className="text-[12px] font-bold text-[#22c55e]">
+                    {isLeader ? 'Review queue' : 'See events'}
+                  </button>
                 </div>
-                <div className="space-y-1">
-                  {reviewSets.map((set, index) => (
-                    <button
-                      key={set.id}
-                      onClick={() => navigate('/leadership/setlists')}
-                      className="group flex w-full items-center gap-3 rounded-[0.55rem] px-2 py-2 text-left transition-colors hover:bg-white/[0.06]"
-                    >
-                      <div className={`h-12 w-12 shrink-0 rounded-[0.35rem] bg-gradient-to-br ${quickTiles[(index + 2) % quickTiles.length].tone}`} />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[13px] font-black text-white">{set.title || set.events?.title || 'Sunday Set'}</p>
-                        <p className="mt-0.5 truncate text-[11px] font-semibold text-white/45">{set.events?.event_date ? format(parseISO(set.events.event_date), 'MMM d, yyyy') : 'Ready now'}</p>
-                      </div>
-                      <span className="rounded-full bg-white/[0.08] px-3 py-1.5 text-[11px] font-black text-white/80">{set.songs_count || 6} songs</span>
-                      <ChevronRight className="h-4 w-4 text-white/70 transition-transform group-hover:translate-x-0.5" />
-                    </button>
-                  ))}
+                <div className={reviewSets.length > 0 ? 'space-y-1' : 'flex min-h-[270px] flex-1 items-center justify-center rounded-[0.6rem] border border-dashed border-white/[0.14] bg-white/[0.035] px-5 py-8'}>
+                  {reviewSets.length > 0 ? (
+                    reviewSets.map((set, index) => {
+                      const eventId = set.events?.id || set.event_id;
+                      const songCount = set.setlist_songs?.length ?? 0;
+                      const artworkUrls = eventId ? eventArtworkMap[eventId] || [] : [];
+                      const artworkSongs = eventId ? eventArtworkSongsMap[eventId] || [] : [];
+                      return (
+                        <button
+                          key={set.id}
+                          onClick={() => navigate(eventId ? `/events/${eventId}` : isLeader ? '/leadership/setlists' : '/events')}
+                          className="group flex w-full items-center gap-3 rounded-[0.55rem] px-2 py-2 text-left transition-colors hover:bg-white/[0.06]"
+                        >
+                          <EventArtwork
+                            eventType={set.events?.event_type}
+                            title={set.events?.title}
+                            artworkUrls={artworkUrls}
+                            songs={artworkSongs.length > 0 ? artworkSongs : set.setlist_songs}
+                            className="h-12 w-12 rounded-[0.35rem]"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[13px] font-black text-white">{set.events?.title || 'Submitted setlist'}</p>
+                            <p className="mt-0.5 truncate text-[11px] font-semibold text-white/45">
+                              {set.events?.event_date ? format(parseISO(set.events.event_date), 'MMM d, yyyy') : 'Ready for review'}
+                              {!isLeader ? ' · Awaiting leadership' : ''}
+                            </p>
+                          </div>
+                          <span className="rounded-full bg-white/[0.08] px-3 py-1.5 text-[11px] font-black text-white/80">
+                            {songCount} {songCount === 1 ? 'song' : 'songs'}
+                          </span>
+                          <ChevronRight className="h-4 w-4 text-white/70 transition-transform group-hover:translate-x-0.5" />
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <div className="flex max-w-[280px] flex-col items-center justify-center text-center">
+                      <ListChecks className="mx-auto h-8 w-8 text-[#22c55e]" />
+                      <p className="mt-4 text-[14px] font-black text-white">No setlists awaiting approval</p>
+                      <p className="mx-auto mt-2 max-w-[250px] text-[11px] font-semibold leading-relaxed text-white/45">
+                        Submitted setlists will appear here for the whole team. Leaders can approve them from the event review controls.
+                      </p>
+                    </div>
+                  )}
                 </div>
               </section>
         </motion.section>
@@ -659,36 +1038,16 @@ export function Dashboard() {
             </div>
           </section>
 
-          <section className="rounded-[0.75rem] border border-white/[0.08] bg-[radial-gradient(circle_at_12%_0%,rgba(34,197,94,0.18),transparent_38%),#181818] p-4 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)]">
+          <section className="rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-4 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)]">
             <div className="mb-4 flex items-center gap-2">
               <ClipboardCheck className="h-4 w-4 text-[#22c55e]" />
               <h2 className="text-[15px] font-black text-white">Daily verse</h2>
             </div>
-            <p className="line-clamp-4 text-[15px] font-semibold leading-relaxed text-white/86">"{todayVerse.text}"</p>
-            <p className="mt-4 text-[10px] font-black uppercase tracking-[0.16em] text-[#22c55e]/80">{todayVerse.ref}</p>
+            <div className="flex min-h-[104px] flex-col justify-center rounded-[0.55rem] bg-white/[0.045] px-3 py-3">
+              <p className="line-clamp-4 text-[13px] font-bold leading-relaxed text-white/88">"{todayVerse.text}"</p>
+              <p className="mt-3 text-[10px] font-black uppercase tracking-[0.14em] text-[#22c55e]">{todayVerse.ref}</p>
+            </div>
           </section>
-        </motion.section>
-
-        <motion.section variants={item} className="lg:hidden">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-[22px] font-black text-white">Upcoming services</h2>
-            <button onClick={() => navigate('/events')} className="text-[12px] font-bold text-[#22c55e]">See all</button>
-          </div>
-          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-            {displayEvents.map((event) => (
-              <button key={event.id} onClick={() => navigate(event.id.startsWith('sample') ? '/events' : `/events/${event.id}`)} className="flex min-w-[188px] items-center gap-3 rounded-[0.6rem] bg-[#242424] p-3 text-left">
-                <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-[0.55rem] bg-[#22c55e] text-black">
-                  <span className="text-[10px] font-black uppercase">{format(parseISO(event.event_date), 'MMM')}</span>
-                  <span className="text-[18px] font-black leading-none">{format(parseISO(event.event_date), 'd')}</span>
-                </div>
-                <div className="min-w-0">
-                  <p className="line-clamp-2 text-[13px] font-black leading-tight text-white">{event.title}</p>
-                  <p className="mt-1 text-[12px] font-semibold text-white/60">{event.start_time ? formatTime12Hour(event.start_time) : 'TBA'}</p>
-                  <p className="text-[11px] font-semibold text-white/42">{event.location || 'Main Hall'}</p>
-                </div>
-              </button>
-            ))}
-          </div>
         </motion.section>
 
         <motion.section variants={item} className="lg:hidden">
@@ -789,9 +1148,9 @@ export function Dashboard() {
         )}
 
         <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.75fr)] xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,0.8fr)]">
-          <motion.section variants={item} className="min-w-0 overflow-hidden rounded-[1rem] border border-white/[0.08] bg-[#181818] p-4">
+          <motion.section variants={item} className="min-w-0 overflow-hidden lg:rounded-[1rem] lg:border lg:border-white/[0.08] lg:bg-[#181818] lg:p-4">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-[18px] font-black text-white">Recent announcements</h2>
+              <h2 className="text-[22px] font-black text-white lg:text-[18px]">Recent announcements</h2>
               <button onClick={() => navigate('/announcements')} className="text-[12px] font-bold text-[#22c55e]">See all</button>
             </div>
             <div className="divide-y divide-white/[0.07]">
@@ -815,7 +1174,7 @@ export function Dashboard() {
             </div>
           </motion.section>
 
-          <motion.section variants={item} className="min-w-0 rounded-[1rem] border border-white/[0.08] bg-[#181818] p-4">
+          <motion.section variants={item} className="hidden min-w-0 rounded-[1rem] border border-white/[0.08] bg-[#181818] p-4 lg:block">
             <h2 className="mb-4 text-[18px] font-black text-white">Quick actions</h2>
             <div className="grid grid-cols-2 gap-2">
               {quickActions.map((action) => {

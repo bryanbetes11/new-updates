@@ -4,8 +4,8 @@ import { motion } from 'framer-motion';
 import {
   Music, Upload, CheckCircle, AlertTriangle, Calendar, Search,
   ChevronDown, Trash2, Square, CheckSquare, X,
-  ListMusic, Clock, Music2, ArrowUpDown, BarChart2, ArrowRight, FileMusic,
-  ExternalLink, Globe2, ClipboardPaste,
+  ListMusic, Clock, Music2, ArrowUpDown, ArrowRight, FileMusic,
+  ExternalLink, Globe2, ClipboardPaste, Pencil,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -14,6 +14,7 @@ import { Modal } from '../../components/Modal';
 import { EmptyState } from '../../components/EmptyState';
 import { Avatar } from '../../components/Avatar';
 import { SongChartViewer } from '../../components/SongChartViewer';
+import { SongArtwork } from '../../components/SongArtwork';
 import { parseChordProMetadata } from '../../lib/chordPro';
 import { withSaveTimeout } from '../../lib/saveTimeout';
 import { filterSetlistsBySearch } from '../../lib/setlistSearch';
@@ -23,7 +24,7 @@ interface SetlistWithEvent {
   status: string;
   event_id: string;
   events?: { title: string; event_date: string; event_type: string };
-  setlist_songs?: { id: string; position: number; song_id: string; performed_key: string; songs?: { id: string; title: string; artist: string; song_key: string; chordpro_text?: string | null } }[];
+  setlist_songs?: { id: string; position: number; song_id: string; performed_key: string; youtube_url?: string | null; songs?: { id: string; title: string; artist: string; song_key: string; youtube_url?: string | null; chordpro_text?: string | null } }[];
 }
 
 interface SongUsage {
@@ -31,6 +32,8 @@ interface SongUsage {
   title: string;
   artist: string;
   song_key: string;
+  created_by?: string | null;
+  youtube_url?: string | null;
   chordpro_text?: string | null;
   last_used_date: string | null;
   days_since: number | null;
@@ -182,7 +185,15 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   const [selectModeSongs, setSelectModeSongs] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'all' | 'safe' | 'not_ready' | 'never_used'>('all');
   const [selectedChartSong, setSelectedChartSong] = useState<SongUsage | null>(null);
+  const [editingLibrarySong, setEditingLibrarySong] = useState<SongUsage | null>(null);
+  const [editLibrarySongForm, setEditLibrarySongForm] = useState({
+    title: '',
+    artist: '',
+    song_key: '',
+    youtube_url: '',
+  });
   const [chartSaving, setChartSaving] = useState(false);
+  const [songDetailsSaving, setSongDetailsSaving] = useState(false);
   const [chartImporting, setChartImporting] = useState(false);
   const [showWebImport, setShowWebImport] = useState(false);
   const [webImportSaving, setWebImportSaving] = useState(false);
@@ -201,10 +212,10 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
     const [setlistRes, songsRes, songLeadersRes] = await Promise.all([
       supabase
         .from('setlists')
-        .select('id, status, event_id, events(title, event_date, event_type), setlist_songs(id, position, song_id, performed_key, songs(id, title, artist, song_key, chordpro_text))')
+        .select('id, status, event_id, events(title, event_date, event_type), setlist_songs(id, position, song_id, performed_key, youtube_url, songs(id, title, artist, song_key, youtube_url, chordpro_text))')
         .eq('status', 'approved')
         .order('created_at', { ascending: false }),
-      supabase.from('songs').select('id, title, artist, song_key, chordpro_text').order('title'),
+      supabase.from('songs').select('id, title, artist, song_key, created_by, youtube_url, chordpro_text').order('title'),
       supabase.from('event_assignments').select('event_id, profiles(first_name, last_name, nickname, gender, avatar_url), roles!inner(name)').eq('roles.name', 'Song Leader'),
     ]);
 
@@ -282,6 +293,8 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
         title: parsed.title,
         artist: parsed.artist || '',
         song_key: parsed.song_key || '',
+        created_by: parsed.created_by ?? null,
+        youtube_url: parsed.youtube_url ?? null,
         chordpro_text: parsed.chordpro_text ?? null,
         last_used_date: parsed.last_used_date ?? null,
         days_since: parsed.days_since ?? null,
@@ -315,6 +328,88 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
       localStorage.removeItem(openChartStorageKey);
     } catch {
       // Ignore storage failures.
+    }
+  };
+
+  const openEditLibrarySong = (song: SongUsage) => {
+    setEditingLibrarySong(song);
+    setEditLibrarySongForm({
+      title: song.title || '',
+      artist: song.artist || '',
+      song_key: song.song_key || '',
+      youtube_url: song.youtube_url || '',
+    });
+  };
+
+  const closeEditLibrarySong = () => {
+    if (songDetailsSaving) return;
+    setEditingLibrarySong(null);
+  };
+
+  const handleSaveLibrarySongDetails = async () => {
+    if (!editingLibrarySong || songDetailsSaving) return;
+
+    const title = sanitizeSongTitle(editLibrarySongForm.title.trim());
+    const artist = editLibrarySongForm.artist.trim();
+    const songKey = editLibrarySongForm.song_key.trim();
+    const youtubeUrl = editLibrarySongForm.youtube_url.trim();
+    const canRenameSong = editingLibrarySong.created_by === user?.id;
+
+    if (canRenameSong && !title) {
+      toast('error', 'Song title is required');
+      return;
+    }
+
+    setSongDetailsSaving(true);
+    try {
+      const updatePayload: {
+        artist: string;
+        song_key: string;
+        youtube_url: string;
+        title?: string;
+      } = {
+        artist,
+        song_key: songKey,
+        youtube_url: youtubeUrl,
+      };
+
+      if (canRenameSong) {
+        updatePayload.title = title;
+      }
+
+      const { data, error } = await withSaveTimeout(
+        supabase
+          .from('songs')
+          .update(updatePayload)
+          .eq('id', editingLibrarySong.id)
+          .select('id, title, artist, song_key, created_by, youtube_url, chordpro_text')
+          .maybeSingle()
+      );
+
+      if (error || !data) {
+        throw new Error(error?.message || 'No song was updated');
+      }
+
+      const updatedSong: SongUsage = {
+        ...editingLibrarySong,
+        title: sanitizeSongTitle(data.title),
+        artist: data.artist || '',
+        song_key: data.song_key || '',
+        created_by: data.created_by ?? editingLibrarySong.created_by ?? null,
+        youtube_url: data.youtube_url || '',
+        chordpro_text: data.chordpro_text ?? editingLibrarySong.chordpro_text,
+      };
+
+      setSongUsages(current => current.map(song => song.id === updatedSong.id ? updatedSong : song));
+      if (selectedChartSong?.id === updatedSong.id) setSelectedChartSong(updatedSong);
+      toast('success', 'Song details updated');
+      setEditingLibrarySong(null);
+      await fetchData();
+    } catch (error: unknown) {
+      console.error('Failed to update song details:', error);
+      toast('error', getErrorMessage(error, 'Failed to update song details'));
+    } finally {
+      setSongDetailsSaving(false);
     }
   };
 
@@ -1137,9 +1232,14 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                               const displayKey = ss.performed_key || ss.songs?.song_key || '';
                               const keyChanged = ss.performed_key && ss.songs?.song_key && ss.performed_key !== ss.songs.song_key;
                               return (
-                                <div key={ss.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-black/[0.015] dark:hover:bg-white/[0.02] transition-colors">
-                                  <span className="flex items-center justify-center h-6 w-6 rounded-lg bg-gray-100 dark:bg-white/[0.05] text-[10px] font-black text-gray-400 dark:text-white/35 shrink-0 tabular-nums">{i + 1}</span>
-                                  <div className="min-w-0 flex-1">
+	                                <div key={ss.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-black/[0.015] dark:hover:bg-white/[0.02] transition-colors">
+	                                  <span className="flex items-center justify-center h-6 w-6 rounded-lg bg-gray-100 dark:bg-white/[0.05] text-[10px] font-black text-gray-400 dark:text-white/35 shrink-0 tabular-nums">{i + 1}</span>
+	                                  <SongArtwork
+	                                    song={ss.songs}
+	                                    youtubeUrl={ss.youtube_url || ss.songs?.youtube_url}
+	                                    className="h-10 w-10 rounded-[0.35rem]"
+	                                  />
+	                                  <div className="min-w-0 flex-1">
                                     <div className="flex items-center gap-1.5 flex-wrap">
                                       <p className="text-[13px] font-semibold text-gray-900 dark:text-white leading-snug">{ss.songs?.title}</p>
                                       {displayKey && (
@@ -1269,84 +1369,40 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   return (
     <div className="space-y-5 pb-2">
 
-      {/* ── Header row ── */}
-      <SectionLabel
-        index="01"
-        action={
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={openWebImport}
-              className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-semibold text-sky-700 bg-sky-50 border border-sky-200/80 transition-all active:scale-[0.97] dark:bg-sky-500/[0.12] dark:text-sky-300 dark:border-sky-500/20"
-            >
-              <Globe2 className="h-3.5 w-3.5" />
-              Search UG
-            </button>
-            <button
-              type="button"
-              onClick={() => chartFileRef.current?.click()}
-              disabled={chartImporting}
-              className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 transition-all active:scale-[0.97] disabled:opacity-60 dark:bg-emerald-500/[0.12] dark:text-emerald-300 dark:border-emerald-500/20"
-            >
-              <FileMusic className="h-3.5 w-3.5" />
-              {chartImporting ? 'Importing...' : 'Import .cho'}
-            </button>
-            {!isSongsOnly && (
-              <button
-                type="button"
-                onClick={() => {
-                  setShowSongResults(false);
-                  setActiveFilter('all');
-                  setSearch('');
-                  setSelectedSongs(new Set());
-                  setSelectModeSongs(false);
-                }}
-                className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-semibold text-white transition-all active:scale-[0.97]"
-                style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', boxShadow: '0 3px 10px rgba(22,163,74,0.3)' }}
-              >
-                Back to sets
-              </button>
-            )}
-          </div>
-        }
-      >
-        <span className="flex items-center gap-1.5"><BarChart2 className="h-3 w-3" /> Song Results</span>
-      </SectionLabel>
       <input ref={chartFileRef} type="file" accept=".cho" multiple className="hidden" onChange={e => handleChartUpload(e.target.files)} />
 
-      {/* ── Stats strip ── */}
+      {/* ── Filter pills ── */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-        className="grid grid-cols-2 sm:grid-cols-4 gap-2"
+        className="flex gap-2 overflow-x-auto pb-1 no-scrollbar"
       >
-        <StatCard
-          label="Total"
-          value={songUsages.length}
-          active={activeFilter === 'all'}
-          onClick={() => setActiveFilter('all')}
-        />
-        <StatCard
-          label="Never Used"
-          value={neverUsed}
-          active={activeFilter === 'never_used'}
-          onClick={() => setActiveFilter(prev => prev === 'never_used' ? 'all' : 'never_used')}
-        />
-        <StatCard
-          label="Safe"
-          value={safeCount}
-          color="green"
-          active={activeFilter === 'safe'}
-          onClick={() => setActiveFilter(prev => prev === 'safe' ? 'all' : 'safe')}
-        />
-        <StatCard
-          label="Not Ready"
-          value={notReadyCount}
-          color={notReadyCount > 0 ? 'red' : 'default'}
-          active={activeFilter === 'not_ready'}
-          onClick={() => setActiveFilter(prev => prev === 'not_ready' ? 'all' : 'not_ready')}
-        />
+        {[
+          { id: 'all' as const, label: 'All', count: songUsages.length },
+          { id: 'safe' as const, label: 'Safe', count: safeCount },
+          { id: 'not_ready' as const, label: 'Not Ready', count: notReadyCount },
+          { id: 'never_used' as const, label: 'Never Used', count: neverUsed },
+        ].map(filter => {
+          const active = activeFilter === filter.id;
+          return (
+            <button
+              key={filter.id}
+              type="button"
+              onClick={() => setActiveFilter(prev => (prev === filter.id && filter.id !== 'all' ? 'all' : filter.id))}
+              className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-full px-4 text-[12px] font-black transition-colors ${
+                active
+                  ? 'bg-[#22c55e] text-black'
+                  : 'bg-white/[0.10] text-white hover:bg-white/[0.16]'
+              }`}
+            >
+              {filter.label}
+              <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${active ? 'bg-black/12 text-black' : 'bg-white/[0.10] text-white/68'}`}>
+                {filter.count}
+              </span>
+            </button>
+          );
+        })}
       </motion.div>
 
       {/* ── Active filter chip ── */}
@@ -1451,44 +1507,39 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
         </div>
       )}
 
-      {/* ── Song table — premium card ── */}
+      {/* ── Song list ── */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
-        className="relative rounded-3xl overflow-hidden bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06]"
-        style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 28px -16px rgba(15,23,42,0.12)' }}
+        className="divide-y divide-white/[0.07]"
       >
-        <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.12] to-transparent" />
-
-        <div className={`relative grid gap-3 sm:gap-4 px-4 py-3 border-b border-black/[0.04] dark:border-white/[0.05] bg-gray-50/50 dark:bg-white/[0.015] ${selectModeSongs ? 'grid-cols-[auto,1fr,auto,auto]' : 'grid-cols-[1fr,auto,auto]'}`}>
-          {selectModeSongs && <span className="w-4" />}
-          <span className="text-[10px] font-black text-gray-400 dark:text-white/35 uppercase tracking-[0.14em]">Song</span>
-          <span className="text-[10px] font-black text-gray-400 dark:text-white/35 uppercase tracking-[0.14em] text-center hidden sm:block">Last Used</span>
-          <span className="text-[10px] font-black text-gray-400 dark:text-white/35 uppercase tracking-[0.14em] text-right">Status</span>
-        </div>
-
         {filteredSongs.length === 0 ? (
-          <p className="px-5 py-12 text-center text-sm text-gray-400 dark:text-white/30">No songs found</p>
+          <p className="rounded-[0.75rem] bg-[#181818] px-5 py-12 text-center text-sm text-gray-400 dark:text-white/30">No songs found</p>
         ) : (
-          <div className="divide-y divide-black/[0.04] dark:divide-white/[0.04]">
+          <>
             {filteredSongs.map(song => (
               <div
                 key={song.id}
-                className={`grid gap-3 sm:gap-4 px-4 py-3 items-center transition-colors ${selectModeSongs ? 'grid-cols-[auto,1fr,auto,auto]' : 'grid-cols-[1fr,auto,auto]'} ${
+                className={`flex items-center gap-3 py-3 transition-colors ${
                   selectedSongs.has(song.id)
-                    ? 'bg-emerald-50/60 dark:bg-emerald-500/[0.06]'
-                    : 'hover:bg-gray-50/60 dark:hover:bg-white/[0.018]'
+                    ? 'bg-[#22c55e]/10'
+                    : 'hover:bg-white/[0.035]'
                 }`}
               >
                 {selectModeSongs && (
-                  <button onClick={() => toggleSong(song.id)} className="shrink-0 flex items-center">
+                  <button onClick={() => toggleSong(song.id)} className="shrink-0">
                     {selectedSongs.has(song.id)
                       ? <CheckSquare className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                       : <Square className="h-4 w-4 text-gray-300 dark:text-white/20 hover:text-gray-400 dark:hover:text-white/35 transition-colors" />}
                   </button>
                 )}
-                <div className="min-w-0">
+                <SongArtwork
+                  song={song}
+                  youtubeUrl={song.youtube_url}
+                  className="h-14 w-14 rounded-[0.35rem]"
+                />
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <p className="text-[13px] font-semibold text-gray-900 dark:text-white truncate" style={{ letterSpacing: '-0.01em' }}>{song.title}</p>
                     {song.song_key && (
@@ -1496,18 +1547,6 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                     )}
                   </div>
                   {song.artist && <p className="text-[11px] text-gray-400 dark:text-white/30 truncate mt-0.5">{song.artist}</p>}
-                  <button
-                    type="button"
-                    onClick={() => openChartSong(song)}
-                    className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold transition-colors ${
-                      song.chordpro_text
-                        ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/80 hover:bg-emerald-100 dark:bg-emerald-500/[0.12] dark:text-emerald-300 dark:ring-emerald-500/20'
-                        : 'bg-gray-100 text-gray-500 ring-1 ring-gray-200/80 hover:bg-gray-200/70 dark:bg-white/[0.05] dark:text-white/40 dark:ring-white/[0.07]'
-                    }`}
-                  >
-                    <FileMusic className="h-3 w-3" />
-                    {song.chordpro_text ? 'Open chart' : 'Add chart'}
-                  </button>
                   <p className="text-[10px] font-mono text-gray-400 dark:text-white/25 mt-0.5 sm:hidden tracking-wide">
                     {song.last_used_date ? format(parseISO(song.last_used_date), 'MMM d, yyyy') : 'Never used'}
                   </p>
@@ -1519,7 +1558,15 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                     <span className="text-gray-300 dark:text-white/20">Never</span>
                   )}
                 </div>
-                <div className="flex items-center justify-end">
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openEditLibrarySong(song)}
+                    aria-label={`Edit ${song.title}`}
+                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.035] text-white/45 transition-colors hover:border-emerald-400/40 hover:bg-emerald-500/[0.12] hover:text-emerald-300 active:scale-[0.96]"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
                   {song.days_since === null ? (
                     <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-white/45 border border-gray-200 dark:border-white/[0.06]">
                       <CheckCircle className="h-3 w-3" /> New
@@ -1533,7 +1580,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                 </div>
               </div>
             ))}
-          </div>
+          </>
         )}
       </motion.div>
 
@@ -1673,6 +1720,100 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
             </button>
           </div>
         </div>
+      </Modal>
+
+      <Modal open={editingLibrarySong !== null} onClose={closeEditLibrarySong} title="Edit song details" size="md">
+        {editingLibrarySong && (() => {
+          const canRenameSong = editingLibrarySong.created_by === user?.id;
+          return (
+          <div className="space-y-5">
+            <div className="flex items-center gap-3 rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-3">
+              <SongArtwork
+                song={{
+                  title: editLibrarySongForm.title,
+                  artist: editLibrarySongForm.artist,
+                  youtube_url: editLibrarySongForm.youtube_url,
+                }}
+                youtubeUrl={editLibrarySongForm.youtube_url}
+                className="h-16 w-16 rounded-[0.45rem]"
+              />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-black text-white">{editLibrarySongForm.title || 'Untitled song'}</p>
+                <p className="mt-1 truncate text-xs font-semibold text-white/45">
+                  {editLibrarySongForm.artist || 'Add an artist to improve artwork matching'}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block sm:col-span-2">
+                <span className="mb-1.5 block text-[11px] font-black uppercase tracking-[0.18em] text-white/35">Title</span>
+                <input
+                  value={editLibrarySongForm.title}
+                  onChange={event => setEditLibrarySongForm(form => ({ ...form, title: event.target.value }))}
+                  disabled={!canRenameSong}
+                  className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm font-semibold text-white outline-none transition focus:border-emerald-400/60 focus:ring-2 focus:ring-emerald-500/20 disabled:cursor-not-allowed disabled:text-white/50"
+                  placeholder="Song title"
+                />
+                {!canRenameSong && (
+                  <span className="mt-1.5 block text-[11px] font-semibold text-white/35">
+                    Only the original creator can rename a shared song.
+                  </span>
+                )}
+              </label>
+
+              <label className="block sm:col-span-2">
+                <span className="mb-1.5 block text-[11px] font-black uppercase tracking-[0.18em] text-white/35">Artist</span>
+                <input
+                  value={editLibrarySongForm.artist}
+                  onChange={event => setEditLibrarySongForm(form => ({ ...form, artist: event.target.value }))}
+                  className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm font-semibold text-white outline-none transition focus:border-emerald-400/60 focus:ring-2 focus:ring-emerald-500/20"
+                  placeholder="Artist or worship team"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1.5 block text-[11px] font-black uppercase tracking-[0.18em] text-white/35">Key</span>
+                <input
+                  value={editLibrarySongForm.song_key}
+                  onChange={event => setEditLibrarySongForm(form => ({ ...form, song_key: event.target.value }))}
+                  className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm font-semibold text-white outline-none transition focus:border-emerald-400/60 focus:ring-2 focus:ring-emerald-500/20"
+                  placeholder="A, Bb, G..."
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1.5 block text-[11px] font-black uppercase tracking-[0.18em] text-white/35">YouTube URL</span>
+                <input
+                  value={editLibrarySongForm.youtube_url}
+                  onChange={event => setEditLibrarySongForm(form => ({ ...form, youtube_url: event.target.value }))}
+                  className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm font-semibold text-white outline-none transition focus:border-emerald-400/60 focus:ring-2 focus:ring-emerald-500/20"
+                  placeholder="https://youtube.com/watch?v=..."
+                />
+              </label>
+            </div>
+
+            <p className="text-xs font-medium leading-relaxed text-white/45">
+              Saved edits update the shared song record, so setlists, event details, event thumbnails, and the Songs page refresh from the same artist, key, and video link.
+            </p>
+
+            <div className="flex justify-end gap-3">
+              <button type="button" onClick={closeEditLibrarySong} disabled={songDetailsSaving} className="btn-secondary">
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveLibrarySongDetails}
+                disabled={songDetailsSaving}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-black text-black transition hover:bg-emerald-400 disabled:opacity-60"
+              >
+                {songDetailsSaving ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/20 border-t-black" /> : <Pencil className="h-4 w-4" />}
+                Save details
+              </button>
+            </div>
+          </div>
+          );
+        })()}
       </Modal>
 
       {/* Delete modal */}

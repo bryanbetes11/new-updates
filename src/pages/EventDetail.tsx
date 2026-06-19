@@ -16,6 +16,7 @@ import { formatTime12Hour } from '../lib/timeFormat';
 import { Avatar } from '../components/Avatar';
 import { dispatchBadgeCountsRefresh } from '../lib/realtimeSignals';
 import { SongChartViewer } from '../components/SongChartViewer';
+import { SongArtwork } from '../components/SongArtwork';
 import { withSaveTimeout } from '../lib/saveTimeout';
 import { clearActiveServiceMode, getActiveServiceMode, saveActiveServiceMode } from '../lib/serviceModeResume';
 import { useSmartBack } from '../lib/navigationHistory';
@@ -93,6 +94,7 @@ export function EventDetail() {
   const [linkedSetlist, setLinkedSetlist] = useState<Setlist | null>(null);
   const [linkedSetlistSongs, setLinkedSetlistSongs] = useState<SetlistSong[]>([]);
   const [linkedServiceEvent, setLinkedServiceEvent] = useState<Event | null>(null);
+  const [linkedSongLeaderAssignment, setLinkedSongLeaderAssignment] = useState<EventAssignment | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
   const [isLeaving, setIsLeaving] = useState(false);
@@ -423,13 +425,21 @@ export function EventDetail() {
       setLinkedSetlist(null);
       setLinkedSetlistSongs([]);
       setLinkedServiceEvent(null);
+      setLinkedSongLeaderAssignment(null);
 
       if (eventRes.data?.event_type === 'Rehearsals' && eventRes.data.linked_event_id) {
-        const [linkedEventRes, linkedSetlistRes] = await Promise.all([
+        const [linkedEventRes, linkedSetlistRes, linkedSongLeaderRes] = await Promise.all([
           supabase.from('events').select('*').eq('id', eventRes.data.linked_event_id).maybeSingle(),
           supabase.from('setlists').select('*').eq('event_id', eventRes.data.linked_event_id).maybeSingle(),
+          supabase
+            .from('event_assignments')
+            .select('*, profiles(first_name, last_name, gender, avatar_url), roles!inner(name)')
+            .eq('event_id', eventRes.data.linked_event_id)
+            .eq('roles.name', 'Song Leader')
+            .maybeSingle(),
         ]);
         setLinkedServiceEvent(linkedEventRes.data || null);
+        setLinkedSongLeaderAssignment((linkedSongLeaderRes.data as EventAssignment | null) || null);
         if (linkedSetlistRes.data) {
           setLinkedSetlist(linkedSetlistRes.data);
           const { data: linkedSongsData } = await supabase
@@ -1495,12 +1505,23 @@ const openLyricsModal = (ss: SetlistSong) => {
     return prefix ? `${prefix} ${profile.first_name}` : profile.first_name;
   };
   const shortenPrefixedTitle = (title: string) => title.replace(/^(Bro\.|Sis\.)\s+([^\s]+).*$/i, (_match, prefix, firstName) => `${prefix} ${firstName}`);
-  const songLeaderName = songLeaderAssignment?.profiles
+  const linkedSongLeaderName = linkedSongLeaderAssignment?.profiles
+    ? getShortLeaderName(linkedSongLeaderAssignment.profiles)
+    : linkedServiceEvent?.title
+      ? shortenPrefixedTitle(linkedServiceEvent.title)
+      : '';
+  const directSongLeaderName = songLeaderAssignment?.profiles
     ? getShortLeaderName(songLeaderAssignment.profiles)
     : members.find(m => m.id === event.song_leader_id)
       ? members.find(m => m.id === event.song_leader_id)!.first_name
       : '';
-  const eventDisplayTitle = songLeaderName || shortenPrefixedTitle(event.title);
+  const songLeaderName = directSongLeaderName || linkedSongLeaderName;
+  const songLeaderDetail = songLeaderAssignment?.status
+    ? songLeaderAssignment.status === 'confirmed' ? 'Confirmed assignment' : `${songLeaderAssignment.status} assignment`
+    : linkedSongLeaderName
+      ? 'Linked service leader'
+      : 'No song leader assignment';
+  const eventDisplayTitle = directSongLeaderName || shortenPrefixedTitle(event.title);
   const isSongLeader = assignments.some(a => a.user_id === user?.id && a.roles?.name === 'Song Leader');
   const userIsSongLeaderRole = userRoles.some(ur => ur.roles?.name === 'Song Leader');
   const canManageSetlist = isLeader || isSongLeader || userIsSongLeaderRole;
@@ -1576,12 +1597,13 @@ const openLyricsModal = (ss: SetlistSong) => {
       : linkedReferenceSongs;
   const serviceModeSong = serviceModeIndex === null ? null : serviceModeSongs[serviceModeIndex] || null;
   const serviceModeSongKey = serviceModeDisplayKey || serviceModeSong?.performed_key || serviceModeSong?.songs?.song_key || '';
-  const serviceModeSourceLabel = event.event_type === 'Rehearsals' && linkedReferenceSongs.length > 0
-    ? linkedServiceEvent?.title || 'linked Sunday Service'
-    : orderedSetlistSongs.length > 0
-    ? event.title
-    : linkedServiceEvent?.title || 'linked Sunday Service';
-  const serviceModeLabel = event.event_type === 'Rehearsals' ? 'Rehearsal Mode' : 'Service Mode';
+	  const serviceModeSourceLabel = event.event_type === 'Rehearsals' && linkedReferenceSongs.length > 0
+	    ? linkedServiceEvent?.title || 'linked Sunday Service'
+	    : orderedSetlistSongs.length > 0
+	    ? event.title
+	    : linkedServiceEvent?.title || 'linked Sunday Service';
+	  const showServiceModeEntryPoints = false;
+	  const serviceModeLabel = event.event_type === 'Rehearsals' ? 'Rehearsal Mode' : 'Service Mode';
   const serviceModeLoadingTitle = event.event_type === 'Rehearsals' ? 'Preparing rehearsal flow.' : 'Preparing your setlist.';
   const serviceModeLoadingSteps = [
     { label: 'Opening charts', detail: `${serviceModeSongs.length} ${serviceModeSongs.length === 1 ? 'song' : 'songs'}`, icon: FileText },
@@ -1896,9 +1918,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                   icon: Music,
                   label: 'Song Leader',
                   value: songLeaderName || 'Not assigned',
-                  detail: songLeaderAssignment?.status
-                    ? songLeaderAssignment.status === 'confirmed' ? 'Confirmed assignment' : `${songLeaderAssignment.status} assignment`
-                    : 'No song leader assignment',
+                  detail: songLeaderDetail,
                 },
                 {
                   icon: Users,
@@ -2224,7 +2244,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                   </p>
                 </div>
                 <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto">
-                  {canShowLinkedRehearsalModeButton && linkedReferenceSongs.length > 0 && (
+                  {showServiceModeEntryPoints && canShowLinkedRehearsalModeButton && linkedReferenceSongs.length > 0 && (
                     <button
                       onClick={() => openServiceMode(0)}
                       className="group relative inline-flex h-11 min-w-0 flex-1 items-center justify-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-700 px-4 text-sm font-black text-white shadow-xl shadow-emerald-600/25 transition hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-emerald-600/30 active:scale-[0.98] sm:flex-none"
@@ -2256,6 +2276,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                       <div key={ss.id} className="px-4 py-3">
                         <div className="flex items-start gap-3">
                           <span className="flex items-center justify-center h-7 w-7 rounded-lg bg-gray-100 dark:bg-gray-800 text-xs font-medium text-gray-500 dark:text-gray-400 shrink-0">{i + 1}</span>
+                          <SongArtwork song={song} youtubeUrl={ss.youtube_url || song?.youtube_url} className="h-11 w-11 rounded-lg" />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
                               <p className="text-sm font-medium text-gray-900 dark:text-white">{song?.title || 'Untitled song'}</p>
@@ -2402,7 +2423,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    {canShowPrimaryModeButton && setlistSongs.length > 0 && (
+                    {showServiceModeEntryPoints && canShowPrimaryModeButton && setlistSongs.length > 0 && (
                       <button
                         onClick={() => openServiceMode(0)}
                         className="relative inline-flex flex-1 items-center justify-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-700 px-4 py-3 text-sm font-black text-white shadow-xl shadow-emerald-600/25 transition active:scale-[0.98]"
@@ -2453,7 +2474,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                     )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    {canShowPrimaryModeButton && setlistSongs.length > 0 && (
+                    {showServiceModeEntryPoints && canShowPrimaryModeButton && setlistSongs.length > 0 && (
                       <button
                         onClick={() => openServiceMode(0)}
                         className="group relative inline-flex items-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-700 px-5 py-3 text-sm font-black text-white shadow-xl shadow-emerald-600/25 transition hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-emerald-600/30"
@@ -2526,6 +2547,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                           >
                             <GripVertical className="h-4 w-4 text-gray-400 dark:text-gray-500 shrink-0" />
                             <span className="flex items-center justify-center h-7 w-7 rounded-lg bg-gray-100 dark:bg-gray-800 text-xs font-medium text-gray-500 dark:text-gray-400 shrink-0">{i + 1}</span>
+                            <SongArtwork song={ss.songs} youtubeUrl={ss.youtube_url || ss.songs?.youtube_url} className="h-10 w-10 rounded-lg" />
                             <div className="min-w-0 flex-1">
                               <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{ss.songs?.title}</p>
                               <p className="text-xs text-gray-500 dark:text-gray-400">{ss.songs?.artist}</p>
@@ -2567,6 +2589,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                             {/* Desktop: original single-row layout */}
                             <div className="hidden lg:flex lg:items-center lg:gap-3">
                               <span className="flex items-center justify-center h-7 w-7 rounded-lg bg-gray-100 dark:bg-gray-800 text-xs font-medium text-gray-500 dark:text-gray-400 shrink-0">{i + 1}</span>
+                              <SongArtwork song={ss.songs} youtubeUrl={ss.youtube_url || ss.songs?.youtube_url} className="h-10 w-10 rounded-lg" />
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-1.5 min-w-0">
                                   <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{ss.songs?.title}</p>
@@ -2650,6 +2673,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                               {/* Line 1: number + title + action icons */}
                               <div className="flex items-start gap-2.5">
                                 <span className="flex items-center justify-center h-6 w-6 rounded-md bg-gray-100 dark:bg-gray-800 text-xs font-medium text-gray-500 dark:text-gray-400 shrink-0 mt-0.5">{i + 1}</span>
+                                <SongArtwork song={ss.songs} youtubeUrl={ss.youtube_url || ss.songs?.youtube_url} className="h-10 w-10 rounded-lg" />
                                 <div className="flex-1 min-w-0">
                                   <p className="text-sm font-medium text-gray-900 dark:text-white leading-snug">{ss.songs?.title}</p>
                                   {lyricsMissing && (
@@ -2698,10 +2722,10 @@ const openLyricsModal = (ss: SetlistSong) => {
                               </div>
                               {/* Line 2: artist */}
                               {ss.songs?.artist && (
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 ml-[34px] leading-none">{ss.songs.artist}</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 ml-[84px] leading-none">{ss.songs.artist}</p>
                               )}
                               {/* Line 3: key + category + usage + video */}
-                              <div className="flex items-center flex-wrap gap-1.5 mt-1 ml-[34px]">
+                              <div className="flex items-center flex-wrap gap-1.5 mt-1 ml-[84px]">
                                 {displayKey && (canEditSetlistSongDetails ? (
                                   <button
                                     type="button"

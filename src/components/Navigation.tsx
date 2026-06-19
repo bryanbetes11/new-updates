@@ -47,12 +47,26 @@ import {
   saveMobileNavStylePreference,
   type MobileNavStyle,
 } from '../lib/mobileNavPreference';
+import { supabase } from '../lib/supabase';
 import {
   HomeIcon, CalendarIcon, NewsIcon,
   LeaveIcon, ShieldNavIcon, MessageIcon,
 } from './NavIcons';
 
 type NavIcon = React.ComponentType<{ active?: boolean; className?: string; style?: React.CSSProperties }>;
+type GlobalSearchKind = 'event' | 'song' | 'setlist' | 'person' | 'page';
+interface GlobalSearchResult {
+  id: string;
+  kind: GlobalSearchKind;
+  title: string;
+  subtitle: string;
+  path: string;
+}
+interface SearchAnchorRect {
+  left: number;
+  top: number;
+  width: number;
+}
 
 interface NavItem {
   path: string;
@@ -69,6 +83,13 @@ const SetsNavIcon: NavIcon = ({ className, style }) => <ListChecks className={cl
 const SearchNavIcon: NavIcon = ({ className, style }) => <Search className={className} style={style} />;
 const LibraryNavIcon: NavIcon = ({ className, style }) => <Layers3 className={className} style={style} />;
 const CreateNavIcon: NavIcon = ({ className, style }) => <Plus className={className} style={style} />;
+const globalSearchTypeMeta: Record<GlobalSearchKind, { label: string; icon: LucideIcon; tone: string }> = {
+  event: { label: 'Event', icon: Calendar, tone: 'text-emerald-300 bg-emerald-500/14' },
+  song: { label: 'Song', icon: Music2, tone: 'text-sky-300 bg-sky-500/14' },
+  setlist: { label: 'Set', icon: ListChecks, tone: 'text-violet-300 bg-violet-500/14' },
+  person: { label: 'Person', icon: User, tone: 'text-amber-300 bg-amber-500/14' },
+  page: { label: 'Page', icon: Layers3, tone: 'text-white/70 bg-white/[0.08]' },
+};
 
 const mobileNavItems: NavItem[] = [
   { path: '/dashboard', label: 'Home', icon: HomeIcon, exact: true },
@@ -173,8 +194,18 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
   const [addAccountPassword, setAddAccountPassword] = useState('');
   const [showAddPassword, setShowAddPassword] = useState(false);
   const [addAccountLoading, setAddAccountLoading] = useState(false);
+  const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
+  const [globalSearchQuery, setGlobalSearchQuery] = useState('');
+  const [globalSearchResults, setGlobalSearchResults] = useState<GlobalSearchResult[]>([]);
+  const [globalSearchLoading, setGlobalSearchLoading] = useState(false);
+  const [globalSearchAnchorRect, setGlobalSearchAnchorRect] = useState<SearchAnchorRect | null>(null);
+  const [desktopProfileOpen, setDesktopProfileOpen] = useState(false);
   const mobileMenuScrollRef = useRef<HTMLDivElement | null>(null);
   const mobileSettingsScrollRef = useRef<HTMLDivElement | null>(null);
+  const globalSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const globalSearchMobileInputRef = useRef<HTMLInputElement | null>(null);
+  const globalSearchFormRef = useRef<HTMLFormElement | null>(null);
+  const globalSearchDialogRef = useRef<HTMLDivElement | null>(null);
   const mobileMenuScrollTopRef = useRef(0);
   const mobileSettingsScrollTopRef = useRef(0);
 
@@ -215,6 +246,12 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
     if (!mobileOpen) setDrawerPanel('menu');
   }, [mobileOpen]);
 
+  const handleNav = useCallback((path: string) => {
+    navigate(path);
+    onMobileOpenChange(false);
+    setDesktopProfileOpen(false);
+  }, [navigate, onMobileOpenChange]);
+
   useEffect(() => {
     if (!mobileOpen) return;
 
@@ -238,6 +275,203 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
     return 0;
   };
 
+  const updateGlobalSearchAnchor = useCallback(() => {
+    if (!window.matchMedia('(min-width: 1024px)').matches) {
+      setGlobalSearchAnchorRect(null);
+      return;
+    }
+
+    const rect = globalSearchFormRef.current?.getBoundingClientRect();
+    if (!rect) {
+      setGlobalSearchAnchorRect(null);
+      return;
+    }
+
+    setGlobalSearchAnchorRect({
+      left: Math.round(rect.left),
+      top: Math.round(rect.bottom + 10),
+      width: Math.round(rect.width),
+    });
+  }, []);
+
+  const openGlobalSearch = useCallback(() => {
+    updateGlobalSearchAnchor();
+    setGlobalSearchOpen(true);
+    window.setTimeout(() => {
+      if (window.matchMedia('(min-width: 1024px)').matches) {
+        globalSearchInputRef.current?.focus();
+      } else {
+        globalSearchMobileInputRef.current?.focus();
+      }
+    }, 0);
+  }, [updateGlobalSearchAnchor]);
+
+  const scheduleGlobalSearchOpen = useCallback(() => {
+    window.setTimeout(openGlobalSearch, 0);
+  }, [openGlobalSearch]);
+
+  const closeGlobalSearch = useCallback(() => {
+    setGlobalSearchOpen(false);
+  }, []);
+
+  const handleGlobalResultSelect = useCallback((result: GlobalSearchResult) => {
+    setGlobalSearchOpen(false);
+    setDesktopProfileOpen(false);
+    setGlobalSearchQuery('');
+    setGlobalSearchResults([]);
+    handleNav(result.path);
+  }, [handleNav]);
+
+  useEffect(() => {
+    const handleSearchShortcut = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setDesktopProfileOpen(false);
+        openGlobalSearch();
+      }
+      if (event.key === 'Escape') {
+        closeGlobalSearch();
+        setDesktopProfileOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleSearchShortcut);
+    return () => window.removeEventListener('keydown', handleSearchShortcut);
+  }, [closeGlobalSearch, openGlobalSearch]);
+
+  useEffect(() => {
+    if (!globalSearchOpen) return undefined;
+
+    const handleOutsidePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (globalSearchFormRef.current?.contains(target)) return;
+      if (globalSearchDialogRef.current?.contains(target)) return;
+      closeGlobalSearch();
+    };
+
+    updateGlobalSearchAnchor();
+    document.addEventListener('pointerdown', handleOutsidePointerDown, true);
+    window.addEventListener('resize', updateGlobalSearchAnchor);
+    window.addEventListener('scroll', updateGlobalSearchAnchor, true);
+
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsidePointerDown, true);
+      window.removeEventListener('resize', updateGlobalSearchAnchor);
+      window.removeEventListener('scroll', updateGlobalSearchAnchor, true);
+    };
+  }, [closeGlobalSearch, globalSearchOpen, updateGlobalSearchAnchor]);
+
+  useEffect(() => {
+    if (!globalSearchOpen) return;
+
+    const query = globalSearchQuery.trim();
+    if (query.length < 2) {
+      setGlobalSearchLoading(false);
+      setGlobalSearchResults([
+        { id: 'page-events', kind: 'page', title: 'Events', subtitle: 'Schedule, create, and review services', path: '/events' },
+        { id: 'page-songs', kind: 'page', title: 'Songs', subtitle: 'Chord charts and song library', path: '/songs' },
+        { id: 'page-sets', kind: 'page', title: 'Sets', subtitle: 'Setlists and past worship sets', path: '/sets' },
+        { id: 'page-team', kind: 'page', title: 'Team', subtitle: 'People, roles, and ministries', path: '/leadership/team' },
+      ]);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      setGlobalSearchLoading(true);
+      const pattern = `%${query}%`;
+      const lowerQuery = query.toLowerCase();
+
+      try {
+        const [eventsRes, songsRes, profilesRes, setlistsRes] = await Promise.all([
+          supabase
+            .from('events')
+            .select('id, title, event_type, event_date, start_time')
+            .or(`title.ilike.${pattern},event_type.ilike.${pattern}`)
+            .order('event_date', { ascending: false })
+            .limit(6),
+          supabase
+            .from('songs')
+            .select('id, title, artist, song_key')
+            .or(`title.ilike.${pattern},artist.ilike.${pattern},song_key.ilike.${pattern}`)
+            .order('title')
+            .limit(6),
+          supabase
+            .from('profiles')
+            .select('id, first_name, last_name, nickname')
+            .or(`first_name.ilike.${pattern},last_name.ilike.${pattern},nickname.ilike.${pattern}`)
+            .order('first_name')
+            .limit(6),
+          supabase
+            .from('setlists')
+            .select('id, status, event_id, events(id, title, event_date)')
+            .order('created_at', { ascending: false })
+            .limit(40),
+        ]);
+
+        if (cancelled) return;
+
+        const eventResults: GlobalSearchResult[] = ((eventsRes.data || []) as Array<{ id: string; title: string; event_type?: string | null; event_date?: string | null; start_time?: string | null }>)
+          .map(event => ({
+            id: `event-${event.id}`,
+            kind: 'event',
+            title: event.title,
+            subtitle: [event.event_type, event.event_date].filter(Boolean).join(' · ') || 'Event',
+            path: `/events/${event.id}`,
+          }));
+
+        const songResults: GlobalSearchResult[] = ((songsRes.data || []) as Array<{ id: string; title: string; artist?: string | null; song_key?: string | null }>)
+          .map(song => ({
+            id: `song-${song.id}`,
+            kind: 'song',
+            title: song.title,
+            subtitle: [song.artist, song.song_key ? `Key ${song.song_key}` : ''].filter(Boolean).join(' · ') || 'Song library',
+            path: `/songs?search=${encodeURIComponent(song.title)}`,
+          }));
+
+        const personResults: GlobalSearchResult[] = ((profilesRes.data || []) as Array<{ id: string; first_name?: string | null; last_name?: string | null; nickname?: string | null }>)
+          .map(person => {
+            const name = [person.first_name, person.last_name].filter(Boolean).join(' ').trim() || person.nickname || 'Team member';
+            return {
+              id: `person-${person.id}`,
+              kind: 'person',
+              title: name,
+              subtitle: person.nickname ? `Nickname: ${person.nickname}` : 'Team member',
+              path: `/leadership/team?search=${encodeURIComponent(name)}`,
+            };
+          });
+
+        const setlistResults: GlobalSearchResult[] = ((setlistsRes.data || []) as Array<{ id: string; status?: string | null; event_id?: string | null; events?: { id?: string; title?: string | null; event_date?: string | null } | Array<{ id?: string; title?: string | null; event_date?: string | null }> | null }>)
+          .map(setlist => {
+            const event = Array.isArray(setlist.events) ? setlist.events[0] : setlist.events;
+            return { setlist, event };
+          })
+          .filter(({ event }) => {
+            const haystack = [event?.title, event?.event_date, 'setlist', 'set'].filter(Boolean).join(' ').toLowerCase();
+            return haystack.includes(lowerQuery);
+          })
+          .slice(0, 6)
+          .map(({ setlist, event }) => ({
+            id: `setlist-${setlist.id}`,
+            kind: 'setlist',
+            title: event?.title || 'Untitled setlist',
+            subtitle: [setlist.status, event?.event_date].filter(Boolean).join(' · ') || 'Setlist',
+            path: event?.id ? `/events/${event.id}` : '/sets',
+          }));
+
+        setGlobalSearchResults([...eventResults, ...songResults, ...setlistResults, ...personResults].slice(0, 12));
+      } finally {
+        if (!cancelled) setGlobalSearchLoading(false);
+      }
+    }, 180);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [globalSearchOpen, globalSearchQuery]);
+
   const sidebarManagementItems: NavItem[] = [
     { path: '/request-leave', label: 'Leave', icon: LeaveIcon },
     ...(isLeader || isOrgAdmin || canApproveLeave || canManageDiscipline
@@ -249,6 +483,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
   ];
   const displayName = profile?.nickname || profile?.first_name || '';
   const fullName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim();
+
   const useDockedMobileNav = mobileNavStyle === 'docked';
   const hideMobileChrome = mobileChromeHidden && !mobileOpen;
   const hideBottomMobileNav = hideMobileChrome;
@@ -274,11 +509,6 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
   ];
 
   const sidebarWidth = collapsed ? 92 : 300;
-
-  const handleNav = (path: string) => {
-    navigate(path);
-    onMobileOpenChange(false);
-  };
 
   const handleMobileNavStyleChange = async (style: MobileNavStyle) => {
     if (!user?.id || style === mobileNavStyle || savingNavStyle) return;
@@ -664,13 +894,53 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
           <HomeIcon active className="h-5 w-5" />
         </button>
 
-        <label className="flex h-11 max-w-[560px] flex-1 items-center gap-3 rounded-[0.65rem] border border-white/[0.10] bg-[#151515] px-3.5 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+        <form
+          ref={globalSearchFormRef}
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (globalSearchResults[0]) handleGlobalResultSelect(globalSearchResults[0]);
+          }}
+          className="flex h-11 max-w-[560px] flex-1 items-center gap-3 rounded-[0.65rem] border border-white/[0.10] bg-[#151515] px-3.5 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-colors focus-within:border-[#22c55e]/70 focus-within:bg-[#181818]"
+        >
           <Search className="h-5 w-5 shrink-0 text-white/60" />
-          <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-white/58">
-            Search events, songs, people, sets...
-          </span>
-          <span className="rounded-md border border-white/[0.08] bg-white/[0.05] px-2 py-1 text-[11px] font-bold text-white/46">⌘ K</span>
-        </label>
+          <input
+            ref={globalSearchInputRef}
+            value={globalSearchQuery}
+            onFocus={scheduleGlobalSearchOpen}
+            onClick={scheduleGlobalSearchOpen}
+            onChange={(event) => {
+              setGlobalSearchQuery(event.target.value);
+              setGlobalSearchOpen(true);
+              updateGlobalSearchAnchor();
+            }}
+            className="min-w-0 flex-1 bg-transparent text-[13px] font-semibold text-white outline-none placeholder:text-white/46"
+            placeholder="Search events, songs, people, sets..."
+            aria-label="Search events, songs, people, sets"
+          />
+          {globalSearchQuery ? (
+            <button
+              type="button"
+              onClick={() => {
+                setGlobalSearchQuery('');
+                updateGlobalSearchAnchor();
+                globalSearchInputRef.current?.focus();
+              }}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-white/42 transition-colors hover:bg-white/[0.08] hover:text-white"
+              aria-label="Clear search"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={openGlobalSearch}
+              className="rounded-md border border-white/[0.08] bg-white/[0.05] px-2 py-1 text-[11px] font-bold text-white/46 transition-colors hover:bg-white/[0.09] hover:text-white"
+              aria-label="Open search"
+            >
+              ⌘ K
+            </button>
+          )}
+        </form>
 
         <div className="ml-auto flex items-center gap-3">
           <button className="hidden h-11 items-center gap-2 rounded-[0.65rem] bg-white/[0.08] px-4 text-[13px] font-black text-white transition-colors hover:bg-white/[0.13] xl:flex">
@@ -687,15 +957,198 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
             {unread.messages > 0 && <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-[#22c55e]" />}
           </button>
           <button
-            onClick={() => handleNav('/profile')}
-            className="flex items-center gap-2 rounded-full px-1.5 py-1 transition-colors hover:bg-white/[0.08]"
-            aria-label="Profile"
+            onClick={() => {
+              setGlobalSearchOpen(false);
+              setDesktopProfileOpen(open => !open);
+            }}
+            className={`flex items-center gap-2 rounded-full px-1.5 py-1 transition-colors hover:bg-white/[0.08] ${desktopProfileOpen ? 'bg-white/[0.08]' : ''}`}
+            aria-label="Open profile menu"
+            aria-expanded={desktopProfileOpen}
           >
             <Avatar src={profile?.avatar_url} firstName={profile?.first_name || '?'} lastName={profile?.last_name} size="sm" className="!h-11 !w-11 ring-1 ring-white/10" />
-            <ChevronRight className="h-4 w-4 rotate-90 text-white/70" />
+            <ChevronRight className={`h-4 w-4 text-white/70 transition-transform ${desktopProfileOpen ? '-rotate-90' : 'rotate-90'}`} />
           </button>
         </div>
       </div>
+
+      <AnimatePresence>
+        {desktopProfileOpen && (
+          <>
+            <motion.button
+              aria-label="Close profile menu"
+              className="fixed inset-0 z-[55] cursor-default bg-transparent"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.1 }}
+              onClick={() => setDesktopProfileOpen(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, y: -8, scale: 0.985 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -6, scale: 0.985 }}
+              transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
+              className="fixed right-5 top-[4.55rem] z-[95] hidden w-[290px] overflow-hidden rounded-[0.9rem] border border-white/[0.10] bg-[#121212]/98 text-white shadow-[0_24px_80px_-34px_rgba(0,0,0,0.92)] backdrop-blur-2xl lg:block"
+              role="menu"
+              aria-label="Profile menu"
+            >
+              <div className="border-b border-white/[0.08] p-3">
+                <div className="flex items-center gap-3 rounded-[0.75rem] bg-white/[0.045] p-2.5">
+                  <Avatar
+                    src={profile?.avatar_url}
+                    firstName={profile?.first_name || '?'}
+                    lastName={profile?.last_name}
+                    size="sm"
+                    className="ring-1 ring-white/10"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-black leading-tight text-white">{displayName || fullName || 'Profile'}</p>
+                    <p className="mt-0.5 truncate text-[11px] font-semibold leading-tight text-white/42">{profile?.email}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-2">
+                <button
+                  type="button"
+                  onClick={() => handleNav('/profile')}
+                  className="group flex w-full items-center gap-3 rounded-[0.7rem] px-3 py-2.5 text-left transition-colors hover:bg-white/[0.07]"
+                  role="menuitem"
+                >
+                  <span className="flex h-9 w-9 items-center justify-center rounded-[0.65rem] bg-emerald-500/14 text-emerald-300">
+                    <User className="h-[18px] w-[18px]" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[13px] font-black text-white">Profile</span>
+                    <span className="mt-0.5 block text-[11px] font-semibold text-white/42">Account and personal settings</span>
+                  </span>
+                  <ChevronRight className="h-4 w-4 text-white/28 transition-colors group-hover:text-white/72" />
+                </button>
+
+                <div className="mt-1 flex items-center justify-between rounded-[0.7rem] px-3 py-2.5">
+                  <span className="flex items-center gap-3">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-[0.65rem] bg-white/[0.08] text-white/70">
+                      <Settings className="h-[18px] w-[18px]" />
+                    </span>
+                    <span>
+                      <span className="block text-[13px] font-black text-white">Appearance</span>
+                      <span className="mt-0.5 block text-[11px] font-semibold text-white/42">Theme preference</span>
+                    </span>
+                  </span>
+                  <ThemeToggle />
+                </div>
+              </div>
+
+              <div className="border-t border-white/[0.08] p-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDesktopProfileOpen(false);
+                    signOut();
+                  }}
+                  className="flex w-full items-center gap-3 rounded-[0.7rem] px-3 py-2.5 text-left text-red-300 transition-colors hover:bg-red-500/10"
+                  role="menuitem"
+                >
+                  <span className="flex h-9 w-9 items-center justify-center rounded-[0.65rem] bg-red-500/10 text-red-300">
+                    <LogOut className="h-[18px] w-[18px]" />
+                  </span>
+                  <span className="text-[13px] font-black">Sign out</span>
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {globalSearchOpen && (
+          <>
+            <motion.button
+              aria-label="Close search"
+              className="fixed inset-x-0 bottom-0 top-0 z-[55] cursor-default bg-black/18 lg:top-[4.5rem]"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0, transition: { duration: 0 } }}
+              transition={{ duration: 0.06 }}
+              onPointerDown={closeGlobalSearch}
+              onClick={closeGlobalSearch}
+            />
+            <motion.div
+              ref={globalSearchDialogRef}
+              initial={{ opacity: 0, y: -8, scale: 0.985 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 0, scale: 1, transition: { duration: 0 } }}
+              transition={{ duration: 0.1, ease: [0.22, 1, 0.36, 1] }}
+              style={globalSearchAnchorRect ? {
+                left: globalSearchAnchorRect.left,
+                top: globalSearchAnchorRect.top,
+                width: globalSearchAnchorRect.width,
+              } : undefined}
+              className="fixed left-1/2 top-[4.6rem] z-[90] w-[min(92vw,620px)] -translate-x-1/2 overflow-hidden rounded-[0.9rem] border border-white/[0.10] bg-[#121212]/98 text-white shadow-[0_24px_80px_-34px_rgba(0,0,0,0.92)] backdrop-blur-2xl lg:-translate-x-0"
+              role="dialog"
+              aria-label="Global search"
+            >
+              <div className="border-b border-white/[0.07] p-3 lg:hidden">
+                <div className="flex h-11 items-center gap-3 rounded-[0.65rem] border border-white/[0.10] bg-[#181818] px-3">
+                  <Search className="h-5 w-5 shrink-0 text-white/60" />
+                  <input
+                    ref={globalSearchMobileInputRef}
+                    value={globalSearchQuery}
+                    onChange={(event) => setGlobalSearchQuery(event.target.value)}
+                    className="min-w-0 flex-1 bg-transparent text-[14px] font-semibold text-white outline-none placeholder:text-white/42"
+                    placeholder="Search events, songs, people, sets..."
+                    aria-label="Search"
+                  />
+                  <button type="button" onClick={closeGlobalSearch} className="flex h-8 w-8 items-center justify-center rounded-full text-white/50 hover:bg-white/[0.08] hover:text-white" aria-label="Close search">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="max-h-[min(68vh,540px)] overflow-y-auto p-2">
+                <div className="flex items-center justify-between px-2 pb-2 pt-1">
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/36">
+                    {globalSearchQuery.trim().length >= 2 ? 'Search results' : 'Quick search'}
+                  </p>
+                  {globalSearchLoading && <RefreshCw className="h-3.5 w-3.5 animate-spin text-[#22c55e]" />}
+                </div>
+
+                {!globalSearchLoading && globalSearchResults.length === 0 ? (
+                  <div className="px-4 py-8 text-center">
+                    <Search className="mx-auto h-6 w-6 text-white/24" />
+                    <p className="mt-3 text-[14px] font-black text-white">No results found</p>
+                    <p className="mt-1 text-[12px] font-semibold text-white/42">Try a song title, service name, setlist, or team member.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {globalSearchResults.map((result) => {
+                      const meta = globalSearchTypeMeta[result.kind];
+                      const Icon = meta.icon;
+                      return (
+                        <button
+                          key={result.id}
+                          type="button"
+                          onClick={() => handleGlobalResultSelect(result)}
+                          className="group flex w-full items-center gap-3 rounded-[0.7rem] px-3 py-2.5 text-left transition-colors hover:bg-white/[0.07]"
+                        >
+                          <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.65rem] ${meta.tone}`}>
+                            <Icon className="h-5 w-5" />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[13px] font-black text-white">{result.title}</span>
+                            <span className="mt-0.5 block truncate text-[11px] font-semibold text-white/42">{meta.label} · {result.subtitle}</span>
+                          </span>
+                          <ChevronRight className="h-4 w-4 shrink-0 text-white/28 transition-colors group-hover:text-white/72" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* ── Mobile top bar ── */}
       <div
@@ -904,7 +1357,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
       <motion.aside
         animate={{ width: sidebarWidth }}
         transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-        className="fixed bottom-[88px] left-0 top-[72px] z-40 hidden flex-col border-r border-white/[0.08] bg-[#050505] lg:flex"
+        className="fixed bottom-0 left-0 top-[72px] z-40 hidden flex-col border-r border-white/[0.08] bg-[#050505] lg:flex"
         style={{ overflow: 'visible' }}
       >
         <div
@@ -990,74 +1443,6 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
                   {sidebarManagementItems.map(item => renderNavItem(item, collapsed))}
                 </div>
               </div>
-            )}
-          </div>
-
-          <div className={`shrink-0 border-t border-white/[0.07] ${collapsed ? 'space-y-2 px-2 py-2.5' : 'space-y-2.5 px-4 py-3'}`}>
-            {!collapsed ? (
-              <>
-                <div className="flex items-center justify-between rounded-[0.9rem] border border-white/[0.07] bg-white/[0.035] px-2 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-                  <ThemeToggle />
-                  <div className="h-5 w-px bg-white/[0.08]" />
-                  <NotificationBell />
-                </div>
-
-                <button
-                  onClick={() => navigate('/profile')}
-                  className="group flex w-full items-center gap-2.5 rounded-[0.9rem] border border-white/[0.08] bg-white/[0.045] px-2.5 py-2.5 text-left transition-all hover:-translate-y-0.5 hover:border-white/[0.14] hover:bg-white/[0.075]"
-                >
-                  <Avatar
-                    src={profile?.avatar_url}
-                    firstName={profile?.first_name || '?'}
-                    lastName={profile?.last_name}
-                    size="sm"
-                    className="ring-1 ring-white/10"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[12px] font-black leading-tight text-white">
-                      {displayName || fullName || 'Profile'}
-                    </p>
-                    <p className="mt-0.5 truncate text-[10px] font-semibold leading-tight text-white/40">{profile?.email}</p>
-                  </div>
-                </button>
-
-                <button
-                  onClick={signOut}
-                  className="flex h-10 w-full items-center gap-2 rounded-[0.8rem] px-3 text-left text-red-300 transition-colors hover:bg-red-500/10"
-                >
-                  <LogOut className="h-4 w-4 shrink-0" />
-                  <span className="text-[12px] font-bold">Sign out</span>
-                </button>
-              </>
-            ) : (
-              <>
-                <Tooltip label="Theme">
-                  <div className="flex w-full justify-center rounded-[0.8rem] border border-white/[0.08] bg-white/[0.045] py-1.5">
-                    <ThemeToggle />
-                  </div>
-                </Tooltip>
-                <Tooltip label="Notifications">
-                  <div className="flex w-full justify-center rounded-[0.8rem] border border-white/[0.08] bg-white/[0.045] py-1.5">
-                    <NotificationBell />
-                  </div>
-                </Tooltip>
-                <Tooltip label={displayName || fullName || 'Profile'}>
-                  <button
-                    onClick={() => navigate('/profile')}
-                    className="flex h-11 w-full items-center justify-center rounded-[0.8rem] border border-white/[0.08] bg-white/[0.045] transition-colors hover:border-white/[0.14]"
-                  >
-                    <Avatar src={profile?.avatar_url} firstName={profile?.first_name || '?'} lastName={profile?.last_name} size="sm" />
-                  </button>
-                </Tooltip>
-                <Tooltip label="Sign out">
-                  <button
-                    onClick={signOut}
-                    className="flex h-11 w-full items-center justify-center rounded-[0.8rem] text-red-300 transition-colors hover:bg-red-500/10"
-                  >
-                    <LogOut className="h-4 w-4" />
-                  </button>
-                </Tooltip>
-              </>
             )}
           </div>
         </div>

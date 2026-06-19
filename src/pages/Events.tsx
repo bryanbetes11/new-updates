@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { format, parseISO, startOfDay, subWeeks, previousSunday, addDays, subDays, differenceInDays, eachDayOfInterval } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { motion } from 'framer-motion';
-import { Calendar, Plus, Search, ChevronRight, Filter, Users, Trash2, CalendarOff, LayoutGrid, List, AlertCircle, Clock, X, PartyPopper, Heart, Sparkles } from 'lucide-react';
+import { Calendar, Plus, Search, ChevronRight, Filter, Users, Trash2, CalendarOff, AlertCircle, Clock, X, PartyPopper, Heart, Sparkles } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -13,17 +13,48 @@ import { DatePicker } from '../components/DatePicker';
 import { TimePicker } from '../components/TimePicker';
 import { EventsSkeleton } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
-import { CalendarGrid } from '../components/CalendarGrid';
 import { formatTime12Hour } from '../lib/timeFormat';
 import { withRequestTimeout } from '../lib/requestTimeout';
 import { describeSetlistReviewAge, getSetlistPendingMessage } from '../lib/setlistReviewAge';
+import { EventArtwork } from '../components/EventArtwork';
 import type { Event } from '../types';
 
 const eventTypes = ['Sunday Service', 'Prayer Meeting', 'LGTF (Midweek)', 'Rehearsals', 'Online Devotion', 'Equipping', 'Revamp Session', 'Youth Recharge', 'Custom'];
 
 interface AssignmentRow { user_id: string; role_id: string; }
 interface CalendarEntry { type: 'birthday' | 'leave'; date: string; name: string; status?: string; }
-interface SetlistInfo { status: string; created_at: string; submitted_at: string | null; }
+interface EventSongArtwork {
+  id: string;
+  song_id?: string | null;
+  position?: number | null;
+  youtube_url?: string | null;
+  songs?: {
+    id?: string | null;
+    title?: string | null;
+    artist?: string | null;
+    youtube_url?: string | null;
+  } | Array<{
+    id?: string | null;
+    title?: string | null;
+    artist?: string | null;
+    youtube_url?: string | null;
+  }> | null;
+}
+interface ArtworkSongRecord {
+  id?: string | null;
+  title?: string | null;
+  artist?: string | null;
+  youtube_url?: string | null;
+}
+interface SetlistInfo {
+  status: string;
+  created_at: string;
+  submitted_at: string | null;
+  artworkUrls?: string[];
+  artworkSongs?: EventSongArtwork[];
+  songCount?: number;
+}
+interface EventMemberSummary { id: string; first_name: string; last_name: string; gender?: string | null; }
 interface LinkedAssignmentRow {
   user_id: string;
   role_id: string;
@@ -60,6 +91,125 @@ const fadeUp = (delay = 0) => ({
   transition: { duration: 0.42, delay, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] },
 });
 
+const publicArtworkCache = new Map<string, string | null>();
+
+function getYouTubeThumbnailUrl(url?: string | null) {
+  if (!url) return null;
+
+  const trimmed = url.trim();
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([A-Za-z0-9_-]{11})/,
+    /youtube\.com\/.*[?&]v=([A-Za-z0-9_-]{11})/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = trimmed.match(pattern);
+    if (match?.[1]) return `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg`;
+  }
+
+  return null;
+}
+
+function normalizeArtworkUrl(url?: string | null) {
+  if (!url) return null;
+  return url.replace(/\/\d+x\d+bb\./, '/300x300bb.');
+}
+
+function getEventArtworkSong(song: EventSongArtwork) {
+  if (!song.songs) return null;
+  return Array.isArray(song.songs) ? song.songs[0] || null : song.songs;
+}
+
+function hydrateEventArtworkSongs(setlistSongs: EventSongArtwork[] | null | undefined, songsById: Map<string, ArtworkSongRecord>) {
+  return (setlistSongs || []).map((song) => {
+    if (getEventArtworkSong(song) || !song.song_id) return song;
+    const fallbackSong = songsById.get(song.song_id);
+    return fallbackSong ? { ...song, songs: fallbackSong } : song;
+  });
+}
+
+async function fetchPublicSongArtwork(song: EventSongArtwork) {
+  const nestedSong = getEventArtworkSong(song);
+  const searchTerm = [nestedSong?.title?.trim(), nestedSong?.artist?.trim()].filter(Boolean).join(' ');
+  if (!searchTerm) return null;
+
+  const cacheKey = searchTerm.toLowerCase();
+  if (publicArtworkCache.has(cacheKey)) return publicArtworkCache.get(cacheKey) || null;
+
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 1800);
+
+  try {
+    const deezerParams = new URLSearchParams({ q: searchTerm, limit: '1' });
+    const deezerResponse = await fetch(`https://api.deezer.com/search?${deezerParams.toString()}`, {
+      signal: controller.signal,
+    });
+    if (deezerResponse.ok) {
+      const deezerData = await deezerResponse.json() as {
+        data?: Array<{ album?: { cover_big?: string; cover_medium?: string; cover_xl?: string } }>;
+      };
+      const deezerArtwork = deezerData.data?.[0]?.album?.cover_big || deezerData.data?.[0]?.album?.cover_medium || deezerData.data?.[0]?.album?.cover_xl;
+      if (deezerArtwork) {
+        publicArtworkCache.set(cacheKey, deezerArtwork);
+        return deezerArtwork;
+      }
+    }
+
+    const iTunesParams = new URLSearchParams({
+      term: searchTerm,
+      entity: 'song',
+      media: 'music',
+      limit: '1',
+    });
+    const iTunesResponse = await fetch(`https://itunes.apple.com/search?${iTunesParams.toString()}`, {
+      signal: controller.signal,
+    });
+    if (!iTunesResponse.ok) {
+      publicArtworkCache.set(cacheKey, null);
+      return null;
+    }
+    const iTunesData = await iTunesResponse.json() as { results?: Array<{ artworkUrl100?: string; artworkUrl60?: string }> };
+    const artworkUrl = normalizeArtworkUrl(iTunesData.results?.[0]?.artworkUrl100 || iTunesData.results?.[0]?.artworkUrl60);
+    publicArtworkCache.set(cacheKey, artworkUrl);
+    return artworkUrl;
+  } catch {
+    publicArtworkCache.set(cacheKey, null);
+    return null;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+async function getEventSongArtworkUrls(setlistSongs?: EventSongArtwork[] | null) {
+  if (!setlistSongs?.length) return [];
+
+  const seen = new Set<string>();
+  const orderedSongs = setlistSongs
+    .slice()
+    .sort((a, b) => (a.position ?? 999) - (b.position ?? 999))
+    .slice(0, 4);
+
+  const artworkUrls = orderedSongs
+    .map(song => getYouTubeThumbnailUrl(song.youtube_url || getEventArtworkSong(song)?.youtube_url))
+    .filter((url): url is string => {
+      if (!url || seen.has(url)) return false;
+      seen.add(url);
+      return true;
+    });
+
+  if (artworkUrls.length >= 4) return artworkUrls;
+
+  const publicUrls = await Promise.all(orderedSongs.map(fetchPublicSongArtwork));
+  publicUrls.forEach((url) => {
+    if (url && !seen.has(url)) {
+      seen.add(url);
+      artworkUrls.push(url);
+    }
+  });
+
+  return artworkUrls.slice(0, 4);
+}
+
 function EventTypeBadge({ type }: { type: string }) {
   const colors = EVENT_TYPE_COLORS[type];
   if (!colors) return (
@@ -79,30 +229,18 @@ function EventDateChip({
   date,
   dim = false,
   tone = 'default',
-  approved = false,
+  compact = false,
 }: {
   date: string;
   dim?: boolean;
   tone?: 'default' | 'warning' | 'danger';
-  approved?: boolean;
+  compact?: boolean;
 }) {
   const parsed = parseISO(date);
 
   const surfaceClasses = dim
     ? 'border-black/[0.06] bg-gray-100 dark:border-white/[0.06] dark:bg-[#202020]'
-    : tone === 'danger'
-    ? 'border-red-200/90 bg-[linear-gradient(145deg,#fff5f5,#ffe3e3)] dark:border-red-500/20 dark:bg-[linear-gradient(145deg,#3b1616,#241212)]'
-    : tone === 'warning'
-    ? 'border-amber-200/90 bg-[linear-gradient(145deg,#fff9eb,#ffedd5)] dark:border-amber-500/20 dark:bg-[linear-gradient(145deg,#36210b,#23170c)]'
-    : 'border-black/[0.08] bg-[linear-gradient(145deg,#ffffff,#eef2ef)] dark:border-white/[0.08] dark:bg-[linear-gradient(145deg,#262626,#1c1c1c)]';
-
-  const shadowStyle = dim
-    ? undefined
-    : tone === 'danger'
-    ? '0 10px 24px rgba(239,68,68,0.18)'
-    : tone === 'warning'
-    ? '0 10px 24px rgba(245,158,11,0.18)'
-    : '0 10px 24px rgba(15,23,42,0.12)';
+    : 'border-black/[0.08] bg-white dark:border-white/[0.08] dark:bg-[#222222]';
 
   const monthClasses = dim
     ? 'text-gray-400 dark:text-white/28'
@@ -112,25 +250,56 @@ function EventDateChip({
     ? 'text-amber-600 dark:text-amber-300'
     : 'text-[#1DB954]';
 
+  if (compact) {
+    return (
+      <div className="relative flex h-16 w-14 shrink-0 flex-col items-center justify-center">
+        <span className={`text-[9px] font-black uppercase tracking-widest leading-none ${monthClasses}`}>
+          {format(parsed, 'EEE')}
+        </span>
+        <span className={`mt-0.5 text-[18px] font-black leading-none ${dim ? 'text-white/58' : 'text-white'}`}>
+          {format(parsed, 'MMM')}
+        </span>
+        <span className={`text-[24px] font-black leading-none ${dim ? 'text-white/58' : 'text-white'}`}>
+          {format(parsed, 'dd')}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div
-      className={`relative flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-[0.7rem] border ${surfaceClasses}`}
-      style={shadowStyle ? { boxShadow: shadowStyle } : undefined}
+      className={`relative flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-[0.35rem] border ${surfaceClasses}`}
     >
       <span className={`text-[9px] font-black uppercase tracking-widest leading-none ${monthClasses}`}>
         {format(parsed, 'MMM')}
       </span>
       <span className={`mt-0.5 text-[24px] font-black leading-none ${dim ? 'text-gray-500 dark:text-white/58' : 'text-gray-900 dark:text-white'}`} style={{ letterSpacing: '-0.05em' }}>
-        {format(parsed, 'd')}
+        {format(parsed, 'dd')}
       </span>
       <span className={`mt-0.5 text-[8px] font-bold leading-none ${dim ? 'text-gray-400 dark:text-white/24' : 'text-gray-500 dark:text-white/42'}`}>
         {format(parsed, 'EEE')}
       </span>
-      {approved && !dim && (
-        <div className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-[#22c55e] ring-2 ring-white dark:ring-[#1c1b1e]" />
-      )}
     </div>
   );
+}
+
+function EmptyEventArtwork({ className = 'h-16 w-16' }: { className?: string }) {
+  return (
+    <div className={`relative isolate flex shrink-0 items-center justify-center overflow-hidden rounded-[0.35rem] border border-white/[0.08] bg-[#222222] ${className}`}>
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.12),transparent_34%)]" />
+      <Calendar className="relative h-5 w-5 text-white/38" />
+    </div>
+  );
+}
+
+function formatSongLeaderName(profile: { first_name?: string | null; last_name?: string | null; gender?: string | null }) {
+  const firstName = profile.first_name?.trim();
+  const lastName = profile.last_name?.trim();
+  if (!firstName && !lastName) return '';
+
+  const prefix = profile.gender === 'male' ? 'Bro.' : profile.gender === 'female' ? 'Sis.' : '';
+  const name = [firstName, lastName].filter(Boolean).join(' ');
+  return prefix ? `${prefix} ${name}` : name;
 }
 
 function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEventClick, isPast }: {
@@ -145,51 +314,45 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
   const daysUntilDue = proposalDueDate ? differenceInDays(proposalDueDate, now) : null;
   const isDueSoon = daysUntilDue !== null && daysUntilDue >= 0 && daysUntilDue <= 3;
   const isOverdue = daysUntilDue !== null && daysUntilDue < 0;
-  const setlistSubmittedAt = setlistInfo?.submitted_at ? parseISO(setlistInfo.submitted_at) : (setlistInfo?.created_at ? parseISO(setlistInfo.created_at) : null);
   const pendingReviewAge = setlistInfo?.status === 'pending_review'
     ? describeSetlistReviewAge(setlistInfo.submitted_at || setlistInfo.created_at)
     : null;
   const pendingReviewMessage = pendingReviewAge ? getSetlistPendingMessage(pendingReviewAge, false) : null;
-  const wasSubmittedLate = hasApprovedSetlist && proposalDueDate && setlistSubmittedAt && setlistSubmittedAt > proposalDueDate;
-  const wasSubmittedOnTime = hasApprovedSetlist && proposalDueDate && setlistSubmittedAt && setlistSubmittedAt <= proposalDueDate;
-  const daysOverdueWhenSubmitted = wasSubmittedLate && proposalDueDate && setlistSubmittedAt
-    ? Math.ceil((setlistSubmittedAt.getTime() - proposalDueDate.getTime()) / (1000 * 60 * 60 * 24)) : 0;
 
   // Visual urgency states (only when proposal is missing)
   const showOverdueStyle = isOverdue && !hasApprovedSetlist && !isPast;
   const showDueSoonStyle = isDueSoon && !hasApprovedSetlist && !isPast;
 
-  // Card tint — subtle full-card wash matching urgency / status
-  const cardTint = isPast
-    ? undefined
-    : showOverdueStyle
-    ? 'linear-gradient(135deg, rgba(239,68,68,0.13), rgba(239,68,68,0.04) 45%, transparent 75%)'
-    : showDueSoonStyle
-    ? 'linear-gradient(135deg, rgba(245,158,11,0.13), rgba(245,158,11,0.04) 45%, transparent 75%)'
-    : 'linear-gradient(135deg, rgba(34,197,94,0.09), rgba(34,197,94,0.025) 45%, transparent 75%)';
-
   return (
     <button
       onClick={() => onEventClick(event.id)}
-      className="card-hover touch-action-pan-y group relative w-full flex items-center gap-3.5 px-4 py-3.5 text-left overflow-hidden"
-      style={{ borderRadius: '1.5rem', opacity: isPast ? 0.6 : 1, backgroundImage: cardTint }}
+      className="touch-action-pan-y group relative flex w-full items-center gap-3 rounded-[0.75rem] border border-white/[0.08] bg-[#181818] px-3 py-3 text-left shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)] transition-colors hover:bg-[#202020]"
+      style={{ opacity: isPast ? 0.62 : 1 }}
     >
-      <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.05] dark:via-white/[0.09] to-transparent" />
-
-      <EventDateChip
-        date={event.event_date}
-        dim={!!isPast}
-        tone={showOverdueStyle ? 'danger' : showDueSoonStyle ? 'warning' : 'default'}
-        approved={hasApprovedSetlist}
-      />
+      {setlistInfo?.songCount ? (
+        <EventArtwork
+          eventType={event.event_type}
+          title={event.title}
+          artworkUrls={setlistInfo.artworkUrls || []}
+          songs={setlistInfo.artworkSongs}
+          className="h-16 w-16 rounded-[0.35rem]"
+        />
+      ) : (
+        <EmptyEventArtwork />
+      )}
 
       {/* Body */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
-          <p className="text-[14px] font-bold leading-snug text-gray-900 dark:text-white" style={{ letterSpacing: '-0.015em' }}>
+          <p className="text-[14px] font-black leading-snug text-white" style={{ letterSpacing: '-0.015em' }}>
             {songLeader || event.title}
           </p>
           <EventTypeBadge type={event.event_type} />
+          {setlistInfo?.songCount ? (
+            <span className="inline-flex items-center rounded-full bg-white/[0.08] px-2 py-0.5 text-[10px] font-black text-white/72">
+              {setlistInfo.songCount} {setlistInfo.songCount === 1 ? 'song' : 'songs'}
+            </span>
+          ) : null}
           {showOverdueStyle && (
             <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-lg bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400">
               <AlertCircle className="h-3 w-3" /> Overdue
@@ -212,24 +375,11 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
         </div>
 
         <div className="flex items-center gap-1.5 mt-1">
-          <Clock className="h-3 w-3 shrink-0 text-gray-400 dark:text-white/25" />
-          <span className="text-[12px] text-gray-500 dark:text-white/40">
+          <Clock className="h-3 w-3 shrink-0 text-white/28" />
+          <span className="text-[12px] font-semibold text-white/45">
             {formatTime12Hour(event.start_time || '')}{event.end_time && ` – ${formatTime12Hour(event.end_time)}`}
           </span>
         </div>
-
-        {event.proposal_due_date && !isPast && (
-          <p className={`text-[11px] mt-1 flex items-center gap-1 font-medium ${
-            wasSubmittedOnTime || wasSubmittedLate ? 'text-emerald-600 dark:text-emerald-400' :
-            isOverdue && !hasApprovedSetlist ? 'text-red-500 dark:text-red-400' :
-            isDueSoon && !hasApprovedSetlist ? 'text-amber-600 dark:text-amber-400' :
-            'text-gray-400 dark:text-white/25'
-          }`}>
-            <span className="font-semibold">Due:</span> {formatInTimeZone(parseISO(event.proposal_due_date), 'Asia/Manila', "MMM d 'at' h:mm a")}
-            {wasSubmittedOnTime && ' ✓ On-time'}
-            {wasSubmittedLate && ` (${daysOverdueWhenSubmitted}d late)`}
-          </p>
-        )}
 
         {dayEntries.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mt-1.5">
@@ -243,7 +393,18 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
         )}
       </div>
 
-      <ChevronRight className="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5 text-gray-300 dark:text-white/20" />
+      <div className="flex shrink-0 items-center gap-2 lg:gap-3">
+        <span className={`hidden rounded-full border px-4 py-2 text-[12px] font-bold lg:inline-flex ${hasApprovedSetlist ? 'border-[#22c55e]/20 bg-[#22c55e]/10 text-[#22c55e]' : setlistInfo?.status === 'pending_review' ? 'border-amber-400/20 bg-amber-400/10 text-amber-300' : 'border-white/[0.08] text-white/62'}`}>
+          {hasApprovedSetlist ? 'Ready' : setlistInfo?.status === 'pending_review' ? 'Pending review' : 'No songs yet'}
+        </span>
+        <EventDateChip
+          date={event.event_date}
+          dim={!!isPast}
+          tone={showOverdueStyle ? 'danger' : showDueSoonStyle ? 'warning' : 'default'}
+          compact
+        />
+        <ChevronRight className="h-4 w-4 text-white/32 transition-transform group-hover:translate-x-0.5 group-hover:text-white/70" />
+      </div>
     </button>
   );
 }
@@ -324,36 +485,16 @@ function BirthdayCard({ name, date }: { name: string; date: string }) {
 
   return (
     <div
-      className="touch-action-pan-y relative flex items-center gap-4 overflow-hidden rounded-[1.5rem] border border-black/[0.06] bg-white px-4 py-4 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_4px_16px_-10px_rgba(15,23,42,0.08)] dark:border-white/[0.07] dark:bg-[#1e1e21]"
-      style={{
-        backgroundImage: 'linear-gradient(135deg, rgba(236,72,153,0.07) 0%, rgba(168,85,247,0.035) 42%, transparent 78%)',
-      }}
+      className="touch-action-pan-y relative flex w-full items-center gap-3 rounded-[0.75rem] border border-white/[0.08] bg-[#181818] px-3 py-3 text-left shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)]"
     >
-      {/* Subtle shimmer highlight */}
-      <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-pink-300/16 to-transparent dark:via-pink-300/10" />
-
-      {/* Birthday date chip */}
-      <div
-        className="relative flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-[0.7rem] border border-black/[0.08] bg-[linear-gradient(145deg,#ffffff,#faf2fb)] shadow-[0_10px_24px_rgba(15,23,42,0.10)] dark:border-white/[0.08] dark:bg-[linear-gradient(145deg,#2a1a22,#1d171d)] dark:shadow-[0_10px_22px_rgba(0,0,0,0.28)]"
-      >
-        <span className="text-[9px] font-black uppercase tracking-widest leading-none text-pink-500 dark:text-pink-300/88">
-          {format(parseISO(date), 'MMM')}
-        </span>
-        <span className="mt-0.5 text-[24px] font-black leading-none text-gray-900 dark:text-white" style={{ letterSpacing: '-0.05em' }}>
-          {format(parseISO(date), 'd')}
-        </span>
-        <span className="mt-0.5 text-[8px] font-bold leading-none text-gray-500 dark:text-white/42">
-          {format(parseISO(date), 'EEE')}
-        </span>
-        <div className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[linear-gradient(145deg,#f3a8c9,#d8b4fe)] text-[9px] shadow-[0_3px_8px_rgba(236,72,153,0.12)] dark:bg-[linear-gradient(145deg,#8f496c,#7c5aa4)] dark:shadow-[0_3px_8px_rgba(236,72,153,0.08)]">
-          <span className="leading-none">🎂</span>
-        </div>
+      <div className="relative isolate flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-[0.35rem] border border-white/[0.08] bg-[#222222]">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(236,72,153,0.22),transparent_34%)]" />
+        <PartyPopper className="relative h-5 w-5 text-pink-200/82" />
       </div>
 
-      {/* Info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <p className="text-[14px] font-bold leading-snug text-gray-900 dark:text-white" style={{ letterSpacing: '-0.015em' }}>
+          <p className="text-[14px] font-black leading-snug text-white" style={{ letterSpacing: '-0.015em' }}>
             {name}
           </p>
           {isToday ? (
@@ -366,40 +507,40 @@ function BirthdayCard({ name, date }: { name: string; date: string }) {
             </span>
           )}
         </div>
-        <p className="text-[12px] text-gray-500 dark:text-white/40 mt-0.5 font-mono">
+        <p className="mt-1 truncate text-[12px] font-semibold text-white/45">
           {format(parseISO(date), 'EEEE, MMMM d')}
         </p>
       </div>
 
-      {/* Greet button — only active on the birthday itself */}
-      {isToday ? (
-        <button
-          onClick={handleWish}
-          disabled={wishing || wished}
-          className="touch-action-pan-y shrink-0 inline-flex items-center gap-1.5 px-3.5 h-8 rounded-full text-[12px] font-semibold transition-all active:scale-95 disabled:opacity-60"
-          style={wished
-            ? { background: 'rgba(22,163,74,0.12)', color: '#16a34a', border: '1px solid rgba(22,163,74,0.25)' }
-            : { background: 'linear-gradient(135deg, #ec4899, #a855f7)', color: '#fff', boxShadow: '0 3px 10px rgba(236,72,153,0.3)' }
-          }
-        >
-          {wished ? (
-            <><Heart className="h-3.5 w-3.5 fill-emerald-500 text-emerald-500" /> Wished!</>
-          ) : wishing ? (
-            '...'
-          ) : (
-            <><PartyPopper className="h-3.5 w-3.5" /> Greet</>
-          )}
-        </button>
-      ) : (
-        <div
-          className="touch-action-pan-y shrink-0 inline-flex items-center gap-1.5 px-3.5 h-8 rounded-full text-[12px] font-semibold cursor-not-allowed select-none"
-          style={{ background: 'rgba(236,72,153,0.08)', color: 'rgba(236,72,153,0.4)', border: '1px solid rgba(236,72,153,0.15)' }}
-          title={`Greetings open on ${format(parseISO(date), 'MMMM d')}`}
-        >
-          <PartyPopper className="h-3.5 w-3.5" />
-          {daysUntilBirthday === 1 ? '1 day' : `${daysUntilBirthday} days`}
-        </div>
-      )}
+      <div className="flex shrink-0 items-center gap-2 lg:gap-3">
+        {isToday ? (
+          <button
+            onClick={handleWish}
+            disabled={wishing || wished}
+            className={`touch-action-pan-y hidden h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-[12px] font-bold transition-all active:scale-95 disabled:opacity-60 sm:inline-flex ${
+              wished
+                ? 'border-[#22c55e]/20 bg-[#22c55e]/10 text-[#22c55e]'
+                : 'border-pink-300/20 bg-pink-400/10 text-pink-200'
+            }`}
+          >
+            {wished ? (
+              <><Heart className="h-3.5 w-3.5 fill-emerald-500 text-emerald-500" /> Wished</>
+            ) : wishing ? (
+              '...'
+            ) : (
+              <><PartyPopper className="h-3.5 w-3.5" /> Greet</>
+            )}
+          </button>
+        ) : (
+          <span
+            className="hidden h-9 shrink-0 items-center rounded-full border border-pink-300/15 bg-pink-400/10 px-3.5 text-[12px] font-bold text-pink-200/72 sm:inline-flex"
+            title={`Greetings open on ${format(parseISO(date), 'MMMM d')}`}
+          >
+            {daysUntilBirthday === 1 ? '1 day' : `${daysUntilBirthday} days`}
+          </span>
+        )}
+        <EventDateChip date={date} compact tone="danger" />
+      </div>
     </div>
   );
 }
@@ -417,8 +558,8 @@ const createEmptyEventForm = (eventDate = ''): EventFormState => ({
   linked_event_id: '',
 });
 
-function EventList({ events, calendarEntries, songLeaderMap, setlistInfoMap, onEventClick, showPast, animateItems = true }: {
-  events: Event[]; calendarEntries: CalendarEntry[]; songLeaderMap?: Record<string, string>; setlistInfoMap?: Record<string, SetlistInfo>; onEventClick: (id: string) => void; showPast?: boolean; animateItems?: boolean;
+function EventList({ events, calendarEntries, songLeaderMap, setlistInfoMap, onEventClick, showPast, animateItems = true, layout = 'list' }: {
+  events: Event[]; calendarEntries: CalendarEntry[]; songLeaderMap?: Record<string, string>; setlistInfoMap?: Record<string, SetlistInfo>; onEventClick: (id: string) => void; showPast?: boolean; animateItems?: boolean; layout?: 'list' | 'grid';
 }) {
   const today = startOfDay(new Date());
 
@@ -459,7 +600,7 @@ function EventList({ events, calendarEntries, songLeaderMap, setlistInfoMap, onE
 
   if (!animateItems) {
     return (
-      <div className="touch-action-pan-y space-y-2.5">
+      <div className={layout === 'grid' ? 'touch-action-pan-y grid gap-2.5 md:grid-cols-2 xl:grid-cols-3' : 'touch-action-pan-y space-y-2.5'}>
         {merged.map((item) => (
           <div
             key={item.kind === 'event' ? item.event.id : `bday-${item.entry.name}-${item.entry.date}`}
@@ -477,7 +618,7 @@ function EventList({ events, calendarEntries, songLeaderMap, setlistInfoMap, onE
       initial="hidden"
       animate="show"
       variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}
-      className="touch-action-pan-y space-y-2.5"
+      className={layout === 'grid' ? 'touch-action-pan-y grid gap-2.5 md:grid-cols-2 xl:grid-cols-3' : 'touch-action-pan-y space-y-2.5'}
     >
       {merged.map((item) => (
         <motion.div
@@ -492,15 +633,171 @@ function EventList({ events, calendarEntries, songLeaderMap, setlistInfoMap, onE
   );
 }
 
-function useIsDesktop() {
-  const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 1024);
-  useEffect(() => {
-    const mq = window.matchMedia('(min-width: 1024px)');
-    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
-  return isDesktop;
+function getEventListItems(events: Event[], calendarEntries: CalendarEntry[], showPast?: boolean) {
+  const today = startOfDay(new Date());
+  const displayEvents = showPast
+    ? events.filter(e => parseISO(e.event_date) < today).sort((a, b) => b.event_date.localeCompare(a.event_date))
+    : events.filter(e => parseISO(e.event_date) >= today).sort((a, b) => a.event_date.localeCompare(b.event_date));
+  const birthdayEntries = showPast ? [] : Array.from(
+    new Map(
+      calendarEntries
+        .filter(e => e.type === 'birthday' && parseISO(e.date) >= today)
+        .map(e => [`${e.name}-${e.date}`, e])
+    ).values()
+  );
+
+  return [
+    ...displayEvents.map(e => ({ kind: 'event' as const, sortDate: e.event_date, event: e })),
+    ...birthdayEntries.map(e => ({ kind: 'birthday' as const, sortDate: e.date, entry: e })),
+  ].sort((a, b) => showPast
+    ? b.sortDate.localeCompare(a.sortDate)
+    : a.sortDate.localeCompare(b.sortDate)
+  );
+}
+
+function getEventStatus(event: Event, setlistInfo: SetlistInfo | undefined, isPast?: boolean) {
+  const hasApprovedSetlist = setlistInfo?.status === 'approved';
+  const proposalDueDate = event.proposal_due_date ? parseISO(event.proposal_due_date) : null;
+  const daysUntilDue = proposalDueDate ? differenceInDays(proposalDueDate, new Date()) : null;
+  const isOverdue = daysUntilDue !== null && daysUntilDue < 0 && !hasApprovedSetlist && !isPast;
+  const isDueSoon = daysUntilDue !== null && daysUntilDue >= 0 && daysUntilDue <= 3 && !hasApprovedSetlist && !isPast;
+
+  if (hasApprovedSetlist) return { label: 'Ready', className: 'border-[#22c55e]/20 bg-[#22c55e]/10 text-[#22c55e]' };
+  if (setlistInfo?.status === 'pending_review') return { label: 'Pending review', className: 'border-amber-400/20 bg-amber-400/10 text-amber-300' };
+  if (isOverdue) return { label: 'Overdue', className: 'border-red-400/20 bg-red-400/10 text-red-300' };
+  if (isDueSoon) return { label: `Due in ${daysUntilDue}d`, className: 'border-amber-400/20 bg-amber-400/10 text-amber-300' };
+  return { label: 'No songs yet', className: 'border-white/[0.08] bg-white/[0.04] text-white/58' };
+}
+
+type EventListItem =
+  | { kind: 'event'; sortDate: string; event: Event }
+  | { kind: 'birthday'; sortDate: string; entry: CalendarEntry };
+
+function scoreSetlistInfo(info: SetlistInfo) {
+  const statusScore = info.status === 'approved' ? 100 : info.status === 'pending_review' ? 50 : 0;
+  return statusScore + (info.artworkUrls?.length || 0) * 10 + (info.songCount || 0);
+}
+
+function shouldReplaceSetlistInfo(current: SetlistInfo | undefined, next: SetlistInfo) {
+  if (!current) return true;
+  return scoreSetlistInfo(next) > scoreSetlistInfo(current);
+}
+
+function groupEventItemsByMonth(items: EventListItem[]) {
+  const groups = new Map<string, EventListItem[]>();
+  items.forEach((item) => {
+    const key = format(parseISO(item.sortDate), 'MMMM yyyy');
+    const current = groups.get(key) || [];
+    current.push(item);
+    groups.set(key, current);
+  });
+  return Array.from(groups.entries()).map(([month, monthItems]) => ({ month, items: monthItems }));
+}
+
+function EventDesktopCardGroups({ events, calendarEntries, songLeaderMap, setlistInfoMap, onEventClick, showPast }: {
+  events: Event[];
+  calendarEntries: CalendarEntry[];
+  songLeaderMap?: Record<string, string>;
+  setlistInfoMap?: Record<string, SetlistInfo>;
+  onEventClick: (id: string) => void;
+  showPast?: boolean;
+}) {
+  const monthGroups = groupEventItemsByMonth(getEventListItems(events, calendarEntries, showPast) as EventListItem[]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+      className="space-y-8"
+    >
+      {monthGroups.map((group) => (
+        <section key={group.month} className="space-y-3">
+          <div className="flex items-center gap-3">
+            <h2 className="text-[22px] font-black text-white" style={{ letterSpacing: '-0.025em' }}>{group.month}</h2>
+            <span className="rounded-full bg-white/[0.08] px-2 py-0.5 text-[11px] font-black text-white/58">{group.items.length}</span>
+          </div>
+
+          <div className="grid gap-3 xl:grid-cols-2">
+            {group.items.map((item) => {
+              if (item.kind === 'birthday') {
+                const parsedDate = parseISO(item.entry.date);
+                return (
+                  <div
+                    key={`desktop-bday-${item.entry.name}-${item.entry.date}`}
+                    className="group relative flex min-h-[8rem] items-center gap-4 rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-4 text-left shadow-[0_20px_58px_-48px_rgba(0,0,0,0.95)] transition-colors hover:bg-[#202020]"
+                  >
+                    <div className="relative isolate flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-[0.35rem] border border-white/[0.08] bg-[#222222]">
+                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(236,72,153,0.22),transparent_34%)]" />
+                      <PartyPopper className="relative h-8 w-8 text-pink-200/82" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate text-[18px] font-black leading-tight text-white">{item.entry.name}</p>
+                        <EventTypeBadge type="Birthday" />
+                      </div>
+                      <p className="mt-1 text-[13px] font-semibold text-white/48">{format(parsedDate, 'EEEE, MMMM dd')}</p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <EventDateChip date={item.entry.date} compact tone="danger" />
+                      <span className="inline-flex rounded-full border border-pink-300/15 bg-pink-400/10 px-3 py-1 text-[11px] font-bold text-pink-200/72">
+                        Birthday
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+
+              const setlistInfo = setlistInfoMap?.[item.event.id];
+              const songLeader = songLeaderMap?.[item.event.id];
+              const status = getEventStatus(item.event, setlistInfo, showPast);
+
+              return (
+                <button
+                  key={item.event.id}
+                  type="button"
+                  onClick={() => onEventClick(item.event.id)}
+                  className="group relative flex min-h-[8rem] w-full items-center gap-4 rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-4 text-left shadow-[0_20px_58px_-48px_rgba(0,0,0,0.95)] transition-colors hover:bg-[#202020]"
+                  style={{ opacity: showPast ? 0.72 : 1 }}
+                >
+                  {setlistInfo?.songCount ? (
+                    <EventArtwork
+                      eventType={item.event.event_type}
+                      title={item.event.title}
+                      artworkUrls={setlistInfo.artworkUrls || []}
+                      songs={setlistInfo.artworkSongs}
+                      className="h-24 w-24 rounded-[0.35rem]"
+                    />
+                  ) : (
+                    <EmptyEventArtwork className="h-24 w-24" />
+                  )}
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate text-[18px] font-black leading-tight text-white">{songLeader || item.event.title}</p>
+                      <EventTypeBadge type={item.event.event_type} />
+                      {setlistInfo?.songCount ? (
+                        <span className="inline-flex rounded-full bg-white/[0.08] px-2 py-0.5 text-[10px] font-black text-white/72">
+                          {setlistInfo.songCount} {setlistInfo.songCount === 1 ? 'song' : 'songs'}
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-2 text-[13px] font-semibold text-white/48">{formatTime12Hour(item.event.start_time || '')}{item.event.end_time && ` – ${formatTime12Hour(item.event.end_time)}`}</p>
+                  </div>
+
+                  <div className="flex shrink-0 items-center gap-3">
+                    <span className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-bold ${status.className}`}>{status.label}</span>
+                    <EventDateChip date={item.event.event_date} compact />
+                    <ChevronRight className="h-4 w-4 text-white/32 transition-transform group-hover:translate-x-0.5 group-hover:text-white/70" />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ))}
+    </motion.div>
+  );
 }
 
 export function Events() {
@@ -508,22 +805,18 @@ export function Events() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
-  const isDesktop = useIsDesktop();
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [members, setMembers] = useState<{ id: string; first_name: string; last_name: string }[]>([]);
+  const [members, setMembers] = useState<EventMemberSummary[]>([]);
   const [memberRoles, setMemberRoles] = useState<{ user_id: string; role_id: string }[]>([]);
   const [assignmentRows, setAssignmentRows] = useState<AssignmentRow[]>([]);
   const [calendarEntries, setCalendarEntries] = useState<CalendarEntry[]>([]);
   const [songLeaderMap, setSongLeaderMap] = useState<Record<string, string>>({});
   const [setlistInfoMap, setSetlistInfoMap] = useState<Record<string, SetlistInfo>>({});
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
-    const s = localStorage.getItem('eventsViewMode'); return (s === 'grid' || s === 'list') ? s : 'grid';
-  });
   const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>(() => {
     const s = localStorage.getItem('eventsActiveTab'); return (s === 'upcoming' || s === 'past') ? s : 'upcoming';
   });
@@ -537,12 +830,18 @@ export function Events() {
     try {
       const [eventsRes, membersRes, userRolesRes, birthdaysRes, leaveRes, songLeadersRes, setlistsRes, sundayServicesRes] = await Promise.all([
         withRequestTimeout(supabase.from('events').select('*').order('event_date', { ascending: false }), emptyList, 'Events list'),
-        withRequestTimeout(supabase.from('profiles').select('id, first_name, last_name, birthday'), emptyList, 'Event members list'),
+        withRequestTimeout(supabase.from('profiles').select('id, first_name, last_name, gender, birthday'), emptyList, 'Event members list'),
         withRequestTimeout(supabase.from('user_roles').select('user_id, role_id'), emptyList, 'Event member roles'),
         withRequestTimeout(supabase.from('profiles').select('first_name, last_name, birthday').not('birthday', 'is', null), emptyList, 'Birthdays list'),
         withRequestTimeout(supabase.from('user_availability').select('leave_type, unavailable_date, start_date, end_date, status, profiles!user_availability_user_id_fkey(first_name, last_name)').eq('status', 'approved'), emptyList, 'Approved leave list'),
         withRequestTimeout(supabase.from('event_assignments').select('event_id, profiles(first_name, last_name, gender), roles!inner(name)').eq('roles.name', 'Song Leader'), emptyList, 'Song leader list'),
-        withRequestTimeout(supabase.from('setlists').select('event_id, status, created_at, submitted_at'), emptyList, 'Event setlist statuses'),
+        withRequestTimeout(
+          supabase
+            .from('setlists')
+            .select('event_id, status, created_at, submitted_at, setlist_songs(id, song_id, position, youtube_url, songs(id, title, artist, youtube_url))'),
+          emptyList,
+          'Event setlist statuses',
+        ),
         withRequestTimeout(supabase.from('events').select('*').eq('event_type', 'Sunday Service').gte('event_date', new Date().toISOString().split('T')[0]).order('event_date'), emptyList, 'Upcoming Sunday services'),
       ]);
       setEvents(eventsRes.data || []);
@@ -553,14 +852,74 @@ export function Events() {
       const slMap: Record<string, string> = {};
       (songLeadersRes.data || []).forEach((a: any) => {
         if (a.profiles) {
-          const prefix = a.profiles.gender === 'male' ? 'Bro.' : a.profiles.gender === 'female' ? 'Sis.' : '';
-          slMap[a.event_id] = prefix ? `${prefix} ${a.profiles.first_name}` : `${a.profiles.first_name} ${a.profiles.last_name}`;
+          const name = formatSongLeaderName(a.profiles);
+          if (name) slMap[a.event_id] = name;
+        }
+      });
+
+      const memberNameById = new Map(
+        ((membersRes.data || []) as EventMemberSummary[])
+          .map(member => [member.id, formatSongLeaderName(member)])
+          .filter((entry): entry is [string, string] => Boolean(entry[1]))
+      );
+      (eventsRes.data || []).forEach((event: Event) => {
+        if (!slMap[event.id] && event.song_leader_id) {
+          const directLeaderName = memberNameById.get(event.song_leader_id);
+          if (directLeaderName) slMap[event.id] = directLeaderName;
+        }
+      });
+      (eventsRes.data || []).forEach((event: Event) => {
+        if (!slMap[event.id] && event.linked_event_id && slMap[event.linked_event_id]) {
+          slMap[event.id] = slMap[event.linked_event_id];
         }
       });
       setSongLeaderMap(slMap);
 
+      const setlistRows = setlistsRes.data || [];
+      const songIds = Array.from(new Set(
+        setlistRows.flatMap((setlist: any) =>
+          (setlist.setlist_songs || [])
+            .map((song: EventSongArtwork) => song.song_id)
+            .filter((id: string | null | undefined): id is string => Boolean(id))
+        )
+      ));
+      const songsById = new Map<string, ArtworkSongRecord>();
+      if (songIds.length > 0) {
+        const songsRes = await withRequestTimeout(
+          supabase.from('songs').select('id, title, artist, youtube_url').in('id', songIds),
+          emptyList,
+          'Event artwork song fallback',
+        );
+        (songsRes.data || []).forEach((song: ArtworkSongRecord) => {
+          if (song.id) songsById.set(song.id, song);
+        });
+      }
+
       const setlistMap: Record<string, SetlistInfo> = {};
-      (setlistsRes.data || []).forEach((s: any) => { setlistMap[s.event_id] = { status: s.status, created_at: s.created_at, submitted_at: s.submitted_at }; });
+      await Promise.all(setlistRows.map(async (s: any) => {
+        const setlistSongs = hydrateEventArtworkSongs(s.setlist_songs as EventSongArtwork[] | null, songsById);
+        const artworkUrls = await getEventSongArtworkUrls(setlistSongs);
+        const artworkSongs = setlistSongs
+          .slice()
+          .sort((a, b) => (a.position ?? 999) - (b.position ?? 999))
+          .slice(0, 4);
+        const nextInfo: SetlistInfo = {
+          status: s.status,
+          created_at: s.created_at,
+          submitted_at: s.submitted_at,
+          artworkUrls,
+          artworkSongs,
+          songCount: s.setlist_songs?.length || 0,
+        };
+        if (shouldReplaceSetlistInfo(setlistMap[s.event_id], nextInfo)) {
+          setlistMap[s.event_id] = nextInfo;
+        }
+      }));
+      (eventsRes.data || []).forEach((event: Event) => {
+        if (event.linked_event_id && setlistMap[event.linked_event_id] && shouldReplaceSetlistInfo(setlistMap[event.id], setlistMap[event.linked_event_id])) {
+          setlistMap[event.id] = setlistMap[event.linked_event_id];
+        }
+      });
       setSetlistInfoMap(setlistMap);
 
       const entries: CalendarEntry[] = [];
@@ -612,7 +971,6 @@ export function Events() {
     fetchEvents();
     navigate(location.pathname, { replace: true, state: null });
   }, [location.key]);
-  useEffect(() => { localStorage.setItem('eventsViewMode', viewMode); }, [viewMode]);
   useEffect(() => { localStorage.setItem('eventsActiveTab', activeTab); }, [activeTab]);
 
   const openCreateEvent = (eventDate = '') => {
@@ -691,9 +1049,7 @@ export function Events() {
     if (form.song_leader_id.trim()) {
       const sl = members.find(m => m.id === form.song_leader_id);
       if (sl) {
-        const { data: p } = await supabase.from('profiles').select('gender').eq('id', form.song_leader_id).maybeSingle();
-        const prefix = p?.gender === 'male' ? 'Bro.' : p?.gender === 'female' ? 'Sis.' : '';
-        return prefix ? `${prefix} ${sl.first_name} ${sl.last_name}` : `${sl.first_name} ${sl.last_name}`;
+        return formatSongLeaderName(sl);
       }
     }
     return form.event_type;
@@ -766,12 +1122,6 @@ export function Events() {
   const today = startOfDay(new Date());
   const upcomingEvents = events.filter(e => parseISO(e.event_date) >= today);
   const pastEvents = events.filter(e => parseISO(e.event_date) < today);
-  const eventsThisWeek = upcomingEvents.filter(e => {
-    const eventDate = parseISO(e.event_date);
-    return eventDate >= today && eventDate <= addDays(today, 7);
-  });
-  const approvedSetlists = upcomingEvents.filter(e => setlistInfoMap[e.id]?.status === 'approved');
-  const pendingSetlists = upcomingEvents.filter(e => e.proposal_due_date && setlistInfoMap[e.id]?.status !== 'approved');
   const approvedLeaveToday = calendarEntries.filter(e => e.type === 'leave' && e.date === format(today, 'yyyy-MM-dd')).length;
 
   const filtered = events.filter(e => {
@@ -784,151 +1134,88 @@ export function Events() {
   if (loading) return <div className="page-container"><EventsSkeleton /></div>;
 
   return (
-    <div className="page-container page-bottom-pad relative overflow-hidden bg-[#f6f4ef] text-gray-900 dark:bg-[#121212] dark:text-white">
+    <div className="page-container page-bottom-pad relative overflow-hidden bg-[#050505] text-white">
       <div
-        className="pointer-events-none fixed inset-0 -z-10 bg-[#f6f4ef] dark:bg-[#121212]"
+        className="pointer-events-none fixed inset-0 -z-10 bg-[#050505]"
       />
       <div className="relative max-w-2xl lg:max-w-6xl xl:max-w-[1560px] mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-5 pb-6 space-y-5 sm:space-y-6">
 
-        {/* ── Schedule Command Center ── */}
-        <motion.section
+        {/* ── Toolbar ── */}
+        <motion.div
           {...fadeUp(0)}
-          className="relative overflow-hidden rounded-[2rem] border border-emerald-200/70 bg-[radial-gradient(circle_at_18%_20%,rgba(52,211,153,0.24),transparent_34%),radial-gradient(circle_at_86%_24%,rgba(52,211,153,0.16),transparent_36%),linear-gradient(135deg,#f0fdf4_0%,#ffffff_48%,#f8fafc_100%)] p-5 shadow-[0_24px_80px_-46px_rgba(6,95,70,0.72)] dark:border-white/[0.08] dark:bg-[radial-gradient(circle_at_16%_18%,rgba(16,185,129,0.18),transparent_34%),radial-gradient(circle_at_86%_24%,rgba(16,185,129,0.12),transparent_36%),linear-gradient(135deg,#071c14_0%,#0d1110_46%,#070807_100%)] sm:p-6"
+          className="relative z-20 flex flex-col gap-3"
         >
-          <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/90 to-transparent dark:via-white/[0.09]" />
-
-          <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2.5">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-70 animate-ping dark:bg-emerald-400" />
-                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
-                </span>
-                <p className="text-[10px] font-mono font-black uppercase tracking-[0.32em] text-emerald-700/75 dark:text-emerald-300/70">
-                  Schedule <span className="mx-1.5 text-emerald-700/25 dark:text-white/20">·</span> {format(today, 'EEE, MMM d')}
-                </p>
-              </div>
-              <h1
-                className="mt-3 text-[2.35rem] font-black leading-none text-gray-950 dark:text-white sm:text-[3.15rem] lg:text-[3.65rem]"
-                style={{ letterSpacing: '-0.065em' }}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+            {(['upcoming', 'past'] as const).map(tab => {
+              const active = activeTab === tab;
+              const count = tab === 'upcoming' ? upcomingEvents.length : pastEvents.length;
+              return (
+                <button
+                  type="button"
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`relative z-10 inline-flex h-9 shrink-0 touch-manipulation items-center justify-center gap-2 rounded-full px-4 text-[12px] font-black transition-colors ${
+                    active
+                      ? 'bg-[#22c55e] text-black'
+                      : 'bg-white/[0.10] text-white hover:bg-white/[0.16]'
+                  }`}
+                >
+                  {tab === 'upcoming' ? 'Upcoming' : 'Past events'}
+                  {count > 0 && (
+                    <span className={`pointer-events-none text-[11px] px-1.5 py-0.5 rounded-md font-black ${
+                      active
+                        ? 'bg-black/15 text-black'
+                        : 'bg-white/[0.10] text-white/58'
+                    }`}>{count}</span>
+                  )}
+                </button>
+              );
+            })}
+            {isLeader && (
+              <button
+                onClick={() => openCreateEvent()}
+                className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white/[0.10] px-4 text-[12px] font-black text-white transition-colors hover:bg-white/[0.16] active:scale-[0.97]"
               >
-                Events.
-              </h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600 dark:text-white/52">
-                Plan services, track setlists, and see who is available before the team steps on deck.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2 sm:min-w-[23rem]">
-              {[
-                { label: 'This week', value: eventsThisWeek.length },
-                { label: 'Ready', value: approvedSetlists.length },
-                { label: 'Pending', value: pendingSetlists.length },
-              ].map(stat => (
-                <div key={stat.label} className="rounded-2xl border border-white bg-white px-3 py-3 text-center shadow-sm dark:border-white/[0.08] dark:bg-white/[0.05]">
-                  <p className="text-lg font-black leading-none text-gray-950 dark:text-white">{stat.value}</p>
-                  <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400 dark:text-white/32">{stat.label}</p>
-                </div>
-              ))}
-            </div>
+                <Plus className="h-3.5 w-3.5" /> New event
+              </button>
+            )}
           </div>
 
-          {(isLeader || upcomingEvents.length === 0 || approvedLeaveToday > 0) && (
-            <div className="relative mt-5 grid gap-3 border-t border-emerald-900/[0.07] pt-4 dark:border-white/[0.11] md:grid-cols-[1fr_auto] md:items-center">
-              <div className="min-w-0">
-                {upcomingEvents.length === 0 && (
-                  <p className="text-sm font-semibold text-gray-500 dark:text-white/70">No upcoming events are scheduled yet.</p>
-                )}
-                {approvedLeaveToday > 0 && (
-                  <p className="text-[11px] font-semibold text-orange-600 dark:text-orange-300">
-                    {approvedLeaveToday} team member{approvedLeaveToday === 1 ? '' : 's'} unavailable today.
-                  </p>
-                )}
-              </div>
-              {isLeader && (
-                <button
-                  onClick={() => openCreateEvent()}
-                  className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full px-5 text-[12px] font-black text-white shadow-[0_12px_28px_-16px_rgba(6,95,70,0.9)] transition-all active:scale-[0.97]"
-                  style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)' }}
-                >
-                  <Plus className="h-3.5 w-3.5" /> New event
+          <div className="hidden sm:flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-500/80 pointer-events-none" />
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search events..."
+                className="h-11 w-full rounded-[0.7rem] border border-white/[0.08] bg-[#101010] pl-10 pr-10 text-[13px] font-semibold text-white outline-none transition-all placeholder:text-white/32 focus:border-[#22c55e]/50 focus:bg-[#151515] focus:ring-4 focus:ring-emerald-500/10"
+              />
+              {search && (
+                <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-gray-400 transition-colors hover:bg-black/[0.04] hover:text-gray-600 dark:hover:bg-white/[0.06] dark:hover:text-gray-300">
+                  <X className="h-4 w-4" />
                 </button>
               )}
             </div>
-          )}
-        </motion.section>
-
-        {/* ── Toolbar ── */}
-        <motion.div
-          {...fadeUp(0.08)}
-          className="relative z-20 rounded-[1.6rem] border border-black/[0.05] bg-white/75 p-2 shadow-[0_16px_44px_-34px_rgba(15,23,42,0.65)] backdrop-blur-xl dark:border-white/[0.07] dark:bg-white/[0.035]"
-        >
-          <div className="flex flex-col gap-2">
-            <div className="flex gap-1 rounded-[1.25rem] bg-gray-100/80 p-1 dark:bg-black/20">
-              {(['upcoming', 'past'] as const).map(tab => {
-                const active = activeTab === tab;
-                const count = tab === 'upcoming' ? upcomingEvents.length : pastEvents.length;
-                return (
-                  <button
-                    type="button"
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`relative z-10 flex-1 touch-manipulation flex items-center justify-center gap-2 py-2.5 rounded-2xl text-[13px] font-black transition-all duration-200 ${
-                      active
-                        ? 'bg-white text-gray-950 shadow-sm ring-1 ring-black/[0.04] dark:bg-white/[0.09] dark:text-white dark:ring-white/[0.08]'
-                        : 'text-gray-400 hover:bg-white/55 hover:text-gray-700 dark:text-white/35 dark:hover:bg-white/[0.045] dark:hover:text-white/70'
-                    }`}
-                  >
-                    {tab === 'upcoming' ? 'Upcoming' : 'Past events'}
-                    {count > 0 && (
-                      <span className={`pointer-events-none text-[11px] px-1.5 py-0.5 rounded-md font-black ${
-                        active && tab === 'upcoming'
-                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300'
-                          : 'bg-black/[0.06] text-gray-500 dark:bg-white/[0.08] dark:text-white/35'
-                      }`}>{count}</span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="hidden sm:flex items-center gap-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-500/80 pointer-events-none" />
-                <input
-                  type="text"
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  placeholder="Search events..."
-                  className="h-11 w-full rounded-[1.15rem] border border-transparent bg-gray-50/90 pl-10 pr-10 text-[13px] font-semibold text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-emerald-300 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 dark:bg-black/20 dark:text-white dark:placeholder:text-white/26 dark:focus:border-emerald-500/40 dark:focus:bg-white/[0.055]"
-                />
-                {search && (
-                  <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-gray-400 transition-colors hover:bg-black/[0.04] hover:text-gray-600 dark:hover:bg-white/[0.06] dark:hover:text-gray-300">
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
-              <Select
-                value={typeFilter}
-                onChange={setTypeFilter}
-                options={[{ value: '', label: 'All Types' }, ...eventTypes.map(t => ({ value: t, label: t }))]}
-                placeholder="All Types"
-                className="sm:w-48"
-                icon={<Filter className="h-4 w-4" />}
-              />
-              <div className="hidden lg:flex gap-1 rounded-[1rem] border border-black/[0.06] bg-gray-50/90 p-1 dark:border-white/[0.07] dark:bg-black/20">
-                {(['grid', 'list'] as const).map(mode => (
-                  <button
-                    key={mode}
-                    onClick={() => setViewMode(mode)}
-                    className={`p-2 rounded-xl transition-all ${viewMode === mode ? 'bg-white text-gray-900 shadow-sm dark:bg-white/[0.1] dark:text-white' : 'text-gray-400 dark:text-white/30'}`}
-                  >
-                    {mode === 'grid' ? <LayoutGrid className="h-4 w-4" /> : <List className="h-4 w-4" />}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <Select
+              value={typeFilter}
+              onChange={setTypeFilter}
+              options={[{ value: '', label: 'All Types' }, ...eventTypes.map(t => ({ value: t, label: t }))]}
+              placeholder="All Types"
+              className="sm:w-48"
+              icon={<Filter className="h-4 w-4" />}
+            />
           </div>
+          {(upcomingEvents.length === 0 || approvedLeaveToday > 0) && (
+            <div className="hidden rounded-[0.75rem] bg-white/[0.045] px-3 py-2 text-[12px] font-semibold text-white/62 sm:block">
+              {upcomingEvents.length === 0 && <span>No upcoming events are scheduled yet.</span>}
+              {approvedLeaveToday > 0 && (
+                <span className="text-orange-300">
+                  {approvedLeaveToday} team member{approvedLeaveToday === 1 ? '' : 's'} unavailable today.
+                </span>
+              )}
+            </div>
+          )}
         </motion.div>
         {/* ── Content ── */}
         <div>
@@ -942,19 +1229,14 @@ export function Events() {
         ) : (
           <>
             <motion.div {...fadeUp(0.1)} className="hidden lg:block">
-              {viewMode === 'grid' ? (
-                <CalendarGrid
-                  events={filtered}
-                  calendarEntries={calendarEntries}
-                  songLeaderMap={songLeaderMap}
-                  setlistInfoMap={setlistInfoMap}
-                  onEventClick={id => navigate(`/events/${id}`)}
-                  onCreateEvent={isLeader ? openCreateEvent : undefined}
-                  onEventDateChange={isLeader ? handleEventDateChange : undefined}
-                />
-              ) : (
-                <EventList events={filtered} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={id => navigate(`/events/${id}`)} showPast={activeTab === 'past'} animateItems />
-              )}
+              <EventDesktopCardGroups
+                events={filtered}
+                calendarEntries={calendarEntries}
+                songLeaderMap={songLeaderMap}
+                setlistInfoMap={setlistInfoMap}
+                onEventClick={id => navigate(`/events/${id}`)}
+                showPast={activeTab === 'past'}
+              />
             </motion.div>
             <div className="touch-action-pan-y lg:hidden">
               <EventList events={filtered} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={id => navigate(`/events/${id}`)} showPast={activeTab === 'past'} animateItems={false} />

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { motion } from 'framer-motion';
-import { Calendar, Music, ChevronRight, Megaphone, Image as ImageIcon, UserX, Trash2, ArrowUpRight, LayoutDashboard, Users, ClipboardCheck, ListChecks, Shield, ArrowLeftRight, Check, X, RefreshCw } from 'lucide-react';
+import { Calendar, Music, ChevronRight, Megaphone, Trash2, ListChecks, ArrowLeftRight, Check, X, RefreshCw, Heart, MoreHorizontal, Edit3, Upload, UserPlus, MapPin, MessageCircle, UserX, ClipboardCheck, Shield } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -36,6 +36,7 @@ const item = {
 
 const MANILA_TIMEZONE = 'Asia/Manila';
 const DASHBOARD_REQUEST_TIMEOUT_MS = 8000;
+type DashboardEventCard = Pick<Event, 'title' | 'event_date' | 'start_time' | 'event_type' | 'id'> & { location?: string };
 
 async function withDashboardTimeout<T>(request: PromiseLike<T>, fallback: T, label: string): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -77,56 +78,6 @@ function compareEventsByDateTime(a: Event, b: Event) {
 function compareAssignmentsByEventDateTime(a: EventAssignment, b: EventAssignment) {
   if (!a.events || !b.events) return 0;
   return compareEventsByDateTime(a.events, b.events);
-}
-
-function OpenSection({ children, className = '', accent = false }: { children: React.ReactNode; className?: string; accent?: boolean }) {
-  return (
-    <div className={`relative isolate overflow-hidden rounded-[1.5rem] border border-black/[0.06] bg-white/80 px-4 py-6 shadow-[0_18px_40px_rgba(15,23,42,0.10)] dark:border-white/[0.06] dark:bg-[#181818] dark:shadow-[0_18px_40px_rgba(0,0,0,0.34)] sm:px-5 sm:py-7 ${className}`}>
-      <div
-        className="pointer-events-none absolute inset-0 rounded-[1.5rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.55),rgba(255,255,255,0.14))] dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.01))]"
-        style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.35)' }}
-      />
-      <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.07] to-transparent dark:via-white/[0.08]" />
-      {accent && (
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-36 bg-[radial-gradient(circle_at_12%_0%,rgba(29,185,84,0.14),transparent_42%),radial-gradient(circle_at_88%_0%,rgba(29,185,84,0.08),transparent_34%)] dark:bg-[radial-gradient(circle_at_12%_0%,rgba(29,185,84,0.24),transparent_42%),radial-gradient(circle_at_88%_0%,rgba(29,185,84,0.14),transparent_34%)]" />
-      )}
-      <div className="pointer-events-none absolute inset-y-8 left-0 w-px bg-gradient-to-b from-transparent via-[#1DB954]/28 to-transparent" />
-      <div className="relative">{children}</div>
-    </div>
-  );
-}
-
-function SectionLabel({ index, children, action }: { index: string; children: React.ReactNode; action?: React.ReactNode }) {
-  return (
-    <div className="flex items-end justify-between mb-3 px-0.5">
-      <div className="flex items-baseline gap-2.5">
-        <span className="text-[10px] font-mono font-semibold tabular-nums text-gray-400 tracking-widest dark:text-white/25">{index}</span>
-        <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-white/52">{children}</span>
-      </div>
-      {action}
-    </div>
-  );
-}
-
-function DateChip({ date, dim = false }: { date: string | null; dim?: boolean }) {
-  if (!date) return <div className="h-14 w-14 rounded-[0.7rem] shrink-0 bg-gray-100 dark:bg-[#222]" />;
-  const parsed = parseISO(date);
-  return (
-    <div
-      className={`relative flex flex-col items-center justify-center h-14 w-14 rounded-[0.7rem] shrink-0 border ${dim ? 'border-black/[0.06] bg-gray-100 dark:border-white/[0.06] dark:bg-[#202020]' : 'border-black/[0.08] bg-[linear-gradient(145deg,#ffffff,#eef2ef)] dark:border-white/[0.08] dark:bg-[linear-gradient(145deg,#262626,#1c1c1c)]'}`}
-      style={dim ? {} : { boxShadow: '0 10px 24px rgba(15,23,42,0.12)' }}
-    >
-      <span className={`text-[9px] font-black uppercase tracking-widest leading-none ${dim ? 'text-gray-400 dark:text-white/28' : 'text-[#1DB954]'}`}>
-        {format(parsed, 'MMM')}
-      </span>
-      <span className={`text-[24px] font-black leading-none mt-0.5 ${dim ? 'text-gray-500 dark:text-white/58' : 'text-gray-900 dark:text-white'}`} style={{ letterSpacing: '-0.05em' }}>
-        {format(parsed, 'd')}
-      </span>
-      <span className={`text-[8px] font-bold leading-none mt-0.5 ${dim ? 'text-gray-400 dark:text-white/24' : 'text-gray-500 dark:text-white/42'}`}>
-        {format(parsed, 'EEE')}
-      </span>
-    </div>
-  );
 }
 
 export function Dashboard() {
@@ -184,7 +135,7 @@ export function Dashboard() {
     if (!silent) setLoading(true);
 
     try {
-      const emptyList = { data: [] };
+      const emptyList = { data: [] } as any;
       const [eventsRes, assignRes, setlistsRes, announcementsRes, unavailableRes, pendingLeaveRes] = await Promise.all([
         withDashboardTimeout(
           supabase.from('events').select('*').gte('event_date', today).order('event_date').limit(5),
@@ -216,7 +167,7 @@ export function Dashboard() {
         isLeader
           ? withDashboardTimeout(
               supabase.from('user_availability').select('id', { count: 'exact', head: true }).eq('status', 'pending').eq('request_type', 'leave'),
-              { count: 0 },
+              { count: 0 } as any,
               'Pending leave count',
             )
           : Promise.resolve({ count: 0 }),
@@ -444,27 +395,52 @@ export function Dashboard() {
     return 'Good evening';
   })();
 
-  const nextEvent = upcomingEvents.find(event => getManilaEventDateTime(event.event_date, event.start_time) >= now) ?? upcomingEvents[0];
-  const nextAssignment = myAssignments[0];
-  const serviceTime = nextEvent?.start_time ? formatTime12Hour(nextEvent.start_time) : null;
-  const [serviceHour = 'Ready', servicePeriod = ''] = serviceTime?.split(' ') ?? [];
-  const serviceDateCaption = nextEvent?.event_date === getManilaTodayKey(now)
-    ? 'today'
-    : nextEvent
-      ? format(parseISO(nextEvent.event_date), 'MMM d')
-      : 'scheduled';
-  const heroPulse = incomingSwapRequests.length > 0
-    ? { label: 'Requests', value: incomingSwapRequests.length.toString(), caption: 'waiting' }
-    : stats.pending > 0
-      ? { label: 'Needs reply', value: stats.pending.toString(), caption: 'pending' }
-      : serviceTime
-        ? { label: 'Service', value: serviceHour, caption: `${servicePeriod} ${serviceDateCaption}`.trim() }
-        : { label: 'No service', value: 'Clear', caption: 'scheduled' };
+  const quickTiles = [
+    { title: 'Worship with Bry', subtitle: 'Ministry Hub', tone: 'from-amber-500/80 via-zinc-800 to-black', path: '/sets' },
+    { title: 'Liked Songs', subtitle: '89 songs', tone: 'from-indigo-400 via-violet-500 to-emerald-300', path: '/songs', icon: Heart },
+    { title: 'Top 50 - Philippines', subtitle: 'Charts', tone: 'from-blue-500 via-blue-900 to-slate-950', path: '/events' },
+    { title: 'KEN', subtitle: 'Artist', tone: 'from-zinc-200 via-zinc-700 to-black', path: '/messages' },
+    { title: 'Best Praise Songs', subtitle: 'Playlist', tone: 'from-yellow-400 via-amber-800 to-black', path: '/songs' },
+    { title: 'Upbeat Mix', subtitle: 'Playlist', tone: 'from-sky-400 via-violet-700 to-black', path: '/videos' },
+  ];
+  const fallbackEvents: DashboardEventCard[] = [
+    { title: 'Sunday Morning Service', event_date: '2025-06-22', start_time: '09:00:00', event_type: 'Sunday Service', location: 'Main Auditorium', id: 'sample-1' },
+    { title: 'Youth Night', event_date: '2025-06-20', start_time: '19:00:00', event_type: 'Friday Service', location: 'Main Auditorium', id: 'sample-2' },
+    { title: 'Sunday Evening Service', event_date: '2025-06-22', start_time: '18:00:00', event_type: 'Sunday Service', location: 'Main Auditorium', id: 'sample-3' },
+  ];
+  const displayEvents: DashboardEventCard[] = (upcomingEvents.length > 0 ? upcomingEvents : fallbackEvents)
+    .slice(0, 3)
+    .map(event => ({ ...event, location: (event as { location?: string }).location }));
+  const reviewSets = (pendingSetlists.length > 0 ? pendingSetlists : [
+    { id: 'sample-set-1', title: 'Sunday Morning Set', events: { event_date: '2025-06-22' }, songs_count: 7 },
+    { id: 'sample-set-2', title: 'Youth Night Set', events: { event_date: '2025-06-20' }, songs_count: 6 },
+    { id: 'sample-set-3', title: 'Prayer & Worship Night', events: { event_date: '2025-06-27' }, songs_count: 6 },
+  ] as any[]).slice(0, 4);
+  const announcementRows = (recentAnnouncements.length > 0 ? recentAnnouncements : [
+    { id: 'sample-ann-1', title: 'Leadership Meeting this Saturday', content: 'We will be discussing service flow, volunteer updates, and upcoming events.', created_at: new Date().toISOString() },
+    { id: 'sample-ann-2', title: 'New Training: In-Ear Monitor Basics', content: 'Join us this Sunday after the morning service at the Media Room.', created_at: new Date().toISOString() },
+    { id: 'sample-ann-3', title: 'Song Requests Open', content: "Submit your song requests for next month's setlists.", created_at: new Date().toISOString() },
+  ] as any[]).slice(0, 3);
+  const newThisWeek = [
+    { title: 'Graves Into Gardens', artist: 'Spontaneous', tone: 'from-zinc-300 via-zinc-700 to-black', badge: 'New Song' },
+    { title: 'Holy Forever', artist: 'Elevation Worship', tone: 'from-yellow-200 via-amber-700 to-black', badge: 'New EP' },
+    { title: 'Great Are You Lord', artist: 'All Sons & Daughters', tone: 'from-orange-200 via-stone-700 to-black', badge: 'New Song' },
+  ];
+  const quickActions = [
+    { label: 'Create Set', icon: ListChecks, path: '/sets' },
+    { label: 'Schedule Event', icon: Calendar, path: '/events' },
+    { label: 'Add Song', icon: Music, path: '/songs' },
+    { label: 'Upload Video', icon: Upload, path: '/videos' },
+    { label: 'New Announcement', icon: Megaphone, path: '/announcements/new' },
+    { label: 'Invite People', icon: UserPlus, path: '/leadership/team' },
+  ];
+  const assignmentRows = myAssignments.slice(0, 3);
+  const teamAvailabilityRows = unavailableMembers.slice(0, 3);
 
   return (
-    <div className="page-container page-bottom-pad relative overflow-hidden bg-[#f6f4ef] text-gray-900 dark:bg-[#121212] dark:text-white">
+    <div className="dark page-container page-bottom-pad relative overflow-hidden bg-[#050505] text-white">
       <div
-        className="pointer-events-none fixed inset-0 -z-10 bg-[#f6f4ef] dark:bg-[#121212] [background-image:radial-gradient(circle_at_top_left,rgba(29,185,84,0.10),transparent_24%),radial-gradient(circle_at_top_right,rgba(255,255,255,0.45),transparent_20%),linear-gradient(180deg,#fbfaf6_0%,#f6f4ef_18%,#f1eee7_100%)] dark:[background-image:radial-gradient(circle_at_top_left,rgba(29,185,84,0.14),transparent_26%),radial-gradient(circle_at_top_right,rgba(255,255,255,0.04),transparent_18%),linear-gradient(180deg,#1a1a1a_0%,#121212_18%,#121212_100%)]"
+        className="pointer-events-none fixed inset-0 -z-10 bg-[#050505] [background-image:radial-gradient(circle_at_top_left,rgba(34,197,94,0.12),transparent_24%),radial-gradient(circle_at_top_right,rgba(255,255,255,0.04),transparent_18%),linear-gradient(180deg,#121212_0%,#050505_24%,#050505_100%)]"
       />
       {createPortal(
         <motion.div
@@ -488,105 +464,250 @@ export function Dashboard() {
         variants={container}
         initial="initial"
         animate="animate"
-        className="relative max-w-2xl lg:max-w-6xl xl:max-w-[1560px] mx-auto pt-4 sm:pt-5 pb-6 px-4 sm:px-6 lg:px-8 space-y-5 sm:space-y-6"
+        className="relative max-w-2xl lg:max-w-6xl xl:max-w-[1560px] mx-auto pt-4 sm:pt-5 pb-24 px-4 sm:px-6 lg:px-8 space-y-5 sm:space-y-6"
       >
 
-        {/* ── 01 · Home Command Center ── */}
-        <motion.section
-          variants={item}
-          className="relative overflow-hidden rounded-[1.9rem] border border-emerald-200/70 bg-[radial-gradient(circle_at_18%_20%,rgba(52,211,153,0.24),transparent_34%),radial-gradient(circle_at_86%_24%,rgba(52,211,153,0.16),transparent_36%),linear-gradient(135deg,#f0fdf4_0%,#ffffff_48%,#f8fafc_100%)] p-5 shadow-[0_24px_80px_-46px_rgba(6,95,70,0.72)] dark:border-white/[0.08] dark:bg-[radial-gradient(circle_at_16%_18%,rgba(16,185,129,0.18),transparent_34%),radial-gradient(circle_at_86%_24%,rgba(16,185,129,0.12),transparent_36%),linear-gradient(135deg,#071c14_0%,#0d1110_46%,#070807_100%)] dark:shadow-[0_28px_80px_-44px_rgba(0,0,0,0.88)] sm:p-6"
-        >
-          <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/90 to-transparent dark:via-white/[0.09]" />
-          <button
-            onClick={() => navigate(heroPulse.label === 'Requests' ? '/my-assignments' : heroPulse.label === 'Needs reply' ? '/my-assignments?status=pending' : '/events')}
-            className="absolute right-5 top-[2.65rem] z-10 hidden w-[calc((100%-4rem)/3)] rounded-2xl border border-white bg-white px-3 py-2.5 text-center shadow-sm transition-all hover:-translate-y-0.5 active:scale-[0.98] dark:border-white/[0.06] dark:bg-[#1f1f1f] dark:shadow-[0_14px_38px_-28px_rgba(0,0,0,0.8)] min-[390px]:block lg:hidden"
-          >
-            <p className="text-[8px] font-black uppercase tracking-[0.18em] text-gray-400 dark:text-white/42">{heroPulse.label}</p>
-            <p className="mt-1 truncate text-[1.35rem] font-black leading-none text-gray-900 dark:text-white" style={{ letterSpacing: '-0.055em' }}>{heroPulse.value}</p>
-            <p className="mt-1 truncate text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400 dark:text-white/28">{heroPulse.caption}</p>
-          </button>
-
-          <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div className="flex items-start">
-              <div className="min-w-0 min-[390px]:pr-24 lg:pr-0">
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <span className="relative flex h-1.5 w-1.5">
-                    <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-70 animate-ping dark:bg-emerald-400" />
-                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
-                  </span>
-                  <p className="text-[10px] font-mono font-black uppercase tracking-[0.32em] text-emerald-700/75 dark:text-emerald-300/70">
-                    {format(now, 'EEE, MMM d')} <span className="mx-1.5 text-emerald-700/25 dark:text-white/20">·</span> {format(now, 'h:mm a')}
-                  </p>
-                </div>
-
-                <p className="mt-3 text-sm font-semibold text-gray-500 dark:text-white/44">{greeting},</p>
-                <h1
-                  className="mt-1 text-[2.35rem] font-black leading-none text-gray-950 dark:text-white sm:text-[3.15rem] lg:text-[3.65rem]"
-                  style={{ letterSpacing: '-0.065em' }}
-                >
-                  {displayName}.
-                </h1>
-              </div>
+        <motion.section variants={item} className="space-y-4">
+            <div className="hidden items-center justify-between lg:flex">
+              <h1 className="text-[2.4rem] font-black leading-none text-white" style={{ letterSpacing: '-0.055em' }}>
+                {greeting}, {displayName}
+              </h1>
+              <button className="flex items-center gap-2 rounded-full px-3 py-2 text-[13px] font-semibold text-white/70 transition-colors hover:bg-white/[0.06] hover:text-white">
+                Customize <Edit3 className="h-4 w-4" />
+              </button>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 sm:min-w-[23rem]">
+            <div className="flex gap-2 overflow-x-auto no-scrollbar lg:mt-5">
+            {['All', 'This Week', 'Serving', 'Leadership'].map((chip, index) => (
+              <button
+                key={chip}
+                className={`h-9 shrink-0 rounded-full px-4 text-[12px] font-black transition-colors ${
+                  index === 0
+                    ? 'bg-[#22c55e] text-black'
+                    : 'bg-[#2a2a2a] text-white hover:bg-[#353535]'
+                }`}
+              >
+                {chip}
+              </button>
+            ))}
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-3 xl:grid-cols-6">
+            {quickTiles.map(tile => (
+              <button
+                key={tile.title}
+                onClick={() => navigate(tile.path)}
+                className="group flex h-[68px] min-w-0 items-center overflow-hidden rounded-[0.5rem] border border-white/[0.08] bg-[#2a2a2a] text-left shadow-[0_18px_46px_-34px_rgba(0,0,0,0.9)] transition-all hover:-translate-y-0.5 hover:bg-[#343434] lg:h-[88px]"
+              >
+                <div className={`relative flex h-full w-[68px] shrink-0 items-center justify-center bg-gradient-to-br ${tile.tone} lg:w-[86px]`}>
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_25%,rgba(255,255,255,0.24),transparent_28%)]" />
+                  {'icon' in tile && tile.icon ? <tile.icon className="relative h-8 w-8 fill-white text-white" /> : null}
+                </div>
+                <div className="min-w-0 flex-1 px-3">
+                  <p className="line-clamp-2 text-[13px] font-black leading-tight text-white">{tile.title}</p>
+                  <p className="mt-0.5 truncate text-[10px] font-semibold text-white/45">{tile.subtitle}</p>
+                </div>
+              </button>
+            ))}
+            </div>
+        </motion.section>
+
+        <motion.section variants={item} className="grid gap-5 xl:grid-cols-[1.95fr_1fr]">
+              <section className="rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-3 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)] sm:p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="text-[18px] font-black text-white">Upcoming services</h2>
+                  <button onClick={() => navigate('/events')} className="text-[12px] font-bold text-[#22c55e]">See all</button>
+                </div>
+                <div className="space-y-2">
+                  {displayEvents.map((event, index) => (
+                    <button
+                      key={event.id}
+                      onClick={() => navigate(event.id.startsWith('sample') ? '/events' : `/events/${event.id}`)}
+                      className="group flex w-full items-center gap-3 rounded-[0.55rem] bg-[#242424] p-2.5 text-left transition-colors hover:bg-[#2d2d2d]"
+                    >
+                      <div className="w-12 shrink-0 text-center">
+                        <p className="text-[11px] font-black uppercase leading-none text-[#22c55e]">{format(parseISO(event.event_date), 'EEE')}</p>
+                        <p className="mt-1 text-[18px] font-black leading-none text-white">{format(parseISO(event.event_date), 'MMM')}</p>
+                        <p className="text-[22px] font-black leading-none text-white">{format(parseISO(event.event_date), 'd')}</p>
+                      </div>
+                      <div className={`h-16 w-28 shrink-0 overflow-hidden rounded-[0.35rem] bg-gradient-to-br ${quickTiles[index % quickTiles.length].tone}`}>
+                        <div className="h-full w-full bg-[radial-gradient(circle_at_50%_18%,rgba(255,255,255,0.28),transparent_24%),linear-gradient(180deg,transparent,rgba(0,0,0,0.35))]" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[14px] font-black text-white">{event.title}</p>
+                        <p className="mt-1 truncate text-[12px] font-semibold text-white/58">{event.event_type} · {event.start_time ? formatTime12Hour(event.start_time) : 'TBA'}</p>
+                        <p className="mt-0.5 flex items-center gap-1 truncate text-[11px] font-semibold text-white/42"><MapPin className="h-3 w-3" /> {event.location || 'Main Auditorium'}</p>
+                      </div>
+                      <span className={`hidden shrink-0 rounded-full border px-4 py-2 text-[12px] font-bold sm:inline-flex ${index < 2 ? 'border-[#22c55e]/20 bg-[#22c55e]/10 text-[#22c55e]' : 'border-white/[0.08] text-white/62'}`}>
+                        {index < 2 ? "You're serving" : 'Not serving'}
+                      </span>
+                      <MoreHorizontal className="hidden h-5 w-5 text-white/70 lg:block" />
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className="rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-3 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)] sm:p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="text-[17px] font-black text-white">Setlists ready for review</h2>
+                  <button onClick={() => navigate('/leadership/setlists')} className="text-[12px] font-bold text-[#22c55e]">See all</button>
+                </div>
+                <div className="space-y-1">
+                  {reviewSets.map((set, index) => (
+                    <button
+                      key={set.id}
+                      onClick={() => navigate('/leadership/setlists')}
+                      className="group flex w-full items-center gap-3 rounded-[0.55rem] px-2 py-2 text-left transition-colors hover:bg-white/[0.06]"
+                    >
+                      <div className={`h-12 w-12 shrink-0 rounded-[0.35rem] bg-gradient-to-br ${quickTiles[(index + 2) % quickTiles.length].tone}`} />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[13px] font-black text-white">{set.title || set.events?.title || 'Sunday Set'}</p>
+                        <p className="mt-0.5 truncate text-[11px] font-semibold text-white/45">{set.events?.event_date ? format(parseISO(set.events.event_date), 'MMM d, yyyy') : 'Ready now'}</p>
+                      </div>
+                      <span className="rounded-full bg-white/[0.08] px-3 py-1.5 text-[11px] font-black text-white/80">{set.songs_count || 6} songs</span>
+                      <ChevronRight className="h-4 w-4 text-white/70 transition-transform group-hover:translate-x-0.5" />
+                    </button>
+                  ))}
+                </div>
+              </section>
+        </motion.section>
+
+        <motion.section variants={item} className="hidden grid-cols-4 gap-5 lg:grid">
+          <section className="rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-4 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)]">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Music className="h-4 w-4 text-[#22c55e]" />
+                <h2 className="text-[15px] font-black text-white">My assignments</h2>
+              </div>
+              <button onClick={() => navigate('/my-assignments')} className="text-[11px] font-bold text-[#22c55e]">All</button>
+            </div>
+            {assignmentRows.length > 0 ? (
+              <div className="space-y-2">
+                {assignmentRows.map((assignment) => (
+                  <button
+                    key={assignment.id}
+                    onClick={() => navigate(`/events/${assignment.event_id}`)}
+                    className="flex w-full items-center gap-3 rounded-[0.55rem] bg-white/[0.045] px-3 py-2.5 text-left transition-colors hover:bg-white/[0.075]"
+                  >
+                    <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${assignment.status === 'confirmed' ? 'bg-[#22c55e]' : assignment.status === 'declined' ? 'bg-red-400' : 'bg-amber-400'}`} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[12px] font-black text-white">{assignment.events?.title || 'Upcoming service'}</span>
+                      <span className="mt-0.5 block truncate text-[11px] font-semibold text-white/45">
+                        {assignment.roles?.name || 'Team'}{assignment.events?.start_time ? ` · ${formatTime12Hour(assignment.events.start_time)}` : ''}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="rounded-[0.55rem] bg-white/[0.045] px-3 py-5 text-[12px] font-semibold text-white/45">No current assignments.</p>
+            )}
+          </section>
+
+          <section className="rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-4 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)]">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <UserX className="h-4 w-4 text-[#22c55e]" />
+                <h2 className="text-[15px] font-black text-white">Team availability</h2>
+              </div>
+              <button onClick={() => navigate('/request-leave')} className="text-[11px] font-bold text-[#22c55e]">Open</button>
+            </div>
+            {teamAvailabilityRows.length > 0 ? (
+              <div className="space-y-2">
+                {teamAvailabilityRows.map((member) => {
+                  const memberName = member.profiles?.nickname || `${member.profiles?.first_name || ''} ${member.profiles?.last_name || ''}`.trim() || 'Team member';
+                  const dateLabel = member.unavailable_date || member.start_date;
+                  return (
+                    <button
+                      key={member.id}
+                      onClick={() => setSelectedUnavailability(member)}
+                      className="flex w-full items-center gap-3 rounded-[0.55rem] bg-white/[0.045] px-3 py-2.5 text-left transition-colors hover:bg-white/[0.075]"
+                    >
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-[11px] font-black text-amber-200">
+                        {memberName.slice(0, 1)}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[12px] font-black text-white">{memberName}</span>
+                        <span className="mt-0.5 block truncate text-[11px] font-semibold text-white/45">{dateLabel ? format(parseISO(dateLabel), 'MMM d') : 'Upcoming'}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="rounded-[0.55rem] bg-white/[0.045] px-3 py-5 text-[12px] font-semibold text-white/45">Everyone is currently available.</p>
+            )}
+          </section>
+
+          <section className="rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-4 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)]">
+            <div className="mb-4 flex items-center gap-2">
+              <Shield className="h-4 w-4 text-[#22c55e]" />
+              <h2 className="text-[15px] font-black text-white">Leadership queue</h2>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
               {[
-                { label: 'Upcoming', value: stats.total, status: 'all' },
-                { label: 'Confirmed', value: stats.confirmed, status: 'confirmed' },
-                { label: 'Pending', value: stats.pending, status: 'pending' },
-              ].map(stat => (
-                <button
-                  key={stat.label}
-                  onClick={() => navigate(`/my-assignments?status=${stat.status}`)}
-                  className="rounded-2xl border border-white bg-white px-3 py-3 text-center shadow-sm transition-all hover:-translate-y-0.5 active:scale-[0.98] dark:border-white/[0.08] dark:bg-white/[0.05]"
-                >
-                  <p className="text-lg font-black leading-none text-gray-950 dark:text-white">{stat.value}</p>
-                  <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-gray-500 dark:text-white/34">{stat.label}</p>
+                { label: 'Setlists', value: pendingSetlists.length, path: '/leadership/setlists' },
+                { label: 'Leave', value: pendingLeaveCount, path: '/leadership/leave' },
+                { label: 'Swaps', value: incomingSwapRequests.length, path: '/leadership/swaps' },
+                { label: 'Pending', value: stats.pending, path: '/my-assignments?status=pending' },
+              ].map(queue => (
+                <button key={queue.label} onClick={() => navigate(queue.path)} className="rounded-[0.55rem] bg-white/[0.045] px-3 py-3 text-left transition-colors hover:bg-white/[0.075]">
+                  <span className="block text-[22px] font-black leading-none text-white">{queue.value}</span>
+                  <span className="mt-1 block text-[10px] font-black uppercase tracking-[0.12em] text-white/40">{queue.label}</span>
                 </button>
               ))}
             </div>
-          </div>
+          </section>
 
-          <div className="relative mt-5 grid gap-3 border-t border-emerald-900/[0.07] pt-4 dark:border-white/[0.11] md:grid-cols-[1fr_auto] md:items-center">
-            <div className="min-w-0">
-              {nextEvent ? (
-                <>
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-white/46">Coming Up</p>
-                  <p className="mt-1 truncate text-sm font-extrabold text-gray-950 dark:text-white">
-                    {nextEvent.title} <span className="font-mono text-xs font-semibold text-gray-500 dark:text-white/34">· {format(parseISO(nextEvent.event_date), 'MMM d')}</span>
-                  </p>
-                </>
-              ) : (
-                <p className="text-sm font-semibold text-gray-500 dark:text-white/58">No upcoming service is scheduled yet.</p>
-              )}
+          <section className="rounded-[0.75rem] border border-white/[0.08] bg-[radial-gradient(circle_at_12%_0%,rgba(34,197,94,0.18),transparent_38%),#181818] p-4 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)]">
+            <div className="mb-4 flex items-center gap-2">
+              <ClipboardCheck className="h-4 w-4 text-[#22c55e]" />
+              <h2 className="text-[15px] font-black text-white">Daily verse</h2>
             </div>
-            <button
-              onClick={() => navigate('/events')}
-              className="inline-flex h-11 items-center justify-center gap-1.5 rounded-full px-5 text-[12px] font-black text-white shadow-[0_16px_34px_-18px_rgba(29,185,84,0.8)] transition-all hover:scale-[1.02] active:scale-[0.97]"
-              style={{ background: '#1DB954' }}
-            >
-              Open calendar <ArrowUpRight className="h-3.5 w-3.5" />
-            </button>
+            <p className="line-clamp-4 text-[15px] font-semibold leading-relaxed text-white/86">"{todayVerse.text}"</p>
+            <p className="mt-4 text-[10px] font-black uppercase tracking-[0.16em] text-[#22c55e]/80">{todayVerse.ref}</p>
+          </section>
+        </motion.section>
+
+        <motion.section variants={item} className="lg:hidden">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-[22px] font-black text-white">Upcoming services</h2>
+            <button onClick={() => navigate('/events')} className="text-[12px] font-bold text-[#22c55e]">See all</button>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+            {displayEvents.map((event) => (
+              <button key={event.id} onClick={() => navigate(event.id.startsWith('sample') ? '/events' : `/events/${event.id}`)} className="flex min-w-[188px] items-center gap-3 rounded-[0.6rem] bg-[#242424] p-3 text-left">
+                <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-[0.55rem] bg-[#22c55e] text-black">
+                  <span className="text-[10px] font-black uppercase">{format(parseISO(event.event_date), 'MMM')}</span>
+                  <span className="text-[18px] font-black leading-none">{format(parseISO(event.event_date), 'd')}</span>
+                </div>
+                <div className="min-w-0">
+                  <p className="line-clamp-2 text-[13px] font-black leading-tight text-white">{event.title}</p>
+                  <p className="mt-1 text-[12px] font-semibold text-white/60">{event.start_time ? formatTime12Hour(event.start_time) : 'TBA'}</p>
+                  <p className="text-[11px] font-semibold text-white/42">{event.location || 'Main Hall'}</p>
+                </div>
+              </button>
+            ))}
           </div>
         </motion.section>
 
-        {/* ── 02 · Verse ── */}
-        <motion.section variants={item}>
-          <OpenSection accent className="px-1 pt-8 sm:pt-10">
-            <SectionLabel index="02">Daily Verse</SectionLabel>
-            <div className="relative max-w-4xl pl-5 sm:pl-7">
-              <div className="absolute left-0 top-1 bottom-1 w-[2px] rounded-full" style={{ background: 'linear-gradient(180deg, rgba(34,197,94,0.7), rgba(34,197,94,0.05))' }} />
-              <p
-                className="text-[22px] sm:text-[28px] lg:text-[34px] font-light leading-[1.28] text-gray-900 dark:text-white"
-                style={{ letterSpacing: '-0.03em', fontFeatureSettings: '"ss01", "kern"' }}
-              >
-                "{todayVerse.text}"
-              </p>
-              <p className="mt-4 text-[11px] font-mono uppercase tracking-[0.2em] text-[#1DB954]/82">
-                — {todayVerse.ref}
-              </p>
-            </div>
-          </OpenSection>
+        <motion.section variants={item} className="lg:hidden">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-[22px] font-black text-white">New this week</h2>
+            <button onClick={() => navigate('/songs')} className="text-[12px] font-bold text-[#22c55e]">See all</button>
+          </div>
+          <div className="flex gap-3 overflow-x-auto pb-1 no-scrollbar">
+            {newThisWeek.map((song) => (
+              <button key={song.title} onClick={() => navigate('/songs')} className="min-w-[132px] text-left">
+                <div className={`relative aspect-square overflow-hidden rounded-[0.45rem] bg-gradient-to-br ${song.tone}`}>
+                  <span className="absolute left-2 top-2 rounded bg-white px-1.5 py-0.5 text-[7px] font-black uppercase text-black">{song.badge}</span>
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_28%_20%,rgba(255,255,255,0.32),transparent_28%),linear-gradient(180deg,transparent,rgba(0,0,0,0.42))]" />
+                </div>
+                <p className="mt-2 line-clamp-2 text-[12px] font-bold leading-tight text-white">{song.title}</p>
+                <p className="mt-0.5 truncate text-[11px] font-semibold text-white/50">{song.artist}</p>
+              </button>
+            ))}
+          </div>
         </motion.section>
 
         {/* ── Incoming Swap Requests ── */}
@@ -667,196 +788,51 @@ export function Dashboard() {
           </motion.section>
         )}
 
-        {/* ── 03 · Your Next Service (compact gradient) ── */}
-        {nextAssignment?.events && (
-          <motion.section variants={item}>
-            <SectionLabel index="03">Your Next Service</SectionLabel>
-            <button
-              onClick={() => navigate(`/events/${nextAssignment.event_id}`)}
-              className="group w-full text-left"
-            >
-              <div
-                className={`relative overflow-hidden rounded-[1.6rem] px-5 py-4 sm:px-6 transition-all duration-500 group-hover:-translate-y-0.5 border ${
-                  nextAssignment.status === 'confirmed'
-                    ? 'border-black/[0.06] bg-[linear-gradient(135deg,#eff8f2_0%,#f8fcf9_45%,#edf5ef_100%)] dark:border-white/[0.07] dark:bg-[linear-gradient(135deg,#17261d_0%,#1b221e_45%,#151a17_100%)]'
-                    : 'border-black/[0.06] bg-[linear-gradient(135deg,#fff7e8_0%,#fdf8ef_45%,#f5efe2_100%)] dark:border-white/[0.07] dark:bg-[linear-gradient(135deg,#3a2e1b_0%,#302819_45%,#241f16_100%)]'
-                }`}
-                style={{
-                  boxShadow: '0 20px 46px -26px rgba(15,23,42,0.14), 0 1px 2px rgba(15,23,42,0.08)',
-                }}
-              >
-                <div className="absolute right-[-2.5rem] top-1/2 h-32 w-32 -translate-y-1/2 rounded-full pointer-events-none"
-                  style={{
-                    background: nextAssignment.status === 'confirmed'
-                      ? 'radial-gradient(circle, rgba(29,185,84,0.18), transparent 68%)'
-                      : 'radial-gradient(circle, rgba(255,196,92,0.22), transparent 68%)',
-                    filter: 'blur(14px)', opacity: 0.62,
-                  }}
-                />
-
-                <div className="relative flex items-center gap-4">
-                  <DateChip date={nextAssignment.events.event_date} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${nextAssignment.status === 'confirmed' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-                      <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-gray-500 dark:text-white/48">
-                        {nextAssignment.status === 'confirmed' ? 'Confirmed' : 'Pending Confirmation'}
-                      </p>
-                    </div>
-                    <p className="text-[15px] font-bold text-gray-950 dark:text-white truncate leading-tight" style={{ letterSpacing: '-0.02em' }}>
-                      {(() => { const parts = (nextAssignment.events.title || '').split(' '); if (parts.length > 1) { parts[parts.length - 1] = parts[parts.length - 1][0].toUpperCase() + '.'; } return parts.join(' '); })()}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      {nextAssignment.roles?.name && (
-                        <span className="text-[11px] text-gray-500 dark:text-white/42 font-mono">{nextAssignment.roles.name}</span>
-                      )}
-                      {nextAssignment.events.start_time && (
-                        <>
-                          <span className="text-gray-300 dark:text-white/18">·</span>
-                          <span className="text-[11px] text-gray-500 dark:text-white/42 font-mono">{formatTime12Hour(nextAssignment.events.start_time)}</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-gray-300 group-hover:translate-x-0.5 group-hover:text-gray-500 transition-all shrink-0 dark:text-white/26 dark:group-hover:text-white/58" />
-                </div>
-              </div>
-            </button>
-          </motion.section>
-        )}
-
-        {/* ── 05 · Events + Assignments + Announcements ── */}
-        <div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3 lg:gap-6">
-
-          <motion.section variants={item}>
-            <OpenSection className="h-full pt-7">
-            <SectionLabel
-              index="05"
-              action={
-                <button onClick={() => navigate('/events')} className="text-[11px] font-semibold text-[#1DB954] hover:text-[#48d67c] flex items-center gap-1 transition-colors">
-                  All <ArrowUpRight className="h-3 w-3" />
+        <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.75fr)] xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,0.8fr)]">
+          <motion.section variants={item} className="min-w-0 overflow-hidden rounded-[1rem] border border-white/[0.08] bg-[#181818] p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-[18px] font-black text-white">Recent announcements</h2>
+              <button onClick={() => navigate('/announcements')} className="text-[12px] font-bold text-[#22c55e]">See all</button>
+            </div>
+            <div className="divide-y divide-white/[0.07]">
+              {announcementRows.map((a, index) => (
+                <button
+                  key={a.id}
+                  onClick={() => navigate(a.id?.startsWith?.('sample') ? '/announcements' : `/announcements/${a.id}`)}
+                  className="group flex w-full min-w-0 items-center gap-3 py-3 text-left"
+                >
+                  <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-[0.55rem] ${index === 0 ? 'bg-emerald-500/18 text-[#22c55e]' : index === 1 ? 'bg-violet-500/18 text-violet-300' : 'bg-sky-500/18 text-sky-300'}`}>
+                    {index === 0 ? <Megaphone className="h-6 w-6" /> : index === 1 ? <Calendar className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
+                  </span>
+                  <span className="min-w-0 flex-1 overflow-hidden">
+                    <span className="block truncate text-[13px] font-black text-white">{a.title}</span>
+                    <span className="mt-1 block max-w-full truncate text-[12px] font-semibold text-white/55">{a.content}</span>
+                  </span>
+                  <span className="shrink-0 text-[11px] font-semibold text-white/46">{index === 0 ? '2h ago' : index === 1 ? '6h ago' : '1d ago'}</span>
+                  <MoreHorizontal className="h-5 w-5 shrink-0 text-white/58" />
                 </button>
-              }
-            >
-              <span className="flex items-center gap-1.5"><Calendar className="h-3 w-3" /> Upcoming Events</span>
-            </SectionLabel>
-
-            {upcomingEvents.length === 0 ? (
-              <p className="text-[13px] text-gray-500 dark:text-white/34 py-6">No upcoming events.</p>
-            ) : (
-              <div className="divide-y divide-white/[0.06]">
-                {upcomingEvents.slice(0, 3).map(event => (
-                  <button
-                    key={event.id}
-                    onClick={() => navigate(`/events/${event.id}`)}
-                    className="group flex items-center gap-3.5 rounded-[1.1rem] px-2.5 py-3.5 -mx-2.5 w-[calc(100%+1.25rem)] text-left transition-all duration-200 hover:bg-black/[0.04] dark:hover:bg-[#212121]"
-                  >
-                    <DateChip date={event.event_date} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[14px] font-semibold text-gray-900 dark:text-white truncate leading-tight tracking-tight">{event.title}</p>
-                      <p className="text-[11px] text-gray-500 dark:text-white/36 mt-0.5 font-mono">
-                        {event.event_type}{event.start_time && ` · ${formatTime12Hour(event.start_time)}`}
-                      </p>
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-gray-400 dark:text-white/18 shrink-0 transition-all group-hover:translate-x-0.5 group-hover:text-gray-700 dark:group-hover:text-white/42" />
-                  </button>
-                ))}
-              </div>
-            )}
-            </OpenSection>
+              ))}
+            </div>
           </motion.section>
 
-          <motion.section variants={item}>
-            <OpenSection className="h-full pt-7">
-            <SectionLabel
-              index="06"
-              action={
-                <button onClick={() => navigate('/my-assignments')} className="text-[11px] font-semibold text-[#1DB954] hover:text-[#48d67c] flex items-center gap-1 transition-colors">
-                  All <ArrowUpRight className="h-3 w-3" />
-                </button>
-              }
-            >
-              <span className="flex items-center gap-1.5"><Music className="h-3 w-3" /> My Assignments</span>
-            </SectionLabel>
-
-            {myAssignments.length === 0 ? (
-              <p className="text-[13px] text-gray-500 dark:text-white/34 py-6">No current assignments.</p>
-            ) : (
-              <div className="divide-y divide-white/[0.06]">
-                {myAssignments.slice(0, 3).map(a => (
-                  <button
-                    key={a.id}
-                    onClick={() => navigate(`/events/${a.event_id}`)}
-                    className="group flex items-center gap-3.5 rounded-[1.1rem] px-2.5 py-3.5 -mx-2.5 w-[calc(100%+1.25rem)] text-left transition-all duration-200 hover:bg-black/[0.04] dark:hover:bg-[#212121]"
-                  >
-                    <DateChip date={a.events?.event_date ?? null} dim={a.status === 'declined'} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[14px] font-semibold text-gray-900 dark:text-white truncate leading-tight tracking-tight">{a.events?.title}</p>
-                      <p className="text-[11px] text-gray-500 dark:text-white/36 mt-0.5 font-mono">
-                        {a.roles?.name}{a.events?.start_time && ` · ${formatTime12Hour(a.events.start_time)}`}
-                      </p>
-                    </div>
-                    <span className={`text-[10px] font-bold px-2 py-1 rounded-md shrink-0 border ${
-                      a.status === 'confirmed' ? 'bg-emerald-50 dark:bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/25' :
-                      a.status === 'declined' ? 'bg-red-50 dark:bg-red-500/[0.12] text-red-700 dark:text-red-300 border-red-200 dark:border-red-500/25' :
-                      'bg-amber-50 dark:bg-amber-500/[0.12] text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/25'
-                    }`}>
-                      {a.status === 'confirmed' ? 'Confirmed' : a.status === 'declined' ? 'Declined' : 'Pending'}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-            </OpenSection>
-          </motion.section>
-
-        {/* ── 07 · Announcements ── */}
-        {recentAnnouncements.length > 0 && (
-          <motion.section variants={item} className="lg:col-span-2 xl:col-span-1">
-            <OpenSection className="h-full pt-7">
-            <SectionLabel
-              index="07"
-              action={
-                <button onClick={() => navigate('/announcements')} className="text-[11px] font-semibold text-[#1DB954] hover:text-[#48d67c] flex items-center gap-1 transition-colors">
-                  All <ArrowUpRight className="h-3 w-3" />
-                </button>
-              }
-            >
-              <span className="flex items-center gap-1.5"><Megaphone className="h-3 w-3" /> Announcements</span>
-            </SectionLabel>
-
-            <div className="divide-y divide-white/[0.06]">
-              {recentAnnouncements.map(a => {
-                const blocks = (a as Announcement & { content_blocks?: { type: string; content: string }[] }).content_blocks;
-                const hasPhotos = blocks?.some(b => b.type === 'image');
-                const previewText = blocks?.length ? blocks.find(b => b.type === 'text')?.content || '' : a.content;
+          <motion.section variants={item} className="min-w-0 rounded-[1rem] border border-white/[0.08] bg-[#181818] p-4">
+            <h2 className="mb-4 text-[18px] font-black text-white">Quick actions</h2>
+            <div className="grid grid-cols-2 gap-2">
+              {quickActions.map((action) => {
+                const Icon = action.icon;
                 return (
                   <button
-                    key={a.id}
-                    onClick={() => navigate(`/announcements/${a.id}`)}
-                    className="group flex items-start gap-4 rounded-[1.1rem] px-2.5 py-4 -mx-2.5 w-[calc(100%+1.25rem)] text-left transition-all duration-200 hover:bg-black/[0.04] dark:hover:bg-[#212121]"
+                    key={action.label}
+                    onClick={() => navigate(action.path)}
+                    className="flex h-20 flex-col items-center justify-center gap-2 rounded-[0.55rem] border border-white/[0.06] bg-[#242424] text-center transition-colors hover:bg-[#303030]"
                   >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <p className="text-[14px] font-semibold text-gray-900 dark:text-white truncate leading-tight tracking-tight">{a.title}</p>
-                        {a.priority === 'urgent' && (
-                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0 bg-red-50 dark:bg-red-500/[0.14] text-red-600 dark:text-red-300 border border-red-200 dark:border-red-500/25">Urgent</span>
-                        )}
-                        {hasPhotos && <ImageIcon className="h-3 w-3 text-gray-400 dark:text-white/28 shrink-0" />}
-                      </div>
-                      {previewText && <p className="text-[12px] text-gray-500 dark:text-white/42 line-clamp-1 leading-relaxed">{previewText}</p>}
-                      <p className="text-[10px] font-mono text-gray-400 dark:text-white/24 mt-1.5 tracking-wide">
-                        {a.profiles?.first_name} {a.profiles?.last_name} · {format(parseISO(a.created_at), 'MMM d')}
-                      </p>
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-gray-400 dark:text-white/18 shrink-0 mt-1 transition-all group-hover:translate-x-0.5 group-hover:text-gray-700 dark:group-hover:text-white/42" />
+                    <Icon className="h-6 w-6 text-[#22c55e]" />
+                    <span className="text-[12px] font-black text-white">{action.label}</span>
                   </button>
                 );
               })}
             </div>
-            </OpenSection>
           </motion.section>
-        )}
         </div>
 
       </motion.div>

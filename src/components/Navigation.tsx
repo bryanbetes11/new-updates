@@ -4,23 +4,25 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Activity,
   AlertTriangle,
-  ArrowLeft,
   ArrowLeftRight,
-  Bell,
   BookOpen,
   Calendar,
   CheckCircle2,
+  Download,
   Eye,
   EyeOff,
+  Home,
   ListChecks,
   LogOut,
   ChevronLeft,
   ChevronRight,
   Layers3,
+  Library,
+  MessageCircle,
   Music2,
   Plus,
   RefreshCw,
-  Shield,
+  Search,
   Settings,
   Sparkles,
   Trash2,
@@ -66,12 +68,15 @@ interface NavItem {
 const SongsNavIcon: NavIcon = ({ className, style }) => <BookOpen className={className} style={style} />;
 const VideosNavIcon: NavIcon = ({ className, style }) => <Video className={className} style={style} />;
 const SetsNavIcon: NavIcon = ({ className, style }) => <ListChecks className={className} style={style} />;
+const SearchNavIcon: NavIcon = ({ className, style }) => <Search className={className} style={style} />;
+const LibraryNavIcon: NavIcon = ({ className, style }) => <Library className={className} style={style} />;
+const CreateNavIcon: NavIcon = ({ className, style }) => <Plus className={className} style={style} />;
 
 const mobileNavItems: NavItem[] = [
   { path: '/dashboard', label: 'Home', icon: HomeIcon, exact: true },
-  { path: '/events', label: 'Events', icon: CalendarIcon, badgeKey: 'events', badgeColor: 'red' },
-  { path: '/announcements', label: 'News', icon: NewsIcon, badgeKey: 'announcements', badgeColor: 'blue' },
-  { path: '/messages', label: 'Chat', icon: MessageIcon, badgeKey: 'messages', badgeColor: 'red' },
+  { path: '/songs', label: 'Search', icon: SearchNavIcon },
+  { path: '/sets', label: 'Your Library', icon: LibraryNavIcon },
+  { path: '/events', label: 'Create', icon: CreateNavIcon, badgeKey: 'events', badgeColor: 'red' },
 ];
 
 const sidebarMainItems: NavItem[] = [
@@ -248,10 +253,27 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
   const fullName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim();
   const useDockedMobileNav = mobileNavStyle === 'docked';
   const hideMobileChrome = mobileChromeHidden && !mobileOpen;
-  const hideDockedMobileNav = useDockedMobileNav && hideMobileChrome;
+  const hideBottomMobileNav = hideMobileChrome;
   const mobileMenuTranslateX = mobileOpen ? 'translateX(min(82vw, 340px))' : 'translateX(0)';
-  const mobileNavTransform = `${mobileMenuTranslateX} ${hideDockedMobileNav ? 'translateY(calc(100% + 10px))' : 'translateY(0)'}`;
+  const mobileNavTransform = `${mobileMenuTranslateX} ${hideBottomMobileNav ? 'translateY(calc(100% + 10px))' : 'translateY(0)'}`;
   const mobileHeaderTransform = mobileMenuTranslateX;
+  const mobileTitle = location.pathname.startsWith('/sets')
+    ? 'Your Library'
+    : location.pathname.startsWith('/songs')
+      ? 'Search'
+      : location.pathname.startsWith('/events')
+        ? 'Create'
+        : 'ServeSync';
+  const desktopLibraryItems = [
+    { title: 'Worship Team', caption: '12 members', tone: 'from-amber-500/80 via-zinc-800 to-black' },
+    { title: 'Production Team', caption: '8 members', tone: 'from-violet-500/80 via-blue-900 to-black' },
+    { title: 'Youth Ministry', caption: '15 members', tone: 'from-orange-500/80 via-zinc-800 to-black' },
+    { title: 'Kids Ministry', caption: '6 members', tone: 'from-emerald-400/80 via-cyan-900 to-black' },
+  ];
+  const desktopShortcutItems = [
+    { title: 'Liked Songs', caption: '89 songs', tone: 'from-indigo-400 via-violet-500 to-emerald-300' },
+    { title: 'My Sets', caption: '6 sets', tone: 'from-emerald-500 via-green-700 to-black' },
+  ];
 
   const sidebarWidth = collapsed ? 92 : 300;
 
@@ -401,16 +423,16 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
         <Tooltip key={item.path} label={item.label}>
           <button
             onClick={() => handleNav(item.path)}
-            className={`group relative flex h-11 w-full items-center justify-center rounded-[1.15rem] border transition-all duration-200 ${
+            className={`group relative flex h-11 w-full items-center justify-center rounded-[0.8rem] border transition-all duration-200 ${
               active
-                ? 'border-slate-200/80 bg-slate-50 text-slate-950 shadow-[0_12px_24px_-20px_rgba(15,23,42,0.55),0_2px_8px_-7px_rgba(15,23,42,0.22),inset_0_1px_0_rgba(255,255,255,0.9)] dark:border-white/[0.10] dark:bg-white/[0.08] dark:text-white dark:shadow-[0_14px_24px_-18px_rgba(0,0,0,0.85)]'
-                : 'border-transparent text-slate-500 hover:border-slate-200/70 hover:bg-white/80 hover:text-slate-950 hover:shadow-[0_10px_22px_-20px_rgba(15,23,42,0.5)] dark:text-white/58 dark:hover:border-white/[0.08] dark:hover:bg-white/[0.055] dark:hover:text-white'
+                ? 'border-white/[0.10] bg-white/[0.10] text-white shadow-[0_14px_24px_-18px_rgba(0,0,0,0.85)]'
+                : 'border-transparent text-white/58 hover:border-white/[0.08] hover:bg-white/[0.065] hover:text-white'
             }`}
           >
             {active && (
               <motion.div
                 layoutId="activeNavBg"
-                className="absolute inset-0 rounded-[1.15rem]"
+                className="absolute inset-0 rounded-[0.8rem]"
                 transition={{ type: 'spring', stiffness: 460, damping: 38 }}
               />
             )}
@@ -431,22 +453,22 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
       <button
         key={item.path}
         onClick={() => handleNav(item.path)}
-        className={`relative group flex h-12 w-full items-center gap-3 rounded-[1.15rem] border px-3.5 text-[13px] transition-all duration-200 ${
+        className={`relative group flex h-12 w-full items-center gap-3 rounded-[0.8rem] border px-3.5 text-[13px] transition-all duration-200 ${
           active
-            ? 'border-slate-200/80 bg-slate-50/95 font-bold text-slate-950 shadow-[0_14px_28px_-24px_rgba(15,23,42,0.55),0_2px_8px_-7px_rgba(15,23,42,0.25),inset_0_1px_0_rgba(255,255,255,0.95)] dark:border-white/[0.10] dark:bg-white/[0.08] dark:text-white dark:shadow-[0_16px_32px_-24px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.12)]'
-            : 'border-transparent font-semibold text-slate-600 hover:border-slate-200/70 hover:bg-white/78 hover:text-slate-950 hover:shadow-[0_10px_22px_-20px_rgba(15,23,42,0.48)] dark:text-white/62 dark:hover:border-white/[0.08] dark:hover:bg-white/[0.055] dark:hover:text-white'
+            ? 'border-white/[0.10] bg-white/[0.10] font-bold text-white shadow-[0_16px_32px_-24px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.12)]'
+            : 'border-transparent font-semibold text-white/62 hover:border-white/[0.08] hover:bg-white/[0.065] hover:text-white'
         }`}
       >
         {active && (
           <motion.div
             layoutId="activeNavBg"
-            className="absolute inset-0 rounded-[1.15rem]"
+            className="absolute inset-0 rounded-[0.8rem]"
             transition={{ type: 'spring', stiffness: 460, damping: 38 }}
           />
         )}
         <Icon
           active={active}
-          className={`relative shrink-0 h-[18px] w-[18px] transition-colors ${active ? 'text-slate-950 dark:text-white' : 'text-slate-500 group-hover:text-slate-900 dark:text-white/58 dark:group-hover:text-white'}`}
+          className={`relative shrink-0 h-[18px] w-[18px] transition-colors ${active ? 'text-[#22c55e]' : 'text-white/58 group-hover:text-white'}`}
           style={{ width: '18px', height: '18px', strokeWidth: 2 }}
         />
         <span className="relative flex-1 truncate text-left">{item.label}</span>
@@ -611,16 +633,81 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
   );
 
   return (
-    <>
+    <div className="dark contents">
+      {/* ── Desktop top bar ── */}
+      <div className="fixed inset-x-0 top-0 z-50 hidden h-[72px] items-center gap-4 bg-[#050505]/96 px-5 text-white backdrop-blur-2xl lg:flex">
+        <button
+          onClick={() => handleNav('/dashboard')}
+          className="flex min-w-[170px] items-center gap-3 text-left"
+          aria-label="Go to dashboard"
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#22c55e] text-black shadow-[0_14px_28px_-20px_rgba(34,197,94,0.9)]">
+            <Music2 className="h-5 w-5" />
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-[18px] font-black leading-none">ServeSync</span>
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onCollapsedChange(!collapsed)}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.65rem] border border-white/[0.08] bg-white/[0.055] text-white/62 transition-colors hover:bg-white/[0.10] hover:text-white"
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+        </button>
+
+        <button
+          onClick={() => handleNav('/dashboard')}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[0.65rem] border border-white/[0.08] bg-white/[0.08] text-white transition-colors hover:bg-white/[0.13]"
+          aria-label="Home"
+        >
+          <Home className="h-5 w-5 fill-current" />
+        </button>
+
+        <label className="flex h-11 max-w-[560px] flex-1 items-center gap-3 rounded-[0.65rem] border border-white/[0.10] bg-[#151515] px-3.5 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+          <Search className="h-5 w-5 shrink-0 text-white/60" />
+          <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-white/58">
+            Search events, songs, people, sets...
+          </span>
+          <span className="rounded-md border border-white/[0.08] bg-white/[0.05] px-2 py-1 text-[11px] font-bold text-white/46">⌘ K</span>
+        </label>
+
+        <div className="ml-auto flex items-center gap-3">
+          <button className="hidden h-11 items-center gap-2 rounded-[0.65rem] bg-white/[0.08] px-4 text-[13px] font-black text-white transition-colors hover:bg-white/[0.13] xl:flex">
+            <Download className="h-4 w-4 text-[#22c55e]" />
+            Install App
+          </button>
+          <NotificationBell />
+          <button
+            onClick={() => handleNav('/messages')}
+            className="relative flex h-11 w-11 items-center justify-center rounded-full text-white transition-colors hover:bg-white/[0.08]"
+            aria-label="Messages"
+          >
+            <MessageCircle className="h-6 w-6" />
+            {unread.messages > 0 && <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-[#22c55e]" />}
+          </button>
+          <button
+            onClick={() => handleNav('/profile')}
+            className="flex items-center gap-2 rounded-full px-1.5 py-1 transition-colors hover:bg-white/[0.08]"
+            aria-label="Profile"
+          >
+            <Avatar src={profile?.avatar_url} firstName={profile?.first_name || '?'} lastName={profile?.last_name} size="sm" className="!h-11 !w-11 ring-1 ring-white/10" />
+            <ChevronRight className="h-4 w-4 rotate-90 text-white/70" />
+          </button>
+        </div>
+      </div>
+
       {/* ── Mobile top bar ── */}
       <div
         className={`fixed top-0 left-0 right-0 z-30 flex items-end justify-between overflow-hidden px-4 lg:hidden ${hideMobileAll ? 'hidden' : ''}`}
         style={{
-          background: 'color-mix(in srgb, var(--sidebar-bg) 78%, transparent)',
+          background: 'rgba(5,5,5,0.88)',
           WebkitBackdropFilter: 'blur(30px) saturate(190%) contrast(108%)',
           backdropFilter: 'blur(30px) saturate(190%) contrast(108%)',
-          borderBottom: '1px solid var(--sidebar-border)',
-          boxShadow: '0 14px 34px -30px rgba(0,0,0,0.55), inset 0 -1px 0 rgba(255,255,255,0.06)',
+          borderBottom: '1px solid rgba(255,255,255,0.08)',
+          boxShadow: '0 14px 34px -30px rgba(0,0,0,0.85), inset 0 -1px 0 rgba(255,255,255,0.06)',
           paddingTop: 'env(safe-area-inset-top)',
           height: 'calc(3.5rem + env(safe-area-inset-top))',
           transform: mobileHeaderTransform,
@@ -629,15 +716,15 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
           willChange: 'transform',
         }}
       >
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(16,185,129,0.12),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.32),rgba(255,255,255,0.08)_52%,rgba(255,255,255,0))] dark:bg-[radial-gradient(circle_at_18%_20%,rgba(16,185,129,0.15),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.025)_52%,rgba(255,255,255,0))]" />
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-white/38 to-transparent dark:from-black/18" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(34,197,94,0.14),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.015)_52%,rgba(255,255,255,0))]" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-black/24 to-transparent" />
         <div className="relative flex h-14 w-full items-center justify-between gap-2 pb-0">
           <button
             onClick={() => {
               setDrawerPanel('menu');
               onMobileOpenChange(true);
             }}
-            className="flex min-w-0 items-center gap-2 rounded-2xl px-1.5 py-1.5 text-left transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+            className="flex min-w-0 items-center gap-2 rounded-2xl px-1.5 py-1.5 text-left transition-colors hover:bg-white/[0.06]"
             aria-label="Open account menu"
           >
             <Avatar
@@ -645,56 +732,33 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
               firstName={profile?.first_name || '?'}
               lastName={profile?.last_name}
               size="sm"
-              className="!h-8 !w-8 !text-[11px] ring-1 ring-black/10 dark:ring-white/10"
+              className="!h-8 !w-8 !text-[11px] ring-1 ring-white/10"
             />
             <div className="min-w-0">
-              <p className="truncate text-[13px] font-black leading-tight text-gray-900 dark:text-white">
-                {displayName || fullName || 'Profile'}
-              </p>
-              <p className="truncate text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400 dark:text-gray-400">
-                Menu
+              <p className="truncate text-[20px] font-black leading-tight text-white">
+                {mobileTitle}
               </p>
             </div>
           </button>
 
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <motion.button
-              type="button"
-              onClick={() => {
-                setDrawerPanel('menu');
-                onMobileOpenChange(true);
-              }}
-              className="pointer-events-auto px-1 py-1 text-center"
-              aria-label="Open menu to see moved tabs"
-              whileTap={{ scale: 0.97 }}
-            >
-              <span className="relative flex items-center justify-center gap-1">
-                <motion.span
-                  className="relative mr-0.5 flex h-4 w-5 items-center justify-center"
-                  animate={{ x: [0, -6, 0] }}
-                  transition={{ duration: 1.15, repeat: Infinity, ease: 'easeInOut' }}
-                >
-                  <motion.span
-                    animate={{ opacity: [0.55, 1, 0.55] }}
-                    transition={{ duration: 1.15, repeat: Infinity, ease: 'easeInOut' }}
-                  >
-                    <ArrowLeft className="h-4 w-4 text-emerald-700 dark:text-emerald-200" strokeWidth={2.6} />
-                  </motion.span>
-                </motion.span>
-                <motion.span
-                  className="min-w-0 truncate text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-300"
-                  animate={{ opacity: [0.7, 1, 0.7], y: [0, -1.5, 0], x: [0, -1.5, 0] }}
-                  transition={{ duration: 1.15, repeat: Infinity, ease: 'easeInOut' }}
-                >
-                  More tabs here
-                </motion.span>
-              </span>
-            </motion.button>
-          </div>
-
           <div className="relative z-20 flex items-center gap-1">
-            <ThemeToggle />
-            <NotificationBell />
+            {location.pathname.startsWith('/sets') ? (
+              <>
+                <button onClick={() => handleNav('/songs')} className="flex h-10 w-10 items-center justify-center rounded-full text-white transition-colors hover:bg-white/[0.08]" aria-label="Search">
+                  <Search className="h-5 w-5" />
+                </button>
+                <button onClick={() => handleNav('/events')} className="flex h-10 w-10 items-center justify-center rounded-full text-white transition-colors hover:bg-white/[0.08]" aria-label="Create">
+                  <Plus className="h-6 w-6" />
+                </button>
+              </>
+            ) : (
+              <>
+                <NotificationBell />
+                <button onClick={() => handleNav('/messages')} className="flex h-10 w-10 items-center justify-center rounded-full text-white transition-colors hover:bg-white/[0.08]" aria-label="Messages">
+                  <MessageCircle className="h-6 w-6" />
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -712,7 +776,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
               onClick={() => onMobileOpenChange(false)}
             />
             <motion.aside
-              className="fixed inset-y-0 left-0 z-[70] w-[min(82vw,340px)] overflow-hidden touch-action-none bg-[#fbfaf6] text-gray-900 shadow-[24px_0_70px_-44px_rgba(15,23,42,0.24)] dark:bg-[#191919] dark:text-white dark:shadow-[24px_0_70px_-44px_rgba(0,0,0,0.8)] lg:hidden"
+              className="fixed inset-y-0 left-0 z-[70] w-[min(82vw,340px)] overflow-hidden touch-action-none bg-[#121212] text-white shadow-[24px_0_70px_-44px_rgba(0,0,0,0.9)] lg:hidden"
               style={{ overscrollBehaviorY: 'none' }}
               initial={{ x: '-100%' }}
               animate={{ x: 0 }}
@@ -842,57 +906,19 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
       <motion.aside
         animate={{ width: sidebarWidth }}
         transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-        className={`fixed left-0 top-0 z-40 hidden h-screen flex-col ${collapsed ? 'p-3' : 'p-4'} lg:flex`}
+        className="fixed bottom-[88px] left-0 top-[72px] z-40 hidden flex-col border-r border-white/[0.08] bg-[#050505] lg:flex"
         style={{ overflow: 'visible' }}
       >
         <div
-          className="flex h-full flex-col overflow-hidden rounded-[1.7rem] border border-slate-200/75 bg-white/96 shadow-[0_24px_60px_-44px_rgba(15,23,42,0.55),0_6px_22px_-18px_rgba(15,23,42,0.22),inset_0_1px_0_rgba(255,255,255,0.96)] dark:border-white/[0.08] dark:bg-[#151519]/96 dark:shadow-[0_26px_62px_-42px_rgba(0,0,0,0.92),inset_0_1px_0_rgba(255,255,255,0.08)]"
+          className="flex h-full flex-col overflow-hidden bg-[radial-gradient(circle_at_0%_0%,rgba(34,197,94,0.12),transparent_32%),linear-gradient(180deg,#07110b_0%,#050505_28%,#050505_100%)]"
           style={{
             WebkitBackdropFilter: 'blur(24px) saturate(145%)',
             backdropFilter: 'blur(24px) saturate(145%)',
           }}
         >
-          <div className={`${collapsed ? 'p-2.5' : 'p-3'}`}>
-            <button
-              type="button"
-              onClick={() => handleNav('/dashboard')}
-              className={`group flex w-full rounded-[1.35rem] border border-slate-200/75 bg-white text-left shadow-[0_14px_30px_-26px_rgba(15,23,42,0.48),0_1px_4px_rgba(15,23,42,0.035),inset_0_1px_0_rgba(255,255,255,0.95)] transition-all hover:-translate-y-0.5 hover:border-slate-300/80 dark:border-white/[0.08] dark:bg-white/[0.055] dark:hover:border-white/[0.14] dark:hover:bg-white/[0.075] ${
-                collapsed ? 'flex-col items-center justify-center gap-2 px-2 py-3' : 'items-center gap-3 px-3 py-3'
-              }`}
-              aria-label="Go to dashboard"
-            >
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[1.05rem] bg-slate-950 shadow-[0_14px_28px_-20px_rgba(15,23,42,0.85)] dark:bg-white/[0.11]">
-                <Music2 className="text-emerald-300" style={{ width: '19px', height: '19px' }} />
-              </span>
-
-              {!collapsed && (
-                <motion.span
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.16 }}
-                  className="min-w-0 flex-1"
-                >
-                  <span className="block truncate text-[14px] font-black leading-tight text-slate-950 dark:text-white">ServeSync</span>
-                  <span className="mt-0.5 block truncate text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 dark:text-white/42">Team Management</span>
-                </motion.span>
-              )}
-            </button>
-
-            <div className={`mt-2 flex ${collapsed ? 'justify-center' : 'justify-end'}`}>
-              <button
-                type="button"
-                onClick={() => onCollapsedChange(!collapsed)}
-                className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200/70 bg-white/80 text-slate-400 shadow-[0_8px_18px_-16px_rgba(15,23,42,0.45)] transition-all hover:-translate-y-0.5 hover:border-slate-300/80 hover:text-slate-700 dark:border-white/[0.08] dark:bg-white/[0.045] dark:text-white/46 dark:hover:border-white/[0.14] dark:hover:text-white"
-                aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              >
-                {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
-
-          <div className={`flex-1 overflow-y-auto ${collapsed ? 'px-2 pb-2 pt-1' : 'px-3 pb-3 pt-1'} scrollbar-thin`}>
+          <div className={`flex-1 overflow-y-auto ${collapsed ? 'px-2 pb-2 pt-5' : 'px-4 pb-3 pt-5'} scrollbar-thin`}>
             {!collapsed && (
-              <p className="px-2.5 pb-2 pt-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-white/36">Main</p>
+              <p className="px-2.5 pb-2 pt-1 text-[10px] font-black uppercase tracking-[0.16em] text-white/36">Main</p>
             )}
             {collapsed && <div className="pt-1" />}
 
@@ -900,13 +926,65 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
               {sidebarMainItems.map(item => renderNavItem(item, collapsed))}
             </div>
 
+            {!collapsed && (
+              <>
+                <div className="mt-5 border-t border-white/[0.08] pt-4">
+                  <div className="mb-2 flex items-center justify-between px-2.5">
+                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-white/36">Ministry Library</p>
+                    <Plus className="h-4 w-4 text-white/48" />
+                  </div>
+                  <div className="space-y-1.5">
+                    {desktopLibraryItems.map((entry) => (
+                      <button
+                        key={entry.title}
+                        onClick={() => handleNav('/leadership/team')}
+                        className="group flex w-full items-center gap-3 rounded-[0.7rem] px-2.5 py-1.5 text-left transition-colors hover:bg-white/[0.065]"
+                      >
+                        <span className={`h-10 w-10 shrink-0 overflow-hidden rounded-[0.35rem] bg-gradient-to-br ${entry.tone}`}>
+                          <span className="block h-full w-full bg-[radial-gradient(circle_at_28%_22%,rgba(255,255,255,0.30),transparent_28%)]" />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-[13px] font-bold leading-tight text-white">{entry.title}</span>
+                          <span className="mt-0.5 block truncate text-[11px] font-semibold leading-tight text-white/45">{entry.caption}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-4 border-t border-white/[0.08] pt-4">
+                  <div className="mb-2 flex items-center justify-between px-2.5">
+                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-white/36">My Shortcuts</p>
+                    <Plus className="h-4 w-4 text-white/48" />
+                  </div>
+                  <div className="space-y-1.5">
+                    {desktopShortcutItems.map((entry) => (
+                      <button
+                        key={entry.title}
+                        onClick={() => handleNav(entry.title === 'Liked Songs' ? '/songs' : '/sets')}
+                        className="group flex w-full items-center gap-3 rounded-[0.7rem] px-2.5 py-1.5 text-left transition-colors hover:bg-white/[0.065]"
+                      >
+                        <span className={`h-10 w-10 shrink-0 overflow-hidden rounded-[0.35rem] bg-gradient-to-br ${entry.tone}`}>
+                          <span className="block h-full w-full bg-[radial-gradient(circle_at_28%_22%,rgba(255,255,255,0.35),transparent_28%)]" />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-[13px] font-bold leading-tight text-white">{entry.title}</span>
+                          <span className="mt-0.5 block truncate text-[11px] font-semibold leading-tight text-white/45">{entry.caption}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+
             {sidebarManagementItems.length > 0 && (
               <div className="mt-5">
                 {!collapsed && (
                   <div className="mb-2 flex items-center gap-3 px-2.5">
-                    <span className="h-px flex-1 bg-slate-200/85 dark:bg-white/[0.08]" />
-                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-white/36">Management</p>
-                    <span className="h-px flex-1 bg-slate-200/85 dark:bg-white/[0.08]" />
+                    <span className="h-px flex-1 bg-white/[0.08]" />
+                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/36">Management</p>
+                    <span className="h-px flex-1 bg-white/[0.08]" />
                   </div>
                 )}
                 {collapsed && <div className="h-3" />}
@@ -917,37 +995,37 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
             )}
           </div>
 
-          <div className={`shrink-0 border-t border-slate-200/70 dark:border-white/[0.07] ${collapsed ? 'space-y-2 px-2 py-2.5' : 'space-y-2.5 p-3'}`}>
+          <div className={`shrink-0 border-t border-white/[0.07] ${collapsed ? 'space-y-2 px-2 py-2.5' : 'space-y-2.5 px-4 py-3'}`}>
             {!collapsed ? (
               <>
-                <div className="flex items-center justify-between rounded-[1.2rem] border border-slate-200/70 bg-slate-50/70 px-2 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.92)] dark:border-white/[0.07] dark:bg-white/[0.035]">
+                <div className="flex items-center justify-between rounded-[0.9rem] border border-white/[0.07] bg-white/[0.035] px-2 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
                   <ThemeToggle />
-                  <div className="h-5 w-px bg-slate-200 dark:bg-white/[0.08]" />
+                  <div className="h-5 w-px bg-white/[0.08]" />
                   <NotificationBell />
                 </div>
 
                 <button
                   onClick={() => navigate('/profile')}
-                  className="group flex w-full items-center gap-2.5 rounded-[1.2rem] border border-slate-200/70 bg-white px-2.5 py-2.5 text-left shadow-[0_12px_24px_-22px_rgba(15,23,42,0.42),0_1px_3px_rgba(15,23,42,0.035)] transition-all hover:-translate-y-0.5 hover:border-slate-300/80 dark:border-white/[0.08] dark:bg-white/[0.045] dark:hover:border-white/[0.14] dark:hover:bg-white/[0.075]"
+                  className="group flex w-full items-center gap-2.5 rounded-[0.9rem] border border-white/[0.08] bg-white/[0.045] px-2.5 py-2.5 text-left transition-all hover:-translate-y-0.5 hover:border-white/[0.14] hover:bg-white/[0.075]"
                 >
                   <Avatar
                     src={profile?.avatar_url}
                     firstName={profile?.first_name || '?'}
                     lastName={profile?.last_name}
                     size="sm"
-                    className="ring-1 ring-black/10 dark:ring-white/10"
+                    className="ring-1 ring-white/10"
                   />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[12px] font-black leading-tight text-slate-900 dark:text-white">
+                    <p className="truncate text-[12px] font-black leading-tight text-white">
                       {displayName || fullName || 'Profile'}
                     </p>
-                    <p className="mt-0.5 truncate text-[10px] font-semibold leading-tight text-slate-400 dark:text-white/40">{profile?.email}</p>
+                    <p className="mt-0.5 truncate text-[10px] font-semibold leading-tight text-white/40">{profile?.email}</p>
                   </div>
                 </button>
 
                 <button
                   onClick={signOut}
-                  className="flex h-10 w-full items-center gap-2 rounded-[1rem] px-3 text-left text-red-500 transition-colors hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-500/10"
+                  className="flex h-10 w-full items-center gap-2 rounded-[0.8rem] px-3 text-left text-red-300 transition-colors hover:bg-red-500/10"
                 >
                   <LogOut className="h-4 w-4 shrink-0" />
                   <span className="text-[12px] font-bold">Sign out</span>
@@ -956,19 +1034,19 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
             ) : (
               <>
                 <Tooltip label="Theme">
-                  <div className="flex w-full justify-center rounded-[1.05rem] border border-slate-200/70 bg-white/75 py-1.5 shadow-[0_10px_20px_-18px_rgba(15,23,42,0.45)] dark:border-white/[0.08] dark:bg-white/[0.045]">
+                  <div className="flex w-full justify-center rounded-[0.8rem] border border-white/[0.08] bg-white/[0.045] py-1.5">
                     <ThemeToggle />
                   </div>
                 </Tooltip>
                 <Tooltip label="Notifications">
-                  <div className="flex w-full justify-center rounded-[1.05rem] border border-slate-200/70 bg-white/75 py-1.5 shadow-[0_10px_20px_-18px_rgba(15,23,42,0.45)] dark:border-white/[0.08] dark:bg-white/[0.045]">
+                  <div className="flex w-full justify-center rounded-[0.8rem] border border-white/[0.08] bg-white/[0.045] py-1.5">
                     <NotificationBell />
                   </div>
                 </Tooltip>
                 <Tooltip label={displayName || fullName || 'Profile'}>
                   <button
                     onClick={() => navigate('/profile')}
-                    className="flex h-11 w-full items-center justify-center rounded-[1.05rem] border border-slate-200/70 bg-white/75 shadow-[0_10px_20px_-18px_rgba(15,23,42,0.45)] transition-colors hover:border-slate-300/80 dark:border-white/[0.08] dark:bg-white/[0.045] dark:hover:border-white/[0.14]"
+                    className="flex h-11 w-full items-center justify-center rounded-[0.8rem] border border-white/[0.08] bg-white/[0.045] transition-colors hover:border-white/[0.14]"
                   >
                     <Avatar src={profile?.avatar_url} firstName={profile?.first_name || '?'} lastName={profile?.last_name} size="sm" />
                   </button>
@@ -976,7 +1054,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
                 <Tooltip label="Sign out">
                   <button
                     onClick={signOut}
-                    className="flex h-11 w-full items-center justify-center rounded-[1.05rem] text-red-500 transition-colors hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-500/10"
+                    className="flex h-11 w-full items-center justify-center rounded-[0.8rem] text-red-300 transition-colors hover:bg-red-500/10"
                   >
                     <LogOut className="h-4 w-4" />
                   </button>
@@ -995,14 +1073,14 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
           style={{
             paddingBottom: useDockedMobileNav ? '0px' : 'max(0px, calc(env(safe-area-inset-bottom) - 6px))',
             paddingTop: useDockedMobileNav ? '0px' : '6px',
-            background: useDockedMobileNav ? 'color-mix(in srgb, var(--sidebar-bg) 96%, transparent)' : undefined,
-            WebkitBackdropFilter: useDockedMobileNav ? 'blur(18px) saturate(160%) contrast(104%)' : undefined,
-            backdropFilter: useDockedMobileNav ? 'blur(18px) saturate(160%) contrast(104%)' : undefined,
-            borderTop: useDockedMobileNav ? '1px solid var(--sidebar-border)' : undefined,
+            background: useDockedMobileNav ? 'rgba(5,5,5,0.96)' : 'linear-gradient(180deg, rgba(5,5,5,0), rgba(5,5,5,0.84) 34%, rgba(5,5,5,0.98))',
+            WebkitBackdropFilter: useDockedMobileNav ? 'blur(18px) saturate(160%) contrast(104%)' : 'blur(10px) saturate(120%)',
+            backdropFilter: useDockedMobileNav ? 'blur(18px) saturate(160%) contrast(104%)' : 'blur(10px) saturate(120%)',
+            borderTop: useDockedMobileNav ? '1px solid rgba(255,255,255,0.08)' : undefined,
             boxShadow: useDockedMobileNav ? '0 -18px 42px -34px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.08)' : undefined,
             transform: mobileNavTransform,
             filter: mobileOpen ? 'blur(1.25px) brightness(0.78)' : 'blur(0px) brightness(1)',
-            opacity: hideDockedMobileNav ? 0 : 1,
+            opacity: hideBottomMobileNav ? 0 : 1,
             pointerEvents: hideMobileChrome ? 'none' : undefined,
             transition: 'transform 360ms cubic-bezier(0.16, 1, 0.3, 1), opacity 180ms cubic-bezier(0.4, 0, 0.2, 1), filter 260ms cubic-bezier(0.22, 1, 0.36, 1)',
             willChange: 'transform, opacity',
@@ -1024,23 +1102,23 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
             className={`relative flex ${useDockedMobileNav ? 'justify-stretch px-0' : 'justify-center px-8'}`}
           >
             <nav
-              className={`pointer-events-auto relative flex ${useDockedMobileNav ? 'w-full items-start overflow-visible px-2 pt-2' : 'w-full max-w-[480px] items-center overflow-hidden bg-white/95 p-1.5 rounded-full dark:bg-[#17171a]'}`}
+              className={`pointer-events-auto relative flex ${useDockedMobileNav ? 'w-full items-start overflow-visible px-2 pt-2' : 'w-full max-w-[480px] items-center overflow-hidden bg-[#080808] p-1.5 rounded-full'}`}
               style={{
                 height: useDockedMobileNav ? 'calc(64px + env(safe-area-inset-bottom))' : undefined,
                 background: useDockedMobileNav ? 'transparent' : undefined,
                 WebkitBackdropFilter: useDockedMobileNav ? undefined : 'none',
                 backdropFilter: useDockedMobileNav ? undefined : 'none',
-                border: useDockedMobileNav ? undefined : '1px solid var(--nav-border)',
+                border: useDockedMobileNav ? undefined : '1px solid rgba(255,255,255,0.18)',
                 boxShadow: useDockedMobileNav
                   ? 'none'
-                  : '0 14px 30px -18px rgba(0,0,0,0.22), 0 2px 8px -5px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.28)',
+                  : '0 18px 44px -18px rgba(0,0,0,0.92), 0 8px 18px -10px rgba(0,0,0,0.78), inset 0 1px 0 rgba(255,255,255,0.16)',
                 paddingBottom: useDockedMobileNav ? 'env(safe-area-inset-bottom)' : undefined,
               }}
             >
               {!useDockedMobileNav && (
                 <>
-                  <span className="pointer-events-none absolute inset-0 rounded-full bg-[linear-gradient(180deg,rgba(255,255,255,0.12),rgba(255,255,255,0.03))] dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.012))]" />
-                  <span className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-white/38 to-transparent dark:via-white/10" />
+                  <span className="pointer-events-none absolute inset-0 rounded-full bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.015))]" />
+                  <span className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-white/26 to-transparent" />
                 </>
               )}
 
@@ -1277,6 +1355,6 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
           </motion.div>
         )}
       </AnimatePresence>
-    </>
+    </div>
   );
 }

@@ -275,12 +275,12 @@
 
   .mobile-layout-padding {
     padding-top: calc(3.5rem + env(safe-area-inset-top) + 1rem);
-    padding-bottom: calc(64px + env(safe-area-inset-bottom) + 1rem);
+    padding-bottom: calc(132px + env(safe-area-inset-bottom) + 1rem);
   }
 
   .wide-shell-spacing {
     padding-top: calc(3.5rem + env(safe-area-inset-top));
-    padding-bottom: calc(64px + env(safe-area-inset-bottom) + 1rem);
+    padding-bottom: calc(132px + env(safe-area-inset-bottom) + 1rem);
   }
 
   .page-loader-shell {
@@ -295,12 +295,12 @@
 
     .mobile-layout-padding {
       padding-top: 2rem;
-      padding-bottom: 2rem;
+      padding-bottom: 5.75rem;
     }
 
     .wide-shell-spacing {
-      padding-top: 0;
-      padding-bottom: 2rem;
+      padding-top: 72px;
+      padding-bottom: 5.75rem;
     }
 
     .page-loader-shell {

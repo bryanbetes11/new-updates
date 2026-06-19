@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, type CSSProperties, type WheelEvent as ReactWheelEvent } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { AlertCircle, CheckCircle2, ClipboardCheck, ListChecks, MessageCircle, UserCheck, Users } from 'lucide-react';
 import { Navigation } from './Navigation';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -20,6 +21,81 @@ const wheelContainmentSelectors = [
   '.chat-container',
   '.service-mode-overlay',
 ].join(',');
+
+function NowServiceBar({ hidden }: { hidden: boolean }) {
+  if (hidden) return null;
+
+  return (
+    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(64px+env(safe-area-inset-bottom)+0.35rem)] z-[48] px-3 lg:bottom-0 lg:px-2 lg:pb-2">
+      <div className="pointer-events-auto mx-auto grid h-[62px] max-w-[520px] grid-cols-[auto_1fr_auto_auto] items-center gap-3 rounded-[0.95rem] border border-white/[0.08] bg-[#050505]/96 px-3 text-white shadow-[0_18px_55px_-26px_rgba(0,0,0,0.9)] backdrop-blur-2xl lg:h-[88px] lg:max-w-none lg:grid-cols-[minmax(270px,0.76fr)_minmax(480px,1fr)_minmax(360px,0.84fr)] lg:rounded-[1rem] lg:px-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-[0.55rem] bg-[linear-gradient(135deg,#5a3b1c,#171717_52%,#0d2618)] ring-1 ring-white/[0.08] lg:h-14 lg:w-14">
+            <div className="h-full w-full bg-[radial-gradient(circle_at_28%_20%,rgba(245,158,11,0.56),transparent_28%),radial-gradient(circle_at_72%_70%,rgba(34,197,94,0.24),transparent_30%)]" />
+            <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-[#22c55e] ring-2 ring-[#050505]" />
+          </div>
+          <div className="min-w-0 lg:border-r lg:border-white/[0.08] lg:pr-5">
+            <p className="text-[9px] font-black uppercase tracking-[0.11em] text-[#22c55e] lg:text-[10px]">Live service</p>
+            <p className="mt-1 truncate text-[13px] font-black leading-tight text-white">Sunday Morning Service</p>
+            <p className="mt-0.5 hidden truncate text-[11px] font-semibold leading-tight text-white/48 sm:block">Main Auditorium · 9:00 AM</p>
+          </div>
+        </div>
+
+        <div className="hidden min-w-0 grid-cols-3 gap-2 lg:grid">
+          <div className="min-w-0 rounded-[0.65rem] bg-white/[0.07] px-3 py-2 ring-1 ring-white/[0.06]">
+            <div className="flex items-center gap-1.5 text-[#22c55e]">
+              <UserCheck className="h-3.5 w-3.5" />
+              <span className="text-[9px] font-black uppercase tracking-[0.13em]">Checked in</span>
+            </div>
+            <p className="mt-1 text-[18px] font-black leading-none text-white">8/12</p>
+          </div>
+          <div className="min-w-0 rounded-[0.65rem] bg-white/[0.07] px-3 py-2 ring-1 ring-white/[0.06]">
+            <div className="flex items-center gap-1.5 text-[#22c55e]">
+              <ListChecks className="h-3.5 w-3.5" />
+              <span className="text-[9px] font-black uppercase tracking-[0.13em]">Setlist</span>
+            </div>
+            <p className="mt-1 truncate text-[18px] font-black leading-none text-white">Ready</p>
+          </div>
+          <div className="min-w-0 rounded-[0.65rem] bg-white/[0.07] px-3 py-2 ring-1 ring-white/[0.06]">
+            <div className="flex items-center gap-1.5 text-[#fbbf24]">
+              <AlertCircle className="h-3.5 w-3.5" />
+              <span className="text-[9px] font-black uppercase tracking-[0.13em]">Open needs</span>
+            </div>
+            <p className="mt-1 text-[18px] font-black leading-none text-white">2</p>
+          </div>
+        </div>
+
+        <div className="hidden items-center justify-end gap-2 lg:flex">
+          <button className="inline-flex h-11 items-center gap-2 rounded-full bg-[#22c55e] px-4 text-[12px] font-black text-black shadow-[0_12px_28px_-14px_rgba(34,197,94,0.9)] transition-transform hover:scale-[1.03] active:scale-95" aria-label="Check in for this service">
+            <CheckCircle2 className="h-4 w-4" />
+            Check in
+          </button>
+          <button className="inline-flex h-11 items-center gap-2 rounded-full bg-white/[0.08] px-4 text-[12px] font-black text-white ring-1 ring-white/[0.08] transition-colors hover:bg-white/[0.12]" aria-label="View service set">
+            <ClipboardCheck className="h-4 w-4 text-[#22c55e]" />
+            View set
+          </button>
+          <button className="flex h-11 w-11 items-center justify-center rounded-full bg-white/[0.08] text-white ring-1 ring-white/[0.08] transition-colors hover:bg-white/[0.12]" aria-label="Open team chat">
+            <MessageCircle className="h-5 w-5" />
+          </button>
+          <button className="flex h-11 w-11 items-center justify-center rounded-full bg-white/[0.08] text-[#fbbf24] ring-1 ring-white/[0.08] transition-colors hover:bg-white/[0.12]" aria-label="Raise an open need">
+            <AlertCircle className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="hidden items-center gap-1 rounded-full bg-white/[0.07] px-2.5 py-1.5 text-[10px] font-black text-white ring-1 ring-white/[0.08] sm:flex lg:hidden">
+          <Users className="h-3.5 w-3.5 text-[#22c55e]" />
+          8/12
+        </div>
+        <button className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-[#22c55e] px-3 text-[11px] font-black text-black shadow-[0_12px_28px_-14px_rgba(34,197,94,0.9)] transition-transform hover:scale-[1.04] active:scale-95 max-[420px]:w-9 max-[420px]:justify-center max-[420px]:px-0 lg:hidden" aria-label="Check in for this service">
+          <CheckCircle2 className="h-4 w-4" />
+          <span className="max-[420px]:sr-only">Check in</span>
+        </button>
+        <button className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-white ring-1 ring-white/[0.08] transition-colors hover:bg-white/[0.12] lg:hidden" aria-label="Open team chat">
+          <MessageCircle className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function canScrollElementWithWheel(element: HTMLElement, deltaY: number) {
   const style = window.getComputedStyle(element);
@@ -290,7 +366,7 @@ export function Layout() {
   }, [location.pathname]);
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-[#050505]">
       {user && !staticHideNav && (
         <Navigation
           hideMobile={hideNavMobile}
@@ -325,7 +401,7 @@ export function Layout() {
               staticHideNav
                 ? ''
                 : isWideShellPage
-                  ? 'wide-shell-spacing bg-[#f6f4ef] dark:bg-[#121212]'
+                  ? 'wide-shell-spacing bg-[#050505]'
                   : 'px-4 sm:px-6 lg:px-8 mobile-layout-padding'
             }
           >
@@ -357,6 +433,9 @@ export function Layout() {
           </div>
         )}
       </motion.main>
+      {user && !staticHideNav && !isMessagesConversation && (
+        <NowServiceBar hidden={hideNavMobile || mobileChromeHidden || mobileOpen} />
+      )}
     </div>
   );
 }

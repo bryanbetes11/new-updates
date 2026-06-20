@@ -1,6 +1,6 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, type ReactNode } from 'react';
 
-type Theme = 'light' | 'dark';
+type Theme = 'dark';
 
 interface ThemeContextValue {
   theme: Theme;
@@ -8,47 +8,22 @@ interface ThemeContextValue {
 }
 
 const STORAGE_KEY = 'theme';
-const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-
-function getInitialTheme(): Theme {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === 'dark' || stored === 'light') return stored;
-  return mediaQuery.matches ? 'dark' : 'light';
-}
-
-const ThemeContext = createContext<ThemeContextValue>({ theme: 'light', toggle: () => {} });
+const ThemeContext = createContext<ThemeContextValue>({ theme: 'dark', toggle: () => {} });
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(getInitialTheme);
-
-  // Apply dark class to <html> whenever theme changes
   useEffect(() => {
     const root = document.documentElement;
-    root.classList.toggle('dark', theme === 'dark');
-  }, [theme]);
-
-  // Follow system preference changes — but only when the user hasn't set an override
-  useEffect(() => {
-    const handler = (e: MediaQueryListEvent) => {
-      if (!localStorage.getItem(STORAGE_KEY)) {
-        setTheme(e.matches ? 'dark' : 'light');
-      }
-    };
-    mediaQuery.addEventListener('change', handler);
-    return () => mediaQuery.removeEventListener('change', handler);
+    root.classList.add('dark');
+    localStorage.setItem(STORAGE_KEY, 'dark');
   }, []);
 
-  // Only write to localStorage (and lock in a preference) when the user explicitly toggles
   const toggle = () => {
-    setTheme(prev => {
-      const next = prev === 'dark' ? 'light' : 'dark';
-      localStorage.setItem(STORAGE_KEY, next);
-      return next;
-    });
+    document.documentElement.classList.add('dark');
+    localStorage.setItem(STORAGE_KEY, 'dark');
   };
 
   return (
-    <ThemeContext.Provider value={{ theme, toggle }}>
+    <ThemeContext.Provider value={{ theme: 'dark', toggle }}>
       {children}
     </ThemeContext.Provider>
   );

@@ -6,7 +6,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
 import { DatePicker } from '../components/DatePicker';
-import { ThemeToggle } from '../components/ThemeToggle';
 
 const inputClass = `w-full h-12 px-4 rounded-xl text-[14px]
   bg-gray-50 dark:bg-white/[0.05]
@@ -104,13 +103,6 @@ export function Onboarding() {
 
   return (
     <div className="min-h-screen bg-[#f5f5f7] dark:bg-[#0d0d0f] transition-colors duration-300">
-
-      {/* Theme toggle — fixed top-right */}
-      <div className="fixed top-4 right-4 z-30">
-        <div className="bg-white/90 dark:bg-white/[0.07] backdrop-blur-md rounded-xl border border-gray-200/70 dark:border-white/[0.09] shadow-sm transition-colors duration-300">
-          <ThemeToggle />
-        </div>
-      </div>
 
       <div className="flex justify-center min-h-screen px-6 py-16">
         <div className="w-full max-w-[420px]">

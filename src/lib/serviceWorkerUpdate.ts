@@ -9,6 +9,11 @@ let installedAppVersion = readStoredInstalledAppVersion();
 let userRequestedUpdate = false;
 let hasRegisteredControllerChangeHandler = false;
 
+function isLocalPreviewHost() {
+  if (typeof window === 'undefined') return false;
+  return ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
+}
+
 function readStoredInstalledAppVersion() {
   if (typeof window === 'undefined') return null;
   return window.localStorage.getItem(INSTALLED_APP_VERSION_KEY);
@@ -89,7 +94,7 @@ export function applyPendingAppUpdate() {
 
 export function registerAppServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
-  if (import.meta.env.DEV) {
+  if (import.meta.env.DEV || isLocalPreviewHost()) {
     window.addEventListener('load', async () => {
       try {
         const registrations = await navigator.serviceWorker.getRegistrations();
@@ -98,8 +103,13 @@ export function registerAppServiceWorker() {
             .filter(registration => registration.scope.startsWith(window.location.origin))
             .map(registration => registration.unregister()),
         );
+
+        if ('caches' in window) {
+          const cacheKeys = await window.caches.keys();
+          await Promise.all(cacheKeys.map(cacheKey => window.caches.delete(cacheKey)));
+        }
       } catch (error) {
-        console.warn('Failed to clean up development service workers:', error);
+        console.warn('Failed to clean up local preview service workers:', error);
       }
     });
     return;

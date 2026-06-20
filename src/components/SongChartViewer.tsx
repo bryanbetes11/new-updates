@@ -2,10 +2,9 @@ import { useLayoutEffect, useRef } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowDown, ArrowUp, Bold, Captions, Check, ChevronLeft, ChevronRight, Copy, Edit3, Gauge, Italic, ListOrdered, Lock, Minus, Moon, Music2, Pause, Play, Plus, RotateCcw, Save, Settings2, StickyNote, Sun, Trash2, Users, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Bold, Captions, Check, ChevronLeft, ChevronRight, Copy, Edit3, Gauge, Italic, ListOrdered, Lock, Minus, Music2, Pause, Play, Plus, RotateCcw, Save, Settings2, StickyNote, Trash2, Users, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { ChordProLine, detectChordProKey, formatChordProForPlainEditor, getKeyTransposeOffset, parseChordPro, parseChordProMetadata, plainEditorSectionsToChordPro, plainEditorToChordPro, transposeChordPro, transposeKey } from '../lib/chordPro';
-import { useTheme } from '../contexts/ThemeContext';
 
 const SECTION_TONES = [
   {
@@ -526,7 +525,6 @@ export function SongChartViewer({
   onDisplayKeyChange,
   footerNavigation,
 }: SongChartViewerProps) {
-  const { theme, toggle: toggleTheme } = useTheme();
   const initialEditorState = useMemo(() => getInitialEditorState(draftStorageId || songId, songId, chordproText), []); // eslint-disable-line react-hooks/exhaustive-deps
   const initialMetadata = parseChordProMetadata(chordproText ?? '');
   const initialDetectedKey = detectChordProKey(chordproText ?? '', initialMetadata.key || songKey || '');
@@ -1369,25 +1367,7 @@ export function SongChartViewer({
               exit={{ height: 0, opacity: 0, y: -8, scale: 0.98, filter: 'blur(10px)' }}
               transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
             >
-              <div className="grid gap-2 p-2 sm:grid-cols-2 xl:grid-cols-5">
-                <div className="grid gap-1.5 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-2 shadow-sm shadow-slate-500/5 dark:border-white/10 dark:bg-white/[0.055]">
-                  <span className="flex items-center justify-between text-[12px] font-black uppercase tracking-[0.16em] text-slate-900 dark:text-white">
-                    Appearance
-                    <span className="rounded-full bg-white/80 px-2 py-0.5 font-mono text-[11px] capitalize text-slate-600 ring-1 ring-slate-200/80 dark:bg-white/[0.07] dark:text-white/70 dark:ring-white/10">{theme}</span>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={toggleTheme}
-                    className="relative inline-flex h-10 items-center justify-center gap-2 rounded-full bg-white px-3 text-xs font-black text-slate-700 ring-1 ring-black/[0.06] transition active:scale-[0.97] dark:bg-white/[0.08] dark:text-white/75 dark:ring-white/[0.08]"
-                    aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-                  >
-                    <span className="relative flex h-4 w-4 items-center justify-center">
-                      <Sun className={`absolute h-4 w-4 transition-all duration-300 ${theme === 'dark' ? 'scale-0 rotate-90 opacity-0' : 'scale-100 rotate-0 opacity-100'}`} />
-                      <Moon className={`absolute h-4 w-4 transition-all duration-300 ${theme === 'dark' ? 'scale-100 rotate-0 opacity-100' : 'scale-0 -rotate-90 opacity-0'}`} />
-                    </span>
-                    {theme === 'dark' ? 'Use light' : 'Use dark'}
-                  </button>
-                </div>
+              <div className="grid gap-2 p-2 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="grid gap-1.5 rounded-2xl border border-emerald-200/80 bg-emerald-50/70 p-2 shadow-sm shadow-emerald-500/5 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:shadow-emerald-950/10">
                   <span className="flex items-center justify-between text-[12px] font-black uppercase tracking-[0.16em] text-emerald-900 dark:text-emerald-100">
                     Auto Scroll

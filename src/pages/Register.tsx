@@ -6,7 +6,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
 import { DatePicker } from '../components/DatePicker';
-import { ThemeToggle } from '../components/ThemeToggle';
 import { useSmartBack } from '../lib/navigationHistory';
 
 const inputClass = `w-full h-12 px-4 rounded-xl text-[14px]
@@ -90,13 +89,6 @@ export function Register() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back
         </button>
-      </div>
-
-      {/* Theme toggle — fixed top-right */}
-      <div className="fixed top-4 right-4 z-30">
-        <div className="bg-white/90 dark:bg-white/[0.07] backdrop-blur-md rounded-xl border border-gray-200/70 dark:border-white/[0.09] shadow-sm transition-colors duration-300">
-          <ThemeToggle />
-        </div>
       </div>
 
       <div className="flex items-center justify-center min-h-screen px-6 py-20">

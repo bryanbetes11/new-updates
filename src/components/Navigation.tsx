@@ -35,7 +35,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useUnreadCounts } from '../hooks/useUnreadCounts';
 import { NotificationBell } from './NotificationBell';
-import { ThemeToggle } from './ThemeToggle';
 import { Avatar } from './Avatar';
 import { Modal } from './Modal';
 import { PushNotificationSetting } from './PushNotificationSetting';
@@ -1025,18 +1024,6 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
                   <ChevronRight className="h-4 w-4 text-white/28 transition-colors group-hover:text-white/72" />
                 </button>
 
-                <div className="mt-1 flex items-center justify-between rounded-[0.7rem] px-3 py-2.5">
-                  <span className="flex items-center gap-3">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-[0.65rem] bg-white/[0.08] text-white/70">
-                      <Settings className="h-[18px] w-[18px]" />
-                    </span>
-                    <span>
-                      <span className="block text-[13px] font-black text-white">Appearance</span>
-                      <span className="mt-0.5 block text-[11px] font-semibold text-white/42">Theme preference</span>
-                    </span>
-                  </span>
-                  <ThemeToggle />
-                </div>
               </div>
 
               <div className="border-t border-white/[0.08] p-2">

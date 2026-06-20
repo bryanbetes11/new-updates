@@ -5,8 +5,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { useTheme } from '../contexts/ThemeContext';
-import { ThemeToggle } from '../components/ThemeToggle';
 import { isPasswordRecoveryUrl, recoveryRedirectPath } from '../lib/authRedirect';
 
 export function Login() {
@@ -21,14 +19,13 @@ export function Login() {
   const [switchingAccountId, setSwitchingAccountId] = useState<string | null>(null);
   const { signIn, user, savedAccounts, switchAccount, forgetSavedAccount } = useAuth();
   const { toast } = useToast();
-  const { theme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const isRecoveryLink = isPasswordRecoveryUrl(location.search, location.hash);
   const params = new URLSearchParams(location.search);
   const redirectTo = params.get('redirect') || '/dashboard';
   const prefillEmail = params.get('email') || '';
-  const isDark = theme === 'dark';
+  const isDark = true;
 
   useEffect(() => {
     if (isRecoveryLink) {
@@ -91,19 +88,6 @@ export function Login() {
 
   return (
     <div className="min-h-screen flex overflow-x-hidden bg-[#f5f5f7] dark:bg-[#0d0d0f] transition-colors duration-300">
-
-      {/* Theme toggle — fixed top-right, always visible */}
-      <div
-        className="fixed z-30"
-        style={{
-          top: 'calc(env(safe-area-inset-top) + 1rem)',
-          right: 'max(1rem, calc(env(safe-area-inset-right) + 1rem))',
-        }}
-      >
-        <div className="bg-white/90 dark:bg-white/[0.07] backdrop-blur-md rounded-xl border border-gray-200/70 dark:border-white/[0.09] shadow-sm transition-colors duration-300">
-          <ThemeToggle />
-        </div>
-      </div>
 
       {/* ── LEFT PANEL (desktop only) ────────────────────── */}
       <div

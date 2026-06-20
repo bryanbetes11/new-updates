@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
@@ -66,8 +66,12 @@ function PasswordRecoveryRedirect() {
 function ServiceModeResumeRedirect() {
   const location = useLocation();
   const navigate = useNavigate();
+  const hasTriedServiceModeResume = useRef(false);
 
   useEffect(() => {
+    if (hasTriedServiceModeResume.current) return;
+    hasTriedServiceModeResume.current = true;
+
     const restoreServiceMode = () => {
       const activeMode = getActiveServiceMode();
       if (!activeMode) return;
@@ -85,18 +89,6 @@ function ServiceModeResumeRedirect() {
     };
 
     restoreServiceMode();
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') restoreServiceMode();
-    };
-
-    window.addEventListener('pageshow', restoreServiceMode);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      window.removeEventListener('pageshow', restoreServiceMode);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
   }, [location.pathname, location.search, navigate]);
 
   return null;

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type CSSProperties, type WheelEvent as ReactWheelEvent } from 'react';
+import { useState, useEffect, type CSSProperties, type WheelEvent as ReactWheelEvent } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Navigation } from './Navigation';
@@ -47,10 +47,7 @@ export function Layout() {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [mobileChromeHidden, setMobileChromeHidden] = useState(false);
-  const lastScrollYRef = useRef(0);
-  const revealDistanceRef = useRef(0);
-  const scrollTickingRef = useRef(false);
+  const mobileChromeHidden = false;
 
   const staticHideNav = ['/', '/login', '/register', '/onboarding', '/reset-password', '/create-church'].includes(location.pathname)
     || /^\/invite\/[^/]+$/.test(location.pathname);
@@ -103,53 +100,6 @@ export function Layout() {
       document.body.classList.remove('allow-native-pull-refresh');
     };
   }, [shouldAllowNativePullRefresh]);
-
-  useEffect(() => {
-    if (staticHideNav || isDashboardPage || isMessagesConversation || mobileOpen) {
-      setMobileChromeHidden(false);
-      return;
-    }
-
-    setMobileChromeHidden(false);
-    lastScrollYRef.current = Math.max(0, window.scrollY || document.documentElement.scrollTop || 0);
-    revealDistanceRef.current = 0;
-
-    const updateMobileChrome = () => {
-      scrollTickingRef.current = false;
-
-      const currentY = Math.max(0, window.scrollY || document.documentElement.scrollTop || 0);
-      const delta = currentY - lastScrollYRef.current;
-      const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-
-      if (currentY <= 84 || maxScroll < 260) {
-        revealDistanceRef.current = 0;
-        setMobileChromeHidden(false);
-      } else if (delta > 7) {
-        revealDistanceRef.current = 0;
-        setMobileChromeHidden(true);
-      } else if (delta < -7) {
-        revealDistanceRef.current += Math.abs(delta);
-        if (revealDistanceRef.current >= 36) setMobileChromeHidden(false);
-      }
-
-      lastScrollYRef.current = currentY;
-    };
-
-    const handleScroll = () => {
-      if (scrollTickingRef.current) return;
-      scrollTickingRef.current = true;
-      window.requestAnimationFrame(updateMobileChrome);
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    window.addEventListener('resize', handleScroll, { passive: true });
-
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-      window.removeEventListener('resize', handleScroll);
-      scrollTickingRef.current = false;
-    };
-  }, [staticHideNav, isMessagesConversation, mobileOpen, location.pathname]);
 
   useEffect(() => {
     const clampHorizontalScroll = () => {

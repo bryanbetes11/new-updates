@@ -147,17 +147,6 @@ export function registerAppServiceWorker() {
         hasRegisteredControllerChangeHandler = true;
       }
 
-      const triggerUpdateCheck = () => {
-        registration.update().catch(error => {
-          console.warn('Service Worker update check failed:', error);
-        });
-      };
-
-      window.addEventListener('focus', triggerUpdateCheck);
-      document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') triggerUpdateCheck();
-      });
-
     } catch (error) {
       console.error('Service Worker registration failed:', error);
     }

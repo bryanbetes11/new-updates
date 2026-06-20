@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { format, parseISO, startOfDay, subWeeks, previousSunday, addDays, subDays, differenceInDays, eachDayOfInterval } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { motion } from 'framer-motion';
-import { Calendar, Plus, Search, Filter, Users, Trash2, CalendarOff, AlertCircle, Clock, X, PartyPopper, Heart, Sparkles } from 'lucide-react';
+import { Calendar, Plus, Search, Filter, Users, Trash2, CalendarOff, AlertCircle, Clock, X, PartyPopper, Heart, Sparkles, List } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -17,6 +17,7 @@ import { formatTime12Hour } from '../lib/timeFormat';
 import { withRequestTimeout } from '../lib/requestTimeout';
 import { describeSetlistReviewAge, getSetlistPendingMessage } from '../lib/setlistReviewAge';
 import { EventArtwork } from '../components/EventArtwork';
+import { CalendarGrid } from '../components/CalendarGrid';
 import type { Event } from '../types';
 
 const eventTypes = ['Sunday Service', 'Prayer Meeting', 'LGTF (Midweek)', 'Rehearsals', 'Online Devotion', 'Equipping', 'Revamp Session', 'Youth Recharge', 'Custom'];
@@ -818,6 +819,10 @@ export function Events() {
   const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>(() => {
     const s = localStorage.getItem('eventsActiveTab'); return (s === 'upcoming' || s === 'past') ? s : 'upcoming';
   });
+  const [desktopView, setDesktopView] = useState<'list' | 'calendar'>(() => {
+    const storedView = sessionStorage.getItem('eventsDesktopView');
+    return storedView === 'calendar' ? 'calendar' : 'list';
+  });
   const [form, setForm] = useState<EventFormState>(() => createEmptyEventForm());
   const [customName, setCustomName] = useState('');
   const [sundayServices, setSundayServices] = useState<Event[]>([]);
@@ -970,6 +975,7 @@ export function Events() {
     navigate(location.pathname, { replace: true, state: null });
   }, [location.key]);
   useEffect(() => { localStorage.setItem('eventsActiveTab', activeTab); }, [activeTab]);
+  useEffect(() => { sessionStorage.setItem('eventsDesktopView', desktopView); }, [desktopView]);
 
   const openCreateEvent = (eventDate = '') => {
     setForm(createEmptyEventForm(eventDate));
@@ -1128,6 +1134,12 @@ export function Events() {
     const matchTab = activeTab === 'upcoming' ? parseISO(e.event_date) >= today : parseISO(e.event_date) < today;
     return matchSearch && matchType && matchTab;
   });
+  const calendarEvents = events.filter(e => {
+    const matchSearch = !search || e.title.toLowerCase().includes(search.toLowerCase());
+    const matchType = !typeFilter || e.event_type === typeFilter;
+    return matchSearch && matchType;
+  });
+  const displayEvents = desktopView === 'calendar' ? calendarEvents : filtered;
 
   if (loading) return <div className="page-container"><EventsSkeleton /></div>;
 
@@ -1153,6 +1165,8 @@ export function Events() {
                   key={tab}
                   onClick={() => setActiveTab(tab)}
                   className={`relative z-10 inline-flex h-9 shrink-0 touch-manipulation items-center justify-center gap-2 rounded-full px-4 text-[12px] font-black transition-colors ${
+                    desktopView === 'calendar' ? 'lg:hidden' : ''
+                  } ${
                     active
                       ? 'bg-[#22c55e] text-black'
                       : 'bg-white/[0.10] text-white hover:bg-white/[0.16]'
@@ -1169,6 +1183,14 @@ export function Events() {
                 </button>
               );
             })}
+            <span
+              className={`hidden h-9 shrink-0 items-center justify-center gap-2 rounded-full bg-[#22c55e] px-4 text-[12px] font-black text-black ${
+                desktopView === 'calendar' ? 'lg:inline-flex' : ''
+              }`}
+            >
+              All events
+              <span className="rounded-md bg-black/15 px-1.5 py-0.5 text-[11px] font-black text-black">{calendarEvents.length}</span>
+            </span>
             {isLeader && (
               <button
                 onClick={() => openCreateEvent()}
@@ -1203,6 +1225,30 @@ export function Events() {
               className="sm:w-48"
               icon={<Filter className="h-4 w-4" />}
             />
+            <div className="hidden shrink-0 items-center gap-1 rounded-[0.7rem] bg-white/[0.07] p-1 lg:flex">
+              {([
+                { value: 'list' as const, label: 'List', icon: List },
+                { value: 'calendar' as const, label: 'Calendar', icon: Calendar },
+              ]).map(option => {
+                const Icon = option.icon;
+                const active = desktopView === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setDesktopView(option.value)}
+                    className={`inline-flex h-9 items-center gap-2 rounded-[0.55rem] px-3 text-[12px] font-black transition-colors ${
+                      active
+                        ? 'bg-[#22c55e] text-black'
+                        : 'text-white/58 hover:bg-white/[0.08] hover:text-white'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
           {(upcomingEvents.length === 0 || approvedLeaveToday > 0) && (
             <div className="hidden rounded-[0.75rem] bg-white/[0.045] px-3 py-2 text-[12px] font-semibold text-white/62 sm:block">
@@ -1217,7 +1263,7 @@ export function Events() {
         </motion.div>
         {/* ── Content ── */}
         <div>
-        {filtered.length === 0 ? (
+        {displayEvents.length === 0 ? (
           <EmptyState
             icon={<Calendar className="h-8 w-8" />}
             title="No events found"
@@ -1226,16 +1272,30 @@ export function Events() {
           />
         ) : (
           <>
-            <motion.div {...fadeUp(0.1)} className="hidden lg:block">
-              <EventDesktopCardGroups
-                events={filtered}
-                calendarEntries={calendarEntries}
-                songLeaderMap={songLeaderMap}
-                setlistInfoMap={setlistInfoMap}
-                onEventClick={id => navigate(`/events/${id}`)}
-                showPast={activeTab === 'past'}
-              />
-            </motion.div>
+            {desktopView === 'calendar' ? (
+              <motion.div {...fadeUp(0.1)} className="hidden lg:block">
+                <CalendarGrid
+                  events={calendarEvents}
+                  calendarEntries={calendarEntries}
+                  songLeaderMap={songLeaderMap}
+                  setlistInfoMap={setlistInfoMap}
+                  onEventClick={id => navigate(`/events/${id}`)}
+                  onCreateEvent={isLeader ? openCreateEvent : undefined}
+                  onEventDateChange={isLeader ? handleEventDateChange : undefined}
+                />
+              </motion.div>
+            ) : (
+              <motion.div {...fadeUp(0.1)} className="hidden lg:block">
+                <EventDesktopCardGroups
+                  events={filtered}
+                  calendarEntries={calendarEntries}
+                  songLeaderMap={songLeaderMap}
+                  setlistInfoMap={setlistInfoMap}
+                  onEventClick={id => navigate(`/events/${id}`)}
+                  showPast={activeTab === 'past'}
+                />
+              </motion.div>
+            )}
             <div className="touch-action-pan-y lg:hidden">
               <EventList events={filtered} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={id => navigate(`/events/${id}`)} showPast={activeTab === 'past'} animateItems={false} />
             </div>

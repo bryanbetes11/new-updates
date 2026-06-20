@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
   startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval,
-  format, isSameMonth, isToday, addMonths, subMonths, parseISO, differenceInDays
+  format, isSameMonth, isToday, addMonths, subMonths, parseISO, differenceInDays, startOfDay
 } from 'date-fns';
 import { ChevronLeft, ChevronRight, Cake, CalendarOff, GripVertical } from 'lucide-react';
 import type { Event } from '../types';
@@ -51,6 +51,7 @@ export function CalendarGrid({ events, calendarEntries, songLeaderMap, setlistSt
   const calStart = startOfWeek(monthStart);
   const calEnd = endOfWeek(monthEnd);
   const days = eachDayOfInterval({ start: calStart, end: calEnd });
+  const calendarToday = startOfDay(new Date());
 
   const getEventsForDay = (day: Date) => {
     const dateStr = format(day, 'yyyy-MM-dd');
@@ -94,28 +95,36 @@ export function CalendarGrid({ events, calendarEntries, songLeaderMap, setlistSt
   }, [events, onEventDateChange]);
 
   return (
-    <div className="card overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-white/[0.06]">
+    <div className="overflow-hidden rounded-[0.9rem] border border-white/[0.08] bg-[#121212] shadow-[0_24px_72px_-60px_rgba(0,0,0,0.95)]">
+      <div className="flex items-center justify-between border-b border-white/[0.08] px-5 py-4">
         <button
           onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-          className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          className="rounded-full p-2 text-white/58 transition-colors hover:bg-white/[0.08] hover:text-white"
+          aria-label="Previous month"
         >
-          <ChevronLeft className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+          <ChevronLeft className="h-5 w-5" />
         </button>
-        <h2 className="text-base font-semibold text-gray-900 dark:text-white">
-          {format(currentMonth, 'MMMM yyyy')}
-        </h2>
+        <div className="text-center">
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#22c55e]">Calendar view</p>
+          <h2 className="mt-1 text-[20px] font-black leading-none text-white" style={{ letterSpacing: '-0.025em' }}>
+            {format(currentMonth, 'MMMM yyyy')}
+          </h2>
+          {onEventDateChange && (
+            <p className="mt-1 text-[11px] font-semibold text-white/40">Drag an event to reschedule it</p>
+          )}
+        </div>
         <button
           onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-          className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          className="rounded-full p-2 text-white/58 transition-colors hover:bg-white/[0.08] hover:text-white"
+          aria-label="Next month"
         >
-          <ChevronRight className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+          <ChevronRight className="h-5 w-5" />
         </button>
       </div>
 
       <div className="grid grid-cols-7">
         {WEEKDAYS.map(day => (
-          <div key={day} className="px-2 py-2.5 text-center text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider border-b border-gray-100 dark:border-white/[0.06]">
+          <div key={day} className="border-b border-white/[0.08] px-2 py-3 text-center text-[10px] font-black uppercase tracking-[0.16em] text-white/36">
             {day}
           </div>
         ))}
@@ -133,11 +142,11 @@ export function CalendarGrid({ events, calendarEntries, songLeaderMap, setlistSt
           return (
             <div
               key={idx}
-              className={`min-h-[100px] border-b border-r border-gray-100 dark:border-white/[0.06] p-1.5 transition-colors ${
-                !inMonth ? 'bg-gray-50/50 dark:bg-[#18171a]' : 'bg-white dark:bg-[#1c1b1e]'
+              className={`min-h-[128px] border-b border-r border-white/[0.06] p-2 transition-colors ${
+                !inMonth ? 'bg-black/20' : 'bg-[#161616]'
               } ${idx % 7 === 0 ? 'border-l-0' : ''} ${
-                onCreateEvent && inMonth ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-[#222124]' : ''
-              } ${isDragOver ? 'ring-2 ring-inset ring-brand-400 bg-brand-50/50 dark:bg-brand-900/20' : ''}`}
+                onCreateEvent && inMonth ? 'cursor-pointer hover:bg-[#1f1f1f]' : ''
+              } ${isDragOver ? 'bg-[#12331f] ring-2 ring-inset ring-[#22c55e]' : ''}`}
               onClick={() => {
                 if (onCreateEvent && inMonth) onCreateEvent(dateStr);
               }}
@@ -148,10 +157,10 @@ export function CalendarGrid({ events, calendarEntries, songLeaderMap, setlistSt
               <div className="flex items-center justify-between mb-1">
                 <span className={`inline-flex items-center justify-center h-6 w-6 rounded-full text-xs font-medium ${
                   today
-                    ? 'bg-brand-600 text-white'
+                    ? 'bg-[#22c55e] text-black'
                     : inMonth
-                      ? 'text-gray-900 dark:text-gray-100'
-                      : 'text-gray-300 dark:text-gray-600'
+                      ? 'text-white'
+                      : 'text-white/22'
                 }`}>
                   {format(day, 'd')}
                 </span>
@@ -162,6 +171,7 @@ export function CalendarGrid({ events, calendarEntries, songLeaderMap, setlistSt
                   const songLeader = songLeaderMap[event.id];
                   const setlistInfo = setlistInfoMap?.[event.id] || (setlistStatusMap?.[event.id] ? { status: setlistStatusMap[event.id], created_at: '', submitted_at: null } : undefined);
                   const hasApprovedSetlist = setlistInfo?.status === 'approved';
+                  const isPastEvent = parseISO(event.event_date) < calendarToday;
 
                   const now = new Date();
                   const proposalDueDate = event.proposal_due_date ? parseISO(event.proposal_due_date) : null;
@@ -181,15 +191,21 @@ export function CalendarGrid({ events, calendarEntries, songLeaderMap, setlistSt
                       draggable={canDrag}
                       onDragStart={canDrag ? (e) => handleDragStart(e, event.id) : undefined}
                       onClick={(e) => { e.stopPropagation(); onEventClick(event.id); }}
-                      className={`group w-full text-left px-1.5 py-0.5 rounded-md text-[11px] font-medium truncate transition-colors bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-900/50 ${
+                      className={`group w-full rounded-md px-1.5 py-1 text-left text-[11px] font-bold transition-colors ${
+                        isPastEvent
+                          ? 'bg-white/[0.035] text-white/30 hover:bg-white/[0.055] hover:text-white/42'
+                          : 'bg-white/[0.08] text-white/82 hover:bg-white/[0.13]'
+                      } ${
                         canDrag ? 'cursor-grab active:cursor-grabbing' : ''
                       }`}
+                      title={isPastEvent ? `${songLeader || event.title} (past event)` : songLeader || event.title}
                     >
-                      {canDrag && <GripVertical className="inline h-3 w-3 mr-0.5 opacity-0 group-hover:opacity-50 -ml-0.5 align-text-bottom" />}
+                      {canDrag && <GripVertical className={`inline h-3 w-3 mr-0.5 opacity-0 group-hover:opacity-50 -ml-0.5 align-text-bottom ${isPastEvent ? 'text-white/30' : ''}`} />}
                       {songLeader || event.title}
                       {(hasApprovedSetlist || showDueIndicator) && (
                         <span
                           className={`inline-block ml-1 h-1.5 w-1.5 rounded-full ${
+                            isPastEvent ? 'bg-white/24' :
                             hasApprovedSetlist && !wasSubmittedLate ? 'bg-green-500' :
                             wasSubmittedLate ? 'bg-green-500' :
                             isOverdue ? 'bg-red-500' : 'bg-amber-500'
@@ -207,10 +223,10 @@ export function CalendarGrid({ events, calendarEntries, songLeaderMap, setlistSt
                 {dayEntries.slice(0, 2).map((entry, i) => (
                   <div
                     key={i}
-                    className={`flex items-center gap-0.5 px-1 py-0.5 rounded-md text-[10px] truncate ${
+                    className={`flex items-center gap-0.5 truncate rounded-md px-1 py-0.5 text-[10px] font-semibold ${
                       entry.type === 'birthday'
-                        ? 'bg-pink-50 dark:bg-pink-900/20 text-pink-600 dark:text-pink-400'
-                        : 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400'
+                        ? 'bg-pink-500/16 text-pink-200'
+                        : 'bg-orange-500/16 text-orange-200'
                     }`}
                   >
                     {entry.type === 'birthday' ? <Cake className="h-2.5 w-2.5 shrink-0" /> : <CalendarOff className="h-2.5 w-2.5 shrink-0" />}
@@ -218,7 +234,7 @@ export function CalendarGrid({ events, calendarEntries, songLeaderMap, setlistSt
                   </div>
                 ))}
                 {dayEntries.length > 2 && (
-                  <span className="text-[10px] text-gray-400 px-1">+{dayEntries.length - 2} more</span>
+                  <span className="px-1 text-[10px] font-semibold text-white/36">+{dayEntries.length - 2} more</span>
                 )}
               </div>
             </div>

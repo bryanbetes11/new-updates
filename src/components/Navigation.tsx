@@ -79,9 +79,7 @@ interface NavItem {
 const SongsNavIcon: NavIcon = ({ className, style }) => <BookOpen className={className} style={style} />;
 const VideosNavIcon: NavIcon = ({ className, style }) => <Video className={className} style={style} />;
 const SetsNavIcon: NavIcon = ({ className, style }) => <ListChecks className={className} style={style} />;
-const SearchNavIcon: NavIcon = ({ className, style }) => <Search className={className} style={style} />;
 const LibraryNavIcon: NavIcon = ({ className, style }) => <Layers3 className={className} style={style} />;
-const CreateNavIcon: NavIcon = ({ className, style }) => <Plus className={className} style={style} />;
 const globalSearchTypeMeta: Record<GlobalSearchKind, { label: string; icon: LucideIcon; tone: string }> = {
   event: { label: 'Event', icon: Calendar, tone: 'text-emerald-300 bg-emerald-500/14' },
   song: { label: 'Song', icon: Music2, tone: 'text-sky-300 bg-sky-500/14' },
@@ -92,9 +90,9 @@ const globalSearchTypeMeta: Record<GlobalSearchKind, { label: string; icon: Luci
 
 const mobileNavItems: NavItem[] = [
   { path: '/dashboard', label: 'Home', icon: HomeIcon, exact: true },
-  { path: '/songs', label: 'Search', icon: SearchNavIcon },
-  { path: '/sets', label: 'Your Library', icon: LibraryNavIcon },
-  { path: '/events', label: 'Create', icon: CreateNavIcon, badgeKey: 'events', badgeColor: 'red' },
+  { path: '/events', label: 'Events', icon: CalendarIcon, badgeKey: 'events', badgeColor: 'red' },
+  { path: '/announcements', label: 'News', icon: NewsIcon, badgeKey: 'announcements', badgeColor: 'blue' },
+  { path: '/library', label: 'Library', icon: LibraryNavIcon },
 ];
 
 const sidebarMainItems: NavItem[] = [
@@ -209,6 +207,9 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
   const mobileSettingsScrollTopRef = useRef(0);
 
   const isActive = useCallback((item: NavItem) => {
+    if (item.path === '/library') {
+      return ['/library', '/songs', '/sets'].some(p => location.pathname.startsWith(p));
+    }
     if (item.path === '/more') {
       return ['/more', '/profile', '/notifications'].some(p => location.pathname.startsWith(p));
     }
@@ -489,12 +490,12 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
   const mobileMenuTranslateX = mobileOpen ? 'translateX(min(82vw, 340px))' : 'translateX(0)';
   const mobileNavTransform = `${mobileMenuTranslateX} ${hideBottomMobileNav ? 'translateY(calc(100% + 10px))' : 'translateY(0)'}`;
   const mobileHeaderTransform = mobileMenuTranslateX;
-  const mobileTitle = location.pathname.startsWith('/sets')
-    ? 'Your Library'
-    : location.pathname.startsWith('/songs')
-      ? 'Search'
-      : location.pathname.startsWith('/events')
-        ? 'Create'
+  const mobileTitle = location.pathname.startsWith('/events')
+    ? 'Events'
+    : location.pathname.startsWith('/announcements')
+      ? 'News'
+      : ['/library', '/songs', '/sets'].some(path => location.pathname.startsWith(path))
+        ? 'Library'
         : 'ServeSync';
   const desktopLibraryItems = [
     { title: 'Worship Team', caption: '12 members', tone: 'from-amber-500/80 via-zinc-800 to-black' },
@@ -1180,23 +1181,10 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
           </button>
 
           <div className="relative z-20 flex items-center gap-1">
-            {location.pathname.startsWith('/sets') ? (
-              <>
-                <button onClick={() => handleNav('/songs')} className="flex h-10 w-10 items-center justify-center rounded-full text-white transition-colors hover:bg-white/[0.08]" aria-label="Search">
-                  <Search className="h-5 w-5" />
-                </button>
-                <button onClick={() => handleNav('/events')} className="flex h-10 w-10 items-center justify-center rounded-full text-white transition-colors hover:bg-white/[0.08]" aria-label="Create">
-                  <Plus className="h-6 w-6" />
-                </button>
-              </>
-            ) : (
-              <>
-                <NotificationBell />
-                <button onClick={() => handleNav('/messages')} className="flex h-10 w-10 items-center justify-center rounded-full text-white transition-colors hover:bg-white/[0.08]" aria-label="Messages">
-                  <MessageCircle className="h-6 w-6" />
-                </button>
-              </>
-            )}
+            <NotificationBell />
+            <button onClick={() => handleNav('/messages')} className="flex h-10 w-10 items-center justify-center rounded-full text-white transition-colors hover:bg-white/[0.08]" aria-label="Messages">
+              <MessageCircle className="h-6 w-6" />
+            </button>
           </div>
         </div>
       </div>
@@ -1443,9 +1431,9 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
           style={{
             paddingBottom: useDockedMobileNav ? '0px' : 'max(0px, calc(env(safe-area-inset-bottom) - 6px))',
             paddingTop: useDockedMobileNav ? '0px' : '6px',
-            background: useDockedMobileNav ? 'rgba(5,5,5,0.96)' : 'linear-gradient(180deg, rgba(5,5,5,0), rgba(5,5,5,0.84) 34%, rgba(5,5,5,0.98))',
-            WebkitBackdropFilter: useDockedMobileNav ? 'blur(18px) saturate(160%) contrast(104%)' : 'blur(10px) saturate(120%)',
-            backdropFilter: useDockedMobileNav ? 'blur(18px) saturate(160%) contrast(104%)' : 'blur(10px) saturate(120%)',
+            background: useDockedMobileNav ? 'rgba(5,5,5,0.96)' : 'transparent',
+            WebkitBackdropFilter: useDockedMobileNav ? 'blur(18px) saturate(160%) contrast(104%)' : undefined,
+            backdropFilter: useDockedMobileNav ? 'blur(18px) saturate(160%) contrast(104%)' : undefined,
             borderTop: useDockedMobileNav ? '1px solid rgba(255,255,255,0.08)' : undefined,
             boxShadow: useDockedMobileNav ? '0 -18px 42px -34px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.08)' : undefined,
             transform: mobileNavTransform,
@@ -1472,12 +1460,12 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
             className={`relative flex ${useDockedMobileNav ? 'justify-stretch px-0' : 'justify-center px-8'}`}
           >
             <nav
-              className={`pointer-events-auto relative flex ${useDockedMobileNav ? 'w-full items-start overflow-visible px-2 pt-2' : 'w-full max-w-[480px] items-center overflow-hidden bg-[#080808] p-1.5 rounded-full'}`}
+              className={`pointer-events-auto relative flex ${useDockedMobileNav ? 'w-full items-start overflow-visible px-2 pt-2' : 'w-full max-w-[480px] items-center overflow-hidden bg-[#080808]/92 p-1.5 rounded-full'}`}
               style={{
                 height: useDockedMobileNav ? 'calc(64px + env(safe-area-inset-bottom))' : undefined,
-                background: useDockedMobileNav ? 'transparent' : undefined,
-                WebkitBackdropFilter: useDockedMobileNav ? undefined : 'none',
-                backdropFilter: useDockedMobileNav ? undefined : 'none',
+                background: useDockedMobileNav ? 'transparent' : 'rgba(8,8,8,0.96)',
+                WebkitBackdropFilter: useDockedMobileNav ? undefined : 'blur(26px) saturate(190%) contrast(108%)',
+                backdropFilter: useDockedMobileNav ? undefined : 'blur(26px) saturate(190%) contrast(108%)',
                 border: useDockedMobileNav ? undefined : '1px solid rgba(255,255,255,0.18)',
                 boxShadow: useDockedMobileNav
                   ? 'none'

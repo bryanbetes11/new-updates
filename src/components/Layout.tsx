@@ -105,7 +105,7 @@ export function Layout() {
   }, [shouldAllowNativePullRefresh]);
 
   useEffect(() => {
-    if (staticHideNav || isMessagesConversation || mobileOpen) {
+    if (staticHideNav || isDashboardPage || isMessagesConversation || mobileOpen) {
       setMobileChromeHidden(false);
       return;
     }
@@ -324,7 +324,7 @@ export function Layout() {
               staticHideNav
                 ? ''
                 : isWideShellPage
-                  ? 'wide-shell-spacing bg-[#050505]'
+                  ? `wide-shell-spacing ${isDashboardPage ? 'dashboard-shell-spacing' : ''} bg-[#050505]`
                   : 'px-4 sm:px-6 lg:px-8 mobile-layout-padding'
             }
           >

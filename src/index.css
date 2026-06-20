@@ -283,6 +283,10 @@
     padding-bottom: calc(132px + env(safe-area-inset-bottom) + 1rem);
   }
 
+  .dashboard-shell-spacing {
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  }
+
   .page-loader-shell {
     min-height: calc(100vh - 3.5rem - 64px - 2rem);
     min-height: calc(100dvh - 3.5rem - 64px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 2rem);
@@ -300,6 +304,10 @@
 
     .wide-shell-spacing {
       padding-top: 72px;
+      padding-bottom: 5.75rem;
+    }
+
+    .dashboard-shell-spacing {
       padding-bottom: 5.75rem;
     }
 

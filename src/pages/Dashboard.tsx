@@ -11,6 +11,7 @@ import { DashboardSkeleton } from '../components/LoadingSpinner';
 import { formatTime12Hour } from '../lib/timeFormat';
 import { Modal } from '../components/Modal';
 import { EventArtwork } from '../components/EventArtwork';
+import { SongArtwork } from '../components/SongArtwork';
 import type { Event, EventAssignment, Setlist, Announcement, UserAvailability, SwapRequest } from '../types';
 
 const verses = [
@@ -66,6 +67,13 @@ type DashboardArtworkSongRecord = {
 type DashboardSetlistArtwork = {
   event_id?: string | null;
   setlist_songs?: DashboardSongArtwork[] | null;
+};
+type DashboardWeekSong = {
+  key: string;
+  title: string;
+  artist: string;
+  youtubeUrl?: string | null;
+  song: DashboardSongArtwork;
 };
 type PendingReviewSetlist = Setlist & {
   events?: Pick<Event, 'id' | 'title' | 'event_date' | 'event_type'>;
@@ -157,6 +165,16 @@ function hydrateDashboardArtworkSongs(setlistSongs: DashboardSongArtwork[] | nul
     const fallbackSong = songsById.get(song.song_id);
     return fallbackSong ? { ...song, songs: fallbackSong } : song;
   });
+}
+
+function getSongListenUrl(song: DashboardSongArtwork) {
+  const nestedSong = getDashboardArtworkSong(song);
+  const youtubeUrl = song.youtube_url || nestedSong?.youtube_url;
+  if (youtubeUrl?.trim()) return youtubeUrl.trim();
+
+  const searchTerm = [nestedSong?.title?.trim(), nestedSong?.artist?.trim()].filter(Boolean).join(' ');
+  if (!searchTerm) return '/songs';
+  return `https://www.youtube.com/results?search_query=${encodeURIComponent(searchTerm)}`;
 }
 
 async function fetchPublicSongArtwork(song: DashboardSongArtwork) {
@@ -293,7 +311,7 @@ export function Dashboard() {
       const emptyList = { data: [] } as any;
       const [eventsRes, assignRes, setlistsRes, announcementsRes, unavailableRes, pendingLeaveRes, songLeadersRes, membersRes] = await Promise.all([
         withDashboardTimeout(
-          supabase.from('events').select('*').gte('event_date', today).order('event_date').limit(5),
+          supabase.from('events').select('*').gte('event_date', today).order('event_date').limit(12),
           emptyList,
           'Upcoming events',
         ),
@@ -665,8 +683,9 @@ export function Dashboard() {
     { title: 'Sunday Evening Service', event_date: '2025-06-22', start_time: '18:00:00', event_type: 'Sunday Service', location: 'Main Auditorium', id: 'sample-3' },
   ];
   const displayEvents: DashboardEventCard[] = (upcomingEvents.length > 0 ? upcomingEvents : fallbackEvents)
-    .slice(0, 3)
+    .slice(0, 12)
     .map(event => ({ ...event, location: (event as { location?: string }).location }));
+  const dashboardUpcomingEvents = displayEvents.slice(0, 3);
   const assignedEventIds = new Set(myAssignments.map(assignment => assignment.event_id));
   const reviewSets = pendingSetlists.slice(0, 4);
   const announcementRows = (recentAnnouncements.length > 0 ? recentAnnouncements : [
@@ -674,11 +693,30 @@ export function Dashboard() {
     { id: 'sample-ann-2', title: 'New Training: In-Ear Monitor Basics', content: 'Join us this Sunday after the morning service at the Media Room.', created_at: new Date().toISOString() },
     { id: 'sample-ann-3', title: 'Song Requests Open', content: "Submit your song requests for next month's setlists.", created_at: new Date().toISOString() },
   ] as any[]).slice(0, 3);
-  const newThisWeek = [
-    { title: 'Graves Into Gardens', artist: 'Spontaneous', tone: 'from-zinc-300 via-zinc-700 to-black', badge: 'New Song' },
-    { title: 'Holy Forever', artist: 'Elevation Worship', tone: 'from-yellow-200 via-amber-700 to-black', badge: 'New EP' },
-    { title: 'Great Are You Lord', artist: 'All Sons & Daughters', tone: 'from-orange-200 via-stone-700 to-black', badge: 'New Song' },
+  const songsThisWeek = displayEvents.reduce<DashboardWeekSong[]>((songs, event) => {
+    const eventSongs = eventArtworkSongsMap[event.id] || [];
+    eventSongs.forEach((song) => {
+      const nestedSong = getDashboardArtworkSong(song);
+      const title = nestedSong?.title?.trim();
+      if (!title) return;
+      const key = nestedSong?.id || song.song_id || title.toLowerCase();
+      if (songs.some(existingSong => existingSong.key === key)) return;
+      songs.push({
+        key,
+        title,
+        artist: nestedSong?.artist?.trim() || 'ServeSync',
+        youtubeUrl: song.youtube_url || nestedSong?.youtube_url,
+        song,
+      });
+    });
+    return songs;
+  }, []).slice(0, 12);
+  const fallbackSongsThisWeek: DashboardWeekSong[] = [
+    { key: 'graves-into-gardens', title: 'Graves Into Gardens', artist: 'Elevation Worship', song: { id: 'fallback-graves', songs: { title: 'Graves Into Gardens', artist: 'Elevation Worship' } } },
+    { key: 'holy-forever', title: 'Holy Forever', artist: 'Bethel Music', song: { id: 'fallback-holy', songs: { title: 'Holy Forever', artist: 'Bethel Music' } } },
+    { key: 'great-are-you-lord', title: 'Great Are You Lord', artist: 'All Sons & Daughters', song: { id: 'fallback-great', songs: { title: 'Great Are You Lord', artist: 'All Sons & Daughters' } } },
   ];
+  const weekSongs = songsThisWeek.length > 0 ? songsThisWeek : fallbackSongsThisWeek;
   const quickActions = [
     { label: 'Create Set', icon: ListChecks, path: '/sets' },
     { label: 'Schedule Event', icon: Calendar, path: '/events' },
@@ -704,7 +742,7 @@ export function Dashboard() {
   }[]> = {
     all: [
       { title: 'My Assignments', subtitle: `${stats.total} upcoming`, tone: 'from-emerald-400 via-green-700 to-black', path: '/my-assignments', icon: Check },
-      { title: 'Upcoming Services', subtitle: `${displayEvents.length} services`, tone: 'from-blue-500 via-blue-900 to-slate-950', path: '/events', icon: Calendar },
+      { title: 'Upcoming Events', subtitle: `${displayEvents.length} events`, tone: 'from-blue-500 via-blue-900 to-slate-950', path: '/events', icon: Calendar },
       { title: 'Team Chat', subtitle: 'Messages', tone: 'from-zinc-200 via-zinc-700 to-black', path: '/messages', icon: MessageCircle },
       { title: 'My Sets', subtitle: 'Setlists', tone: 'from-indigo-400 via-violet-500 to-emerald-300', path: '/sets', icon: ListChecks },
       { title: 'Request Leave', subtitle: 'Availability', tone: 'from-yellow-400 via-amber-800 to-black', path: '/request-leave', icon: UserX },
@@ -764,7 +802,7 @@ export function Dashboard() {
         variants={container}
         initial="initial"
         animate="animate"
-        className="relative max-w-2xl lg:max-w-6xl xl:max-w-[1560px] mx-auto pt-4 sm:pt-5 pb-24 px-4 sm:px-6 lg:px-8 space-y-5 sm:space-y-6"
+        className="relative mx-auto w-full max-w-2xl space-y-5 px-4 pt-4 pb-4 sm:px-6 sm:pt-5 sm:space-y-6 lg:max-w-6xl lg:px-8 lg:pb-24 xl:max-w-[1560px]"
       >
 
         <motion.section variants={item} className="space-y-4">
@@ -822,13 +860,13 @@ export function Dashboard() {
             </div>
         </motion.section>
 
-        <motion.section variants={item} className="grid gap-5 xl:grid-cols-[1.95fr_1fr]">
-              <section className="self-start lg:flex lg:flex-col lg:rounded-[0.75rem] lg:border lg:border-white/[0.08] lg:bg-[#181818] lg:p-4 lg:shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)]">
+        <motion.section variants={item} className="grid min-w-0 gap-5 xl:grid-cols-[1.95fr_1fr]">
+              <section className="min-w-0 self-start lg:flex lg:flex-col lg:rounded-[0.75rem] lg:border lg:border-white/[0.08] lg:bg-[#181818] lg:p-4 lg:shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)]">
                 <div className="mb-3 flex items-center justify-between">
-                  <h2 className="text-[18px] font-black text-white">Upcoming services</h2>
+                  <h2 className="text-[18px] font-black text-white">Upcoming events</h2>
                   <button onClick={() => navigate('/events')} className="text-[12px] font-bold text-[#22c55e]">See all</button>
                 </div>
-                <div className="flex gap-3 overflow-x-auto pb-1 no-scrollbar lg:hidden">
+                <div className="flex snap-x gap-3 overflow-x-auto pb-1 no-scrollbar lg:hidden" style={{ WebkitOverflowScrolling: 'touch' }}>
                   {displayEvents.map((event) => {
                     const eventTitle = eventLeaderMap[event.id] || event.title;
                     const artworkUrls = eventArtworkMap[event.id] || [];
@@ -837,7 +875,7 @@ export function Dashboard() {
                       <button
                         key={event.id}
                         onClick={() => navigate(event.id.startsWith('sample') ? '/events' : `/events/${event.id}`)}
-                        className="min-w-[132px] max-w-[132px] text-left"
+                        className="min-w-[132px] max-w-[132px] snap-start text-left"
                       >
                         <div className="relative">
                           <EventArtwork
@@ -860,7 +898,7 @@ export function Dashboard() {
                   })}
                 </div>
                 <div className="hidden space-y-2 lg:block">
-                  {displayEvents.map((event) => {
+                  {dashboardUpcomingEvents.map((event) => {
                     const isAssignedToEvent = assignedEventIds.has(event.id);
                     const eventTitle = eventLeaderMap[event.id] || event.title;
                     const artworkUrls = eventArtworkMap[event.id] || [];
@@ -897,10 +935,10 @@ export function Dashboard() {
                 </div>
               </section>
 
-              <section className={`${reviewSets.length === 0 ? 'hidden lg:block' : ''} rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-3 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)] sm:p-4`}>
+              <section className={`${reviewSets.length === 0 ? 'hidden lg:block' : ''} w-full min-w-0 max-w-full overflow-hidden rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-3 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)] sm:p-4`}>
                 <div className="mb-3 flex items-center justify-between">
-                  <h2 className="text-[17px] font-black text-white">Setlists awaiting approval</h2>
-                  <button onClick={() => navigate(isLeader ? '/leadership/setlists' : '/events')} className="text-[12px] font-bold text-[#22c55e]">
+                  <h2 className="min-w-0 truncate text-[18px] font-black text-white">Setlists awaiting approval</h2>
+                  <button onClick={() => navigate(isLeader ? '/leadership/setlists' : '/events')} className="ml-3 shrink-0 text-[12px] font-bold text-[#22c55e]">
                     {isLeader ? 'Review queue' : 'See events'}
                   </button>
                 </div>
@@ -915,7 +953,7 @@ export function Dashboard() {
                         <button
                           key={set.id}
                           onClick={() => navigate(eventId ? `/events/${eventId}` : isLeader ? '/leadership/setlists' : '/events')}
-                          className="group flex w-full items-center gap-3 rounded-[0.55rem] px-2 py-2 text-left transition-colors hover:bg-white/[0.06]"
+                          className="group flex min-w-0 w-full items-center gap-3 overflow-hidden rounded-[0.55rem] px-2 py-2 text-left transition-colors hover:bg-white/[0.06]"
                         >
                           <EventArtwork
                             eventType={set.events?.event_type}
@@ -931,10 +969,10 @@ export function Dashboard() {
                               {!isLeader ? ' · Awaiting leadership' : ''}
                             </p>
                           </div>
-                          <span className="rounded-full bg-white/[0.08] px-3 py-1.5 text-[11px] font-black text-white/80">
+                          <span className="shrink-0 rounded-full bg-white/[0.08] px-3 py-1.5 text-[11px] font-black text-white/80">
                             {songCount} {songCount === 1 ? 'song' : 'songs'}
                           </span>
-                          <ChevronRight className="h-4 w-4 text-white/70 transition-transform group-hover:translate-x-0.5" />
+                          <ChevronRight className="h-4 w-4 shrink-0 text-white/70 transition-transform group-hover:translate-x-0.5" />
                         </button>
                       );
                     })
@@ -1052,19 +1090,22 @@ export function Dashboard() {
 
         <motion.section variants={item} className="lg:hidden">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-[22px] font-black text-white">New this week</h2>
+            <h2 className="text-[18px] font-black text-white">Songs this week</h2>
             <button onClick={() => navigate('/songs')} className="text-[12px] font-bold text-[#22c55e]">See all</button>
           </div>
-          <div className="flex gap-3 overflow-x-auto pb-1 no-scrollbar">
-            {newThisWeek.map((song) => (
-              <button key={song.title} onClick={() => navigate('/songs')} className="min-w-[132px] text-left">
-                <div className={`relative aspect-square overflow-hidden rounded-[0.45rem] bg-gradient-to-br ${song.tone}`}>
-                  <span className="absolute left-2 top-2 rounded bg-white px-1.5 py-0.5 text-[7px] font-black uppercase text-black">{song.badge}</span>
-                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_28%_20%,rgba(255,255,255,0.32),transparent_28%),linear-gradient(180deg,transparent,rgba(0,0,0,0.42))]" />
-                </div>
+          <div className="flex snap-x gap-3 overflow-x-auto pb-1 no-scrollbar" style={{ WebkitOverflowScrolling: 'touch' }}>
+            {weekSongs.map((song) => (
+              <a
+                key={song.key}
+                href={getSongListenUrl(song.song)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="min-w-[132px] max-w-[132px] snap-start text-left"
+              >
+                <SongArtwork song={getDashboardArtworkSong(song.song) || song.song} youtubeUrl={song.youtubeUrl} className="aspect-square w-full rounded-[0.45rem]" />
                 <p className="mt-2 line-clamp-2 text-[12px] font-bold leading-tight text-white">{song.title}</p>
                 <p className="mt-0.5 truncate text-[11px] font-semibold text-white/50">{song.artist}</p>
-              </button>
+              </a>
             ))}
           </div>
         </motion.section>
@@ -1148,9 +1189,9 @@ export function Dashboard() {
         )}
 
         <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.75fr)] xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,0.8fr)]">
-          <motion.section variants={item} className="min-w-0 overflow-hidden lg:rounded-[1rem] lg:border lg:border-white/[0.08] lg:bg-[#181818] lg:p-4">
+          <motion.section variants={item} className="min-w-0 overflow-hidden rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-3 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)] sm:p-4 lg:rounded-[1rem]">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-[22px] font-black text-white lg:text-[18px]">Recent announcements</h2>
+              <h2 className="text-[18px] font-black text-white">Recent announcements</h2>
               <button onClick={() => navigate('/announcements')} className="text-[12px] font-bold text-[#22c55e]">See all</button>
             </div>
             <div className="divide-y divide-white/[0.07]">
@@ -1160,8 +1201,11 @@ export function Dashboard() {
                   onClick={() => navigate(a.id?.startsWith?.('sample') ? '/announcements' : `/announcements/${a.id}`)}
                   className="group flex w-full min-w-0 items-center gap-3 py-3 text-left"
                 >
-                  <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-[0.55rem] ${index === 0 ? 'bg-emerald-500/18 text-[#22c55e]' : index === 1 ? 'bg-violet-500/18 text-violet-300' : 'bg-sky-500/18 text-sky-300'}`}>
-                    {index === 0 ? <Megaphone className="h-6 w-6" /> : index === 1 ? <Calendar className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
+                  <span className={`relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[0.55rem] bg-gradient-to-br ${index === 0 ? 'from-emerald-400 via-green-800 to-black text-[#22c55e]' : index === 1 ? 'from-violet-300 via-violet-800 to-black text-violet-200' : 'from-sky-300 via-sky-800 to-black text-sky-100'}`}>
+                    <span className="absolute inset-0 bg-[radial-gradient(circle_at_30%_24%,rgba(255,255,255,0.30),transparent_30%)]" />
+                    <span className="relative flex h-8 w-8 items-center justify-center rounded-full border border-white/60 bg-black/48 shadow-[0_10px_24px_-14px_rgba(0,0,0,0.95),0_0_0_3px_rgba(255,255,255,0.10),inset_0_1px_0_rgba(255,255,255,0.26)] ring-1 ring-black/40 backdrop-blur-sm">
+                      {index === 0 ? <Megaphone className="h-4 w-4" strokeWidth={2.5} /> : index === 1 ? <Calendar className="h-4 w-4" strokeWidth={2.5} /> : <MessageCircle className="h-4 w-4" strokeWidth={2.5} />}
+                    </span>
                   </span>
                   <span className="min-w-0 flex-1 overflow-hidden">
                     <span className="block truncate text-[13px] font-black text-white">{a.title}</span>

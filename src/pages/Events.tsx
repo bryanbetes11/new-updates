@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { format, parseISO, startOfDay, subWeeks, previousSunday, addDays, subDays, differenceInDays, eachDayOfInterval } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { motion } from 'framer-motion';
-import { Calendar, Plus, Search, ChevronRight, Filter, Users, Trash2, CalendarOff, AlertCircle, Clock, X, PartyPopper, Heart, Sparkles } from 'lucide-react';
+import { Calendar, Plus, Search, Filter, Users, Trash2, CalendarOff, AlertCircle, Clock, X, PartyPopper, Heart, Sparkles } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -403,7 +403,6 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
           tone={showOverdueStyle ? 'danger' : showDueSoonStyle ? 'warning' : 'default'}
           compact
         />
-        <ChevronRight className="h-4 w-4 text-white/32 transition-transform group-hover:translate-x-0.5 group-hover:text-white/70" />
       </div>
     </button>
   );
@@ -788,7 +787,6 @@ function EventDesktopCardGroups({ events, calendarEntries, songLeaderMap, setlis
                   <div className="flex shrink-0 items-center gap-3">
                     <span className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-bold ${status.className}`}>{status.label}</span>
                     <EventDateChip date={item.event.event_date} compact />
-                    <ChevronRight className="h-4 w-4 text-white/32 transition-transform group-hover:translate-x-0.5 group-hover:text-white/70" />
                   </div>
                 </button>
               );

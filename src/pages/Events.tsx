@@ -326,7 +326,7 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
   return (
     <button
       onClick={() => onEventClick(event.id)}
-      className="touch-action-pan-y group relative flex w-full items-center gap-3 rounded-[0.75rem] border border-white/[0.08] bg-[#181818] px-3 py-3 text-left shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)] transition-colors hover:bg-[#202020]"
+      className="touch-action-pan-y group relative flex w-full items-center gap-3 bg-transparent px-0 py-3 text-left transition-colors hover:bg-white/[0.03]"
       style={{ opacity: isPast ? 0.62 : 1 }}
     >
       {setlistInfo?.songCount ? (
@@ -484,7 +484,7 @@ function BirthdayCard({ name, date }: { name: string; date: string }) {
 
   return (
     <div
-      className="touch-action-pan-y relative flex w-full items-center gap-3 rounded-[0.75rem] border border-white/[0.08] bg-[#181818] px-3 py-3 text-left shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)]"
+      className="touch-action-pan-y relative flex w-full items-center gap-3 bg-transparent px-0 py-3 text-left"
     >
       <div className="relative isolate flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-[0.35rem] border border-white/[0.08] bg-[#222222]">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(236,72,153,0.22),transparent_34%)]" />
@@ -599,7 +599,7 @@ function EventList({ events, calendarEntries, songLeaderMap, setlistInfoMap, onE
 
   if (!animateItems) {
     return (
-      <div className={layout === 'grid' ? 'touch-action-pan-y grid gap-2.5 md:grid-cols-2 xl:grid-cols-3' : 'touch-action-pan-y space-y-2.5'}>
+      <div className={layout === 'grid' ? 'touch-action-pan-y grid gap-2.5 md:grid-cols-2 xl:grid-cols-3' : 'touch-action-pan-y divide-y divide-white/[0.08]'}>
         {merged.map((item) => (
           <div
             key={item.kind === 'event' ? item.event.id : `bday-${item.entry.name}-${item.entry.date}`}
@@ -617,7 +617,7 @@ function EventList({ events, calendarEntries, songLeaderMap, setlistInfoMap, onE
       initial="hidden"
       animate="show"
       variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}
-      className={layout === 'grid' ? 'touch-action-pan-y grid gap-2.5 md:grid-cols-2 xl:grid-cols-3' : 'touch-action-pan-y space-y-2.5'}
+      className={layout === 'grid' ? 'touch-action-pan-y grid gap-2.5 md:grid-cols-2 xl:grid-cols-3' : 'touch-action-pan-y divide-y divide-white/[0.08]'}
     >
       {merged.map((item) => (
         <motion.div

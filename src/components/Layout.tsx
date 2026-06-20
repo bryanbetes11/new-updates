@@ -294,6 +294,7 @@ export function Layout() {
         <Navigation
           hideMobile={hideNavMobile}
           hideMobileAll={isMessagesConversation}
+          hideMobileHeader={isEventDetail}
           collapsed={collapsed}
           onCollapsedChange={setCollapsed}
           mobileOpen={mobileOpen}
@@ -324,7 +325,7 @@ export function Layout() {
               staticHideNav
                 ? ''
                 : isWideShellPage
-                  ? `wide-shell-spacing ${isDashboardPage ? 'dashboard-shell-spacing' : ''} bg-[#050505]`
+                  ? `wide-shell-spacing ${isDashboardPage ? 'dashboard-shell-spacing' : ''} ${isEventDetail ? 'event-detail-shell-spacing' : ''} bg-[#050505]`
                   : 'px-4 sm:px-6 lg:px-8 mobile-layout-padding'
             }
           >

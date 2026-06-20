@@ -80,6 +80,12 @@
     overscroll-behavior-y: contain !important;
   }
 
+  html.event-detail-active,
+  html.event-detail-active body,
+  body.event-detail-active {
+    background: #071423 !important;
+  }
+
   html.mobile-menu-active,
   html.mobile-menu-active body,
   body.mobile-menu-active {
@@ -287,6 +293,10 @@
     padding-bottom: calc(24px + env(safe-area-inset-bottom));
   }
 
+  .event-detail-shell-spacing {
+    padding-top: 0;
+  }
+
   .page-loader-shell {
     min-height: calc(100vh - 3.5rem - 64px - 2rem);
     min-height: calc(100dvh - 3.5rem - 64px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 2rem);
@@ -309,6 +319,10 @@
 
     .dashboard-shell-spacing {
       padding-bottom: 5.75rem;
+    }
+
+    .event-detail-shell-spacing {
+      padding-top: 72px;
     }
 
     .page-loader-shell {

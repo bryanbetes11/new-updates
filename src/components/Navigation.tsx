@@ -154,6 +154,7 @@ function Tooltip({ label, children }: { label: string; children: React.ReactNode
 interface NavigationProps {
   hideMobile?: boolean;
   hideMobileAll?: boolean;
+  hideMobileHeader?: boolean;
   collapsed: boolean;
   onCollapsedChange: (v: boolean) => void;
   mobileOpen: boolean;
@@ -161,7 +162,7 @@ interface NavigationProps {
   mobileChromeHidden?: boolean;
 }
 
-export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedChange, mobileOpen, onMobileOpenChange, mobileChromeHidden = false }: NavigationProps) {
+export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false, collapsed, onCollapsedChange, mobileOpen, onMobileOpenChange, mobileChromeHidden = false }: NavigationProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const {
@@ -1140,7 +1141,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
 
       {/* ── Mobile top bar ── */}
       <div
-        className={`fixed top-0 left-0 right-0 z-30 flex items-end justify-between overflow-hidden px-4 lg:hidden ${hideMobileAll ? 'hidden' : ''}`}
+        className={`fixed top-0 left-0 right-0 z-30 flex items-end justify-between overflow-hidden px-4 lg:hidden ${hideMobileAll || hideMobileHeader ? 'hidden' : ''}`}
         style={{
           background: 'rgba(5,5,5,0.88)',
           WebkitBackdropFilter: 'blur(30px) saturate(190%) contrast(108%)',
@@ -1190,7 +1191,7 @@ export function Navigation({ hideMobile, hideMobileAll, collapsed, onCollapsedCh
       </div>
 
       <AnimatePresence>
-        {mobileOpen && !hideMobileAll && (
+        {mobileOpen && !hideMobileAll && !hideMobileHeader && (
           <>
             <motion.button
               aria-label="Close account menu"

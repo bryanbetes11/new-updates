@@ -96,9 +96,9 @@ export function Profile() {
         birthday: profile.birthday || '',
         official_join_date: profile.official_join_date || '',
       });
-      setNewEmail(profile.email || '');
+      setNewEmail(user?.email || profile.email || '');
     }
-  }, [profile]);
+  }, [profile, user?.email]);
 
   const fetchMyDiscipline = useCallback(async () => {
     if (!user || isLeader) return;
@@ -156,7 +156,7 @@ export function Profile() {
     if (!user || !profile) return;
 
     const normalizedEmail = newEmail.trim().toLowerCase();
-    const currentEmail = (profile.email || user.email || '').trim().toLowerCase();
+    const currentEmail = (user.email || profile.email || '').trim().toLowerCase();
 
     if (!normalizedEmail) {
       toast('error', 'Enter the new email address.');
@@ -223,6 +223,7 @@ export function Profile() {
 
   const openDisciplineCount = myDisciplineRecords.filter(r => r.status !== 'resolved').length;
   const fullName = `${profile.first_name} ${profile.last_name}`.trim();
+  const displayEmail = user?.email || profile.email;
   const isLeaderProfile = sortedUserRoles.some(ur => ur.roles?.is_leadership);
   const profilePhoneHref = phoneHref(profile.phone);
   const billingLocked = searchParams.get('billing_locked') === '1';
@@ -351,7 +352,7 @@ export function Profile() {
                     {fullName}
                   </h1>
                   <p className="mt-1.5 truncate text-[11px] font-mono tracking-wide text-gray-500 dark:text-white/40 sm:mt-2 sm:text-[13px]">
-                    {profile.email}
+                    {displayEmail}
                   </p>
                   {profile.nickname && (
                     <p className="mt-1 truncate text-[12px] font-bold text-emerald-700/80 dark:text-emerald-300/70">

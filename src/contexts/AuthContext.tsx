@@ -69,6 +69,10 @@ function isInvalidRefreshTokenError(error: unknown): boolean {
   return message.includes('Invalid Refresh Token') || message.includes('Refresh Token Not Found');
 }
 
+function normalizeAuthEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
 async function clearStoredAuthSession() {
   if (typeof window !== 'undefined') {
     Object.keys(window.localStorage)
@@ -294,10 +298,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const canManageMembers = isAdmin || isProductionDirector;
 
   const signUp = async (email: string, password: string, firstName: string) => {
+    const normalizedEmail = normalizeAuthEmail(email);
+    const normalizedFirstName = firstName.trim();
     const { data, error } = await supabase.auth.signUp({
-      email,
+      email: normalizedEmail,
       password,
-      options: { data: { first_name: firstName } },
+      options: { data: { first_name: normalizedFirstName } },
     });
     if (error) return { error: error as Error | null };
 
@@ -311,8 +317,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!existing) {
         await supabase.from('profiles').insert({
           id: data.user.id,
-          email,
-          first_name: firstName,
+          email: normalizedEmail,
+          first_name: normalizedFirstName,
         });
       }
     }
@@ -321,7 +327,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({
+      email: normalizeAuthEmail(email),
+      password,
+    });
     return { error: error as Error | null };
   };
 
@@ -333,7 +342,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const addSavedAccount = async (email: string, password: string) => {
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = normalizeAuthEmail(email);
     const currentEmail = (profile?.email || user?.email || '').trim().toLowerCase();
 
     if (normalizedEmail && normalizedEmail === currentEmail) {
@@ -343,7 +352,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const tempClient = createTransientSupabaseClient();
     const { data, error } = await tempClient.auth.signInWithPassword({
-      email: email.trim(),
+      email: normalizedEmail,
       password,
     });
 
@@ -364,11 +373,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .maybeSingle();
 
     const fullName = `${tempProfile?.first_name || ''} ${tempProfile?.last_name || ''}`.trim();
-    const displayName = tempProfile?.nickname || fullName || tempUser.email || email.trim();
+    const displayName = tempProfile?.nickname || fullName || tempUser.email || normalizedEmail;
 
     setSavedAccounts(upsertSavedAccount({
       userId: tempUser.id,
-      email: tempProfile?.email || tempUser.email || email.trim(),
+      email: tempProfile?.email || tempUser.email || normalizedEmail,
       displayName,
       avatarUrl: tempProfile?.avatar_url || null,
       lastUsedAt: new Date().toISOString(),

@@ -46,6 +46,21 @@ interface MemberAccountabilitySummary {
   offense_level: number;
 }
 
+interface MemberAuthAudit {
+  profile_id: string;
+  email: string;
+  auth_email: string | null;
+  has_auth_user: boolean;
+  email_confirmed_at: string | null;
+  last_sign_in_at: string | null;
+  auth_created_at: string | null;
+  pending_invite_id: string | null;
+  pending_invite_token: string | null;
+  invite_expires_at: string | null;
+  invite_accepted_at: string | null;
+  auth_status: 'ready' | 'invite_pending' | 'missing_auth_account' | 'email_unconfirmed' | 'email_mismatch';
+}
+
 const ministryStatusConfig: Record<string, { label: string; textColor: string; bgColor: string }> = {
   active: { label: 'Active', textColor: 'text-emerald-700 dark:text-emerald-300', bgColor: 'bg-emerald-50 dark:bg-emerald-900/20' },
   restoration: { label: 'Restoration', textColor: 'text-amber-700 dark:text-amber-300', bgColor: 'bg-amber-50 dark:bg-amber-900/20' },
@@ -59,6 +74,34 @@ const offenseColors: Record<number, { text: string; bg: string }> = {
   2: { text: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-900/20' },
   3: { text: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20' },
   4: { text: 'text-red-800 dark:text-red-200', bg: 'bg-red-100 dark:bg-red-900/30' },
+};
+
+const authStatusConfig: Record<MemberAuthAudit['auth_status'], { label: string; detail: string; className: string }> = {
+  ready: {
+    label: 'Login ready',
+    detail: 'Auth account exists and email is confirmed.',
+    className: 'bg-emerald-50 text-emerald-700 ring-emerald-200/70 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/20',
+  },
+  invite_pending: {
+    label: 'Invite pending',
+    detail: 'This member has an invite but has not created their account yet.',
+    className: 'bg-sky-50 text-sky-700 ring-sky-200/70 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/20',
+  },
+  missing_auth_account: {
+    label: 'No login account',
+    detail: 'A roster profile exists, but there is no matching Supabase Auth user.',
+    className: 'bg-red-50 text-red-700 ring-red-200/70 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-500/20',
+  },
+  email_unconfirmed: {
+    label: 'Confirm email',
+    detail: 'The Auth account exists, but the email is not confirmed yet.',
+    className: 'bg-amber-50 text-amber-700 ring-amber-200/70 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/20',
+  },
+  email_mismatch: {
+    label: 'Email mismatch',
+    detail: 'The profile email does not match the Auth account email.',
+    className: 'bg-orange-50 text-orange-700 ring-orange-200/70 dark:bg-orange-500/10 dark:text-orange-300 dark:ring-orange-500/20',
+  },
 };
 
 interface TeamManageProps {
@@ -87,6 +130,7 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
   });
   const [attendanceStats, setAttendanceStats] = useState<Record<string, MemberAttendanceStats>>({});
   const [accountabilityStats, setAccountabilityStats] = useState<Record<string, MemberAccountabilitySummary>>({});
+  const [authAudit, setAuthAudit] = useState<Record<string, MemberAuthAudit>>({});
   const [resetConfirmMember, setResetConfirmMember] = useState<MemberWithRoles | null>(null);
   const [sendingReset, setSendingReset] = useState(false);
   const [removeConfirmMember, setRemoveConfirmMember] = useState<MemberWithRoles | null>(null);
@@ -141,8 +185,21 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
       setAccountabilityStats(accountabilityMap);
     }
 
+    if (canManageChurchMembers) {
+      const { data: authAuditData, error: authAuditError } = await supabase.rpc('get_current_org_auth_audit');
+      if (authAuditData) {
+        const authAuditMap: Record<string, MemberAuthAudit> = {};
+        (authAuditData as MemberAuthAudit[]).forEach(item => { authAuditMap[item.profile_id] = item; });
+        setAuthAudit(authAuditMap);
+      } else if (authAuditError && authAuditError.code !== 'PGRST202') {
+        console.warn('[TeamManage] Auth audit unavailable:', authAuditError);
+      }
+    } else {
+      setAuthAudit({});
+    }
+
     setLoading(false);
-  }, [roles, currentYear, currentQuarter]);
+  }, [roles, currentYear, currentQuarter, canManageChurchMembers]);
 
   useEffect(() => { fetchMembers(); }, [fetchMembers]);
 
@@ -257,11 +314,22 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
     fetchMembers();
   };
 
+  const copyInviteLink = async (token: string) => {
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}/invite/${token}`);
+      toast('success', 'Invite link copied');
+    } catch {
+      toast('error', 'Failed to copy invite link');
+    }
+  };
+
   const filtered = members.filter(m => {
     if (!search) return true;
     const name = `${m.first_name} ${m.last_name} ${m.nickname} ${m.email}`.toLowerCase();
     return name.includes(search.toLowerCase());
   });
+
+  const authIssueCount = Object.values(authAudit).filter(item => item.auth_status !== 'ready').length;
 
   if (loading) return <PageLoader />;
 
@@ -339,12 +407,13 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className="grid grid-cols-3 gap-3"
+            className="grid grid-cols-2 sm:grid-cols-4 gap-3"
           >
             {[
               { label: 'Members', value: stats.total, icon: Users, dot: '#22c55e', dotDark: '#22c55e', tone: 'bg-emerald-50 dark:bg-emerald-500/[0.10] text-emerald-600 dark:text-emerald-400' },
               { label: 'Leaders', value: stats.leaders, icon: Shield, dot: '#0d9488', dotDark: '#2dd4bf', tone: 'bg-teal-50 dark:bg-teal-500/[0.10] text-teal-600 dark:text-teal-400' },
               { label: 'Events', value: stats.events, icon: BarChart3, dot: '#f59e0b', dotDark: '#fbbf24', tone: 'bg-amber-50 dark:bg-amber-500/[0.10] text-amber-600 dark:text-amber-400' },
+              { label: 'Auth issues', value: authIssueCount, icon: KeyRound, dot: '#ef4444', dotDark: '#f87171', tone: authIssueCount > 0 ? 'bg-red-50 dark:bg-red-500/[0.10] text-red-600 dark:text-red-400' : 'bg-gray-50 dark:bg-white/[0.06] text-gray-500 dark:text-white/45' },
             ].map(s => (
               <div key={s.label} className="relative rounded-3xl p-4 bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 4px 14px -8px rgba(15,23,42,0.08)' }}>
                 <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.05] dark:via-white/[0.08] to-transparent" />
@@ -398,6 +467,13 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
               const offColors = offenseColors[Math.min(offLevel, 4)] ?? offenseColors[0];
               const ministryStatus = member.ministry_status ?? 'active';
               const statusCfg = ministryStatusConfig[ministryStatus] ?? ministryStatusConfig.active;
+              const audit = authAudit[member.id];
+              const authStatus = audit?.auth_status;
+              const authCfg = authStatus ? authStatusConfig[authStatus] : null;
+              const resetDisabled =
+                !member.email ||
+                authStatus === 'missing_auth_account' ||
+                authStatus === 'invite_pending';
 
               return (
                 <div
@@ -426,6 +502,11 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                         {ministryStatus !== 'active' && (
                           <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-lg ${statusCfg.bgColor} ${statusCfg.textColor}`}>
                             {statusCfg.label}
+                          </span>
+                        )}
+                        {authCfg && authStatus !== 'ready' && (
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-lg ring-1 ${authCfg.className}`}>
+                            {authCfg.label}
                           </span>
                         )}
                       </div>
@@ -609,8 +690,8 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                                   </button>
                                   <button
                                     onClick={() => setResetConfirmMember(member)}
-                                    disabled={!member.email}
-                                    title={member.email ? 'Send password reset email' : 'No email on file'}
+                                    disabled={resetDisabled}
+                                    title={resetDisabled ? 'Password reset only works after an Auth account exists' : 'Send password reset email'}
                                     className="btn-ghost text-xs disabled:opacity-40 disabled:cursor-not-allowed"
                                   >
                                     <KeyRound className="h-3.5 w-3.5" /> Reset
@@ -626,6 +707,45 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                                 </div>
                               )}
                             </div>
+
+                            {authCfg && (
+                              <div className="rounded-xl bg-gray-50 dark:bg-white/[0.03] ring-1 ring-black/[0.04] dark:ring-white/[0.05] p-3">
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                  <div className="min-w-0">
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-wide mb-1 flex items-center gap-1">
+                                      <KeyRound className="h-3 w-3" /> Login Access
+                                    </p>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className={`inline-flex rounded-lg px-2 py-1 text-[10px] font-bold ring-1 ${authCfg.className}`}>
+                                        {authCfg.label}
+                                      </span>
+                                      {audit?.last_sign_in_at && (
+                                        <span className="text-[11px] text-gray-500 dark:text-white/35">
+                                          Last sign in {format(parseISO(audit.last_sign_in_at), 'MMM d, yyyy h:mm a')}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="mt-1.5 text-xs text-gray-500 dark:text-white/45 leading-relaxed">
+                                      {authCfg.detail}
+                                    </p>
+                                    {authStatus === 'missing_auth_account' && (
+                                      <p className="mt-1 text-xs text-red-600 dark:text-red-300">
+                                        Password reset will not help until they create an account from an invite link.
+                                      </p>
+                                    )}
+                                  </div>
+                                  {authStatus === 'invite_pending' && audit?.pending_invite_token && (
+                                    <button
+                                      type="button"
+                                      onClick={() => copyInviteLink(audit.pending_invite_token!)}
+                                      className="btn-secondary text-xs shrink-0"
+                                    >
+                                      Copy Invite Link
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            )}
 
                             {hasStats && attendanceRate !== null && (
                               <div className="rounded-xl bg-gray-50 dark:bg-white/[0.03] ring-1 ring-black/[0.04] dark:ring-white/[0.05] p-3">

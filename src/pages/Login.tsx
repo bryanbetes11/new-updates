@@ -27,6 +27,22 @@ export function Login() {
   const prefillEmail = params.get('email') || '';
   const isDark = true;
 
+  const inviteCreateAccountLink = `/register${location.search}`;
+  const getLoginErrorMessage = (error: Error & { code?: string }) => {
+    const message = error.message || 'Unable to sign in. Please try again.';
+    const isInvalidCredentials =
+      error.code === 'invalid_credentials' ||
+      message.toLowerCase().includes('invalid login credentials');
+
+    if (!isInvalidCredentials) return message;
+
+    if (params.get('email')) {
+      return 'Invalid email or password. If this is your first time using ServeSync, use Create Account from the invite link first.';
+    }
+
+    return 'Invalid email or password. If your admin just invited you, open the invite link and choose Create Account first.';
+  };
+
   useEffect(() => {
     if (isRecoveryLink) {
       navigate(recoveryRedirectPath(location.search, location.hash), { replace: true });
@@ -47,7 +63,7 @@ export function Login() {
     const { error } = await signIn(email, password);
     setLoading(false);
     if (error) {
-      toast('error', error.message);
+      toast('error', getLoginErrorMessage(error));
     } else {
       navigate(redirectTo);
     }
@@ -57,7 +73,7 @@ export function Login() {
     e.preventDefault();
     if (!forgotEmail) return;
     setForgotLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+    const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail.trim().toLowerCase(), {
       redirectTo: `${window.location.origin}/reset-password`,
     });
     setForgotLoading(false);
@@ -342,7 +358,7 @@ export function Login() {
                         <p className="text-center text-[13px] text-gray-400 dark:text-white/30 transition-colors duration-300">
                           Don&apos;t have an account?{' '}
                           <Link
-                            to={`/register${location.search}`}
+                            to={inviteCreateAccountLink}
                             className="font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
                           >
                             Create one

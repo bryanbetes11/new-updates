@@ -53,7 +53,7 @@ export function Register() {
       return;
     }
     setLoading(true);
-    const { error } = await signUp(email, password, firstName);
+    const { error } = await signUp(email.trim().toLowerCase(), password, firstName.trim());
     if (error) {
       toast('error', error.message);
       setLoading(false);

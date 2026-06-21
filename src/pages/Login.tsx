@@ -40,7 +40,7 @@ export function Login() {
       return 'Invalid email or password. If this is your first time using ServeSync, use Create Account from the invite link first.';
     }
 
-    return 'Invalid email or password. If your admin just invited you, open the invite link and choose Create Account first.';
+    return 'Invalid email or password. Try again or use Forgot password to reset it.';
   };
 
   useEffect(() => {

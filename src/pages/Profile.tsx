@@ -6,7 +6,7 @@ import {
   Pencil, Save, LogOut, X, Check, Crown,
   Camera, Loader2, Shield, ChevronDown, Clock,
   MessageSquare, XCircle, CheckCircle, Eye, KeyRound,
-  Phone, Cake, Calendar, AlertCircle
+  Phone, Cake, Calendar, AlertCircle, Mail
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -79,6 +79,9 @@ export function Profile() {
   const [myDisciplineRecords, setMyDisciplineRecords] = useState<DisciplineRecord[]>([]);
   const [disciplineExpanded, setDisciplineExpanded] = useState<string | null>(null);
   const [accountabilitySummary, setAccountabilitySummary] = useState<AccountabilitySummary | null>(null);
+  const [emailPanelOpen, setEmailPanelOpen] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [emailUpdating, setEmailUpdating] = useState(false);
 
   useEffect(() => {
     if (profile) {
@@ -93,6 +96,7 @@ export function Profile() {
         birthday: profile.birthday || '',
         official_join_date: profile.official_join_date || '',
       });
+      setNewEmail(profile.email || '');
     }
   }, [profile]);
 
@@ -146,6 +150,39 @@ export function Profile() {
   };
 
   const handleSignOut = async () => { await signOut(); navigate('/'); };
+
+  const handleEmailUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !profile) return;
+
+    const normalizedEmail = newEmail.trim().toLowerCase();
+    const currentEmail = (profile.email || user.email || '').trim().toLowerCase();
+
+    if (!normalizedEmail) {
+      toast('error', 'Enter the new email address.');
+      return;
+    }
+
+    if (normalizedEmail === currentEmail) {
+      toast('error', 'That is already your current email.');
+      return;
+    }
+
+    setEmailUpdating(true);
+    const { error } = await supabase.auth.updateUser(
+      { email: normalizedEmail },
+      { emailRedirectTo: `${window.location.origin}/profile` },
+    );
+    setEmailUpdating(false);
+
+    if (error) {
+      toast('error', error.message || 'Failed to send email confirmation.');
+      return;
+    }
+
+    toast('success', `Confirmation sent to ${normalizedEmail}`);
+    setEmailPanelOpen(false);
+  };
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!user || !e.target.files?.[0]) return;
@@ -264,6 +301,12 @@ export function Profile() {
                   <KeyRound className="h-3.5 w-3.5" /> Password
                 </button>
                 <button
+                  onClick={() => setEmailPanelOpen(open => !open)}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-white bg-white px-3 text-[11px] font-black text-gray-700 shadow-sm transition-all hover:-translate-y-0.5 active:scale-[0.97] dark:border-white/[0.08] dark:bg-white/[0.055] dark:text-white/70"
+                >
+                  <Mail className="h-3.5 w-3.5" /> Email
+                </button>
+                <button
                   onClick={handleSignOut}
                   className="inline-flex h-9 items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3 text-[11px] font-black text-red-600 transition-all hover:-translate-y-0.5 hover:bg-red-100 active:scale-[0.97] dark:border-red-500/25 dark:bg-red-500/[0.1] dark:text-red-400"
                 >
@@ -364,7 +407,7 @@ export function Profile() {
               </motion.div>
             )}
 
-            <div className="mt-4 grid grid-cols-3 gap-1.5 sm:hidden">
+            <div className="mt-4 grid grid-cols-2 gap-1.5 sm:hidden">
               <button
                 onClick={() => setEditing(!editing)}
                 className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-full text-[12px] font-black transition-all active:scale-[0.97] ${
@@ -382,6 +425,12 @@ export function Profile() {
                 <KeyRound className="h-3.5 w-3.5" /> Password
               </button>
               <button
+                onClick={() => setEmailPanelOpen(open => !open)}
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full border border-white bg-white text-[12px] font-black text-gray-700 shadow-sm active:scale-[0.97] dark:border-white/[0.08] dark:bg-white/[0.055] dark:text-white/70"
+              >
+                <Mail className="h-3.5 w-3.5" /> Email
+              </button>
+              <button
                 onClick={handleSignOut}
                 className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full border border-red-200 bg-red-50 text-[12px] font-black text-red-600 active:scale-[0.97] dark:border-red-500/25 dark:bg-red-500/[0.1] dark:text-red-400"
               >
@@ -389,6 +438,55 @@ export function Profile() {
               </button>
             </div>
           </div>
+
+          {emailPanelOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+              className="mt-4"
+            >
+              <PremiumCard className="p-5 sm:p-6">
+                <form onSubmit={handleEmailUpdate} className="space-y-4">
+                  <div>
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-300">
+                        <Mail className="h-4 w-4" />
+                      </span>
+                      <div>
+                        <h2 className="text-base font-black text-gray-950 dark:text-white">Update email address</h2>
+                        <p className="text-xs text-gray-500 dark:text-white/40">We will send a confirmation email to the new address.</p>
+                      </div>
+                    </div>
+                    <label className="mt-4 block text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-white/35 mb-2">
+                      New email address
+                    </label>
+                    <input
+                      type="email"
+                      value={newEmail}
+                      onChange={e => setNewEmail(e.target.value)}
+                      className="w-full h-12 rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm font-semibold text-gray-900 outline-none transition focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/20 dark:border-white/[0.08] dark:bg-white/[0.045] dark:text-white"
+                      placeholder="you@example.com"
+                      autoComplete="email"
+                      required
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs leading-relaxed text-gray-500 dark:text-white/35">
+                      Your email changes only after the confirmation link is opened.
+                    </p>
+                    <button
+                      type="submit"
+                      disabled={emailUpdating}
+                      className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-emerald-500 px-5 text-sm font-black text-white transition hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-50"
+                    >
+                      {emailUpdating ? <><Loader2 className="h-4 w-4 animate-spin" /> Sending...</> : 'Send confirmation'}
+                    </button>
+                  </div>
+                </form>
+              </PremiumCard>
+            </motion.div>
+          )}
 
           {/* Inline edit form */}
           {editing && (

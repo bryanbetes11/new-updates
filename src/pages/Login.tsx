@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { Eye, EyeOff, ArrowRight, ChevronLeft, Users, RefreshCw, Trash2 } from 'lucide-react';
+import { Eye, EyeOff, ArrowRight, ChevronLeft, Users, RefreshCw, Trash2, KeyRound, Mail } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -40,7 +40,7 @@ export function Login() {
       return 'Invalid email or password. If this is your first time using ServeSync, use Create Account from the invite link first.';
     }
 
-    return 'Invalid email or password. Try again or use Forgot password to reset it.';
+    return 'Invalid email or password. Try again or use Update my account to reset it.';
   };
 
   useEffect(() => {
@@ -302,7 +302,7 @@ export function Login() {
                             onClick={() => { setView('forgot'); setForgotEmail(email); }}
                             className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
                           >
-                            Forgot password?
+                            Update my account
                           </button>
                         </div>
                         <div className="relative">
@@ -369,7 +369,7 @@ export function Login() {
                   </motion.div>
                 )}
 
-                {/* ── FORGOT PASSWORD VIEW ── */}
+                {/* ── ACCOUNT UPDATE VIEW ── */}
                 {view === 'forgot' && (
                   <motion.div
                     key="forgot"
@@ -396,7 +396,7 @@ export function Login() {
                           Check your email
                         </h1>
                         <p className="text-[14px] text-gray-500 dark:text-white/35 leading-relaxed mb-2 transition-colors duration-300">
-                          We sent a password reset link to:
+                          We sent an account update link to:
                         </p>
                         <p className="text-[14px] font-semibold text-gray-900 dark:text-white mb-6 transition-colors duration-300">
                           {forgotEmail}
@@ -409,11 +409,38 @@ export function Login() {
                       <>
                         <div className="mb-9">
                           <h1 className="text-[26px] font-bold text-gray-900 dark:text-white tracking-[-0.025em] leading-tight transition-colors duration-300">
-                            Forgot password?
+                            Update my account
                           </h1>
                           <p className="mt-2 text-[14px] text-gray-500 dark:text-white/35 leading-relaxed transition-colors duration-300">
-                            Enter your email and we&apos;ll send you a reset link.
+                            Reset your password by email, or sign in first to securely change the email on your account.
                           </p>
+                        </div>
+
+                        <div className="mb-5 grid gap-3">
+                          <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] p-4">
+                            <div className="mb-2 flex items-center gap-2">
+                              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-500 dark:text-emerald-300">
+                                <KeyRound className="h-4 w-4" />
+                              </span>
+                              <div>
+                                <p className="text-[13px] font-bold text-gray-900 dark:text-white">Update password</p>
+                                <p className="text-[12px] text-gray-500 dark:text-white/35">We will email a secure reset link.</p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="rounded-2xl border border-white/[0.08] bg-white/[0.035] p-4">
+                            <div className="flex items-start gap-2">
+                              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-gray-500 dark:text-white/45">
+                                <Mail className="h-4 w-4" />
+                              </span>
+                              <div>
+                                <p className="text-[13px] font-bold text-gray-900 dark:text-white">Update email address</p>
+                                <p className="mt-1 text-[12px] leading-relaxed text-gray-500 dark:text-white/35">
+                                  For security, sign in first, then open Profile and choose Email. Supabase will send the confirmation email to your new address.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
                         </div>
 
                         <form onSubmit={handleForgot} className="space-y-4">
@@ -439,7 +466,7 @@ export function Login() {
                             >
                               {forgotLoading
                                 ? <><span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Sending…</>
-                                : <>Send Reset Link <ArrowRight className="h-4 w-4" /></>}
+                                : <>Send Password Email <ArrowRight className="h-4 w-4" /></>}
                             </button>
                           </div>
                         </form>

@@ -1,10 +1,11 @@
 import { useEffect, useState, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { motion } from 'framer-motion';
 import {
   Music, Upload, CheckCircle, AlertTriangle, Calendar, Search,
   ChevronDown, Trash2, Square, CheckSquare, X,
-  ListMusic, Clock, Music2, ArrowUpDown, ArrowRight, FileMusic,
+  Clock, Music2, ArrowUpDown, FileMusic,
   ExternalLink, Globe2, ClipboardPaste, Pencil,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -23,6 +24,7 @@ interface SetlistWithEvent {
   id: string;
   status: string;
   event_id: string;
+  created_by?: string | null;
   events?: { title: string; event_date: string; event_type: string };
   setlist_songs?: { id: string; position: number; song_id: string; performed_key: string; youtube_url?: string | null; songs?: { id: string; title: string; artist: string; song_key: string; youtube_url?: string | null; chordpro_text?: string | null } }[];
 }
@@ -99,57 +101,11 @@ const itemVariants = {
   show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] } },
 };
 
-/* ── Stat Card (matches Dashboard's vertical premium pill) ──────── */
-function StatCard({ label, value, color = 'default', onClick, active }: { label: string; value: number | string; color?: 'default' | 'green' | 'red' | 'amber'; onClick?: () => void; active?: boolean }) {
-  const tone = {
-    default: { val: 'text-gray-900 dark:text-white', dot: 'rgba(107,114,128,0.7)', dotDark: 'rgba(255,255,255,0.45)', ring: 'ring-black/[0.06] dark:ring-white/[0.08]', activeRing: 'ring-gray-400 dark:ring-gray-300' },
-    green:   { val: 'text-emerald-700 dark:text-emerald-300', dot: '#22c55e', dotDark: '#22c55e', ring: 'ring-emerald-200/80 dark:ring-emerald-500/20', activeRing: 'ring-emerald-500 dark:ring-emerald-400' },
-    red:     { val: 'text-red-700 dark:text-red-300', dot: '#ef4444', dotDark: '#f87171', ring: 'ring-red-200/80 dark:ring-red-500/20', activeRing: 'ring-red-500 dark:ring-red-400' },
-    amber:   { val: 'text-amber-700 dark:text-amber-300', dot: '#f59e0b', dotDark: '#fbbf24', ring: 'ring-amber-200/80 dark:ring-amber-500/20', activeRing: 'ring-amber-500 dark:ring-amber-400' },
-  }[color];
-
-  const Tag = onClick ? 'button' : 'div';
-  return (
-    <Tag
-      {...(onClick ? { type: 'button', onClick, 'aria-pressed': Boolean(active) } : {})}
-      className={`group relative flex flex-col items-start gap-1 px-3.5 py-3 rounded-2xl bg-white dark:bg-white/[0.025] ring-1 transition-all ${
-        active ? `ring-2 ${tone.activeRing}` : `${tone.ring} hover:bg-white dark:hover:bg-white/[0.04]`
-      } ${onClick ? 'cursor-pointer hover:-translate-y-0.5 hover:ring-2 hover:ring-emerald-300/70 dark:hover:ring-emerald-400/30 active:scale-[0.97]' : ''}`}
-      style={{ boxShadow: active ? '0 10px 24px -18px rgba(16,185,129,0.45)' : '0 1px 2px rgba(15,23,42,0.04), 0 4px 14px -10px rgba(15,23,42,0.10)' }}
-    >
-      <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.05] dark:via-white/[0.08] to-transparent" />
-      {onClick && (
-        <span className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-50 dark:bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 opacity-80 transition-all group-hover:translate-x-0.5 group-hover:opacity-100">
-          <ArrowRight className="h-3 w-3" />
-        </span>
-      )}
-      <div className="flex items-center gap-1.5">
-        <span className="h-1.5 w-1.5 rounded-full dark:hidden" style={{ background: tone.dot, boxShadow: `0 0 6px ${tone.dot}` }} />
-        <span className="h-1.5 w-1.5 rounded-full hidden dark:block" style={{ background: tone.dotDark, boxShadow: `0 0 6px ${tone.dotDark}` }} />
-        <span className="text-[9px] font-bold text-gray-500 dark:text-white/45 uppercase tracking-[0.14em] leading-none">{label}</span>
-      </div>
-      <span className={`text-[26px] font-black leading-none tabular-nums ${tone.val}`} style={{ letterSpacing: '-0.04em' }}>{value}</span>
-    </Tag>
-  );
-}
-
 function getDaysBg(days: number | null) {
   if (days === null) return 'bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-white/45';
   if (days >= RULE_DAYS) return 'bg-emerald-50 dark:bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/25';
   if (days >= 60) return 'bg-amber-50 dark:bg-amber-500/[0.12] text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/25';
   return 'bg-red-50 dark:bg-red-500/[0.12] text-red-700 dark:text-red-300 border border-red-200 dark:border-red-500/25';
-}
-
-function SectionLabel({ index, children, action }: { index: string; children: React.ReactNode; action?: React.ReactNode }) {
-  return (
-    <div className="flex items-end justify-between mb-3 px-0.5">
-      <div className="flex items-baseline gap-2.5">
-        <span className="text-[10px] font-mono font-semibold tabular-nums text-gray-400/70 dark:text-white/25 tracking-widest">{index}</span>
-        <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-white/45">{children}</span>
-      </div>
-      {action}
-    </div>
-  );
 }
 
 type SetlistsTabView = 'setlists' | 'songs';
@@ -161,6 +117,7 @@ interface SetlistsTabProps {
 
 export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTabProps) {
   const { user } = useAuth();
+  const location = useLocation();
   const { toast } = useToast();
   const [setlists, setSetlists] = useState<SetlistWithEvent[]>([]);
   const [songUsages, setSongUsages] = useState<SongUsage[]>([]);
@@ -207,12 +164,14 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   const fileRef = useRef<HTMLInputElement>(null);
   const chartFileRef = useRef<HTMLInputElement>(null);
   const openChartStorageKey = user?.id ? `${SONG_CHART_OPEN_STORAGE_PREFIX}:${user.id}` : '';
+  const ownerFilter = new URLSearchParams(location.search).get('owner');
+  const showMyCreatedSets = !isSongsOnly && ownerFilter === 'me';
 
   const fetchData = async () => {
     const [setlistRes, songsRes, songLeadersRes] = await Promise.all([
       supabase
         .from('setlists')
-        .select('id, status, event_id, events(title, event_date, event_type), setlist_songs(id, position, song_id, performed_key, youtube_url, songs(id, title, artist, song_key, youtube_url, chordpro_text))')
+        .select('id, status, event_id, created_by, events(title, event_date, event_type), setlist_songs(id, position, song_id, performed_key, youtube_url, songs(id, title, artist, song_key, youtube_url, chordpro_text))')
         .eq('status', 'approved')
         .order('created_at', { ascending: false }),
       supabase.from('songs').select('id, title, artist, song_key, created_by, youtube_url, chordpro_text').order('title'),
@@ -928,7 +887,11 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
     return true;
   });
 
-  const filteredSetlists = filterSetlistsBySearch(setlists, search, songLeaderMap);
+  const visibleSetlists = showMyCreatedSets && user?.id
+    ? setlists.filter(setlist => setlist.created_by === user.id)
+    : setlists;
+
+  const filteredSetlists = filterSetlistsBySearch(visibleSetlists, search, songLeaderMap);
 
   const sortedSetlists = [...filteredSetlists].sort((a, b) => {
     if (sortKey === 'date_asc') return (a.events?.event_date ?? '').localeCompare(b.events?.event_date ?? '');
@@ -969,22 +932,6 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
     return (
       <div className="space-y-5 pb-2">
 
-        {/* ── Header row: section label + import ── */}
-        <SectionLabel
-          index="01"
-          action={
-            <button
-              onClick={() => fileRef.current?.click()}
-              className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-semibold text-white transition-all active:scale-[0.97]"
-              style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', boxShadow: '0 3px 10px rgba(22,163,74,0.3)' }}
-            >
-              <Upload className="h-3.5 w-3.5" />
-              Import Excel
-            </button>
-          }
-        >
-          <span className="flex items-center gap-1.5"><ListMusic className="h-3 w-3" /> Approved Sets</span>
-        </SectionLabel>
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={e => handleFileUpload(e.target.files)} />
 
         {setlists.length === 0 ? (
@@ -996,7 +943,6 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
           />
         ) : (
           <>
-            {/* ── Search bar ── */}
             <motion.div
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1012,8 +958,8 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                     setSearch(e.target.value);
                     setSelectedSetlists(new Set());
                   }}
-                  placeholder="Search sets by song, leader, event, artist…"
-                  className="w-full h-10 pl-10 pr-9 rounded-2xl text-[13px] bg-white dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.08] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/30 outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 dark:focus:border-emerald-500/50 transition-all"
+                  placeholder={showMyCreatedSets ? 'Search my sets by song, event, artist…' : 'Search sets by song, leader, event, artist…'}
+                  className="w-full h-12 pl-10 pr-9 rounded-full text-[13px] bg-white/[0.055] border border-white/[0.08] text-white placeholder-white/30 outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/50 transition-all"
                 />
                 {search && (
                   <button
@@ -1033,6 +979,13 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                   {sortedSetlists.length} set{sortedSetlists.length !== 1 ? 's' : ''} found
                 </span>
               )}
+              <button
+                onClick={() => fileRef.current?.click()}
+                className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-full bg-white/[0.095] px-5 text-[13px] font-black text-white transition-all hover:bg-[#1ed760] hover:text-black active:scale-[0.97]"
+              >
+                <Upload className="h-4 w-4" />
+                Import Excel
+              </button>
             </motion.div>
 
             {/* ── Toolbar ── */}
@@ -1077,17 +1030,17 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                   <div className="flex-1" />
                   <button
                     onClick={() => setSelectMode(true)}
-                    className="inline-flex items-center gap-1.5 px-3 h-8 text-[11px] font-semibold text-gray-600 dark:text-white/55 rounded-full bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-md hover:bg-white dark:hover:bg-white/[0.07] transition-colors active:scale-[0.97]"
+                    className="inline-flex items-center gap-1.5 px-3 h-8 text-[11px] font-semibold text-white/55 rounded-full bg-white/[0.055] border border-white/[0.07] backdrop-blur-md hover:bg-white/[0.09] transition-colors active:scale-[0.97]"
                   >
                     <CheckSquare className="h-3.5 w-3.5" />
                     Select
                   </button>
-                  <div className="inline-flex items-center gap-1.5 pl-3 pr-2 h-8 rounded-full bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-md">
+                  <div className="inline-flex items-center gap-1.5 pl-3 pr-2 h-8 rounded-full bg-white/[0.055] border border-white/[0.07] backdrop-blur-md">
                     <ArrowUpDown className="h-3 w-3 text-gray-400 dark:text-white/35" />
                     <select
                       value={sortKey}
                       onChange={e => setSortKey(e.target.value as SortKey)}
-                      className="text-[11px] font-semibold text-gray-600 dark:text-white/60 bg-transparent border-none outline-none cursor-pointer pr-1"
+                      className="text-[11px] font-semibold text-white/60 bg-transparent border-none outline-none cursor-pointer pr-1"
                     >
                       <option value="date_desc">Newest first</option>
                       <option value="date_asc">Oldest first</option>
@@ -1103,14 +1056,18 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
               variants={containerVariants}
               initial="hidden"
               animate="show"
-              className="space-y-2.5"
+              className="overflow-hidden border-y border-white/[0.08]"
             >
               {sortedSetlists.length === 0 ? (
-                <div className="rounded-3xl border border-gray-200/80 dark:border-white/[0.06] bg-white dark:bg-white/[0.025] px-5 py-10 text-center">
+                <div className="px-5 py-10 text-center">
                   <Search className="mx-auto h-6 w-6 text-gray-300 dark:text-white/20" />
-                  <p className="mt-3 text-sm font-bold text-gray-900 dark:text-white">No sets found</p>
+                  <p className="mt-3 text-sm font-bold text-gray-900 dark:text-white">
+                    {showMyCreatedSets ? 'No sets created by you yet' : 'No sets found'}
+                  </p>
                   <p className="mt-1 text-xs text-gray-400 dark:text-white/35">
-                    Try another song title, artist, event, or song leader.
+                    {showMyCreatedSets
+                      ? 'Sets you create from event pages will show here.'
+                      : 'Try another song title, artist, event, or song leader.'}
                   </p>
                 </div>
               ) : sortedSetlists.map(sl => {
@@ -1122,20 +1079,19 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                 const displayName = songLeaderMap[sl.event_id] || sl.events?.title || 'Untitled';
                 const eventType = sl.events?.event_type;
                 const leaderAvatar = songLeaderAvatarMap[sl.event_id];
+                const orderedSongs = [...(sl.setlist_songs || [])].sort((a, b) => a.position - b.position);
+                const artworkSongs = orderedSongs.slice(0, 4);
 
                 return (
                   <motion.div
                     key={sl.id}
                     variants={itemVariants}
-                    className={`group relative rounded-3xl overflow-hidden transition-all duration-300 border ${
+                    className={`group relative border-b border-white/[0.075] transition-colors duration-200 last:border-b-0 ${
                       isSelected
-                        ? 'border-emerald-400/60 dark:border-emerald-500/40 bg-emerald-50/40 dark:bg-emerald-500/[0.05]'
-                        : 'border-gray-200/80 dark:border-white/[0.06] bg-white dark:bg-white/[0.025] hover:border-gray-300 dark:hover:border-white/[0.1] hover:-translate-y-0.5'
+                        ? 'bg-[#22c55e]/10'
+                        : 'hover:bg-white/[0.045]'
                     }`}
-                    style={{ boxShadow: isSelected ? '0 0 0 1px rgba(16,185,129,0.2)' : '0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -12px rgba(15,23,42,0.10)' }}
                   >
-                    <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.12] to-transparent" />
-
                     <div className="flex items-center">
                       {selectMode && (
                         <button
@@ -1152,50 +1108,51 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                       )}
                       <button
                         onClick={() => setExpandedSetlist(isExpanded ? null : sl.id)}
-                        className="flex-1 flex items-center gap-3.5 pl-4 pr-4 py-3.5 text-left"
+                        className="flex-1 flex items-center gap-3.5 pl-4 pr-4 py-4 text-left"
                       >
-                        {/* Date chip — gradient like Events */}
-                        {eventDate ? (
-                          <div
-                            className="relative flex flex-col items-center justify-center h-[52px] w-11 rounded-xl shrink-0"
-                            style={{ background: 'linear-gradient(145deg,#16a34a,#15803d)', boxShadow: '0 3px 10px rgba(22,163,74,0.3)' }}
-                          >
-                            <span className="text-[9px] font-black uppercase tracking-widest leading-none text-white/65">
-                              {format(parseISO(eventDate), 'MMM')}
-                            </span>
-                            <span className="text-[22px] font-black leading-none mt-0.5 text-white" style={{ letterSpacing: '-0.04em' }}>
-                              {format(parseISO(eventDate), 'd')}
-                            </span>
-                            <span className="text-[8px] font-bold leading-none mt-0.5 text-white/50">
-                              {format(parseISO(eventDate), 'EEE')}
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="h-[52px] w-11 rounded-xl shrink-0 bg-gray-100 dark:bg-white/[0.05]" />
-                        )}
+                        <div className="grid h-16 w-16 shrink-0 grid-cols-2 overflow-hidden rounded-md bg-white/[0.055] ring-1 ring-white/[0.08] sm:h-20 sm:w-20">
+                          {Array.from({ length: 4 }).map((_, index) => {
+                            const setlistSong = artworkSongs[index];
+                            return setlistSong ? (
+                              <SongArtwork
+                                key={setlistSong.id}
+                                song={setlistSong.songs}
+                                youtubeUrl={setlistSong.youtube_url || setlistSong.songs?.youtube_url}
+                                className="h-full w-full rounded-none"
+                              />
+                            ) : (
+                              <div
+                                key={`empty-${index}`}
+                                className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_35%_25%,rgba(34,197,94,0.30),transparent_34%),linear-gradient(135deg,rgba(255,255,255,0.10),rgba(0,0,0,0.92))]"
+                              >
+                                <Music className="h-3.5 w-3.5 text-white/45" />
+                              </div>
+                            );
+                          })}
+                        </div>
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-[14px] font-bold text-gray-900 dark:text-white truncate leading-tight" style={{ letterSpacing: '-0.015em' }}>
+                            <p className="text-[1rem] font-black leading-tight text-white sm:text-[1.12rem]">
                               {displayName}
                             </p>
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/25">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/[0.12] px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.1em] text-emerald-300 ring-1 ring-emerald-500/20">
                               <CheckCircle className="h-2.5 w-2.5" /> Approved
                             </span>
                           </div>
                           <div className="flex items-center flex-wrap gap-x-2.5 gap-y-0.5 mt-1">
                             {eventDate && (
-                              <span className="text-[11px] text-gray-500 dark:text-white/40 flex items-center gap-1 font-mono">
+                              <span className="text-[11px] text-white/40 flex items-center gap-1 font-mono">
                                 <Calendar className="h-3 w-3" />
                                 {format(parseISO(eventDate), 'MMM d, yyyy')}
                               </span>
                             )}
-                            <span className="text-[11px] text-gray-400 dark:text-white/30 font-mono">{songCount} song{songCount !== 1 ? 's' : ''}</span>
+                            <span className="text-[11px] text-white/30 font-mono">{songCount} song{songCount !== 1 ? 's' : ''}</span>
                             {daysSinceEvent !== null && (
-                              <span className="text-[11px] text-gray-400 dark:text-white/25 font-mono hidden sm:inline">{daysSinceEvent}d ago</span>
+                              <span className="text-[11px] text-white/25 font-mono hidden sm:inline">{daysSinceEvent}d ago</span>
                             )}
                             {eventType && eventType !== 'imported' && (
-                              <span className="hidden sm:inline text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-white/45 capitalize">{eventType.replace(/_/g, ' ')}</span>
+                              <span className="hidden sm:inline text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-white/[0.06] text-white/45 capitalize">{eventType.replace(/_/g, ' ')}</span>
                             )}
                           </div>
                         </div>
@@ -1210,7 +1167,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                               className="ring-1 ring-black/[0.06] dark:ring-white/[0.08]"
                             />
                           )}
-                          <div className={`flex items-center justify-center w-7 h-7 rounded-xl transition-all ${isExpanded ? 'bg-gray-100 dark:bg-white/[0.06] rotate-180' : ''}`}>
+                          <div className={`flex items-center justify-center w-7 h-7 rounded-xl transition-all ${isExpanded ? 'bg-white/[0.06] rotate-180' : ''}`}>
                             <ChevronDown className="h-3.5 w-3.5 text-gray-400 dark:text-white/35" />
                           </div>
                         </div>
@@ -1218,7 +1175,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                     </div>
 
                     {isExpanded && sl.setlist_songs && (
-                      <div className="border-t border-black/[0.04] dark:border-white/[0.05]">
+                      <div className="border-t border-white/[0.055] bg-black/10">
                         <div className="px-4 pt-3 pb-1 flex items-center gap-2">
                           <Music2 className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
                           <span className="text-[10px] font-black text-gray-500 dark:text-white/45 uppercase tracking-[0.14em]">Songs in order</span>
@@ -1226,6 +1183,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                         </div>
                         <div className="divide-y divide-black/[0.03] dark:divide-white/[0.04] pb-2">
                           {sl.setlist_songs
+                            .slice()
                             .sort((a, b) => a.position - b.position)
                             .map((ss, i) => {
                               const songUsage = songUsages.find(u => u.id === ss.song_id);

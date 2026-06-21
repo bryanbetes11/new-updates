@@ -71,6 +71,7 @@ interface NavItem {
   path: string;
   label: string;
   icon: NavIcon;
+  tone?: string;
   badgeKey?: 'announcements' | 'events' | 'notifications' | 'pendingLeave' | 'messages';
   badgeColor?: 'red' | 'blue' | 'amber';
   exact?: boolean;
@@ -80,6 +81,9 @@ const SongsNavIcon: NavIcon = ({ className, style }) => <BookOpen className={cla
 const VideosNavIcon: NavIcon = ({ className, style }) => <Video className={className} style={style} />;
 const SetsNavIcon: NavIcon = ({ className, style }) => <ListChecks className={className} style={style} />;
 const LibraryNavIcon: NavIcon = ({ className, style }) => <Layers3 className={className} style={style} />;
+const SwapsNavIcon: NavIcon = ({ className, style }) => <ArrowLeftRight className={className} style={style} />;
+const TeamNavIcon: NavIcon = ({ className, style }) => <Users className={className} style={style} />;
+const ConductNavIcon: NavIcon = ({ className, style }) => <AlertTriangle className={className} style={style} />;
 const globalSearchTypeMeta: Record<GlobalSearchKind, { label: string; icon: LucideIcon; tone: string }> = {
   event: { label: 'Event', icon: Calendar, tone: 'text-emerald-300 bg-emerald-500/14' },
   song: { label: 'Song', icon: Music2, tone: 'text-sky-300 bg-sky-500/14' },
@@ -96,13 +100,10 @@ const mobileNavItems: NavItem[] = [
 ];
 
 const sidebarMainItems: NavItem[] = [
-  { path: '/dashboard', label: 'Home', icon: HomeIcon, exact: true },
-  { path: '/events', label: 'Events', icon: CalendarIcon, badgeKey: 'events', badgeColor: 'red' },
-  { path: '/announcements', label: 'News', icon: NewsIcon, badgeKey: 'announcements', badgeColor: 'blue' },
-  { path: '/songs', label: 'Songs', icon: SongsNavIcon },
-  { path: '/videos', label: 'Videos', icon: VideosNavIcon },
-  { path: '/sets', label: 'Sets', icon: SetsNavIcon },
-  { path: '/messages', label: 'Chat', icon: MessageIcon, badgeKey: 'messages', badgeColor: 'red' },
+  { path: '/dashboard', label: 'Home', icon: HomeIcon, exact: true, tone: 'from-emerald-500/85 via-green-900 to-black' },
+  { path: '/events', label: 'Events', icon: CalendarIcon, badgeKey: 'events', badgeColor: 'red', tone: 'from-sky-500/85 via-blue-900 to-black' },
+  { path: '/announcements', label: 'News', icon: NewsIcon, badgeKey: 'announcements', badgeColor: 'blue', tone: 'from-amber-500/85 via-zinc-800 to-black' },
+  { path: '/messages', label: 'Chat', icon: MessageIcon, badgeKey: 'messages', badgeColor: 'red', tone: 'from-violet-500/85 via-indigo-900 to-black' },
 ];
 
 function MobileBadge({ count, color }: { count: number; color?: 'red' | 'blue' | 'amber' }) {
@@ -473,13 +474,29 @@ export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false
     };
   }, [globalSearchOpen, globalSearchQuery]);
 
+  const leadershipHomePath = isOrgAdmin && !isLeader ? '/leadership/church' : '/leadership/overview';
   const sidebarManagementItems: NavItem[] = [
-    { path: '/request-leave', label: 'Leave', icon: LeaveIcon },
-    ...(isLeader || isOrgAdmin || canApproveLeave || canManageDiscipline
-      ? [{ path: isOrgAdmin && !isLeader ? '/leadership/church' : '/leadership/overview', label: isOrgAdmin && !isLeader ? 'Church' : 'Leader', icon: ShieldNavIcon, badgeKey: 'pendingLeave' as const, badgeColor: 'red' as const }]
+    {
+      path: canApproveLeave ? '/leadership/leave' : '/request-leave',
+      label: canApproveLeave ? 'Leave Queue' : 'Request Leave',
+      icon: LeaveIcon,
+      tone: 'from-orange-500/85 via-amber-900 to-black',
+      ...(canApproveLeave ? { badgeKey: 'pendingLeave' as const, badgeColor: 'red' as const } : {}),
+    },
+    ...(isLeader
+      ? [
+          { path: '/leadership/setlists', label: 'Setlist Queue', icon: SetsNavIcon, tone: 'from-emerald-500/85 via-teal-900 to-black' },
+          { path: '/leadership/swaps', label: 'Swap Requests', icon: SwapsNavIcon, tone: 'from-cyan-500/85 via-blue-900 to-black' },
+        ]
       : []),
-    ...(isPlatformOwner
-      ? [{ path: '/platform', label: 'Platform', icon: ShieldNavIcon }]
+    ...(isLeader || isOrgAdmin
+      ? [
+          { path: leadershipHomePath, label: 'Leadership', icon: ShieldNavIcon, tone: 'from-indigo-500/85 via-violet-900 to-black' },
+          { path: '/leadership/team', label: 'Team Roster', icon: TeamNavIcon, tone: 'from-fuchsia-500/80 via-slate-800 to-black' },
+        ]
+      : []),
+    ...(isLeader || canManageDiscipline
+      ? [{ path: '/leadership/discipline', label: 'Conduct', icon: ConductNavIcon, tone: 'from-red-500/85 via-rose-900 to-black' }]
       : []),
   ];
   const displayName = profile?.nickname || profile?.first_name || '';
@@ -499,14 +516,14 @@ export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false
         ? 'Library'
         : 'ServeSync';
   const desktopLibraryItems = [
-    { title: 'Worship Team', caption: '12 members', tone: 'from-amber-500/80 via-zinc-800 to-black' },
-    { title: 'Production Team', caption: '8 members', tone: 'from-violet-500/80 via-blue-900 to-black' },
-    { title: 'Youth Ministry', caption: '15 members', tone: 'from-orange-500/80 via-zinc-800 to-black' },
-    { title: 'Kids Ministry', caption: '6 members', tone: 'from-emerald-400/80 via-cyan-900 to-black' },
+    { title: 'Songs', caption: 'Charts & library', path: '/songs', tone: 'from-emerald-500/85 via-teal-800 to-black', icon: Music2 },
+    { title: 'Sets', caption: 'Approved setlists', path: '/sets', tone: 'from-violet-500/85 via-indigo-800 to-black', icon: ListChecks },
+    { title: 'Videos', caption: 'Training media', path: '/videos', tone: 'from-sky-500/85 via-cyan-900 to-black', icon: Video },
   ];
   const desktopShortcutItems = [
-    { title: 'Liked Songs', caption: '89 songs', tone: 'from-indigo-400 via-violet-500 to-emerald-300' },
-    { title: 'My Sets', caption: '6 sets', tone: 'from-emerald-500 via-green-700 to-black' },
+    { title: 'My Assignments', caption: 'Serving schedule', path: '/my-assignments', tone: 'from-emerald-500/85 via-green-900 to-black', icon: CheckCircle2 },
+    { title: 'My Sets', caption: 'Created by me', path: '/sets?owner=me', tone: 'from-indigo-400 via-violet-700 to-black', icon: ListChecks },
+    { title: 'Profile', caption: 'Account & details', path: '/profile', tone: 'from-zinc-300/75 via-zinc-700 to-black', icon: User },
   ];
 
   const sidebarWidth = collapsed ? 92 : 300;
@@ -646,6 +663,7 @@ export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false
     const active = isActive(item);
     const Icon = item.icon;
     const badge = getBadgeCount(item);
+    const iconTone = item.tone || 'from-zinc-300/75 via-zinc-700 to-black';
 
     if (isCollapsed) {
       return (
@@ -665,8 +683,9 @@ export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false
                 transition={{ type: 'spring', stiffness: 460, damping: 38 }}
               />
             )}
-            <div className="relative">
-              <Icon active={active} className="h-[18px] w-[18px] shrink-0" style={{ width: '18px', height: '18px', strokeWidth: 2 }} />
+            <div className={`relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-[0.6rem] bg-gradient-to-br ${iconTone} shadow-[inset_0_1px_0_rgba(255,255,255,0.16)]`}>
+              <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_28%_22%,rgba(255,255,255,0.34),transparent_32%)]" />
+              <Icon active={active} className="relative h-[17px] w-[17px] shrink-0 text-white/90" style={{ width: '17px', height: '17px', strokeWidth: 2.2 }} />
               {badge > 0 && (
                 <span className={`absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full text-white text-[8px] font-bold leading-none ${item.badgeColor === 'blue' ? 'bg-blue-500' : item.badgeColor === 'amber' ? 'bg-amber-500' : 'bg-red-500'}`}>
                   {badge > 9 ? '9+' : badge}
@@ -695,11 +714,14 @@ export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false
             transition={{ type: 'spring', stiffness: 460, damping: 38 }}
           />
         )}
-        <Icon
-          active={active}
-          className={`relative shrink-0 h-[18px] w-[18px] transition-colors ${active ? 'text-[#22c55e]' : 'text-white/58 group-hover:text-white'}`}
-          style={{ width: '18px', height: '18px', strokeWidth: 2 }}
-        />
+        <span className={`relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-[0.55rem] bg-gradient-to-br ${iconTone} shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] transition-transform group-hover:scale-[1.03]`}>
+          <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_28%_22%,rgba(255,255,255,0.34),transparent_32%)]" />
+          <Icon
+            active={active}
+            className="relative h-[17px] w-[17px] shrink-0 text-white/90"
+            style={{ width: '17px', height: '17px', strokeWidth: 2.2 }}
+          />
+        </span>
         <span className="relative flex-1 truncate text-left">{item.label}</span>
         {badge > 0 && <SidebarBadge count={badge} color={item.badgeColor} />}
       </button>
@@ -870,8 +892,13 @@ export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false
           className="flex min-w-[170px] items-center gap-3 text-left"
           aria-label="Go to dashboard"
         >
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#22c55e] text-black shadow-[0_14px_28px_-20px_rgba(34,197,94,0.9)]">
-            <Music2 className="h-5 w-5" />
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center">
+            <img
+              src="/generated/servesync-mark-dark.png"
+              alt=""
+              aria-hidden="true"
+              className="h-8 w-8 object-contain brightness-0 invert drop-shadow-[0_0_14px_rgba(255,255,255,0.14)]"
+            />
           </span>
           <span className="min-w-0">
             <span className="block truncate text-[18px] font-black leading-none">ServeSync</span>
@@ -1356,19 +1383,19 @@ export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false
             {!collapsed && (
               <>
                 <div className="mt-5 border-t border-white/[0.08] pt-4">
-                  <div className="mb-2 flex items-center justify-between px-2.5">
+                  <div className="mb-2 px-2.5">
                     <p className="text-[10px] font-black uppercase tracking-[0.12em] text-white/36">Ministry Library</p>
-                    <Plus className="h-4 w-4 text-white/48" />
                   </div>
                   <div className="space-y-1.5">
                     {desktopLibraryItems.map((entry) => (
                       <button
                         key={entry.title}
-                        onClick={() => handleNav('/leadership/team')}
+                        onClick={() => handleNav(entry.path)}
                         className="group flex w-full items-center gap-3 rounded-[0.7rem] px-2.5 py-1.5 text-left transition-colors hover:bg-white/[0.065]"
                       >
-                        <span className={`h-10 w-10 shrink-0 overflow-hidden rounded-[0.35rem] bg-gradient-to-br ${entry.tone}`}>
+                        <span className={`relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-[0.35rem] bg-gradient-to-br ${entry.tone}`}>
                           <span className="block h-full w-full bg-[radial-gradient(circle_at_28%_22%,rgba(255,255,255,0.30),transparent_28%)]" />
+                          <entry.icon className="absolute h-[18px] w-[18px] text-white/88" strokeWidth={2.2} />
                         </span>
                         <span className="min-w-0">
                           <span className="block truncate text-[13px] font-bold leading-tight text-white">{entry.title}</span>
@@ -1380,19 +1407,19 @@ export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false
                 </div>
 
                 <div className="mt-4 border-t border-white/[0.08] pt-4">
-                  <div className="mb-2 flex items-center justify-between px-2.5">
+                  <div className="mb-2 px-2.5">
                     <p className="text-[10px] font-black uppercase tracking-[0.12em] text-white/36">My Shortcuts</p>
-                    <Plus className="h-4 w-4 text-white/48" />
                   </div>
                   <div className="space-y-1.5">
                     {desktopShortcutItems.map((entry) => (
                       <button
                         key={entry.title}
-                        onClick={() => handleNav(entry.title === 'Liked Songs' ? '/songs' : '/sets')}
+                        onClick={() => handleNav(entry.path)}
                         className="group flex w-full items-center gap-3 rounded-[0.7rem] px-2.5 py-1.5 text-left transition-colors hover:bg-white/[0.065]"
                       >
-                        <span className={`h-10 w-10 shrink-0 overflow-hidden rounded-[0.35rem] bg-gradient-to-br ${entry.tone}`}>
+                        <span className={`relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-[0.35rem] bg-gradient-to-br ${entry.tone}`}>
                           <span className="block h-full w-full bg-[radial-gradient(circle_at_28%_22%,rgba(255,255,255,0.35),transparent_28%)]" />
+                          <entry.icon className="absolute h-[18px] w-[18px] text-white/88" strokeWidth={2.2} />
                         </span>
                         <span className="min-w-0">
                           <span className="block truncate text-[13px] font-bold leading-tight text-white">{entry.title}</span>
@@ -1408,10 +1435,8 @@ export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false
             {sidebarManagementItems.length > 0 && (
               <div className="mt-5">
                 {!collapsed && (
-                  <div className="mb-2 flex items-center gap-3 px-2.5">
-                    <span className="h-px flex-1 bg-white/[0.08]" />
-                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/36">Management</p>
-                    <span className="h-px flex-1 bg-white/[0.08]" />
+                  <div className="mb-2 px-2.5">
+                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-white/36">Management</p>
                   </div>
                 )}
                 {collapsed && <div className="h-3" />}

@@ -9,27 +9,54 @@ let installedAppVersion = readStoredInstalledAppVersion();
 let userRequestedUpdate = false;
 let hasRegisteredControllerChangeHandler = false;
 
+function getLocalStorage() {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
 function isLocalPreviewHost() {
   if (typeof window === 'undefined') return false;
-  return ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
+  const { hostname, port } = window.location;
+
+  return ['localhost', '127.0.0.1', '::1'].includes(hostname)
+    || /^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostname)
+    || /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)
+    || /^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(hostname)
+    || ['4173', '5173'].includes(port);
 }
 
 function readStoredInstalledAppVersion() {
-  if (typeof window === 'undefined') return null;
-  return window.localStorage.getItem(INSTALLED_APP_VERSION_KEY);
+  const storage = getLocalStorage();
+  if (!storage) return null;
+
+  try {
+    return storage.getItem(INSTALLED_APP_VERSION_KEY);
+  } catch {
+    return null;
+  }
 }
 
 function persistInstalledAppVersion(version: string | null) {
   installedAppVersion = version;
 
-  if (typeof window === 'undefined') return;
+  const storage = getLocalStorage();
+  if (!storage) return;
 
-  if (version) {
-    window.localStorage.setItem(INSTALLED_APP_VERSION_KEY, version);
-    return;
+  try {
+    if (version) {
+      storage.setItem(INSTALLED_APP_VERSION_KEY, version);
+      return;
+    }
+
+    storage.removeItem(INSTALLED_APP_VERSION_KEY);
+  } catch {
+    // App update tracking is optional; never block rendering on storage.
   }
-
-  window.localStorage.removeItem(INSTALLED_APP_VERSION_KEY);
 }
 
 function getVersionFromScriptUrl(scriptUrl?: string | null) {

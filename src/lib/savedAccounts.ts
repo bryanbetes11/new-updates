@@ -14,8 +14,14 @@ export interface SavedAccount {
 
 const STORAGE_KEY = 'servesync-saved-accounts';
 
-function canUseStorage() {
-  return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+function getLocalStorage() {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
 }
 
 function isSavedAccount(value: unknown): value is SavedAccount {
@@ -35,10 +41,11 @@ function isSavedAccount(value: unknown): value is SavedAccount {
 }
 
 export function readSavedAccounts(): SavedAccount[] {
-  if (!canUseStorage()) return [];
+  const storage = getLocalStorage();
+  if (!storage) return [];
 
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = storage.getItem(STORAGE_KEY);
     if (!raw) return [];
 
     const parsed = JSON.parse(raw);
@@ -53,8 +60,14 @@ export function readSavedAccounts(): SavedAccount[] {
 }
 
 export function writeSavedAccounts(accounts: SavedAccount[]) {
-  if (!canUseStorage()) return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(accounts));
+  const storage = getLocalStorage();
+  if (!storage) return;
+
+  try {
+    storage.setItem(STORAGE_KEY, JSON.stringify(accounts));
+  } catch {
+    // Saved account shortcuts are optional; never block app startup on storage.
+  }
 }
 
 export function upsertSavedAccount(nextAccount: SavedAccount): SavedAccount[] {

@@ -685,15 +685,47 @@ export function Dashboard() {
   const displayEvents: DashboardEventCard[] = (upcomingEvents.length > 0 ? upcomingEvents : fallbackEvents)
     .slice(0, 12)
     .map(event => ({ ...event, location: (event as { location?: string }).location }));
-  const dashboardUpcomingEvents = displayEvents.slice(0, 3);
   const assignedEventIds = new Set(myAssignments.map(assignment => assignment.event_id));
-  const reviewSets = pendingSetlists.slice(0, 4);
-  const announcementRows = (recentAnnouncements.length > 0 ? recentAnnouncements : [
+  const todayKey = getManilaTodayKey(now);
+  const weekEnd = new Date(`${todayKey}T00:00:00+08:00`);
+  weekEnd.setDate(weekEnd.getDate() + 6);
+  const weekEndKey = format(weekEnd, 'yyyy-MM-dd');
+  const isThisWeekDate = (date?: string | null) => Boolean(date && date >= todayKey && date <= weekEndKey);
+  const isThisWeekEvent = (event?: Pick<Event, 'event_date'> | null) => isThisWeekDate(event?.event_date);
+  const filterEventsForHub = (events: DashboardEventCard[]) => {
+    if (activeHubFilter === 'week') return events.filter(event => isThisWeekEvent(event));
+    if (activeHubFilter === 'serving') return events.filter(event => assignedEventIds.has(event.id));
+    return events;
+  };
+  const filterAssignmentsForHub = (assignments: EventAssignment[]) => {
+    if (activeHubFilter === 'week') return assignments.filter(assignment => isThisWeekEvent(assignment.events));
+    if (activeHubFilter === 'team') return [];
+    return assignments;
+  };
+  const filterSetlistsForHub = (setlists: PendingReviewSetlist[]) => {
+    if (activeHubFilter === 'week') return setlists.filter(setlist => isThisWeekEvent(setlist.events));
+    if (activeHubFilter === 'serving') return setlists.filter(setlist => assignedEventIds.has(setlist.event_id || setlist.events?.id || ''));
+    return setlists;
+  };
+  const filterAvailabilityForHub = (members: UserAvailability[]) => {
+    if (activeHubFilter === 'week') return members.filter(member => isThisWeekDate(member.unavailable_date || member.start_date));
+    if (activeHubFilter === 'serving') return [];
+    return members;
+  };
+  const filteredDisplayEvents = filterEventsForHub(displayEvents);
+  const dashboardUpcomingEvents = filteredDisplayEvents.slice(0, 3);
+  const filteredAssignments = filterAssignmentsForHub(myAssignments);
+  const assignmentRows = filteredAssignments.slice(0, 3);
+  const reviewSets = filterSetlistsForHub(pendingSetlists).slice(0, 4);
+  const announcementRows = ((recentAnnouncements.length > 0 ? recentAnnouncements : [
     { id: 'sample-ann-1', title: 'Leadership Meeting this Saturday', content: 'We will be discussing service flow, volunteer updates, and upcoming events.', created_at: new Date().toISOString() },
     { id: 'sample-ann-2', title: 'New Training: In-Ear Monitor Basics', content: 'Join us this Sunday after the morning service at the Media Room.', created_at: new Date().toISOString() },
     { id: 'sample-ann-3', title: 'Song Requests Open', content: "Submit your song requests for next month's setlists.", created_at: new Date().toISOString() },
-  ] as any[]).slice(0, 3);
-  const songsThisWeek = displayEvents.reduce<DashboardWeekSong[]>((songs, event) => {
+  ] as any[])
+    .filter(announcement => activeHubFilter !== 'week' || isThisWeekDate(announcement.created_at?.slice(0, 10)))
+  ).slice(0, 3);
+  const teamAvailabilityRows = filterAvailabilityForHub(unavailableMembers).slice(0, 3);
+  const songsThisWeek = filteredDisplayEvents.reduce<DashboardWeekSong[]>((songs, event) => {
     const eventSongs = eventArtworkSongsMap[event.id] || [];
     eventSongs.forEach((song) => {
       const nestedSong = getDashboardArtworkSong(song);
@@ -716,7 +748,7 @@ export function Dashboard() {
     { key: 'holy-forever', title: 'Holy Forever', artist: 'Bethel Music', song: { id: 'fallback-holy', songs: { title: 'Holy Forever', artist: 'Bethel Music' } } },
     { key: 'great-are-you-lord', title: 'Great Are You Lord', artist: 'All Sons & Daughters', song: { id: 'fallback-great', songs: { title: 'Great Are You Lord', artist: 'All Sons & Daughters' } } },
   ];
-  const weekSongs = songsThisWeek.length > 0 ? songsThisWeek : fallbackSongsThisWeek;
+  const weekSongs = songsThisWeek.length > 0 ? songsThisWeek : activeHubFilter === 'all' ? fallbackSongsThisWeek : [];
   const quickActions = [
     { label: 'Create Set', icon: ListChecks, path: '/sets' },
     { label: 'Schedule Event', icon: Calendar, path: '/events' },
@@ -725,8 +757,6 @@ export function Dashboard() {
     { label: 'New Announcement', icon: Megaphone, path: '/announcements/new' },
     { label: 'Invite People', icon: UserPlus, path: '/leadership/team' },
   ];
-  const assignmentRows = myAssignments.slice(0, 3);
-  const teamAvailabilityRows = unavailableMembers.slice(0, 3);
   const hubFilters: { id: DashboardHubFilter; label: string }[] = [
     { id: 'all', label: 'All' },
     { id: 'week', label: 'This Week' },
@@ -749,16 +779,16 @@ export function Dashboard() {
       { title: 'Announcements', subtitle: `${announcementRows.length} latest`, tone: 'from-sky-400 via-violet-700 to-black', path: '/announcements', icon: Megaphone },
     ],
     week: [
-      { title: 'This Week', subtitle: 'Calendar', tone: 'from-blue-500 via-blue-900 to-slate-950', path: '/events', icon: Calendar },
-      { title: 'My Assignments', subtitle: `${stats.total} scheduled`, tone: 'from-emerald-400 via-green-700 to-black', path: '/my-assignments', icon: Check },
-      { title: 'Service Updates', subtitle: 'Announcements', tone: 'from-sky-400 via-violet-700 to-black', path: '/announcements', icon: Megaphone },
+      { title: 'This Week', subtitle: `${filteredDisplayEvents.length} events`, tone: 'from-blue-500 via-blue-900 to-slate-950', path: '/events', icon: Calendar },
+      { title: 'My Assignments', subtitle: `${filteredAssignments.length} scheduled`, tone: 'from-emerald-400 via-green-700 to-black', path: '/my-assignments', icon: Check },
+      { title: 'Service Updates', subtitle: `${announcementRows.length} updates`, tone: 'from-sky-400 via-violet-700 to-black', path: '/announcements', icon: Megaphone },
       { title: 'Team Availability', subtitle: `${teamAvailabilityRows.length} upcoming`, tone: 'from-yellow-400 via-amber-800 to-black', path: '/request-leave', icon: UserX },
       { title: 'Songs to Learn', subtitle: 'Library', tone: 'from-orange-200 via-stone-700 to-black', path: '/songs', icon: Music },
       { title: 'Service Recordings', subtitle: 'Videos', tone: 'from-zinc-300 via-zinc-700 to-black', path: '/videos', icon: Upload },
     ],
     serving: [
-      { title: 'Confirm Status', subtitle: `${stats.confirmed}/${stats.total} confirmed`, tone: 'from-emerald-400 via-green-700 to-black', path: '/my-assignments', icon: Check },
-      { title: 'My Service Sets', subtitle: 'Ready songs', tone: 'from-indigo-400 via-violet-500 to-emerald-300', path: '/sets', icon: ListChecks },
+      { title: 'Confirm Status', subtitle: `${filteredAssignments.filter(a => a.status === 'confirmed').length}/${filteredAssignments.length} confirmed`, tone: 'from-emerald-400 via-green-700 to-black', path: '/my-assignments', icon: Check },
+      { title: 'My Service Sets', subtitle: `${reviewSets.length} in review`, tone: 'from-indigo-400 via-violet-500 to-emerald-300', path: '/sets', icon: ListChecks },
       { title: 'Find a Sub', subtitle: 'Swap or cover', tone: 'from-cyan-400 via-blue-800 to-black', path: '/my-assignments', icon: ArrowLeftRight },
       { title: 'Team Chat', subtitle: 'Coordinate', tone: 'from-zinc-200 via-zinc-700 to-black', path: '/messages', icon: MessageCircle },
       { title: 'Request Leave', subtitle: 'Update availability', tone: 'from-yellow-400 via-amber-800 to-black', path: '/request-leave', icon: UserX },
@@ -867,7 +897,7 @@ export function Dashboard() {
                   <button onClick={() => navigate('/events')} className="text-[12px] font-bold text-[#22c55e]">See all</button>
                 </div>
                 <div className="flex snap-x gap-3 overflow-x-auto pb-1 no-scrollbar lg:hidden" style={{ WebkitOverflowScrolling: 'touch' }}>
-                  {displayEvents.map((event) => {
+                  {filteredDisplayEvents.map((event) => {
                     const eventTitle = eventLeaderMap[event.id] || event.title;
                     const artworkUrls = eventArtworkMap[event.id] || [];
                     const artworkSongs = eventArtworkSongsMap[event.id] || [];
@@ -898,7 +928,11 @@ export function Dashboard() {
                   })}
                 </div>
                 <div className="hidden space-y-2 lg:block">
-                  {dashboardUpcomingEvents.map((event) => {
+                  {dashboardUpcomingEvents.length === 0 ? (
+                    <p className="rounded-[0.55rem] bg-white/[0.045] px-3 py-8 text-center text-[12px] font-semibold text-white/45">
+                      No events match this filter.
+                    </p>
+                  ) : dashboardUpcomingEvents.map((event) => {
                     const isAssignedToEvent = assignedEventIds.has(event.id);
                     const eventTitle = eventLeaderMap[event.id] || event.title;
                     const artworkUrls = eventArtworkMap[event.id] || [];

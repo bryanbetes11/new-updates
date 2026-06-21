@@ -7,21 +7,43 @@ export interface ServiceModeResumeState {
   updatedAt: number;
 }
 
-export function getActiveServiceMode(): ServiceModeResumeState | null {
+function getLocalStorage() {
   if (typeof window === 'undefined') return null;
 
   try {
-    const raw = window.localStorage.getItem(SERVICE_MODE_RESUME_KEY);
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+function removeStoredServiceMode() {
+  const storage = getLocalStorage();
+  if (!storage) return;
+
+  try {
+    storage.removeItem(SERVICE_MODE_RESUME_KEY);
+  } catch {
+    // Service-mode resume is optional; storage failures should not block rendering.
+  }
+}
+
+export function getActiveServiceMode(): ServiceModeResumeState | null {
+  const storage = getLocalStorage();
+  if (!storage) return null;
+
+  try {
+    const raw = storage.getItem(SERVICE_MODE_RESUME_KEY);
     if (!raw) return null;
 
     const parsed = JSON.parse(raw) as Partial<ServiceModeResumeState>;
     if (!parsed.eventId || typeof parsed.songIndex !== 'number' || typeof parsed.updatedAt !== 'number') {
-      window.localStorage.removeItem(SERVICE_MODE_RESUME_KEY);
+      removeStoredServiceMode();
       return null;
     }
 
     if (Date.now() - parsed.updatedAt > SERVICE_MODE_RESUME_MAX_AGE_MS) {
-      window.localStorage.removeItem(SERVICE_MODE_RESUME_KEY);
+      removeStoredServiceMode();
       return null;
     }
 
@@ -31,30 +53,33 @@ export function getActiveServiceMode(): ServiceModeResumeState | null {
       updatedAt: parsed.updatedAt,
     };
   } catch {
-    window.localStorage.removeItem(SERVICE_MODE_RESUME_KEY);
+    removeStoredServiceMode();
     return null;
   }
 }
 
 export function saveActiveServiceMode(eventId: string, songIndex: number) {
-  if (typeof window === 'undefined') return;
+  const storage = getLocalStorage();
+  if (!storage) return;
 
-  window.localStorage.setItem(
-    SERVICE_MODE_RESUME_KEY,
-    JSON.stringify({
-      eventId,
-      songIndex: Math.max(0, songIndex),
-      updatedAt: Date.now(),
-    } satisfies ServiceModeResumeState)
-  );
+  try {
+    storage.setItem(
+      SERVICE_MODE_RESUME_KEY,
+      JSON.stringify({
+        eventId,
+        songIndex: Math.max(0, songIndex),
+        updatedAt: Date.now(),
+      } satisfies ServiceModeResumeState)
+    );
+  } catch {
+    // Service-mode resume is optional; storage failures should not block rendering.
+  }
 }
 
 export function clearActiveServiceMode(eventId?: string) {
-  if (typeof window === 'undefined') return;
-
   const current = getActiveServiceMode();
   if (eventId && current && current.eventId !== eventId) return;
-  window.localStorage.removeItem(SERVICE_MODE_RESUME_KEY);
+  removeStoredServiceMode();
 }
 
 export function serviceModeResumePath(state: ServiceModeResumeState) {

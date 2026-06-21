@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { motion } from 'framer-motion';
-import { PlayCircle, Plus, Search, ExternalLink, Film, CreditCard as Edit2, Trash2, MoreVertical, X, Tag } from 'lucide-react';
+import { PlayCircle, Plus, Search, ExternalLink, Film, CreditCard as Edit2, Trash2, MoreVertical, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -163,22 +163,44 @@ export function VideosTab() {
   return (
     <div className="space-y-4 pb-2">
 
-      {/* ── Section Label + Add Button ───────────────── */}
-      <div className="flex items-center justify-between px-0.5">
-        <div className="flex items-baseline gap-2.5">
-          <span className="text-[10px] font-mono font-semibold tabular-nums text-gray-400/70 dark:text-white/25 tracking-widest">01</span>
-          <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-white/45 flex items-center gap-1.5">
-            <Film className="h-3 w-3" /> Video Library
-          </span>
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+        className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div className="-mx-1 flex min-w-0 gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {[{ label: 'All', value: '', count: videos.length }, ...categories
+            .filter(cat => videos.some(v => v.category === cat))
+            .map(cat => ({ label: cat, value: cat, count: videos.filter(v => v.category === cat).length }))]
+            .map(filter => {
+              const active = categoryFilter === filter.value;
+              return (
+                <button
+                  key={filter.label}
+                  type="button"
+                  onClick={() => setCategoryFilter(active && filter.value ? '' : filter.value)}
+                  className={`inline-flex h-11 shrink-0 items-center gap-3 rounded-full px-5 text-sm font-black transition-all active:scale-[0.98] ${
+                    active
+                      ? 'bg-[#1ed760] text-black shadow-[0_14px_34px_-20px_rgba(30,215,96,0.9)]'
+                      : 'bg-white/[0.095] text-white/82 hover:bg-white/[0.14]'
+                  }`}
+                >
+                  <span>{filter.label}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-black ${active ? 'bg-black/10 text-black' : 'bg-white/[0.09] text-white/62'}`}>
+                    {filter.count}
+                  </span>
+                </button>
+              );
+            })}
         </div>
         <button
           onClick={() => setShowCreate(true)}
-          className="inline-flex items-center gap-1.5 px-4 h-9 rounded-full text-[12px] font-semibold text-white shrink-0 transition-all active:scale-[0.97]"
-          style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', boxShadow: '0 4px 14px rgba(22,163,74,0.35)' }}
+          className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-white/[0.095] px-5 text-[13px] font-black text-white transition-all hover:bg-[#1ed760] hover:text-black active:scale-[0.97]"
         >
-          <Plus className="h-3.5 w-3.5" /> Add Video
+          <Plus className="h-4 w-4" /> Add Video
         </button>
-      </div>
+      </motion.div>
 
       {/* ── Toolbar ───────────────────────────────────── */}
       <motion.div
@@ -194,7 +216,7 @@ export function VideosTab() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search videos…"
-            className="w-full h-10 pl-10 pr-9 rounded-2xl text-[13px] bg-white dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.08] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/30 outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 dark:focus:border-emerald-500/50 transition-all"
+            className="w-full h-12 pl-10 pr-9 rounded-full text-[13px] bg-white/[0.055] border border-white/[0.08] text-white placeholder-white/30 outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/50 transition-all"
           />
           {search && (
             <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
@@ -202,58 +224,7 @@ export function VideosTab() {
             </button>
           )}
         </div>
-        <div className="hidden sm:block">
-          <Select
-            value={categoryFilter}
-            onChange={setCategoryFilter}
-            options={[{ value: '', label: 'All Categories' }, ...categories.map(c => ({ value: c, label: c }))]}
-            placeholder="All Categories"
-            className="sm:w-44"
-          />
-        </div>
       </motion.div>
-
-      {/* ── Category Pills ──────────────────────────── */}
-      {videos.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.05, ease: [0.16, 1, 0.3, 1] }}
-          className="flex items-center gap-2 flex-wrap"
-        >
-          <span className="text-[10px] font-black text-gray-400 dark:text-white/35 uppercase tracking-[0.14em] flex items-center gap-1 shrink-0">
-            <Tag className="h-3 w-3" /> Filter
-          </span>
-          {categories
-            .filter(cat => videos.some(v => v.category === cat))
-            .map(cat => {
-              const count = videos.filter(v => v.category === cat).length;
-              const active = categoryFilter === cat;
-              return (
-                <button
-                  key={cat}
-                  onClick={() => setCategoryFilter(active ? '' : cat)}
-                  className={`inline-flex items-center gap-1.5 px-2.5 h-7 rounded-full text-[11px] font-bold transition-all duration-150 active:scale-[0.97] ${
-                    active
-                      ? `${categoryColors[cat] ?? 'bg-gray-100 text-gray-600'} ring-1 ring-current/30`
-                      : 'bg-white/70 dark:bg-white/[0.04] text-gray-500 dark:text-white/45 border border-black/[0.06] dark:border-white/[0.07] hover:bg-white dark:hover:bg-white/[0.07]'
-                  }`}
-                >
-                  {cat}
-                  <span className={`tabular-nums font-semibold ${active ? 'opacity-70' : 'opacity-60'}`}>{count}</span>
-                </button>
-              );
-            })}
-          {categoryFilter && (
-            <button
-              onClick={() => setCategoryFilter('')}
-              className="text-[11px] font-semibold text-gray-400 dark:text-white/40 hover:text-gray-600 dark:hover:text-white/60 flex items-center gap-1 ml-0.5 transition-colors"
-            >
-              <X className="h-3 w-3" /> Clear
-            </button>
-          )}
-        </motion.div>
-      )}
 
       {filtered.length === 0 ? (
         <EmptyState
@@ -268,7 +239,7 @@ export function VideosTab() {
             variants={containerVariants}
             initial="hidden"
             animate="show"
-            className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+            className="overflow-hidden border-y border-white/[0.08]"
           >
             {filtered.map(video => {
               const thumb = video.thumbnail_url || getYouTubeThumb(video.video_url);
@@ -278,15 +249,11 @@ export function VideosTab() {
                 <motion.div
                   key={video.id}
                   variants={itemVariants}
-                  className="group relative rounded-3xl overflow-hidden bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] hover:border-gray-300 dark:hover:border-white/[0.1] hover:-translate-y-0.5 transition-all duration-300"
-                  style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -12px rgba(15,23,42,0.10)' }}
+                  className="group relative border-b border-white/[0.075] transition-colors duration-200 last:border-b-0 hover:bg-white/[0.045]"
                 >
-                  {/* Inner top-edge highlight */}
-                  <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.12] to-transparent z-10" />
-
-                  <a href={video.video_url} target="_blank" rel="noopener noreferrer" className="block">
-                    {/* Thumbnail */}
-                    <div className="relative aspect-video bg-gray-100 dark:bg-white/[0.04] overflow-hidden">
+                  <a href={video.video_url} target="_blank" rel="noopener noreferrer" className="grid gap-3 px-4 py-4 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-5 sm:px-5 lg:px-6">
+                    <div className="flex items-start gap-3 sm:contents">
+                      <div className="relative h-16 w-28 shrink-0 overflow-hidden rounded-md bg-white/[0.055] ring-1 ring-white/[0.08] sm:h-20 sm:w-36">
                       {thumb ? (
                         <img
                           src={thumb}
@@ -295,60 +262,56 @@ export function VideosTab() {
                         />
                       ) : (
                         <div className="flex items-center justify-center h-full">
-                          <Film className="h-10 w-10 text-gray-300 dark:text-white/15" />
+                          <Film className="h-8 w-8 text-white/18" />
                         </div>
                       )}
 
-                      {/* Play overlay */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
-                        <div className="flex items-center justify-center w-14 h-14 rounded-full bg-white/15 backdrop-blur-md ring-2 ring-white/40 translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
-                          <PlayCircle className="h-8 w-8 text-white" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15 backdrop-blur-md ring-1 ring-white/40">
+                            <PlayCircle className="h-6 w-6 text-white" />
+                          </div>
                         </div>
                       </div>
 
-                      {/* Category chip */}
-                      <div className="absolute bottom-2.5 left-2.5">
-                        <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wide ${catColor}`} style={{ backdropFilter: 'blur(8px)' }}>
-                          {video.category}
-                        </span>
-                      </div>
-
-                      {/* Open indicator */}
-                      <div className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                        <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-black/55 backdrop-blur-sm">
-                          <ExternalLink className="h-3 w-3 text-white/85" />
-                          <span className="text-[10px] font-semibold text-white/85">Open</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.1em] ${catColor}`}>
+                            {video.category}
+                          </span>
+                        </div>
+                        <p className="mt-1.5 text-[1rem] font-black leading-tight text-white sm:text-[1.12rem]">
+                          {video.title}
+                        </p>
+                        {video.description && (
+                          <p className="mt-1 line-clamp-2 text-[13px] leading-5 text-white/48 sm:line-clamp-1">{video.description}</p>
+                        )}
+                        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-white/32">
+                          <span className="truncate text-white/48">
+                            {video.profiles?.first_name} {video.profiles?.last_name}
+                          </span>
+                          <span className="font-mono whitespace-nowrap">{format(parseISO(video.created_at), 'MMM d, yyyy')}</span>
                         </div>
                       </div>
                     </div>
 
-                    {/* Card body */}
-                    <div className="p-4">
-                      <p className="text-[14px] font-bold text-gray-900 dark:text-white line-clamp-2 leading-snug" style={{ letterSpacing: '-0.02em' }}>
-                        {video.title}
-                      </p>
-                      {video.description && (
-                        <p className="text-[12px] text-gray-500 dark:text-white/40 mt-1 line-clamp-2 leading-relaxed">{video.description}</p>
-                      )}
-                      <div className="flex items-center gap-2 mt-3 pt-3 border-t border-black/[0.04] dark:border-white/[0.05]">
-                        <span className="text-[11px] font-semibold text-gray-500 dark:text-white/45 truncate">
-                          {video.profiles?.first_name} {video.profiles?.last_name}
-                        </span>
-                        <span className="text-gray-300 dark:text-white/15 shrink-0">·</span>
-                        <span className="text-[11px] font-mono text-gray-400 dark:text-white/30 shrink-0">{format(parseISO(video.created_at), 'MMM d, yyyy')}</span>
-                      </div>
+                    <div className="hidden items-center gap-2 justify-self-end text-white/26 sm:flex">
+                      <span className="text-[11px] font-bold uppercase tracking-[0.12em] opacity-0 transition-opacity group-hover:opacity-100">
+                        Open
+                      </span>
+                      <ExternalLink className="h-4 w-4" />
                     </div>
                   </a>
 
                   {/* Manage menu */}
                   {canManage && (
-                    <div className="absolute top-2.5 left-2.5 z-20">
+                    <div className="absolute right-4 top-4 z-20 sm:right-5 lg:right-6">
                       <div className="relative">
                         <button
                           onClick={e => { e.preventDefault(); e.stopPropagation(); setOpenMenuId(openMenuId === video.id ? null : video.id); }}
-                          className="p-1.5 rounded-xl bg-white/90 dark:bg-[#1c1b1e]/90 backdrop-blur-sm hover:bg-white dark:hover:bg-[#252527] transition-colors shadow-sm ring-1 ring-black/[0.06] dark:ring-white/[0.1]"
+                          className="p-1.5 rounded-full bg-white/[0.075] text-white/60 backdrop-blur-sm ring-1 ring-white/[0.08] transition-colors hover:bg-white/[0.12] hover:text-white"
                         >
-                          <MoreVertical className="h-3.5 w-3.5 text-gray-600 dark:text-gray-300" />
+                          <MoreVertical className="h-3.5 w-3.5" />
                         </button>
                         {openMenuId === video.id && (
                           <div className="absolute left-0 mt-1 w-36 bg-white dark:bg-[#232325] rounded-2xl shadow-xl ring-1 ring-black/[0.07] dark:ring-white/[0.08] py-1 z-30">

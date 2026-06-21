@@ -303,8 +303,8 @@ function formatSongLeaderName(profile: { first_name?: string | null; last_name?:
   return prefix ? `${prefix} ${name}` : name;
 }
 
-function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEventClick, isPast }: {
-  event: Event; calendarEntries: CalendarEntry[]; songLeaderMap?: Record<string, string>; setlistInfoMap?: Record<string, SetlistInfo>; onEventClick: (id: string) => void; isPast?: boolean;
+function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEventClick, isPast, artworkClassName = 'h-16 w-16' }: {
+  event: Event; calendarEntries: CalendarEntry[]; songLeaderMap?: Record<string, string>; setlistInfoMap?: Record<string, SetlistInfo>; onEventClick: (id: string) => void; isPast?: boolean; artworkClassName?: string;
 }) {
   const dayEntries = calendarEntries.filter(e => e.date === event.event_date && e.type === 'leave');
   const songLeader = songLeaderMap?.[event.id];
@@ -336,10 +336,10 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
           title={event.title}
           artworkUrls={setlistInfo.artworkUrls || []}
           songs={setlistInfo.artworkSongs}
-          className="h-16 w-16 rounded-[0.35rem]"
+          className={`${artworkClassName} rounded-[0.35rem]`}
         />
       ) : (
-        <EmptyEventArtwork />
+        <EmptyEventArtwork className={artworkClassName} />
       )}
 
       {/* Body */}
@@ -409,7 +409,7 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
   );
 }
 
-function BirthdayCard({ name, date }: { name: string; date: string }) {
+function BirthdayCard({ name, date, artworkClassName = 'h-16 w-16' }: { name: string; date: string; artworkClassName?: string }) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [wishing, setWishing] = useState(false);
@@ -487,7 +487,7 @@ function BirthdayCard({ name, date }: { name: string; date: string }) {
     <div
       className="touch-action-pan-y relative flex w-full items-center gap-3 bg-transparent px-0 py-3 text-left"
     >
-      <div className="relative isolate flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-[0.35rem] border border-white/[0.08] bg-[#222222]">
+      <div className={`relative isolate flex shrink-0 items-center justify-center overflow-hidden rounded-[0.35rem] border border-white/[0.08] bg-[#222222] ${artworkClassName}`}>
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(236,72,153,0.22),transparent_34%)]" />
         <PartyPopper className="relative h-5 w-5 text-pink-200/82" />
       </div>
@@ -655,20 +655,6 @@ function getEventListItems(events: Event[], calendarEntries: CalendarEntry[], sh
   );
 }
 
-function getEventStatus(event: Event, setlistInfo: SetlistInfo | undefined, isPast?: boolean) {
-  const hasApprovedSetlist = setlistInfo?.status === 'approved';
-  const proposalDueDate = event.proposal_due_date ? parseISO(event.proposal_due_date) : null;
-  const daysUntilDue = proposalDueDate ? differenceInDays(proposalDueDate, new Date()) : null;
-  const isOverdue = daysUntilDue !== null && daysUntilDue < 0 && !hasApprovedSetlist && !isPast;
-  const isDueSoon = daysUntilDue !== null && daysUntilDue >= 0 && daysUntilDue <= 3 && !hasApprovedSetlist && !isPast;
-
-  if (hasApprovedSetlist) return { label: 'Ready', className: 'border-[#22c55e]/20 bg-[#22c55e]/10 text-[#22c55e]' };
-  if (setlistInfo?.status === 'pending_review') return { label: 'Pending review', className: 'border-amber-400/20 bg-amber-400/10 text-amber-300' };
-  if (isOverdue) return { label: 'Overdue', className: 'border-red-400/20 bg-red-400/10 text-red-300' };
-  if (isDueSoon) return { label: `Due in ${daysUntilDue}d`, className: 'border-amber-400/20 bg-amber-400/10 text-amber-300' };
-  return { label: 'No songs yet', className: 'border-white/[0.08] bg-white/[0.04] text-white/58' };
-}
-
 type EventListItem =
   | { kind: 'event'; sortDate: string; event: Event }
   | { kind: 'birthday'; sortDate: string; entry: CalendarEntry };
@@ -718,78 +704,34 @@ function EventDesktopCardGroups({ events, calendarEntries, songLeaderMap, setlis
             <span className="rounded-full bg-white/[0.08] px-2 py-0.5 text-[11px] font-black text-white/58">{group.items.length}</span>
           </div>
 
-          <div className="grid gap-3 xl:grid-cols-2">
+          <div className="divide-y divide-white/[0.08] border-y border-white/[0.08]">
             {group.items.map((item) => {
               if (item.kind === 'birthday') {
-                const parsedDate = parseISO(item.entry.date);
                 return (
                   <div
                     key={`desktop-bday-${item.entry.name}-${item.entry.date}`}
-                    className="group relative flex min-h-[8rem] items-center gap-4 rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-4 text-left shadow-[0_20px_58px_-48px_rgba(0,0,0,0.95)] transition-colors hover:bg-[#202020]"
+                    className="transition-colors hover:bg-white/[0.035]"
                   >
-                    <div className="relative isolate flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-[0.35rem] border border-white/[0.08] bg-[#222222]">
-                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(236,72,153,0.22),transparent_34%)]" />
-                      <PartyPopper className="relative h-8 w-8 text-pink-200/82" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="truncate text-[18px] font-black leading-tight text-white">{item.entry.name}</p>
-                        <EventTypeBadge type="Birthday" />
-                      </div>
-                      <p className="mt-1 text-[13px] font-semibold text-white/48">{format(parsedDate, 'EEEE, MMMM dd')}</p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-3">
-                      <EventDateChip date={item.entry.date} compact tone="danger" />
-                      <span className="inline-flex rounded-full border border-pink-300/15 bg-pink-400/10 px-3 py-1 text-[11px] font-bold text-pink-200/72">
-                        Birthday
-                      </span>
-                    </div>
+                    <BirthdayCard name={item.entry.name} date={item.entry.date} artworkClassName="h-24 w-24" />
                   </div>
                 );
               }
 
-              const setlistInfo = setlistInfoMap?.[item.event.id];
-              const songLeader = songLeaderMap?.[item.event.id];
-              const status = getEventStatus(item.event, setlistInfo, showPast);
-
               return (
-                <button
+                <div
                   key={item.event.id}
-                  type="button"
-                  onClick={() => onEventClick(item.event.id)}
-                  className="group relative flex min-h-[8rem] w-full items-center gap-4 rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-4 text-left shadow-[0_20px_58px_-48px_rgba(0,0,0,0.95)] transition-colors hover:bg-[#202020]"
-                  style={{ opacity: showPast ? 0.72 : 1 }}
+                  className="transition-colors hover:bg-white/[0.035]"
                 >
-                  {setlistInfo?.songCount ? (
-                    <EventArtwork
-                      eventType={item.event.event_type}
-                      title={item.event.title}
-                      artworkUrls={setlistInfo.artworkUrls || []}
-                      songs={setlistInfo.artworkSongs}
-                      className="h-24 w-24 rounded-[0.35rem]"
-                    />
-                  ) : (
-                    <EmptyEventArtwork className="h-24 w-24" />
-                  )}
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="truncate text-[18px] font-black leading-tight text-white">{songLeader || item.event.title}</p>
-                      <EventTypeBadge type={item.event.event_type} />
-                      {setlistInfo?.songCount ? (
-                        <span className="inline-flex rounded-full bg-white/[0.08] px-2 py-0.5 text-[10px] font-black text-white/72">
-                          {setlistInfo.songCount} {setlistInfo.songCount === 1 ? 'song' : 'songs'}
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="mt-2 text-[13px] font-semibold text-white/48">{formatTime12Hour(item.event.start_time || '')}{item.event.end_time && ` – ${formatTime12Hour(item.event.end_time)}`}</p>
-                  </div>
-
-                  <div className="flex shrink-0 items-center gap-3">
-                    <span className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-bold ${status.className}`}>{status.label}</span>
-                    <EventDateChip date={item.event.event_date} compact />
-                  </div>
-                </button>
+                  <EventCard
+                    event={item.event}
+                    calendarEntries={calendarEntries}
+                    songLeaderMap={songLeaderMap}
+                    setlistInfoMap={setlistInfoMap}
+                    onEventClick={onEventClick}
+                    isPast={showPast}
+                    artworkClassName="h-24 w-24"
+                  />
+                </div>
               );
             })}
           </div>

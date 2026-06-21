@@ -25,6 +25,7 @@ type AnnouncementWithBlocks = Announcement & {
 };
 
 const QUICK_EMOJIS = ['👍', '❤️', '🙏', '🔥', '😂', '✅'];
+type NewsFilter = 'all' | 'unread' | 'pinned' | 'urgent';
 
 function groupReactions(reactions: AnnouncementReaction[]) {
   const map: Record<string, { emoji: string; count: number; users: string[] }> = {};
@@ -82,6 +83,7 @@ export function Announcements() {
   const [showCreate, setShowCreate] = useState(false);
   const [isDesktop, setIsDesktop] = useState(() => typeof window === 'undefined' ? true : window.matchMedia('(min-width: 1024px)').matches);
   const [emojiPickerId, setEmojiPickerId] = useState<string | null>(null);
+  const [newsFilter, setNewsFilter] = useState<NewsFilter>('all');
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -217,17 +219,29 @@ export function Announcements() {
     fetchAnnouncements();
   };
 
-  const filtered = announcements.filter(a => {
+  const visibleAnnouncements = announcements.filter(a => {
     if (!isLeader && (a as AnnouncementWithBlocks).is_leaders_only) return false;
     return true;
   });
 
+  const visibleUnreadCount = visibleAnnouncements.filter(a => user && !a.announcement_views?.some(v => v.user_id === user.id)).length;
+  const pinnedCount = visibleAnnouncements.filter(a => (a.announcement_pins?.length || 0) > 0).length;
+  const urgentCount = visibleAnnouncements.filter(a => a.priority === 'urgent').length;
+  const filtered = visibleAnnouncements.filter(a => {
+    if (newsFilter === 'unread') return Boolean(user && !a.announcement_views?.some(v => v.user_id === user.id));
+    if (newsFilter === 'pinned') return (a.announcement_pins?.length || 0) > 0;
+    if (newsFilter === 'urgent') return a.priority === 'urgent';
+    return true;
+  });
   const pinned = filtered.filter(a => (a.announcement_pins?.length || 0) > 0);
   const unpinned = filtered.filter(a => (a.announcement_pins?.length || 0) === 0);
   const sortedFiltered = [...pinned, ...unpinned];
-  const visibleUnreadCount = filtered.filter(a => user && !a.announcement_views?.some(v => v.user_id === user.id)).length;
-  const urgentCount = filtered.filter(a => a.priority === 'urgent').length;
-  const latestAnnouncement = sortedFiltered[0];
+  const filterOptions: { id: NewsFilter; label: string; count: number }[] = [
+    { id: 'all', label: 'All', count: visibleAnnouncements.length },
+    { id: 'unread', label: 'Unread', count: visibleUnreadCount },
+    { id: 'pinned', label: 'Pinned', count: pinnedCount },
+    { id: 'urgent', label: 'Urgent', count: urgentCount },
+  ];
 
   const getPreviewText = (a: AnnouncementWithBlocks) => {
     const blocks = a.content_blocks;
@@ -240,68 +254,47 @@ export function Announcements() {
   if (loading) return <div className="page-container"><AnnouncementsSkeleton /></div>;
 
   return (
-    <div className="page-container page-bottom-pad relative overflow-hidden bg-[#f6f4ef] text-gray-900 dark:bg-[#121212] dark:text-white">
-      <div
-        className="pointer-events-none fixed inset-0 -z-10 bg-[#f6f4ef] dark:bg-[#121212]"
-      />
+    <div className="page-container page-bottom-pad relative min-h-screen overflow-hidden bg-[#050505] text-white">
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-[#050505]" />
       <div className="relative max-w-2xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 pb-6 space-y-5 sm:space-y-6">
 
-        {/* ── Header ───────────────────────────────────── */}
         <motion.div
-          initial={{ opacity: 0, y: 14, filter: 'blur(6px)' }}
+          initial={{ opacity: 0, y: 10, filter: 'blur(4px)' }}
           animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          className="relative overflow-hidden rounded-[2rem] border border-amber-200/70 bg-[radial-gradient(circle_at_18%_20%,rgba(251,191,36,0.28),transparent_34%),radial-gradient(circle_at_86%_24%,rgba(251,191,36,0.18),transparent_36%),linear-gradient(135deg,#fffaf0_0%,#ffffff_48%,#f8fafc_100%)] p-5 shadow-[0_24px_80px_-46px_rgba(146,64,14,0.65)] dark:border-white/[0.08] dark:bg-[radial-gradient(circle_at_16%_18%,rgba(245,158,11,0.18),transparent_34%),radial-gradient(circle_at_86%_24%,rgba(245,158,11,0.12),transparent_36%),linear-gradient(135deg,#1c1307_0%,#10100d_46%,#070807_100%)] sm:p-6"
+          transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+          className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
         >
-          <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div className="flex items-start">
-              <div className="min-w-0">
-                <p className="text-[10px] font-mono font-black uppercase tracking-[0.32em] text-amber-700/75 dark:text-amber-300/70">
-                  Team updates
-                </p>
-                <h1 className="mt-1 text-[2rem] font-black leading-none text-gray-950 dark:text-white sm:text-[2.55rem]" style={{ letterSpacing: '-0.065em' }}>
-                  Announcements
-                </h1>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600 dark:text-white/52">
-                  The latest ministry updates, pinned reminders, and team-wide notes in one calm place.
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2 sm:min-w-[23rem]">
-              {[
-                { label: 'Unread', value: visibleUnreadCount },
-                { label: 'Pinned', value: pinned.length },
-                { label: 'Urgent', value: urgentCount },
-              ].map(stat => (
-                <div key={stat.label} className="rounded-2xl border border-white bg-white px-3 py-3 text-center shadow-sm dark:border-white/[0.08] dark:bg-white/[0.05]">
-                  <p className="text-lg font-black leading-none text-gray-950 dark:text-white">{stat.value}</p>
-                  <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400 dark:text-white/32">{stat.label}</p>
-                </div>
-              ))}
-            </div>
+          <div className="-mx-1 flex min-w-0 gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {filterOptions.map(option => {
+              const active = newsFilter === option.id;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setNewsFilter(option.id)}
+                  className={`inline-flex h-11 shrink-0 items-center gap-3 rounded-full px-5 text-sm font-black transition-all active:scale-[0.98] ${
+                    active
+                      ? 'bg-[#1ed760] text-black shadow-[0_14px_34px_-20px_rgba(30,215,96,0.9)]'
+                      : 'bg-white/[0.095] text-white/82 hover:bg-white/[0.14]'
+                  }`}
+                >
+                  <span>{option.label}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-black ${active ? 'bg-black/10 text-black' : 'bg-white/[0.09] text-white/62'}`}>
+                    {option.count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
-          <div className="relative mt-5 flex flex-col gap-3 border-t border-amber-900/[0.07] pt-4 dark:border-white/[0.07] sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0 text-xs text-gray-500 dark:text-white/38">
-              {latestAnnouncement ? (
-                <span className="line-clamp-1">
-                  Latest: <span className="font-bold text-gray-700 dark:text-white/60">{latestAnnouncement.title}</span>
-                </span>
-              ) : (
-                <span>No news has been posted yet.</span>
-              )}
-            </div>
-            {isLeader && (
-              <button
-                onClick={openCreateAnnouncement}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full px-5 text-[12px] font-black text-white shadow-[0_12px_28px_-16px_rgba(180,83,9,0.9)] transition-all active:scale-[0.97]"
-                style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}
-              >
-                <Plus className="h-3.5 w-3.5" /> Post update
-              </button>
-            )}
-          </div>
+          {isLeader && (
+            <button
+              onClick={openCreateAnnouncement}
+              className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-white/[0.095] px-5 text-[13px] font-black text-white transition-all hover:bg-[#1ed760] hover:text-black active:scale-[0.97]"
+            >
+              <Plus className="h-4 w-4" /> Post update
+            </button>
+          )}
         </motion.div>
 
         {/* ── List ─────────────────────────────────────── */}
@@ -317,7 +310,7 @@ export function Announcements() {
             variants={containerVariants}
             initial="hidden"
             animate="show"
-            className="space-y-3"
+            className="overflow-hidden border-y border-white/[0.08]"
           >
             {sortedFiltered.map((a) => {
               const viewCount = a.announcement_views?.length || 0;
@@ -334,95 +327,98 @@ export function Announcements() {
                 <motion.div
                   key={a.id}
                   variants={itemVariants}
-                  className="group relative overflow-hidden rounded-[1.75rem] border border-gray-200/80 bg-white shadow-[0_18px_55px_-42px_rgba(15,23,42,0.65)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_28px_70px_-48px_rgba(15,23,42,0.75)] dark:border-white/[0.07] dark:bg-white/[0.028]"
-                  style={{
-                    borderColor: pConfig.accentBorder ?? (isPinned ? 'rgba(245,158,11,0.25)' : undefined),
-                    backgroundImage: pConfig.accent
-                      ? `radial-gradient(circle at 0% 0%, ${pConfig.accent}, transparent 42%)`
-                      : undefined,
-                  }}
+                  className="group relative border-b border-white/[0.075] transition-colors duration-200 last:border-b-0 hover:bg-white/[0.045]"
                 >
-                  <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/90 to-transparent dark:via-white/[0.09]" />
-                  <div className="pointer-events-none absolute -right-20 -top-24 h-44 w-44 rounded-full bg-amber-200/0 blur-3xl transition-colors duration-300 group-hover:bg-amber-200/35 dark:group-hover:bg-amber-500/10" />
-                  <div className="absolute bottom-0 left-0 top-0 w-1 bg-gradient-to-b from-amber-300 via-orange-400 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+                  {(isPinned || a.priority !== 'normal') && (
+                    <div
+                      className="absolute bottom-3 left-0 top-3 w-1 rounded-r-full"
+                      style={{ backgroundColor: a.priority === 'urgent' ? '#ef4444' : isPinned ? '#1ed760' : '#f59e0b' }}
+                    />
+                  )}
 
                   <div className="relative">
-                    {/* Pinned bar */}
-                    {isPinned && (
-                      <div className="flex items-center gap-1.5 px-5 pt-4 pb-0">
-                        <Pin className="h-3 w-3 text-amber-500 fill-amber-500" />
-                        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-600 dark:text-amber-400">Pinned notice</span>
-                      </div>
-                    )}
-
                     {/* Main clickable body */}
                     <button className="w-full text-left" onClick={() => navigate(`/announcements/${a.id}`)}>
-                      <div className={`grid gap-4 px-5 py-4 sm:items-start sm:px-6 sm:py-5 ${thumbnail ? 'sm:grid-cols-[auto_1fr_auto]' : 'sm:grid-cols-[1fr_auto]'}`}>
-                        {thumbnail && (
-                          <div className="relative h-32 overflow-hidden rounded-[1.35rem] bg-gray-100 shadow-inner ring-1 ring-black/[0.04] dark:bg-white/[0.06] dark:ring-white/[0.06] sm:h-24 sm:w-32 lg:h-28 lg:w-40">
-                            <img src={thumbnail} alt="" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" />
-                            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/18 via-transparent to-white/10" />
+                      <div className="grid gap-3 px-4 py-4 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-5 sm:px-5 lg:px-6">
+                        <div className="flex items-start gap-3 sm:contents">
+                          <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md bg-[linear-gradient(135deg,rgba(30,215,96,0.36),rgba(245,158,11,0.24)),#181818] ring-1 ring-white/[0.08] sm:h-20 sm:w-20">
+                            {thumbnail ? (
+                              <>
+                                <img src={thumbnail} alt="" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" />
+                                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-white/10" />
+                              </>
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-[#1ed760]">
+                                <Megaphone className="h-6 w-6" />
+                              </div>
+                            )}
                           </div>
-                        )}
 
-                        <div className="min-w-0 flex-1">
-                          <div className="mb-2 flex flex-wrap items-center gap-1.5">
-                            {a.priority !== 'normal' && (
-                              <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${pConfig.badge}`}>
-                                {PriorityIcon && <PriorityIcon className="h-3 w-3" />}
-                                {pConfig.label}
-                              </span>
-                            )}
-                            {isLeadersOnly && (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/[0.12] dark:text-emerald-300 dark:ring-emerald-500/20">
-                                <Lock className="h-3 w-3" /> Leaders
-                              </span>
-                            )}
-                            {isUnread && (
-                              <span className="inline-flex items-center rounded-full bg-sky-500 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-white shadow-[0_8px_20px_-12px_rgba(14,165,233,0.85)]">New</span>
-                            )}
-                          </div>
-                          <div className="flex items-start gap-2">
-                            <p className="text-[1.05rem] font-black leading-tight text-gray-950 dark:text-white sm:text-[1.15rem]" style={{ letterSpacing: '-0.035em' }}>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {isPinned && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.14em] text-[#1ed760]">
+                                  <Pin className="h-3 w-3 fill-[#1ed760]" /> Pinned
+                                </span>
+                              )}
+                              {a.priority !== 'normal' && (
+                                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.1em] ${pConfig.badge}`}>
+                                  {PriorityIcon && <PriorityIcon className="h-3 w-3" />}
+                                  {pConfig.label}
+                                </span>
+                              )}
+                              {isLeadersOnly && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/[0.12] px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.1em] text-emerald-300 ring-1 ring-emerald-500/20">
+                                  <Lock className="h-3 w-3" /> Leaders
+                                </span>
+                              )}
+                              {isUnread && (
+                                <span className="inline-flex items-center rounded-full bg-[#1ed760] px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.1em] text-black">New</span>
+                              )}
+                            </div>
+                            <p className="mt-1.5 text-[1rem] font-black leading-tight text-white sm:text-[1.12rem]">
                               {a.title}
                             </p>
+                            <p className="mt-1 line-clamp-2 text-[13px] leading-5 text-white/48 sm:line-clamp-1">
+                              {getPreviewText(a)}
+                            </p>
+                            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-white/32">
+                              <div className="flex min-w-0 items-center gap-1.5">
+                                <Avatar src={a.profiles?.avatar_url} firstName={a.profiles?.first_name || '?'} lastName={a.profiles?.last_name} size="xs" />
+                                <span className="truncate text-white/48">{a.profiles?.first_name}</span>
+                              </div>
+                              <span className="font-mono whitespace-nowrap">{format(parseISO(a.created_at), 'MMM d')}</span>
+                              <span className="flex items-center gap-1 whitespace-nowrap">
+                                <Eye className="h-3 w-3" />{viewCount}
+                              </span>
+                              {commentCount > 0 && (
+                                <span className="flex items-center gap-1 whitespace-nowrap">
+                                  <MessageCircle className="h-3 w-3" />{commentCount}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <p className="mt-1.5 truncate text-[13px] leading-5 text-gray-500/90 dark:text-white/44">
-                            {getPreviewText(a)}
-                          </p>
                         </div>
 
-                        <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-50 text-gray-300 transition-all group-hover:bg-amber-50 group-hover:text-amber-600 dark:bg-white/[0.035] dark:text-white/22 dark:group-hover:bg-amber-500/[0.12] dark:group-hover:text-amber-300 sm:flex">
+                        <div className="hidden items-center gap-2 justify-self-end text-white/26 sm:flex">
+                          <span className="text-[11px] font-bold uppercase tracking-[0.12em] opacity-0 transition-opacity group-hover:opacity-100">
+                            Open
+                          </span>
                           <ChevronRight className="h-4 w-4" />
                         </div>
                       </div>
                     </button>
 
                     {/* Reaction row */}
-                    <div className="flex flex-wrap items-center gap-1.5 border-t border-black/[0.045] bg-gray-50/55 px-5 pb-4 pt-3 dark:border-white/[0.055] dark:bg-black/10 sm:px-6">
-                      <div className="mr-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-gray-400 dark:text-white/30">
-                        <div className="flex min-w-0 items-center gap-1.5">
-                          <Avatar src={a.profiles?.avatar_url} firstName={a.profiles?.first_name || '?'} lastName={a.profiles?.last_name} size="xs" />
-                          <span className="truncate font-semibold text-gray-500 dark:text-white/45">{a.profiles?.first_name}</span>
-                        </div>
-                        <span className="font-mono whitespace-nowrap">{format(parseISO(a.created_at), 'MMM d')}</span>
-                        <span className="flex items-center gap-1 whitespace-nowrap">
-                          <Eye className="h-3 w-3" />{viewCount}
-                        </span>
-                        {commentCount > 0 && (
-                          <span className="flex items-center gap-1 whitespace-nowrap">
-                            <MessageCircle className="h-3 w-3" />{commentCount}
-                          </span>
-                        )}
-                      </div>
+                    <div className="flex flex-wrap items-center gap-1.5 px-4 pb-4 sm:px-5 lg:px-6">
                       {reactionGroups.map(r => (
                         <button
                           key={r.emoji}
                           onClick={e => handleReact(e, a.id, r.emoji)}
                           className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold transition-all active:scale-[0.95] ${
                             r.users.includes(user?.id || '')
-                              ? 'bg-amber-100 text-amber-800 ring-1 ring-amber-300 dark:bg-amber-500/[0.15] dark:text-amber-300 dark:ring-amber-500/30'
-                              : 'bg-white text-gray-600 shadow-sm ring-1 ring-black/[0.04] hover:bg-gray-100 dark:bg-white/[0.055] dark:text-white/50 dark:ring-white/[0.05] dark:hover:bg-white/[0.08]'
+                              ? 'bg-[#1ed760]/20 text-[#7cffaa] ring-1 ring-[#1ed760]/30'
+                              : 'bg-white/[0.055] text-white/52 ring-1 ring-white/[0.05] hover:bg-white/[0.09]'
                           }`}
                         >
                           {r.emoji} <span>{r.count}</span>
@@ -432,7 +428,7 @@ export function Announcements() {
                       <div className="relative">
                         <button
                           onClick={e => { e.stopPropagation(); setEmojiPickerId(emojiPickerId === a.id ? null : a.id); }}
-                          className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-xs text-gray-400 shadow-sm ring-1 ring-black/[0.04] transition-colors hover:bg-gray-100 dark:bg-white/[0.055] dark:text-white/35 dark:ring-white/[0.05] dark:hover:bg-white/[0.08]"
+                          className="inline-flex items-center gap-1 rounded-full bg-white/[0.055] px-2.5 py-1 text-xs text-white/35 ring-1 ring-white/[0.05] transition-colors hover:bg-white/[0.09]"
                         >
                           <Smile className="h-3.5 w-3.5" />
                         </button>
@@ -443,7 +439,7 @@ export function Announcements() {
                               animate={{ opacity: 1, scale: 1, y: 0 }}
                               exit={{ opacity: 0, scale: 0.9, y: 4 }}
                               transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
-                              className="absolute bottom-full left-0 mb-1.5 flex items-center gap-1 p-2 rounded-2xl bg-white dark:bg-[#232325] shadow-xl ring-1 ring-black/[0.07] dark:ring-white/[0.08] z-20"
+                              className="absolute bottom-full left-0 z-20 mb-1.5 flex items-center gap-1 rounded-2xl bg-[#232325] p-2 shadow-xl ring-1 ring-white/[0.08]"
                             >
                               {QUICK_EMOJIS.map(e => (
                                 <button key={e} onClick={ev => handleReact(ev, a.id, e)} className="text-lg hover:scale-125 transition-transform px-0.5">{e}</button>
@@ -458,11 +454,11 @@ export function Announcements() {
                           onClick={e => handlePin(e, a)}
                           className={`ml-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-black transition-all ${
                             isPinned
-                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/[0.15] dark:text-amber-300'
-                              : 'bg-white text-gray-400 shadow-sm ring-1 ring-black/[0.04] hover:bg-amber-50 hover:text-amber-700 dark:bg-white/[0.055] dark:ring-white/[0.05] dark:hover:bg-amber-500/[0.12]'
+                              ? 'bg-[#1ed760]/20 text-[#7cffaa]'
+                              : 'bg-white/[0.055] text-white/42 ring-1 ring-white/[0.05] hover:bg-white/[0.09] hover:text-white/70'
                           }`}
                         >
-                          <Pin className={`h-3.5 w-3.5 ${isPinned ? 'fill-amber-500' : ''}`} />
+                          <Pin className={`h-3.5 w-3.5 ${isPinned ? 'fill-[#1ed760]' : ''}`} />
                           {isPinned ? 'Pinned' : 'Pin'}
                         </button>
                       )}

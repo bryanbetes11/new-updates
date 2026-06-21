@@ -192,7 +192,7 @@ export function EventDetail() {
 
     document.documentElement.classList.add('event-detail-active');
     document.body.classList.add('event-detail-active');
-    metaThemeColor?.setAttribute('content', '#071423');
+    metaThemeColor?.setAttribute('content', '#211812');
 
     return () => {
       document.documentElement.classList.remove('event-detail-active');
@@ -1824,11 +1824,11 @@ const openLyricsModal = (ss: SetlistSong) => {
                 eventType={event.event_type}
                 title={event.title}
                 songs={eventDetailArtworkSongs}
-                className="h-80 w-80 scale-[2.35] rounded-[2rem] opacity-45 blur-3xl saturate-150"
+                className="h-80 w-80 scale-[2.45] rounded-[2rem] opacity-70 blur-3xl saturate-[1.75]"
               />
             </div>
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_2%,rgba(255,255,255,0.12),transparent_28%),linear-gradient(180deg,rgba(0,0,0,0.04)_0%,rgba(0,0,0,0.24)_38%,#050505_100%)]" />
-            <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-b from-transparent to-[#050505]" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_-6%,rgba(255,255,255,0.22),transparent_32%),radial-gradient(circle_at_70%_18%,rgba(239,68,68,0.20),transparent_36%),radial-gradient(circle_at_24%_24%,rgba(245,158,11,0.13),transparent_38%),linear-gradient(180deg,rgba(0,0,0,0.02)_0%,rgba(0,0,0,0.12)_34%,#050505_100%)]" />
+            <div className="absolute inset-x-0 bottom-0 h-36 bg-gradient-to-b from-transparent via-[#050505]/82 to-[#050505]" />
           </div>
           <div className="relative">
             <button

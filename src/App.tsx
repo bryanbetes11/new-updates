@@ -37,6 +37,7 @@ import { OrganizationSettings } from './pages/leadership/OrganizationSettings';
 import { OrganizationBilling } from './pages/leadership/OrganizationBilling';
 import { ChangePassword } from './pages/ChangePassword';
 import { ResetPassword } from './pages/ResetPassword';
+import { AuthConfirm } from './pages/AuthConfirm';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { isPasswordRecoveryUrl, recoveryRedirectPath } from './lib/authRedirect';
 import { AppUpdateModal } from './components/AppUpdateModal';
@@ -138,6 +139,7 @@ export default function App() {
                 <Route path="/landing" element={<Navigate to="/" replace />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/auth/confirm" element={<AuthConfirm />} />
                 <Route path="/register" element={<Register />} />
                 <Route path="/invite/:token" element={<InviteAccept />} />
                 <Route path="/create-church" element={<Navigate to="/login" replace />} />

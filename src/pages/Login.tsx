@@ -1,19 +1,30 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { Eye, EyeOff, ArrowRight, ChevronLeft, Users, RefreshCw, Trash2, KeyRound, Mail } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { ArrowRight, CheckCircle2, ChevronLeft, Eye, EyeOff, KeyRound, Mail, RefreshCw, Trash2, Users } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { isPasswordRecoveryUrl, recoveryRedirectPath } from '../lib/authRedirect';
+
+type LoginView = 'login' | 'account';
+type AccountUpdateMode = 'password' | 'email';
+
+const inputClass = `w-full h-12 px-4 rounded-2xl text-[14px]
+  bg-white/[0.055]
+  border border-white/[0.09]
+  text-white
+  placeholder-white/24
+  focus:outline-none focus:ring-2 focus:ring-emerald-500/35 focus:border-emerald-400/50
+  transition-all duration-200`;
 
 export function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [view, setView] = useState<'login' | 'forgot'>('login');
-  const [accountUpdateMode, setAccountUpdateMode] = useState<'password' | 'email'>('password');
+  const [view, setView] = useState<LoginView>('login');
+  const [accountUpdateMode, setAccountUpdateMode] = useState<AccountUpdateMode>('password');
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSent, setForgotSent] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
@@ -26,9 +37,8 @@ export function Login() {
   const params = new URLSearchParams(location.search);
   const redirectTo = params.get('redirect') || '/dashboard';
   const prefillEmail = params.get('email') || '';
-  const isDark = true;
-
   const inviteCreateAccountLink = `/register${location.search}`;
+
   const getLoginErrorMessage = (error: Error & { code?: string }) => {
     const message = error.message || 'Unable to sign in. Please try again.';
     const isInvalidCredentials =
@@ -49,20 +59,30 @@ export function Login() {
       navigate(recoveryRedirectPath(location.search, location.hash), { replace: true });
       return;
     }
+
     if (prefillEmail) {
       setEmail(prefillEmail);
       setForgotEmail(prefillEmail);
     }
+
     if (user) navigate(redirectTo, { replace: true });
   }, [isRecoveryLink, location.hash, location.search, navigate, user, redirectTo, prefillEmail]);
 
   if (user || isRecoveryLink) return null;
+
+  const openAccountUpdate = () => {
+    setView('account');
+    setAccountUpdateMode('password');
+    setForgotEmail(email);
+    setForgotSent(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     const { error } = await signIn(email, password);
     setLoading(false);
+
     if (error) {
       toast('error', getLoginErrorMessage(error));
     } else {
@@ -73,11 +93,13 @@ export function Login() {
   const handleForgot = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!forgotEmail) return;
+
     setForgotLoading(true);
     const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail.trim().toLowerCase(), {
       redirectTo: `${window.location.origin}/reset-password`,
     });
     setForgotLoading(false);
+
     if (error) {
       toast('error', 'Failed to send reset email. Please try again.');
     } else {
@@ -90,131 +112,66 @@ export function Login() {
     const { error } = await switchAccount(targetUserId);
     setSwitchingAccountId(null);
 
-    if (error) {
-      toast('error', error.message);
-    }
+    if (error) toast('error', error.message);
   };
 
-  const inputClass = `w-full h-12 px-4 rounded-xl text-[14px]
-    bg-gray-50 dark:bg-white/[0.05]
-    border border-gray-200 dark:border-white/[0.08]
-    text-gray-900 dark:text-white
-    placeholder-gray-400 dark:placeholder-white/20
-    focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/50
-    transition-all duration-200`;
-
   return (
-    <div className="min-h-screen flex overflow-x-hidden bg-[#f5f5f7] dark:bg-[#0d0d0f] transition-colors duration-300">
+    <div className="relative min-h-screen overflow-x-hidden bg-[#050505] text-white">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_16%_8%,rgba(34,197,94,0.18),transparent_32%),radial-gradient(circle_at_82%_18%,rgba(250,204,21,0.08),transparent_28%),linear-gradient(180deg,#090b09_0%,#050505_48%,#000_100%)]" />
 
-      {/* ── LEFT PANEL (desktop only) ────────────────────── */}
-      <div
-        className="hidden lg:flex lg:w-[52%] xl:w-[55%] relative flex-col justify-between p-12 overflow-hidden self-stretch transition-all duration-500"
-        style={{
-          background: isDark
-            ? 'linear-gradient(160deg, #0a1a0a 0%, #0d2010 40%, #071407 100%)'
-            : 'linear-gradient(160deg, #f0fdf4 0%, #dcfce7 50%, #f7fef9 100%)',
-        }}
-      >
-        {/* Ambient blobs */}
-        <div className="absolute inset-0 pointer-events-none">
-          <div
-            className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] rounded-full blur-[90px] transition-all duration-500"
-            style={{ background: isDark ? 'rgba(52,211,153,0.08)' : 'rgba(52,211,153,0.22)' }}
-          />
-          <div
-            className="absolute bottom-[-5%] left-[-8%] w-[400px] h-[400px] rounded-full blur-[80px] transition-all duration-500"
-            style={{ background: isDark ? 'rgba(74,222,128,0.06)' : 'rgba(74,222,128,0.18)' }}
-          />
+      <aside className="fixed inset-y-0 left-0 hidden w-[48%] max-w-[740px] flex-col justify-between overflow-hidden border-r border-white/[0.06] bg-[linear-gradient(160deg,rgba(16,185,129,0.12)_0%,rgba(255,255,255,0.035)_42%,rgba(0,0,0,0)_100%)] p-12 lg:flex">
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute left-[12%] top-[18%] h-72 w-72 rounded-full bg-emerald-500/10 blur-[80px]" />
+          <div className="absolute bottom-[-10%] right-[-8%] h-[28rem] w-[28rem] rounded-full bg-emerald-300/[0.055] blur-[90px]" />
         </div>
 
-        {/* Logo mark */}
         <div className="relative flex items-center gap-3">
-          <img
-            src="/servesync-logo-new.png"
-            alt="ServeSync"
-            className="h-9 w-9 rounded-[22%] shrink-0 shadow-md shadow-black/20 dark:shadow-black/40"
-          />
+          <img src="/logo.png" alt="ServeSync" className="h-12 w-12 shrink-0 rounded-2xl bg-black/40 object-contain p-2 shadow-[0_18px_40px_-24px_rgba(34,197,94,0.8)]" />
           <div>
-            <p className="text-[14px] font-bold text-gray-900 dark:text-white leading-tight tracking-tight transition-colors duration-300">ServeSync</p>
-            <p className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-500/70 uppercase tracking-widest leading-tight transition-colors duration-300">Team Portal</p>
+            <p className="text-[18px] font-black leading-tight tracking-[-0.04em] text-white">ServeSync</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.28em] leading-tight text-emerald-300/70">Team Portal</p>
           </div>
         </div>
 
-        {/* Hero copy */}
-        <div className="relative">
-          <p className="text-[11px] font-bold tracking-widest text-emerald-600 dark:text-emerald-500/60 uppercase mb-4 transition-colors duration-300">
-            Ministry Platform
-          </p>
-          <h2 className="text-[clamp(2rem,3.5vw,3.2rem)] font-bold text-gray-900 dark:text-white leading-[1.1] tracking-[-0.03em] mb-6 transition-colors duration-300">
-            Serve together,<br />
-            <span
-              style={{
-                background: isDark
-                  ? 'linear-gradient(135deg, #4ade80 0%, #16a34a 100%)'
-                  : 'linear-gradient(135deg, #16a34a 0%, #166534 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text',
-              }}
-            >
-              stay organized.
-            </span>
+        <div className="relative max-w-xl">
+          <h2 className="text-[clamp(3.6rem,6vw,6rem)] font-black leading-[0.88] tracking-[-0.085em] text-white">
+            Serve<br />
+            in sync.
           </h2>
-          <p className="text-[15px] text-gray-500 dark:text-gray-400 leading-relaxed max-w-sm mb-10 transition-colors duration-300">
-            Events, assignments, setlists, and team communication — all in one place for your worship ministry.
+          <p className="mt-7 max-w-md text-[17px] leading-8 text-white/45">
+            One focused workspace for the weekly rhythm of worship ministry.
           </p>
 
-          <div className="space-y-3">
-            {[
-              'Real-time event assignments & confirmations',
-              'Setlist planning with leader approval workflow',
-              'Push notifications for every update',
-            ].map(item => (
-              <div key={item} className="flex items-center gap-3">
-                <div className="flex-shrink-0 h-5 w-5 rounded-full bg-emerald-500/15 flex items-center justify-center">
-                  <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
-                </div>
-                <span className="text-sm text-gray-600 dark:text-gray-300 transition-colors duration-300">{item}</span>
+          <div className="mt-10 grid max-w-md gap-2">
+            {['Assignments', 'Setlists', 'Team updates'].map(item => (
+              <div key={item} className="flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.035] px-4 py-3">
+                <div className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.8)]" />
+                <span className="text-sm font-bold text-white/70">{item}</span>
+                <div className="ml-auto h-px w-10 bg-gradient-to-r from-emerald-400/50 to-transparent" />
               </div>
             ))}
           </div>
         </div>
 
-        {/* Bottom tagline */}
-        <div className="relative">
-          <p className="text-xs text-gray-400 dark:text-gray-600 transition-colors duration-300">
-            Built for ministry teams that take excellence seriously.
-          </p>
+        <div className="relative flex items-center gap-3 text-xs font-bold text-white/28">
+          <span className="h-px w-10 bg-white/15" />
+          Built for ministry teams
         </div>
-      </div>
+      </aside>
 
-      {/* ── RIGHT PANEL (form) ────────────────────────────── */}
-      <div className="flex-1 flex flex-col">
-
-        {/* Mobile logo bar */}
-        <div className="lg:hidden flex items-center gap-2.5 px-6 pt-14 pb-2">
-          <img
-            src="/servesync-logo-new.png"
-            alt="ServeSync"
-            className="h-8 w-8 rounded-[22%] shrink-0 shadow-sm shadow-black/10 dark:shadow-black/30"
-          />
-          <span className="text-[14px] font-bold text-gray-900 dark:text-white tracking-tight transition-colors duration-300">
-            ServeSync
-          </span>
+      <main className="relative flex min-h-screen flex-col lg:ml-[48%]">
+        <div className="flex items-center gap-3 px-6 pt-14 pb-2 lg:hidden">
+          <img src="/logo.png" alt="ServeSync" className="h-12 w-12 shrink-0 rounded-2xl bg-black/40 object-contain p-2" />
+          <span className="text-[26px] font-black tracking-[-0.055em] text-white">ServeSync</span>
         </div>
 
-        {/* Centered form area */}
-        <div className="flex-1 flex items-center justify-center px-6 sm:px-10 lg:px-16 py-12 overflow-hidden">
-          <div className="w-full max-w-[380px]">
-
-            {/* Card */}
-            <div className="relative bg-white dark:bg-white/[0.025] rounded-3xl border border-gray-200/80 dark:border-white/[0.06] p-8 shadow-[0_2px_8px_rgba(0,0,0,0.05),0_16px_48px_rgba(0,0,0,0.06)] dark:shadow-none transition-colors duration-300">
-              {/* Top-edge luminous highlight */}
-              <div className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.07] dark:via-white/[0.12] to-transparent" />
+        <div className="flex flex-1 items-center justify-center overflow-hidden px-6 py-10 sm:px-10 lg:px-16">
+          <div className="w-full max-w-[430px]">
+            <div className="relative overflow-hidden rounded-[2rem] border border-white/[0.08] bg-white/[0.035] p-7 shadow-[0_30px_90px_-60px_rgba(34,197,94,0.7)] backdrop-blur-xl transition-colors duration-300 sm:p-8">
+              <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-emerald-300/35 to-transparent" />
+              <div className="pointer-events-none absolute -right-20 -top-20 h-48 w-48 rounded-full bg-emerald-400/[0.06] blur-[70px]" />
 
               <AnimatePresence mode="wait">
-
-                {/* ── SIGN IN VIEW ── */}
                 {view === 'login' && (
                   <motion.div
                     key="login"
@@ -222,52 +179,38 @@ export function Login() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -12 }}
                     transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                    className="relative"
                   >
                     <div className="mb-8">
-                      <h1 className="text-[26px] sm:text-[28px] font-bold text-gray-900 dark:text-white tracking-[-0.025em] leading-tight transition-colors duration-300">
+                      <h1 className="text-[2.45rem] font-black leading-[0.98] tracking-[-0.07em] text-white sm:text-[2.75rem]">
                         Welcome back
                       </h1>
-                      <p className="mt-2 text-[14px] text-gray-500 dark:text-white/35 leading-relaxed transition-colors duration-300">
-                        Sign in to your ServeSync account to continue.
+                      <p className="mt-3 text-[14px] leading-6 text-white/42">
+                        Sign in to continue your ServeSync workspace.
                       </p>
                     </div>
 
                     {savedAccounts.length > 0 && (
-                      <div className="mb-6 rounded-2xl border border-gray-200/80 bg-gray-50/80 p-3.5 dark:border-white/[0.08] dark:bg-white/[0.03]">
-                        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-gray-500 dark:text-white/35">
-                          Saved on this device
-                        </p>
+                      <div className="mb-6 rounded-3xl border border-white/[0.08] bg-black/20 p-3.5">
+                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/35">Saved on this device</p>
                         <div className="mt-3 space-y-2">
-                          {savedAccounts.map((account) => {
+                          {savedAccounts.map(account => {
                             const isSwitching = switchingAccountId === account.userId;
 
                             return (
-                              <div
-                                key={account.userId}
-                                className="flex items-center gap-2 rounded-xl border border-gray-200/70 bg-white px-2.5 py-2 dark:border-white/[0.08] dark:bg-white/[0.03]"
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() => handleQuickSwitch(account.userId)}
-                                  disabled={isSwitching}
-                                  className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:opacity-60"
-                                >
-                                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-[12px] font-bold text-emerald-700 dark:text-emerald-300">
+                              <div key={account.userId} className="flex items-center gap-2 rounded-2xl border border-white/[0.07] bg-white/[0.04] px-2.5 py-2">
+                                <button type="button" onClick={() => handleQuickSwitch(account.userId)} disabled={isSwitching} className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:opacity-60">
+                                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/12 text-[12px] font-black text-emerald-300">
                                     {(account.displayName || account.email || '?').slice(0, 1).toUpperCase()}
                                   </div>
                                   <div className="min-w-0">
-                                    <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{account.displayName}</p>
-                                    <p className="truncate text-[11px] font-mono text-gray-500 dark:text-white/35">{account.email}</p>
+                                    <p className="truncate text-[13px] font-bold text-white">{account.displayName}</p>
+                                    <p className="truncate text-[11px] font-mono text-white/34">{account.email}</p>
                                   </div>
-                                  <RefreshCw className={`h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-300 ${isSwitching ? 'animate-spin' : ''}`} />
+                                  <RefreshCw className={`h-3.5 w-3.5 shrink-0 text-emerald-300 ${isSwitching ? 'animate-spin' : ''}`} />
                                 </button>
 
-                                <button
-                                  type="button"
-                                  onClick={() => forgetSavedAccount(account.userId)}
-                                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 transition-colors hover:text-red-500 dark:text-white/25 dark:hover:text-red-400"
-                                  title="Forget saved account"
-                                >
+                                <button type="button" onClick={() => forgetSavedAccount(account.userId)} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-white/30 transition-colors hover:text-red-300" title="Forget saved account">
                                   <Trash2 className="h-3.5 w-3.5" />
                                 </button>
                               </div>
@@ -279,89 +222,42 @@ export function Login() {
 
                     <form onSubmit={handleSubmit} className="space-y-4">
                       <div>
-                        <label className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
-                          Email address
-                        </label>
-                        <input
-                          type="email"
-                          value={email}
-                          onChange={e => setEmail(e.target.value)}
-                          className={inputClass}
-                          placeholder="you@example.com"
-                          autoComplete="email"
-                          required
-                        />
+                        <label className="mb-2 block text-[11px] font-black uppercase tracking-[0.16em] text-white/34">Email address</label>
+                        <input type="email" value={email} onChange={e => setEmail(e.target.value)} className={inputClass} placeholder="you@example.com" autoComplete="email" required />
                       </div>
 
                       <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <label className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] transition-colors duration-300">
-                            Password
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => { setView('forgot'); setAccountUpdateMode('password'); setForgotEmail(email); }}
-                            className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
-                          >
+                        <div className="mb-2 flex items-center justify-between">
+                          <label className="block text-[11px] font-black uppercase tracking-[0.16em] text-white/34">Password</label>
+                          <button type="button" onClick={openAccountUpdate} className="text-[11px] font-bold text-emerald-300 transition-colors hover:text-emerald-200">
                             Update my account
                           </button>
                         </div>
                         <div className="relative">
-                          <input
-                            type={showPw ? 'text' : 'password'}
-                            value={password}
-                            onChange={e => setPassword(e.target.value)}
-                            className={`${inputClass} pr-12`}
-                            placeholder="Your password"
-                            autoComplete="current-password"
-                            required
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowPw(!showPw)}
-                            className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 rounded-lg text-gray-400 dark:text-white/25 hover:text-gray-600 dark:hover:text-white/50 transition-colors"
-                          >
+                          <input type={showPw ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} className={`${inputClass} pr-12`} placeholder="Your password" autoComplete="current-password" required />
+                          <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3.5 top-1/2 -translate-y-1/2 rounded-lg p-1 text-white/30 transition-colors hover:text-white/60">
                             {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                           </button>
                         </div>
                       </div>
 
-                      <div className="pt-1">
-                        <button
-                          type="submit"
-                          disabled={loading || !email || !password}
-                          className="w-full h-12 rounded-xl text-[14px] font-semibold flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed bg-emerald-500 hover:bg-emerald-600 dark:hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20"
-                        >
-                          {loading
-                            ? <><span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Signing in…</>
-                            : <>Sign In <ArrowRight className="h-4 w-4" /></>}
-                        </button>
-                      </div>
+                      <button type="submit" disabled={loading || !email || !password} className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-emerald-500 text-[14px] font-black text-black shadow-[0_18px_50px_-24px_rgba(34,197,94,0.9)] transition hover:bg-emerald-400 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40">
+                        {loading ? <><span className="h-4 w-4 rounded-full border-2 border-black/30 border-t-black animate-spin" />Signing in...</> : <>Sign In <ArrowRight className="h-4 w-4" /></>}
+                      </button>
                     </form>
 
-                    <div className="mt-7 pt-6 border-t border-gray-100 dark:border-white/[0.06] transition-colors duration-300">
+                    <div className="mt-7 border-t border-white/[0.07] pt-6">
                       {!params.get('email') ? (
-                        <div className="space-y-2">
-                          <p className="text-[11px] font-semibold text-gray-400 dark:text-white/25 uppercase tracking-widest text-center mb-3 transition-colors duration-300">
-                            New here?
-                          </p>
-                          {/* Info row — not clickable */}
-                          <div className="flex items-center gap-3 px-3.5 py-3 rounded-xl bg-gray-50 dark:bg-white/[0.03] border border-gray-100 dark:border-white/[0.04] transition-colors duration-300">
-                            <div className="h-7 w-7 rounded-lg bg-gray-100 dark:bg-white/[0.06] flex items-center justify-center shrink-0 transition-colors duration-300">
-                              <Users className="h-3.5 w-3.5 text-gray-400 dark:text-white/30" />
-                            </div>
-                            <p className="text-[13px] text-gray-500 dark:text-white/30 transition-colors duration-300">
-                              Ask your church admin for an invite
-                            </p>
+                        <div className="flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.035] px-3.5 py-3">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white/[0.06]">
+                            <Users className="h-3.5 w-3.5 text-white/36" />
                           </div>
+                          <p className="text-[13px] font-semibold text-white/38">Ask your church admin for an invite</p>
                         </div>
                       ) : (
-                        <p className="text-center text-[13px] text-gray-400 dark:text-white/30 transition-colors duration-300">
+                        <p className="text-center text-[13px] text-white/34">
                           Don&apos;t have an account?{' '}
-                          <Link
-                            to={inviteCreateAccountLink}
-                            className="font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
-                          >
+                          <Link to={inviteCreateAccountLink} className="font-bold text-emerald-300 transition-colors hover:text-emerald-200">
                             Create one
                           </Link>
                         </p>
@@ -370,96 +266,56 @@ export function Login() {
                   </motion.div>
                 )}
 
-                {/* ── ACCOUNT UPDATE VIEW ── */}
-                {view === 'forgot' && (
+                {view === 'account' && (
                   <motion.div
-                    key="forgot"
+                    key="account"
                     initial={{ opacity: 0, y: 16 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -12 }}
                     transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                    className="relative"
                   >
-                    <button
-                      onClick={() => { setView('login'); setForgotSent(false); }}
-                      className="flex items-center gap-1 text-[13px] font-medium text-gray-400 dark:text-white/40 hover:text-gray-600 dark:hover:text-white/70 transition-colors mb-8"
-                    >
+                    <button type="button" onClick={() => { setView('login'); setForgotSent(false); }} className="mb-8 flex items-center gap-1 text-[13px] font-bold text-white/38 transition-colors hover:text-white/70">
                       <ChevronLeft className="h-4 w-4" /> Back to sign in
                     </button>
 
                     {forgotSent ? (
                       <div>
-                        <div className="mb-6 h-14 w-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center">
-                          <svg className="h-7 w-7 text-emerald-500 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-                          </svg>
+                        <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/12 text-emerald-300">
+                          <CheckCircle2 className="h-7 w-7" />
                         </div>
-                        <h1 className="text-[24px] font-bold text-gray-900 dark:text-white tracking-[-0.025em] mb-3 transition-colors duration-300">
-                          Check your email
-                        </h1>
-                        <p className="text-[14px] text-gray-500 dark:text-white/35 leading-relaxed mb-2 transition-colors duration-300">
-                          We sent an account update link to:
-                        </p>
-                        <p className="text-[14px] font-semibold text-gray-900 dark:text-white mb-6 transition-colors duration-300">
-                          {forgotEmail}
-                        </p>
-                        <p className="text-[13px] text-gray-400 dark:text-white/25 leading-relaxed transition-colors duration-300">
-                          Click the link in the email to set a new password. Check your spam folder if you don&apos;t see it.
-                        </p>
+                        <h1 className="mb-3 text-[2rem] font-black leading-none tracking-[-0.065em] text-white">Check your email</h1>
+                        <p className="mb-2 text-[14px] leading-6 text-white/42">We sent an account update link to:</p>
+                        <p className="mb-6 break-all text-[14px] font-bold text-white">{forgotEmail}</p>
+                        <p className="text-[13px] leading-6 text-white/30">Click the link in the email to set a new password. Check your spam folder if you don&apos;t see it.</p>
                       </div>
                     ) : (
                       <>
-                        <div className="mb-9">
-                          <h1 className="text-[26px] font-bold text-gray-900 dark:text-white tracking-[-0.025em] leading-tight transition-colors duration-300">
-                            Update my account
-                          </h1>
-                          <p className="mt-2 text-[14px] text-gray-500 dark:text-white/35 leading-relaxed transition-colors duration-300">
+                        <div className="mb-8">
+                          <h1 className="text-[2.25rem] font-black leading-[0.98] tracking-[-0.07em] text-white">Update my account</h1>
+                          <p className="mt-3 text-[14px] leading-6 text-white/42">
                             Reset your password by email, or sign in first to securely change the email on your account.
                           </p>
                         </div>
 
                         <div className="mb-5 grid gap-3">
-                          <button
-                            type="button"
-                            onClick={() => setAccountUpdateMode('password')}
-                            className={`w-full rounded-2xl border p-4 text-left transition-all active:scale-[0.99] ${
-                              accountUpdateMode === 'password'
-                                ? 'border-emerald-500/40 bg-emerald-500/[0.08] shadow-[0_0_0_1px_rgba(16,185,129,0.12)]'
-                                : 'border-white/[0.08] bg-white/[0.035] hover:border-white/[0.16] hover:bg-white/[0.055]'
-                            }`}
-                            aria-pressed={accountUpdateMode === 'password'}
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-500 dark:text-emerald-300">
-                                <KeyRound className="h-4 w-4" />
-                              </span>
+                          <button type="button" onClick={() => setAccountUpdateMode('password')} className={`w-full rounded-3xl border p-4 text-left transition-all active:scale-[0.99] ${accountUpdateMode === 'password' ? 'border-emerald-500/40 bg-emerald-500/[0.08] shadow-[0_0_0_1px_rgba(16,185,129,0.12)]' : 'border-white/[0.08] bg-white/[0.035] hover:border-white/[0.16] hover:bg-white/[0.055]'}`} aria-pressed={accountUpdateMode === 'password'}>
+                            <div className="flex items-center gap-3">
+                              <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-500/14 text-emerald-300"><KeyRound className="h-5 w-5" /></span>
                               <div>
-                                <p className="text-[13px] font-bold text-gray-900 dark:text-white">Update password</p>
-                                <p className="text-[12px] text-gray-500 dark:text-white/35">We will email a secure reset link.</p>
+                                <p className="text-[14px] font-black text-white">Update password</p>
+                                <p className="mt-1 text-[12px] text-white/36">We will email a secure reset link.</p>
                               </div>
                             </div>
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => setAccountUpdateMode('email')}
-                            className={`w-full rounded-2xl border p-4 text-left transition-all active:scale-[0.99] ${
-                              accountUpdateMode === 'email'
-                                ? 'border-emerald-500/40 bg-emerald-500/[0.08] shadow-[0_0_0_1px_rgba(16,185,129,0.12)]'
-                                : 'border-white/[0.08] bg-white/[0.035] hover:border-white/[0.16] hover:bg-white/[0.055]'
-                            }`}
-                            aria-pressed={accountUpdateMode === 'email'}
-                          >
-                            <div className="flex items-start gap-2">
-                              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${
-                                accountUpdateMode === 'email'
-                                  ? 'bg-emerald-500/15 text-emerald-500 dark:text-emerald-300'
-                                  : 'bg-white/[0.06] text-gray-500 dark:text-white/45'
-                              }`}>
-                                <Mail className="h-4 w-4" />
-                              </span>
+
+                          <button type="button" onClick={() => setAccountUpdateMode('email')} className={`w-full rounded-3xl border p-4 text-left transition-all active:scale-[0.99] ${accountUpdateMode === 'email' ? 'border-emerald-500/40 bg-emerald-500/[0.08] shadow-[0_0_0_1px_rgba(16,185,129,0.12)]' : 'border-white/[0.08] bg-white/[0.035] hover:border-white/[0.16] hover:bg-white/[0.055]'}`} aria-pressed={accountUpdateMode === 'email'}>
+                            <div className="flex items-start gap-3">
+                              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${accountUpdateMode === 'email' ? 'bg-emerald-500/14 text-emerald-300' : 'bg-white/[0.06] text-white/45'}`}><Mail className="h-5 w-5" /></span>
                               <div>
-                                <p className="text-[13px] font-bold text-gray-900 dark:text-white">Update email address</p>
-                                <p className="mt-1 text-[12px] leading-relaxed text-gray-500 dark:text-white/35">
-                                  For security, sign in first, then open Profile and choose Email. Supabase will send the confirmation email to your new address.
+                                <p className="text-[14px] font-black text-white">Update email address</p>
+                                <p className="mt-1 text-[12px] leading-5 text-white/36">
+                                  Sign in first, then open Profile and choose Email. We will send a confirmation email to your new address.
                                 </p>
                               </div>
                             </div>
@@ -469,44 +325,20 @@ export function Login() {
                         {accountUpdateMode === 'password' ? (
                           <form onSubmit={handleForgot} className="space-y-4">
                             <div>
-                              <label className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
-                                Email address
-                              </label>
-                              <input
-                                type="email"
-                                value={forgotEmail}
-                                onChange={e => setForgotEmail(e.target.value)}
-                                className={inputClass}
-                                placeholder="you@example.com"
-                                autoComplete="email"
-                                required
-                              />
+                              <label className="mb-2 block text-[11px] font-black uppercase tracking-[0.16em] text-white/34">Email address</label>
+                              <input type="email" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} className={inputClass} placeholder="you@example.com" autoComplete="email" required />
                             </div>
-                            <div className="pt-1">
-                              <button
-                                type="submit"
-                                disabled={forgotLoading || !forgotEmail}
-                                className="w-full h-12 rounded-xl text-[14px] font-semibold flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed bg-emerald-500 hover:bg-emerald-600 dark:hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20"
-                              >
-                                {forgotLoading
-                                  ? <><span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Sending…</>
-                                  : <>Send Password Email <ArrowRight className="h-4 w-4" /></>}
-                              </button>
-                            </div>
+                            <button type="submit" disabled={forgotLoading || !forgotEmail} className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-emerald-500 text-[14px] font-black text-black transition hover:bg-emerald-400 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40">
+                              {forgotLoading ? <><span className="h-4 w-4 rounded-full border-2 border-black/30 border-t-black animate-spin" />Sending...</> : <>Send Password Email <ArrowRight className="h-4 w-4" /></>}
+                            </button>
                           </form>
                         ) : (
-                          <div className="rounded-2xl border border-white/[0.08] bg-white/[0.035] p-4">
-                            <p className="text-[13px] font-semibold text-gray-900 dark:text-white">
-                              Email changes happen inside Profile.
+                          <div className="rounded-3xl border border-white/[0.08] bg-white/[0.035] p-4">
+                            <p className="text-[13px] font-bold text-white">Email changes happen inside Profile.</p>
+                            <p className="mt-1 text-[12px] leading-5 text-white/36">
+                              This protects the account from someone changing the login email without already being signed in.
                             </p>
-                            <p className="mt-1 text-[12px] leading-relaxed text-gray-500 dark:text-white/35">
-                              Sign in with your current email first. Then go to Profile → Email and enter the new address. We will send a confirmation email before anything changes.
-                            </p>
-                            <button
-                              type="button"
-                              onClick={() => { setView('login'); setForgotSent(false); }}
-                              className="mt-4 inline-flex h-10 items-center justify-center rounded-full bg-white px-4 text-[13px] font-bold text-gray-900 transition hover:bg-gray-100 dark:bg-white/[0.08] dark:text-white dark:hover:bg-white/[0.12]"
-                            >
+                            <button type="button" onClick={() => { setView('login'); setForgotSent(false); }} className="mt-4 inline-flex h-10 items-center justify-center rounded-full bg-white px-4 text-[13px] font-black text-black transition hover:bg-white/90">
                               Back to sign in
                             </button>
                           </div>
@@ -515,17 +347,13 @@ export function Login() {
                     )}
                   </motion.div>
                 )}
-
               </AnimatePresence>
             </div>
           </div>
         </div>
 
-        <p className="text-center py-5 text-[11px] text-gray-400 dark:text-white/20 lg:hidden transition-colors duration-300">
-          ServeSync — Built for ministry teams
-        </p>
-      </div>
-
+        <p className="pb-5 text-center text-[11px] text-white/20 lg:hidden">ServeSync - Built for ministry teams</p>
+      </main>
     </div>
   );
 }

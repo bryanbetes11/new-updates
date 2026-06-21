@@ -3,16 +3,12 @@ export function isPasswordRecoveryUrl(search = window.location.search, hash = wi
   const hashParams = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
   const searchType = searchParams.get('type');
   const hashType = hashParams.get('type');
+  const hasRecoveryToken = searchParams.has('code') || searchParams.has('token_hash');
+  const hasHashRecoveryToken = hashParams.has('access_token') || hashParams.has('refresh_token') || hashParams.has('token_hash');
 
   return (
-    searchParams.has('code') ||
-    hashParams.has('access_token') ||
-    hashParams.has('refresh_token') ||
-    searchParams.has('token_hash') ||
-    searchType === 'recovery' ||
-    searchType === 'magiclink' ||
-    hashType === 'recovery' ||
-    hashType === 'magiclink'
+    ((searchType === 'recovery' || searchType === 'magiclink') && hasRecoveryToken) ||
+    ((hashType === 'recovery' || hashType === 'magiclink') && hasHashRecoveryToken)
   );
 }
 

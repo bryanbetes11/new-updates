@@ -49,7 +49,7 @@ export function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const mobileChromeHidden = false;
 
-  const staticHideNav = ['/', '/login', '/register', '/onboarding', '/reset-password', '/create-church'].includes(location.pathname)
+  const staticHideNav = ['/', '/login', '/register', '/onboarding', '/reset-password', '/auth/confirm', '/create-church'].includes(location.pathname)
     || /^\/invite\/[^/]+$/.test(location.pathname);
   const isEventDetail = /^\/events\/[^/]+$/.test(location.pathname);
   const isAnnouncementCreate = location.pathname === '/announcements/new';

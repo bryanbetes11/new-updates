@@ -171,7 +171,7 @@ export function Profile() {
     setEmailUpdating(true);
     const { error } = await supabase.auth.updateUser(
       { email: normalizedEmail },
-      { emailRedirectTo: `${window.location.origin}/profile` },
+      { emailRedirectTo: `${window.location.origin}/auth/confirm?next=/profile?email_updated=1` },
     );
     setEmailUpdating(false);
 

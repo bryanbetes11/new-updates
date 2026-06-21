@@ -13,6 +13,7 @@ export function Login() {
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<'login' | 'forgot'>('login');
+  const [accountUpdateMode, setAccountUpdateMode] = useState<'password' | 'email'>('password');
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSent, setForgotSent] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
@@ -299,7 +300,7 @@ export function Login() {
                           </label>
                           <button
                             type="button"
-                            onClick={() => { setView('forgot'); setForgotEmail(email); }}
+                            onClick={() => { setView('forgot'); setAccountUpdateMode('password'); setForgotEmail(email); }}
                             className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
                           >
                             Update my account
@@ -417,8 +418,17 @@ export function Login() {
                         </div>
 
                         <div className="mb-5 grid gap-3">
-                          <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] p-4">
-                            <div className="mb-2 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setAccountUpdateMode('password')}
+                            className={`w-full rounded-2xl border p-4 text-left transition-all active:scale-[0.99] ${
+                              accountUpdateMode === 'password'
+                                ? 'border-emerald-500/40 bg-emerald-500/[0.08] shadow-[0_0_0_1px_rgba(16,185,129,0.12)]'
+                                : 'border-white/[0.08] bg-white/[0.035] hover:border-white/[0.16] hover:bg-white/[0.055]'
+                            }`}
+                            aria-pressed={accountUpdateMode === 'password'}
+                          >
+                            <div className="flex items-center gap-2">
                               <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-500 dark:text-emerald-300">
                                 <KeyRound className="h-4 w-4" />
                               </span>
@@ -427,10 +437,23 @@ export function Login() {
                                 <p className="text-[12px] text-gray-500 dark:text-white/35">We will email a secure reset link.</p>
                               </div>
                             </div>
-                          </div>
-                          <div className="rounded-2xl border border-white/[0.08] bg-white/[0.035] p-4">
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setAccountUpdateMode('email')}
+                            className={`w-full rounded-2xl border p-4 text-left transition-all active:scale-[0.99] ${
+                              accountUpdateMode === 'email'
+                                ? 'border-emerald-500/40 bg-emerald-500/[0.08] shadow-[0_0_0_1px_rgba(16,185,129,0.12)]'
+                                : 'border-white/[0.08] bg-white/[0.035] hover:border-white/[0.16] hover:bg-white/[0.055]'
+                            }`}
+                            aria-pressed={accountUpdateMode === 'email'}
+                          >
                             <div className="flex items-start gap-2">
-                              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-gray-500 dark:text-white/45">
+                              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${
+                                accountUpdateMode === 'email'
+                                  ? 'bg-emerald-500/15 text-emerald-500 dark:text-emerald-300'
+                                  : 'bg-white/[0.06] text-gray-500 dark:text-white/45'
+                              }`}>
                                 <Mail className="h-4 w-4" />
                               </span>
                               <div>
@@ -440,36 +463,54 @@ export function Login() {
                                 </p>
                               </div>
                             </div>
-                          </div>
+                          </button>
                         </div>
 
-                        <form onSubmit={handleForgot} className="space-y-4">
-                          <div>
-                            <label className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
-                              Email address
-                            </label>
-                            <input
-                              type="email"
-                              value={forgotEmail}
-                              onChange={e => setForgotEmail(e.target.value)}
-                              className={inputClass}
-                              placeholder="you@example.com"
-                              autoComplete="email"
-                              required
-                            />
-                          </div>
-                          <div className="pt-1">
+                        {accountUpdateMode === 'password' ? (
+                          <form onSubmit={handleForgot} className="space-y-4">
+                            <div>
+                              <label className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
+                                Email address
+                              </label>
+                              <input
+                                type="email"
+                                value={forgotEmail}
+                                onChange={e => setForgotEmail(e.target.value)}
+                                className={inputClass}
+                                placeholder="you@example.com"
+                                autoComplete="email"
+                                required
+                              />
+                            </div>
+                            <div className="pt-1">
+                              <button
+                                type="submit"
+                                disabled={forgotLoading || !forgotEmail}
+                                className="w-full h-12 rounded-xl text-[14px] font-semibold flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed bg-emerald-500 hover:bg-emerald-600 dark:hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20"
+                              >
+                                {forgotLoading
+                                  ? <><span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Sending…</>
+                                  : <>Send Password Email <ArrowRight className="h-4 w-4" /></>}
+                              </button>
+                            </div>
+                          </form>
+                        ) : (
+                          <div className="rounded-2xl border border-white/[0.08] bg-white/[0.035] p-4">
+                            <p className="text-[13px] font-semibold text-gray-900 dark:text-white">
+                              Email changes happen inside Profile.
+                            </p>
+                            <p className="mt-1 text-[12px] leading-relaxed text-gray-500 dark:text-white/35">
+                              Sign in with your current email first. Then go to Profile → Email and enter the new address. We will send a confirmation email before anything changes.
+                            </p>
                             <button
-                              type="submit"
-                              disabled={forgotLoading || !forgotEmail}
-                              className="w-full h-12 rounded-xl text-[14px] font-semibold flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed bg-emerald-500 hover:bg-emerald-600 dark:hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20"
+                              type="button"
+                              onClick={() => { setView('login'); setForgotSent(false); }}
+                              className="mt-4 inline-flex h-10 items-center justify-center rounded-full bg-white px-4 text-[13px] font-bold text-gray-900 transition hover:bg-gray-100 dark:bg-white/[0.08] dark:text-white dark:hover:bg-white/[0.12]"
                             >
-                              {forgotLoading
-                                ? <><span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Sending…</>
-                                : <>Send Password Email <ArrowRight className="h-4 w-4" /></>}
+                              Back to sign in
                             </button>
                           </div>
-                        </form>
+                        )}
                       </>
                     )}
                   </motion.div>

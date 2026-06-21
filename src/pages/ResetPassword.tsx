@@ -13,6 +13,11 @@ const requirements = [
 ];
 
 type Status = 'checking' | 'ready' | 'expired' | 'success';
+type ResetLinkType = 'recovery' | 'magiclink';
+
+function getResetLinkType(type: string | null): ResetLinkType {
+  return type === 'magiclink' ? 'magiclink' : 'recovery';
+}
 
 export function ResetPassword() {
   const navigate = useNavigate();
@@ -25,51 +30,80 @@ export function ResetPassword() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Detect recovery token from both PKCE (?code=) and implicit (#type=recovery) flows
+    let cancelled = false;
+
+    // Detect recovery token from PKCE (?code=), OTP token_hash, and implicit (#type=recovery) flows
     const searchParams = new URLSearchParams(window.location.search);
     const hashParams = new URLSearchParams(window.location.hash.slice(1));
-    const hasCode = !!searchParams.get('code');
-    const hasHashRecovery = hashParams.get('type') === 'recovery';
-    const isRecoveryFlow = hasCode || hasHashRecovery;
+    const code = searchParams.get('code');
+    const tokenHash = searchParams.get('token_hash') || hashParams.get('token_hash');
+    const type = searchParams.get('type') || hashParams.get('type');
+    const hasImplicitToken = hashParams.has('access_token') || hashParams.has('refresh_token');
+    const isRecoveryFlow = Boolean(code || tokenHash || hasImplicitToken || type === 'recovery' || type === 'magiclink');
+
+    const markStatus = (nextStatus: Status) => {
+      if (!cancelled) setStatus(nextStatus);
+    };
 
     // Listen for Supabase auth events
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
-        setStatus('ready');
+        markStatus('ready');
         return;
       }
-      // PKCE flow fires SIGNED_IN after code exchange — treat as recovery if we came here via reset link
+      // PKCE, token hash, and magic-link flows can fire SIGNED_IN after exchange.
       if (event === 'SIGNED_IN' && session && isRecoveryFlow) {
-        setStatus('ready');
+        markStatus('ready');
         return;
       }
     });
 
-    // If there's a code/token in URL, wait for Supabase to exchange it (up to 6 seconds)
-    // If there's no recovery indicator at all, show expired immediately
-    if (!isRecoveryFlow) {
-      // Check if there's already a valid session from a previous recovery
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session) {
-          setStatus('ready');
-        } else {
-          setStatus('expired');
+    const verifyResetLink = async () => {
+      if (code) {
+        const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+        if (!cancelled && !error && data.session) {
+          markStatus('ready');
+          return;
         }
-      });
-    } else {
-      // Has recovery code — give Supabase time to exchange it
-      const fallback = setTimeout(() => {
-        supabase.auth.getSession().then(({ data: { session } }) => {
-          setStatus(session ? 'ready' : 'expired');
-        });
-      }, 6000);
-      return () => {
-        subscription.unsubscribe();
-        clearTimeout(fallback);
-      };
-    }
 
-    return () => subscription.unsubscribe();
+        const { data: { session } } = await supabase.auth.getSession();
+        markStatus(session ? 'ready' : 'expired');
+        return;
+      }
+
+      if (tokenHash) {
+        const { data, error } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: getResetLinkType(type),
+        });
+        if (!cancelled && !error && data.session) {
+          markStatus('ready');
+          return;
+        }
+
+        const { data: { session } } = await supabase.auth.getSession();
+        markStatus(session ? 'ready' : 'expired');
+        return;
+      }
+
+      if (!isRecoveryFlow) {
+        const { data: { session } } = await supabase.auth.getSession();
+        markStatus(session ? 'ready' : 'expired');
+        return;
+      }
+
+      window.setTimeout(async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        markStatus(session ? 'ready' : 'expired');
+      }, 1200);
+    };
+
+    void verifyResetLink();
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const passwordOk = requirements.every(r => r.test(password));

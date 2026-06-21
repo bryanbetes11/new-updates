@@ -5,10 +5,14 @@ export function isPasswordRecoveryUrl(search = window.location.search, hash = wi
   const hashType = hashParams.get('type');
 
   return (
+    searchParams.has('code') ||
+    hashParams.has('access_token') ||
+    hashParams.has('refresh_token') ||
+    searchParams.has('token_hash') ||
     searchType === 'recovery' ||
+    searchType === 'magiclink' ||
     hashType === 'recovery' ||
-    (searchType === 'recovery' && searchParams.has('code')) ||
-    (hashType === 'recovery' && hashParams.has('access_token'))
+    hashType === 'magiclink'
   );
 }
 

@@ -186,7 +186,7 @@ export function EventDetail() {
 
     document.documentElement.classList.add('event-detail-active');
     document.body.classList.add('event-detail-active');
-    metaThemeColor?.setAttribute('content', '#211812');
+    metaThemeColor?.setAttribute('content', '#5b6470');
 
     return () => {
       document.documentElement.classList.remove('event-detail-active');
@@ -1828,7 +1828,7 @@ const openLyricsModal = (ss: SetlistSong) => {
         {/* ── Event Summary ────────────────────────────── */}
         <motion.div
           {...blurUp(0.08)}
-          className="relative -mx-4 -mt-[env(safe-area-inset-top)] overflow-hidden px-4 pb-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] sm:-mx-6 sm:px-6 sm:pb-5 sm:pt-3 lg:-mx-8 lg:mt-0 lg:px-8"
+          className="relative isolate -mx-4 -mt-[env(safe-area-inset-top)] overflow-hidden bg-[#050505] px-4 pb-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] sm:-mx-6 sm:px-6 sm:pb-5 sm:pt-3 lg:-mx-8 lg:mt-0 lg:px-8"
           style={{
             opacity: heroIsPast ? 0.85 : 1,
           }}
@@ -2698,11 +2698,11 @@ const openLyricsModal = (ss: SetlistSong) => {
                                         event.stopPropagation();
                                         openMobileSongActions(ss);
                                       }}
-                                      className="inline-flex h-8 w-8 items-center justify-center rounded-full text-white/45 transition-colors hover:bg-white/[0.08] hover:text-white"
+                                      className="relative z-10 inline-flex h-10 w-10 touch-manipulation items-center justify-center rounded-full text-white/60 transition-colors hover:bg-white/[0.08] hover:text-white"
                                       title="Song actions"
                                       aria-label={`Open actions for ${ss.songs?.title || 'song'}`}
                                     >
-                                      <MoreHorizontal className="h-4 w-4" />
+                                      <MoreHorizontal className="h-5 w-5" />
                                     </button>
                                   ) : (
                                     <MoreHorizontal className="h-4 w-4 text-white/30" />
@@ -3711,7 +3711,13 @@ const openLyricsModal = (ss: SetlistSong) => {
         </Modal>
 
         {/* Song Actions Modal */}
-        <Modal open={!!mobileSongActionsSong} onClose={() => setMobileSongActionsSong(null)} title="Song Actions" size="sm">
+        <Modal
+          open={!!mobileSongActionsSong}
+          onClose={() => setMobileSongActionsSong(null)}
+          title="Song Actions"
+          size="sm"
+          closeOnBackdrop={false}
+        >
           {mobileSongActionsSong && (
             <div className="space-y-3">
               <div className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.04] p-3">
@@ -3729,11 +3735,15 @@ const openLyricsModal = (ss: SetlistSong) => {
               </div>
 
               <div className="grid gap-2">
-                {showSetlistEditControls && (
+                {(showSetlistEditControls || canEditSetlistSongDetails) && (
                   <button
                     type="button"
                     onClick={() => openLyricsModal(mobileSongActionsSong)}
-                    className="flex h-11 w-full items-center gap-3 rounded-2xl bg-white/[0.055] px-3 text-left text-sm font-bold text-white/80 transition-colors hover:bg-white/[0.09] hover:text-white"
+                    className={`flex h-11 w-full items-center gap-3 rounded-2xl px-3 text-left text-sm font-bold transition-colors ${
+                      mobileSongActionsSong.songs?.lyrics
+                        ? 'bg-white/[0.055] text-white/80 hover:bg-white/[0.09] hover:text-white'
+                        : 'bg-amber-500/[0.13] text-amber-100 ring-1 ring-amber-400/20 hover:bg-amber-500/[0.18]'
+                    }`}
                   >
                     <FileText className={mobileSongActionsSong.songs?.lyrics ? 'h-4 w-4 text-emerald-300' : 'h-4 w-4 text-amber-300'} />
                     {mobileSongActionsSong.songs?.lyrics ? 'Edit lyrics' : 'Add lyrics'}

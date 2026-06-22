@@ -19,6 +19,7 @@ import { SongArtwork } from '../../components/SongArtwork';
 import { parseChordProMetadata } from '../../lib/chordPro';
 import { withSaveTimeout } from '../../lib/saveTimeout';
 import { filterSetlistsBySearch } from '../../lib/setlistSearch';
+import { buildSongUsages, type SongUsageSummary } from '../../lib/songUsage';
 
 interface SetlistWithEvent {
   id: string;
@@ -29,18 +30,7 @@ interface SetlistWithEvent {
   setlist_songs?: { id: string; position: number; song_id: string; performed_key: string; youtube_url?: string | null; songs?: { id: string; title: string; artist: string; song_key: string; youtube_url?: string | null; chordpro_text?: string | null } }[];
 }
 
-interface SongUsage {
-  id: string;
-  title: string;
-  artist: string;
-  song_key: string;
-  created_by?: string | null;
-  youtube_url?: string | null;
-  chordpro_text?: string | null;
-  last_used_date: string | null;
-  days_since: number | null;
-  is_safe: boolean;
-}
+type SongUsage = SongUsageSummary;
 
 interface ImportRow {
   event_date: string;
@@ -198,22 +188,11 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
     setSongLeaderAvatarMap(slAvatarMap);
 
     const songs = songsRes.data || [];
-    const usageMap: Record<string, string> = {};
-
-    approvedSetlists.forEach(sl => {
-      const eventDate = sl.events?.event_date;
-      if (!eventDate) return;
-      sl.setlist_songs?.forEach(ss => {
-        if (!usageMap[ss.song_id] || eventDate > usageMap[ss.song_id]) {
-          usageMap[ss.song_id] = eventDate;
-        }
-      });
-    });
-
-    const usages: SongUsage[] = songs.map(song => {
-      const lastUsed = usageMap[song.id] || null;
-      const daysSince = lastUsed ? differenceInDays(new Date(), parseISO(lastUsed)) : null;
-      return { ...song, title: sanitizeSongTitle(song.title), last_used_date: lastUsed, days_since: daysSince, is_safe: daysSince === null || daysSince >= RULE_DAYS };
+    const usages = buildSongUsages({
+      songs,
+      setlists: approvedSetlists,
+      ruleDays: RULE_DAYS,
+      sanitizeTitle: sanitizeSongTitle,
     });
 
     usages.sort((a, b) => {
@@ -258,6 +237,8 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
         last_used_date: parsed.last_used_date ?? null,
         days_since: parsed.days_since ?? null,
         is_safe: Boolean(parsed.is_safe),
+        latest_usage: parsed.latest_usage ?? null,
+        usages: parsed.usages ?? [],
       });
     } catch {
       localStorage.removeItem(openChartStorageKey);
@@ -452,6 +433,8 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
           last_used_date: null,
           days_since: null,
           is_safe: true,
+          latest_usage: null,
+          usages: [],
         };
         toast('success', 'Song chart updated');
       } else {
@@ -478,6 +461,8 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
           last_used_date: null,
           days_since: null,
           is_safe: true,
+          latest_usage: null,
+          usages: [],
         };
         toast('success', 'Song added to library');
       }
@@ -838,6 +823,11 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   const toggleAllSongs = () => {
     if (selectedSongs.size === filteredSongs.length) setSelectedSongs(new Set());
     else setSelectedSongs(new Set(filteredSongs.map(s => s.id)));
+  };
+
+  const requestDeleteSong = (songId: string) => {
+    setSelectedSongs(new Set([songId]));
+    setShowDeleteConfirm('songs');
   };
 
   const handleDeleteSetlists = async () => {
@@ -1476,68 +1466,89 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
           <p className="rounded-[0.75rem] bg-[#181818] px-5 py-12 text-center text-sm text-gray-400 dark:text-white/30">No songs found</p>
         ) : (
           <>
-            {filteredSongs.map(song => (
-              <div
-                key={song.id}
-                className={`flex items-center gap-3 py-3 transition-colors ${
-                  selectedSongs.has(song.id)
-                    ? 'bg-[#22c55e]/10'
-                    : 'hover:bg-white/[0.035]'
-                }`}
-              >
-                {selectModeSongs && (
-                  <button onClick={() => toggleSong(song.id)} className="shrink-0">
-                    {selectedSongs.has(song.id)
-                      ? <CheckSquare className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                      : <Square className="h-4 w-4 text-gray-300 dark:text-white/20 hover:text-gray-400 dark:hover:text-white/35 transition-colors" />}
-                  </button>
-                )}
-                <SongArtwork
-                  song={song}
-                  youtubeUrl={song.youtube_url}
-                  className="h-14 w-14 rounded-[0.35rem]"
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <p className="text-[13px] font-semibold text-gray-900 dark:text-white truncate" style={{ letterSpacing: '-0.01em' }}>{song.title}</p>
-                    {song.song_key && (
-                      <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-white/45">{song.song_key}</span>
+            {filteredSongs.map(song => {
+              const latestUsage = !song.is_safe ? song.latest_usage : null;
+              return (
+                <div
+                  key={song.id}
+                  className={`flex items-start gap-3 py-3 transition-colors ${
+                    selectedSongs.has(song.id)
+                      ? 'bg-[#22c55e]/10'
+                      : 'hover:bg-white/[0.035]'
+                  }`}
+                >
+                  {selectModeSongs && (
+                    <button onClick={() => toggleSong(song.id)} className="mt-5 shrink-0">
+                      {selectedSongs.has(song.id)
+                        ? <CheckSquare className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                        : <Square className="h-4 w-4 text-gray-300 dark:text-white/20 hover:text-gray-400 dark:hover:text-white/35 transition-colors" />}
+                    </button>
+                  )}
+                  <SongArtwork
+                    song={song}
+                    youtubeUrl={song.youtube_url}
+                    className="h-14 w-14 rounded-[0.35rem]"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="text-[13px] font-semibold text-gray-900 dark:text-white truncate" style={{ letterSpacing: '-0.01em' }}>{song.title}</p>
+                      {song.song_key && (
+                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-white/45">{song.song_key}</span>
+                      )}
+                    </div>
+                    {song.artist && <p className="text-[11px] text-gray-400 dark:text-white/30 truncate mt-0.5">{song.artist}</p>}
+                    <p className="text-[10px] font-mono text-gray-400 dark:text-white/25 mt-0.5 sm:hidden tracking-wide">
+                      {song.last_used_date ? format(parseISO(song.last_used_date), 'MMM d, yyyy') : 'Never used'}
+                    </p>
+                    {latestUsage && (
+                      <div className="mt-2 rounded-xl border border-red-200/80 bg-red-50 px-2.5 py-2 text-[11px] leading-4 text-red-700 dark:border-red-500/20 dark:bg-red-500/[0.10] dark:text-red-200">
+                        <span className="font-black">Used in {latestUsage.event_title}</span>
+                        <span className="block text-red-700/75 dark:text-red-200/70">
+                          {format(parseISO(latestUsage.event_date), 'MMM d, yyyy')}
+                          {latestUsage.event_type ? ` · ${latestUsage.event_type}` : ''}
+                          {song.usages.length > 1 ? ` · ${song.usages.length} total uses` : ''}
+                        </span>
+                      </div>
                     )}
                   </div>
-                  {song.artist && <p className="text-[11px] text-gray-400 dark:text-white/30 truncate mt-0.5">{song.artist}</p>}
-                  <p className="text-[10px] font-mono text-gray-400 dark:text-white/25 mt-0.5 sm:hidden tracking-wide">
-                    {song.last_used_date ? format(parseISO(song.last_used_date), 'MMM d, yyyy') : 'Never used'}
-                  </p>
+                  <div className="text-[11px] font-mono text-gray-400 dark:text-white/30 text-center whitespace-nowrap hidden sm:flex items-center gap-1 tracking-wide pt-1.5">
+                    {song.last_used_date ? (
+                      <><Clock className="h-3 w-3" />{format(parseISO(song.last_used_date), 'MMM d, yyyy')}</>
+                    ) : (
+                      <span className="text-gray-300 dark:text-white/20">Never</span>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-end gap-2 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => openEditLibrarySong(song)}
+                      aria-label={`Edit ${song.title}`}
+                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.035] text-white/45 transition-colors hover:border-emerald-400/40 hover:bg-emerald-500/[0.12] hover:text-emerald-300 active:scale-[0.96]"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => requestDeleteSong(song.id)}
+                      aria-label={`Delete ${song.title}`}
+                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-red-500/15 bg-red-500/[0.08] text-red-300 transition-colors hover:border-red-400/45 hover:bg-red-500/[0.16] hover:text-red-200 active:scale-[0.96]"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                    {song.days_since === null ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-white/45 border border-gray-200 dark:border-white/[0.06]">
+                        <CheckCircle className="h-3 w-3" /> New
+                      </span>
+                    ) : (
+                      <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg ${getDaysBg(song.days_since)}`}>
+                        {song.is_safe ? <CheckCircle className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+                        {song.days_since}d
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className="text-[11px] font-mono text-gray-400 dark:text-white/30 text-center whitespace-nowrap hidden sm:flex items-center gap-1 tracking-wide">
-                  {song.last_used_date ? (
-                    <><Clock className="h-3 w-3" />{format(parseISO(song.last_used_date), 'MMM d, yyyy')}</>
-                  ) : (
-                    <span className="text-gray-300 dark:text-white/20">Never</span>
-                  )}
-                </div>
-                <div className="flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => openEditLibrarySong(song)}
-                    aria-label={`Edit ${song.title}`}
-                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.035] text-white/45 transition-colors hover:border-emerald-400/40 hover:bg-emerald-500/[0.12] hover:text-emerald-300 active:scale-[0.96]"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                  {song.days_since === null ? (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-white/45 border border-gray-200 dark:border-white/[0.06]">
-                      <CheckCircle className="h-3 w-3" /> New
-                    </span>
-                  ) : (
-                    <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg ${getDaysBg(song.days_since)}`}>
-                      {song.is_safe ? <CheckCircle className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
-                      {song.days_since}d
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </>
         )}
       </motion.div>

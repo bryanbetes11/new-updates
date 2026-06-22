@@ -116,6 +116,7 @@ export function EventDetail() {
   const [expandedDeclineNotes, setExpandedDeclineNotes] = useState<Set<string>>(new Set());
   const [showDeleteEvent, setShowDeleteEvent] = useState(false);
   const [showEventActionsMenu, setShowEventActionsMenu] = useState(false);
+  const [mobileSongActionsSong, setMobileSongActionsSong] = useState<SetlistSong | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showRevisionRequest, setShowRevisionRequest] = useState(false);
   const [revisionReason, setRevisionReason] = useState('');
@@ -977,6 +978,7 @@ export function EventDetail() {
   };
 
   const openEditSong = (ss: SetlistSong) => {
+    setMobileSongActionsSong(null);
     setEditingSongId(ss.id);
     setEditSongForm({
       category: ss.song_category || '',
@@ -1199,6 +1201,7 @@ export function EventDetail() {
 
 
 const openLyricsModal = (ss: SetlistSong) => {
+    setMobileSongActionsSong(null);
     setLyricsModalSong(ss);
     setLyricsInput(ss.songs?.lyrics || '');
     setLyricsSearchResults([]);
@@ -2682,27 +2685,13 @@ const openLyricsModal = (ss: SetlistSong) => {
                                   )}
                                 </div>
                                 <div className="flex shrink-0 items-center gap-0.5">
-                                  {showSetlistEditControls && ss.youtube_url && (
-                                    <a href={ss.youtube_url} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 w-8 items-center justify-center rounded-full text-white/45 transition-colors hover:bg-white/[0.08] hover:text-white" title="Open video">
-                                      <Music className="h-3.5 w-3.5" />
-                                    </a>
-                                  )}
-                                  {showSetlistEditControls && (
+                                  {showSetlistEditControls || canEditSetlistSongDetails ? (
                                     <button
-                                      onClick={() => openLyricsModal(ss)}
-                                      className={`inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
-                                        ss.songs?.lyrics
-                                          ? 'text-emerald-300 hover:bg-emerald-500/10 hover:text-emerald-200'
-                                          : 'text-amber-300 hover:bg-amber-500/10 hover:text-amber-200'
-                                      }`}
-                                      title={ss.songs?.lyrics ? 'Edit lyrics' : 'Add lyrics'}
-                                      aria-label={`${ss.songs?.lyrics ? 'Edit' : 'Add'} lyrics for ${ss.songs?.title || 'song'}`}
+                                      onClick={() => setMobileSongActionsSong(ss)}
+                                      className="inline-flex h-8 w-8 items-center justify-center rounded-full text-white/45 transition-colors hover:bg-white/[0.08] hover:text-white"
+                                      title="Song actions"
+                                      aria-label={`Open actions for ${ss.songs?.title || 'song'}`}
                                     >
-                                      <FileText className="h-3.5 w-3.5" />
-                                    </button>
-                                  )}
-                                  {canEditSetlistSongDetails ? (
-                                    <button onClick={() => openEditSong(ss)} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-white/45 transition-colors hover:bg-white/[0.08] hover:text-white" title="Edit song">
                                       <MoreHorizontal className="h-4 w-4" />
                                     </button>
                                   ) : (
@@ -3704,6 +3693,78 @@ const openLyricsModal = (ss: SetlistSong) => {
         </Modal>
 
         {/* Lyrics Modal */}
+        <Modal open={!!mobileSongActionsSong} onClose={() => setMobileSongActionsSong(null)} title="Song Actions" size="sm">
+          {mobileSongActionsSong && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.04] p-3">
+                <SongArtwork
+                  song={mobileSongActionsSong.songs}
+                  youtubeUrl={mobileSongActionsSong.youtube_url || mobileSongActionsSong.songs?.youtube_url}
+                  className="h-12 w-12 rounded-lg"
+                />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-black text-white">{mobileSongActionsSong.songs?.title || 'Untitled song'}</p>
+                  <p className="mt-0.5 truncate text-xs font-semibold text-white/45">
+                    {mobileSongActionsSong.songs?.artist || 'No artist listed'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                {canEditSetlistSongDetails && (
+                  <button
+                    type="button"
+                    onClick={() => openEditSong(mobileSongActionsSong)}
+                    className="flex h-11 w-full items-center gap-3 rounded-2xl bg-white/[0.055] px-3 text-left text-sm font-bold text-white/80 transition-colors hover:bg-white/[0.09] hover:text-white"
+                  >
+                    <Edit className="h-4 w-4 text-emerald-300" />
+                    Edit song details
+                  </button>
+                )}
+
+                {showSetlistEditControls && (
+                  <button
+                    type="button"
+                    onClick={() => openLyricsModal(mobileSongActionsSong)}
+                    className="flex h-11 w-full items-center gap-3 rounded-2xl bg-white/[0.055] px-3 text-left text-sm font-bold text-white/80 transition-colors hover:bg-white/[0.09] hover:text-white"
+                  >
+                    <FileText className={mobileSongActionsSong.songs?.lyrics ? 'h-4 w-4 text-emerald-300' : 'h-4 w-4 text-amber-300'} />
+                    {mobileSongActionsSong.songs?.lyrics ? 'Edit lyrics' : 'Add lyrics'}
+                  </button>
+                )}
+
+                {(mobileSongActionsSong.youtube_url || mobileSongActionsSong.songs?.youtube_url) && (
+                  <a
+                    href={mobileSongActionsSong.youtube_url || mobileSongActionsSong.songs?.youtube_url || undefined}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setMobileSongActionsSong(null)}
+                    className="flex h-11 w-full items-center gap-3 rounded-2xl bg-white/[0.055] px-3 text-left text-sm font-bold text-white/80 transition-colors hover:bg-white/[0.09] hover:text-white"
+                  >
+                    <Music className="h-4 w-4 text-red-300" />
+                    Open video
+                  </a>
+                )}
+
+                {showSetlistEditControls && ((canManageSetlist && !['approved', 'pending_review'].includes(setlist?.status || '')) || (canEditSetlist)) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const targetId = mobileSongActionsSong.id;
+                      setMobileSongActionsSong(null);
+                      handleRemoveSongFromSetlist(targetId);
+                    }}
+                    className="flex h-11 w-full items-center gap-3 rounded-2xl bg-red-500/[0.10] px-3 text-left text-sm font-bold text-red-200 transition-colors hover:bg-red-500/[0.16]"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Remove from setlist
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </Modal>
+
         <Modal open={!!lyricsModalSong} onClose={() => { setLyricsModalSong(null); setArtistPromptVisible(false); setArtistPromptValue(''); }} title="Song Lyrics">
           {lyricsModalSong && (
             <div className="space-y-4">

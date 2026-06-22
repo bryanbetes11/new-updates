@@ -186,7 +186,7 @@ export function EventDetail() {
 
     document.documentElement.classList.add('event-detail-active');
     document.body.classList.add('event-detail-active');
-    metaThemeColor?.setAttribute('content', '#5b6470');
+    metaThemeColor?.setAttribute('content', '#6f6259');
 
     return () => {
       document.documentElement.classList.remove('event-detail-active');

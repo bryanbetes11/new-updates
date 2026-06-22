@@ -808,7 +808,7 @@ export function Dashboard() {
   return (
     <div className="dark page-container page-bottom-pad relative overflow-hidden bg-[#050505] text-white">
       <div
-        className="pointer-events-none fixed inset-0 -z-10 bg-[#050505] [background-image:radial-gradient(circle_at_top_left,rgba(34,197,94,0.12),transparent_24%),radial-gradient(circle_at_top_right,rgba(255,255,255,0.04),transparent_18%),linear-gradient(180deg,#121212_0%,#050505_24%,#050505_100%)]"
+        className="pointer-events-none fixed inset-0 -z-10 bg-[#050505] [background-image:radial-gradient(circle_at_top_right,rgba(255,255,255,0.035),transparent_18%),linear-gradient(180deg,#101010_0%,#050505_24%,#050505_100%)]"
       />
       {createPortal(
         <motion.div

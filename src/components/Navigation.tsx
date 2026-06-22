@@ -1183,7 +1183,7 @@ export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false
           willChange: 'transform',
         }}
       >
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(34,197,94,0.14),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.015)_52%,rgba(255,255,255,0))]" />
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0.012)_52%,rgba(255,255,255,0))]" />
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-black/24 to-transparent" />
         <div className="relative flex h-14 w-full items-center justify-between gap-2 pb-0">
           <button

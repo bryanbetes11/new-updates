@@ -1820,6 +1820,17 @@ const openLyricsModal = (ss: SetlistSong) => {
 
   return (
     <div className="page-container page-bottom-pad">
+      <div className="pointer-events-none fixed inset-x-0 top-0 z-[45] h-[env(safe-area-inset-top)] overflow-hidden bg-[#6f6259] lg:hidden">
+        <div className="absolute inset-x-[-35%] top-[-10rem] flex justify-center">
+          <EventArtwork
+            eventType={event.event_type}
+            title={event.title}
+            songs={eventDetailArtworkSongs}
+            className="h-80 w-80 scale-[2.45] rounded-[2rem] opacity-70 blur-3xl saturate-[1.75]"
+          />
+        </div>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_-6%,rgba(255,255,255,0.22),transparent_32%),radial-gradient(circle_at_70%_18%,rgba(239,68,68,0.20),transparent_36%),radial-gradient(circle_at_24%_24%,rgba(245,158,11,0.13),transparent_38%),linear-gradient(180deg,rgba(0,0,0,0.02)_0%,rgba(0,0,0,0.12)_80%)]" />
+      </div>
       <motion.div
         animate={isLeaving ? { opacity: 0, y: -12, filter: 'blur(8px)' } : { opacity: 1, y: 0, filter: 'blur(0px)' }}
         transition={{ duration: 0.28, ease: [0.4, 0, 1, 1] }}

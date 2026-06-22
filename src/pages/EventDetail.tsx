@@ -987,6 +987,16 @@ export function EventDetail() {
     });
   };
 
+  const openLyricsFromEditingSong = () => {
+    if (!editingSongId) return;
+    const targetSong = setlistSongs.find(song => song.id === editingSongId)
+      || linkedSetlistSongs.find(song => song.id === editingSongId);
+    if (!targetSong) return;
+
+    setEditingSongId(null);
+    openLyricsModal(targetSong);
+  };
+
   const handleUpdateSetlistSong = async () => {
     if (!editingSongId) return;
     const originalSong = setlistSongs.find(song => song.id === editingSongId);
@@ -3156,6 +3166,14 @@ const openLyricsModal = (ss: SetlistSong) => {
                 <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
                   <p className="text-sm font-medium text-gray-900 dark:text-white">{ss.songs.title}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">{ss.songs.artist}{ss.songs.song_key && ` -- Default Key: ${ss.songs.song_key}`}</p>
+                  <button
+                    type="button"
+                    onClick={openLyricsFromEditingSong}
+                    className="mt-3 inline-flex h-9 items-center gap-2 rounded-xl bg-amber-50 px-3 text-xs font-bold text-amber-700 ring-1 ring-amber-200/80 transition-colors hover:bg-amber-100 dark:bg-amber-500/[0.12] dark:text-amber-200 dark:ring-amber-500/20 dark:hover:bg-amber-500/[0.18]"
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    {ss.songs.lyrics ? 'Edit lyrics' : 'Add lyrics'}
+                  </button>
                 </div>
               ) : null;
             })()}

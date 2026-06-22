@@ -22,6 +22,7 @@ import { withSaveTimeout } from '../lib/saveTimeout';
 import { clearActiveServiceMode, getActiveServiceMode, saveActiveServiceMode } from '../lib/serviceModeResume';
 import { useSmartBack } from '../lib/navigationHistory';
 import { describeSetlistReviewAge, getSetlistPendingMessage } from '../lib/setlistReviewAge';
+import { getSingleLyricsAutofill, normalizeLyricsInputForSave, normalizeLyricsSearchResults, type LyricsSearchResult } from '../lib/lyricsSearch';
 
 import type { Event, EventAssignment, Setlist, SetlistSong, Song, ServiceFormat, SetlistCheckReport } from '../types';
 import { inferServiceFormat, SERVICE_FORMAT_LABELS } from '../lib/setlistCheckerEngine';
@@ -157,15 +158,7 @@ export function EventDetail() {
   const [fetchingLyrics, setFetchingLyrics] = useState(false);
   const [artistPromptVisible, setArtistPromptVisible] = useState(false);
   const [artistPromptValue, setArtistPromptValue] = useState('');
-  const [lyricsSearchResults, setLyricsSearchResults] = useState<Array<{
-    id: string;
-    title: string;
-    artist: string;
-    album?: string | null;
-    duration?: number | null;
-    source: string;
-    lyrics: string;
-  }>>([]);
+  const [lyricsSearchResults, setLyricsSearchResults] = useState<LyricsSearchResult[]>([]);
   const [countdownParts, setCountdownParts] = useState<{ hours: number; minutes: number; seconds: number }>({ hours: 0, minutes: 0, seconds: 0 });
   const [serviceFormat, setServiceFormat] = useState<ServiceFormat | null>(null);
   const [isReordering, setIsReordering] = useState(false);
@@ -1249,6 +1242,7 @@ const openLyricsModal = (ss: SetlistSong) => {
     }
 
     setArtistPromptVisible(false);
+    setLyricsSearchResults([]);
     setFetchingLyrics(true);
     const { data, error } = await supabase.functions.invoke('fetch-lyrics-from-link', {
       body: {
@@ -1264,15 +1258,16 @@ const openLyricsModal = (ss: SetlistSong) => {
       return;
     }
 
-    const results = Array.isArray(data?.results) ? data.results : [];
+    const results = normalizeLyricsSearchResults(data);
     if (results.length === 0) {
       toast('error', 'No lyrics found for this song');
       return;
     }
 
     setLyricsSearchResults(results);
-    if (results.length === 1 && typeof results[0]?.lyrics === 'string') {
-      setLyricsInput(results[0].lyrics.trim());
+    const autofillLyrics = getSingleLyricsAutofill(results);
+    if (autofillLyrics) {
+      setLyricsInput(autofillLyrics);
     }
     toast('success', `Found ${results.length} lyrics result${results.length > 1 ? 's' : ''}`);
   };
@@ -1280,7 +1275,7 @@ const openLyricsModal = (ss: SetlistSong) => {
   const handleSaveLyrics = async () => {
     if (!lyricsModalSong) return;
     setSavingLyrics(true);
-    const trimmed = lyricsInput.trim() || null;
+    const trimmed = normalizeLyricsInputForSave(lyricsInput);
     const { error } = await supabase.from('songs').update({ lyrics: trimmed }).eq('id', lyricsModalSong.song_id);
     setSavingLyrics(false);
     if (error) {
@@ -2691,6 +2686,20 @@ const openLyricsModal = (ss: SetlistSong) => {
                                     <a href={ss.youtube_url} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 w-8 items-center justify-center rounded-full text-white/45 transition-colors hover:bg-white/[0.08] hover:text-white" title="Open video">
                                       <Music className="h-3.5 w-3.5" />
                                     </a>
+                                  )}
+                                  {showSetlistEditControls && (
+                                    <button
+                                      onClick={() => openLyricsModal(ss)}
+                                      className={`inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
+                                        ss.songs?.lyrics
+                                          ? 'text-emerald-300 hover:bg-emerald-500/10 hover:text-emerald-200'
+                                          : 'text-amber-300 hover:bg-amber-500/10 hover:text-amber-200'
+                                      }`}
+                                      title={ss.songs?.lyrics ? 'Edit lyrics' : 'Add lyrics'}
+                                      aria-label={`${ss.songs?.lyrics ? 'Edit' : 'Add'} lyrics for ${ss.songs?.title || 'song'}`}
+                                    >
+                                      <FileText className="h-3.5 w-3.5" />
+                                    </button>
                                   )}
                                   {canEditSetlistSongDetails ? (
                                     <button onClick={() => openEditSong(ss)} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-white/45 transition-colors hover:bg-white/[0.08] hover:text-white" title="Edit song">

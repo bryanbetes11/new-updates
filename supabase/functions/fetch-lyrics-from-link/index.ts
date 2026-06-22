@@ -21,6 +21,8 @@ interface LyricsResult {
   lyrics: string;
 }
 
+const PROVIDER_TIMEOUT_MS = 6500;
+
 function normalizeWhitespace(text: string) {
   return text
     .replace(/\r/g, "")
@@ -31,6 +33,20 @@ function normalizeWhitespace(text: string) {
     .trim();
 }
 
+async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = PROVIDER_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 async function searchLrclib(title: string, artist?: string): Promise<LyricsResult[]> {
   const url = new URL("https://lrclib.net/api/search");
   url.searchParams.set("track_name", title);
@@ -38,15 +54,22 @@ async function searchLrclib(title: string, artist?: string): Promise<LyricsResul
     url.searchParams.set("artist_name", artist.trim());
   }
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      "User-Agent": "ServeSyncLyricsFinder/1.0",
-      "Accept": "application/json",
-    },
-  });
+  let data: unknown;
+  try {
+    const response = await fetchWithTimeout(url.toString(), {
+      headers: {
+        "User-Agent": "ServeSyncLyricsFinder/1.0",
+        "Accept": "application/json",
+      },
+    });
 
-  if (!response.ok) return [];
-  const data = await response.json();
+    if (!response.ok) return [];
+    data = await response.json();
+  } catch (error) {
+    console.warn("LRCLIB lyrics lookup failed:", error);
+    return [];
+  }
+
   if (!Array.isArray(data)) return [];
 
   return data
@@ -65,14 +88,21 @@ async function searchLrclib(title: string, artist?: string): Promise<LyricsResul
 
 async function searchLyricsOvh(title: string, artist: string): Promise<LyricsResult[]> {
   const url = `https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`;
-  const response = await fetch(url, {
-    headers: {
-      "Accept": "application/json",
-    },
-  });
+  let data: any;
+  try {
+    const response = await fetchWithTimeout(url, {
+      headers: {
+        "Accept": "application/json",
+      },
+    });
 
-  if (!response.ok) return [];
-  const data = await response.json();
+    if (!response.ok) return [];
+    data = await response.json();
+  } catch (error) {
+    console.warn("lyrics.ovh lyrics lookup failed:", error);
+    return [];
+  }
+
   if (typeof data?.lyrics !== "string" || !data.lyrics.trim()) return [];
 
   return [{
@@ -110,7 +140,11 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const lrclibResults = await searchLrclib(normalizedTitle, normalizedArtist);
+    let lrclibResults = await searchLrclib(normalizedTitle, normalizedArtist);
+    if (lrclibResults.length === 0 && normalizedArtist) {
+      lrclibResults = await searchLrclib(normalizedTitle);
+    }
+
     if (lrclibResults.length > 0) {
       return new Response(JSON.stringify({ results: lrclibResults }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

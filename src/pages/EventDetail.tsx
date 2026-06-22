@@ -3809,23 +3809,21 @@ const openLyricsModal = (ss: SetlistSong) => {
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.97 }}
                       transition={{ duration: 0.2 }}
-                      className="relative overflow-hidden rounded-xl border border-brand-200 dark:border-brand-800/40 px-4 py-5 flex flex-col items-center gap-4"
-                      style={{ background: 'linear-gradient(135deg, #f0fdf5 0%, #dcfce8 60%, #f0fdf5 100%)' }}
+                      className="relative flex flex-col items-center gap-4 overflow-hidden rounded-xl border border-brand-200 bg-[linear-gradient(135deg,#f0fdf5_0%,#dcfce8_60%,#f0fdf5_100%)] px-4 py-5 dark:border-emerald-400/20 dark:bg-[linear-gradient(135deg,rgba(6,78,59,0.35)_0%,rgba(5,46,22,0.36)_58%,rgba(2,6,23,0.18)_100%)]"
                     >
                       {/* Shimmer sweep */}
                       <motion.div
-                        className="pointer-events-none absolute inset-0"
+                        className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,transparent_0%,rgba(255,255,255,0.55)_50%,transparent_100%)] dark:bg-[linear-gradient(90deg,transparent_0%,rgba(52,211,153,0.16)_50%,transparent_100%)]"
                         animate={{ x: ['-100%', '100%'] }}
                         transition={{ duration: 1.8, repeat: Infinity, ease: 'linear' }}
-                        style={{ background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.55) 50%, transparent 100%)' }}
                       />
                       {/* Waveform bars */}
                       <div className="flex items-end gap-1.5 h-10">
                         {[0.4, 0.7, 1, 0.6, 0.9, 0.5, 0.8, 0.45, 0.75, 0.55].map((base, i) => (
                           <motion.div
                             key={i}
-                            className="w-1.5 rounded-full"
-                            style={{ background: 'linear-gradient(180deg, #4ade80, #16a34a)', minHeight: 4 }}
+                            className="w-1.5 rounded-full bg-[linear-gradient(180deg,#4ade80,#16a34a)] shadow-[0_0_12px_rgba(34,197,94,0.25)] dark:bg-[linear-gradient(180deg,#6ee7b7,#10b981)] dark:shadow-[0_0_14px_rgba(16,185,129,0.38)]"
+                            style={{ minHeight: 4 }}
                             animate={{ scaleY: [base, base * 0.3, base * 1.2, base * 0.5, base] }}
                             transition={{ duration: 0.8 + i * 0.07, repeat: Infinity, ease: 'easeInOut', delay: i * 0.08 }}
                           />
@@ -3833,10 +3831,9 @@ const openLyricsModal = (ss: SetlistSong) => {
                       </div>
                       {/* Label */}
                       <motion.span
-                        className="text-sm font-semibold tracking-wide"
+                        className="text-sm font-semibold tracking-wide text-green-600 dark:text-emerald-200"
                         animate={{ opacity: [0.4, 1, 0.4] }}
                         transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
-                        style={{ color: '#16a34a' }}
                       >
                         Finding lyrics…
                       </motion.span>

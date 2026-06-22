@@ -1170,9 +1170,7 @@ export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false
       <div
         className={`fixed top-0 left-0 right-0 z-30 flex items-end justify-between overflow-hidden px-4 lg:hidden ${hideMobileAll || hideMobileHeader ? 'hidden' : ''}`}
         style={{
-          background: 'rgba(5,5,5,0.72)',
-          WebkitBackdropFilter: 'blur(28px) saturate(175%) contrast(106%)',
-          backdropFilter: 'blur(28px) saturate(175%) contrast(106%)',
+          background: '#050505',
           borderBottom: '1px solid rgba(255,255,255,0.08)',
           boxShadow: '0 14px 34px -30px rgba(0,0,0,0.85), inset 0 -1px 0 rgba(255,255,255,0.06)',
           paddingTop: 'env(safe-area-inset-top)',
@@ -1183,8 +1181,7 @@ export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false
           willChange: 'transform',
         }}
       >
-        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.016)_52%,rgba(255,255,255,0))]" />
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-black/24 to-transparent" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-white/[0.06]" />
         <div className="relative flex h-14 w-full items-center justify-between gap-2 pb-0">
           <button
             onClick={() => {

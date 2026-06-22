@@ -987,6 +987,13 @@ export function EventDetail() {
     });
   };
 
+  const openMobileSongActions = (ss: SetlistSong) => {
+    setEditingSongId(null);
+    setLyricsModalSong(null);
+    setChartModalSong(null);
+    setMobileSongActionsSong(ss);
+  };
+
   const openLyricsFromEditingSong = () => {
     if (!editingSongId) return;
     const targetSong = setlistSongs.find(song => song.id === editingSongId)
@@ -2669,19 +2676,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                   <div className="flex min-w-0 items-center gap-2">
                                     <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{ss.songs?.title}</p>
                                     {displayKey && (
-                                      canEditSetlistSongDetails ? (
-                                        <button
-                                          type="button"
-                                          onClick={() => openEditSong(ss)}
-                                          className={editableKeyBadgeClass}
-                                          aria-label={`Edit key for ${ss.songs?.title || 'song'}`}
-                                          title="Edit key"
-                                        >
-                                          <span>{displayKey}</span>
-                                        </button>
-                                      ) : (
-                                        <span className={keyBadgeClass}>{displayKey}</span>
-                                      )
+                                      <span className={keyBadgeClass}>{displayKey}</span>
                                     )}
                                   </div>
                                   <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
@@ -2697,7 +2692,12 @@ const openLyricsModal = (ss: SetlistSong) => {
                                 <div className="flex shrink-0 items-center gap-0.5">
                                   {showSetlistEditControls || canEditSetlistSongDetails ? (
                                     <button
-                                      onClick={() => setMobileSongActionsSong(ss)}
+                                      type="button"
+                                      onClick={(event) => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        openMobileSongActions(ss);
+                                      }}
                                       className="inline-flex h-8 w-8 items-center justify-center rounded-full text-white/45 transition-colors hover:bg-white/[0.08] hover:text-white"
                                       title="Song actions"
                                       aria-label={`Open actions for ${ss.songs?.title || 'song'}`}
@@ -3710,7 +3710,7 @@ const openLyricsModal = (ss: SetlistSong) => {
           </div>
         </Modal>
 
-        {/* Lyrics Modal */}
+        {/* Song Actions Modal */}
         <Modal open={!!mobileSongActionsSong} onClose={() => setMobileSongActionsSong(null)} title="Song Actions" size="sm">
           {mobileSongActionsSong && (
             <div className="space-y-3">
@@ -3729,17 +3729,6 @@ const openLyricsModal = (ss: SetlistSong) => {
               </div>
 
               <div className="grid gap-2">
-                {canEditSetlistSongDetails && (
-                  <button
-                    type="button"
-                    onClick={() => openEditSong(mobileSongActionsSong)}
-                    className="flex h-11 w-full items-center gap-3 rounded-2xl bg-white/[0.055] px-3 text-left text-sm font-bold text-white/80 transition-colors hover:bg-white/[0.09] hover:text-white"
-                  >
-                    <Edit className="h-4 w-4 text-emerald-300" />
-                    Edit song details
-                  </button>
-                )}
-
                 {showSetlistEditControls && (
                   <button
                     type="button"
@@ -3748,6 +3737,17 @@ const openLyricsModal = (ss: SetlistSong) => {
                   >
                     <FileText className={mobileSongActionsSong.songs?.lyrics ? 'h-4 w-4 text-emerald-300' : 'h-4 w-4 text-amber-300'} />
                     {mobileSongActionsSong.songs?.lyrics ? 'Edit lyrics' : 'Add lyrics'}
+                  </button>
+                )}
+
+                {canEditSetlistSongDetails && (
+                  <button
+                    type="button"
+                    onClick={() => openEditSong(mobileSongActionsSong)}
+                    className="flex h-11 w-full items-center gap-3 rounded-2xl bg-white/[0.055] px-3 text-left text-sm font-bold text-white/80 transition-colors hover:bg-white/[0.09] hover:text-white"
+                  >
+                    <Edit className="h-4 w-4 text-emerald-300" />
+                    Edit song details
                   </button>
                 )}
 

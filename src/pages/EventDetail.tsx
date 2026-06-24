@@ -2277,6 +2277,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                   {linkedReferenceSongs.map((ss) => {
                     const song = Array.isArray(ss.songs) ? ss.songs[0] : ss.songs;
                     const displayKey = ss.performed_key || song?.song_key || '';
+                    const videoUrl = ss.youtube_url || song?.youtube_url || '';
                     const keyChanged = ss.performed_key && song?.song_key && ss.performed_key !== song.song_key;
                     return (
                       <div key={ss.id} className="rounded-xl px-1 py-2 transition-colors hover:bg-white/[0.04]">
@@ -2296,9 +2297,9 @@ const openLyricsModal = (ss: SetlistSong) => {
                             </p>
                           </div>
                           <div className="flex shrink-0 items-center gap-1">
-                            {ss.youtube_url && (
-                              <a href={ss.youtube_url} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 w-8 items-center justify-center rounded-full text-white/50 transition-colors hover:bg-white/[0.08] hover:text-white" title="Open video">
-                                <Music className="h-3.5 w-3.5" />
+                            {videoUrl && (
+                              <a href={videoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 w-8 items-center justify-center rounded-full text-white/50 transition-colors hover:bg-white/[0.08] hover:text-white" title="Open video" aria-label={`Open video for ${song?.title || 'song'}`}>
+                                <Play className="h-3.5 w-3.5" />
                               </a>
                             )}
                             <button type="button" className="inline-flex h-8 w-8 items-center justify-center rounded-full text-white/45 transition-colors hover:bg-white/[0.08] hover:text-white" title="More">
@@ -2593,6 +2594,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                         const displayKey = ss.performed_key || ss.songs?.song_key || '';
                         const keyChanged = ss.performed_key && ss.songs?.song_key && ss.performed_key !== ss.songs.song_key;
                         const lyricsMissing = !ss.songs?.lyrics?.trim();
+                        const videoUrl = ss.youtube_url || ss.songs?.youtube_url || '';
                         const keyBadgeClass = `text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${keyChanged ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'}`;
                         const editableKeyBadgeClass = `inline-flex items-center gap-1 text-[10px] font-black px-1.5 py-0.5 rounded shrink-0 transition-colors ${keyChanged ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/45' : 'bg-brand-50 text-brand-700 ring-1 ring-brand-200/70 hover:bg-brand-100 dark:bg-brand-950/40 dark:text-brand-300 dark:ring-brand-700/40 dark:hover:bg-brand-950/60'}`;
                         return (
@@ -2628,9 +2630,9 @@ const openLyricsModal = (ss: SetlistSong) => {
                                 </div>
                                 <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{ss.songs?.artist}</p>
                               </div>
-                              {showSetlistEditControls && ss.youtube_url && (
-                                <a href={ss.youtube_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 transition-colors shrink-0">
-                                  <Music className="h-3 w-3" /> Video
+                              {videoUrl && (
+                                <a href={videoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 transition-colors shrink-0" title="Open video" aria-label={`Open video for ${ss.songs?.title || 'song'}`}>
+                                  <Play className="h-3 w-3" /> Video
                                 </a>
                               )}
                               {showSetlistEditControls && (usage ? (
@@ -2701,6 +2703,21 @@ const openLyricsModal = (ss: SetlistSong) => {
                                   )}
                                 </div>
                                 <div className="flex shrink-0 items-center gap-0.5">
+                                  {videoUrl && (
+                                    <a
+                                      href={videoUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                      }}
+                                      className="relative z-10 inline-flex h-10 w-10 touch-manipulation items-center justify-center rounded-full text-red-300 transition-colors hover:bg-red-500/[0.12] hover:text-red-200"
+                                      title="Open video"
+                                      aria-label={`Open video for ${ss.songs?.title || 'song'}`}
+                                    >
+                                      <Play className="h-4 w-4" />
+                                    </a>
+                                  )}
                                   {showSetlistEditControls || canEditSetlistSongDetails ? (
                                     <button
                                       type="button"

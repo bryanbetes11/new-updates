@@ -508,6 +508,7 @@ export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false
   const mobileMenuTranslateX = mobileOpen ? 'translateX(min(82vw, 340px))' : 'translateX(0)';
   const mobileNavTransform = `${mobileMenuTranslateX} ${hideBottomMobileNav ? 'translateY(calc(100% + 10px))' : 'translateY(0)'}`;
   const mobileHeaderTransform = mobileMenuTranslateX;
+  const isEventsListPage = location.pathname === '/events';
   const mobileTitle = location.pathname.startsWith('/events')
     ? 'Events'
     : location.pathname.startsWith('/announcements')
@@ -1171,8 +1172,8 @@ export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false
         className={`fixed top-0 left-0 right-0 z-30 flex items-end justify-between overflow-hidden px-4 lg:hidden ${hideMobileAll || hideMobileHeader ? 'hidden' : ''}`}
         style={{
           background: '#050505',
-          borderBottom: '1px solid rgba(255,255,255,0.08)',
-          boxShadow: '0 14px 34px -30px rgba(0,0,0,0.85), inset 0 -1px 0 rgba(255,255,255,0.06)',
+          borderBottom: isEventsListPage ? '0' : '1px solid rgba(255,255,255,0.08)',
+          boxShadow: isEventsListPage ? 'none' : '0 14px 34px -30px rgba(0,0,0,0.85), inset 0 -1px 0 rgba(255,255,255,0.06)',
           paddingTop: 'env(safe-area-inset-top)',
           height: 'calc(3.5rem + env(safe-area-inset-top))',
           transform: mobileHeaderTransform,
@@ -1181,7 +1182,7 @@ export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false
           willChange: 'transform',
         }}
       >
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-white/[0.06]" />
+        {!isEventsListPage && <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-white/[0.06]" />}
         <div className="relative flex h-14 w-full items-center justify-between gap-2 pb-0">
           <button
             onClick={() => {

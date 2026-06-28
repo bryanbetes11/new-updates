@@ -476,36 +476,37 @@ function renderPreviewHtml({
     <meta name="twitter:image" content="${safeImageUrl}" />
     <style>
       * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100vh; display: grid; place-items: center; overflow-x: hidden; background: radial-gradient(circle at 50% 0%, rgba(36, 44, 40, 0.72), rgba(5, 5, 5, 0.72) 38%, #050505 72%); color: white; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-      main { width: min(720px, 100vw); padding: 42px 0 46px; }
-      .event-header { width: min(560px, calc(100vw - 44px)); margin: 0 auto 22px; text-align: center; }
-      .eyebrow { margin: 0 0 12px; color: #6dffbf; font-size: 12px; font-weight: 900; letter-spacing: 0.22em; text-transform: uppercase; }
-      h1 { margin: 0 0 10px; font-size: 34px; line-height: 1.05; }
+      body { margin: 0; min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; overflow: hidden; background: radial-gradient(circle at 50% 0%, rgba(36, 44, 40, 0.72), rgba(5, 5, 5, 0.72) 38%, #050505 72%); color: white; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      main { width: min(720px, 100vw); padding: 22px 0 18px; }
+      .event-header { width: min(560px, calc(100vw - 44px)); margin: 0 auto 14px; text-align: center; }
+      .eyebrow { margin: 0 0 8px; color: #6dffbf; font-size: 11px; font-weight: 900; letter-spacing: 0.22em; text-transform: uppercase; }
+      h1 { margin: 0 0 8px; font-size: 32px; line-height: 1.05; }
       p { margin: 0; color: #c9c9c9; line-height: 1.45; }
-      .event-detail { margin-bottom: 22px; }
-      .open-button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 18px; border-radius: 999px; background: #18c985; color: #04140e; font-weight: 800; text-decoration: none; }
-      .setlist-section { margin-top: 42px; }
-      .section-heading { width: min(560px, calc(100vw - 44px)); margin: 0 auto 18px; text-align: center; }
-      .section-heading h2 { margin: 0 0 8px; font-size: 24px; letter-spacing: 0; }
-      .section-heading span { color: #6dffbf; font-size: 13px; font-weight: 800; text-transform: uppercase; }
-      .song-stage { display: flex; gap: 18px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; padding: 10px calc((100% - min(380px, 74vw)) / 2) 22px; scrollbar-width: thin; scrollbar-color: #18c985 #121212; }
-      .song-card { flex: 0 0 min(380px, 74vw); scroll-snap-align: center; overflow: hidden; border: 1px solid rgba(255,255,255,0.12); border-radius: 28px; background: linear-gradient(180deg, #171a19, #0d0f0e); box-shadow: 0 24px 70px rgba(0,0,0,0.5); }
-      .song-art { position: relative; aspect-ratio: 1 / 1; overflow: hidden; background: linear-gradient(135deg, #18c985, #07140f); border-bottom: 1px solid rgba(255,255,255,0.08); }
+      .event-detail { margin-bottom: 14px; font-size: 15px; }
+      .open-button { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 0 17px; border-radius: 999px; background: #18c985; color: #04140e; font-weight: 800; text-decoration: none; }
+      .setlist-section { margin-top: 22px; }
+      .section-heading { width: min(560px, calc(100vw - 44px)); margin: 0 auto 12px; text-align: center; }
+      .section-heading h2 { margin: 0 0 5px; font-size: 23px; letter-spacing: 0; }
+      .section-heading span { color: #6dffbf; font-size: 12px; font-weight: 800; text-transform: uppercase; }
+      .song-stage { display: flex; gap: 18px; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; padding: 8px calc((100% - min(340px, 76vw, 44vh)) / 2) 14px; scrollbar-width: thin; scrollbar-color: #18c985 #121212; }
+      .song-card { flex: 0 0 min(340px, 76vw, 44vh); scroll-snap-align: center; overflow: hidden; border: 1px solid rgba(255,255,255,0.12); border-radius: 24px; background: linear-gradient(180deg, #171a19, #0d0f0e); box-shadow: 0 20px 58px rgba(0,0,0,0.48); }
+      .song-art { position: relative; aspect-ratio: 1 / 0.86; overflow: hidden; background: linear-gradient(135deg, #18c985, #07140f); border-bottom: 1px solid rgba(255,255,255,0.08); }
       .song-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
       .song-art::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 42%, rgba(0,0,0,0.58)); }
       .song-art span { position: absolute; left: 16px; bottom: 16px; z-index: 1; display: grid; place-items: center; min-width: 34px; height: 34px; border-radius: 999px; background: #18c985; color: #04140e; font-weight: 950; font-size: 14px; }
-      .song-copy { padding: 18px 20px 22px; text-align: center; }
-      .song-copy h2 { margin: 0 0 8px; font-size: 22px; line-height: 1.12; }
-      .song-copy p { margin: 0 0 14px; color: #aeb7b3; font-size: 15px; line-height: 1.25; }
+      .song-copy { padding: 14px 18px 16px; text-align: center; }
+      .song-copy h2 { margin: 0 0 6px; font-size: 20px; line-height: 1.12; }
+      .song-copy p { margin: 0 0 11px; color: #aeb7b3; font-size: 14px; line-height: 1.25; }
       .song-meta { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
       .song-meta span { display: inline-flex; align-items: center; min-height: 26px; padding: 0 10px; border-radius: 999px; background: rgba(24,201,133,0.12); color: #6dffbf; font-size: 12px; font-weight: 800; }
       @media (max-width: 520px) {
-        main { padding-top: 32px; }
+        main { padding-top: 18px; padding-bottom: 12px; }
         .event-header { width: min(100vw - 32px, 560px); }
-        h1 { font-size: 30px; }
-        .song-stage { padding-inline: calc((100% - min(330px, 78vw)) / 2); }
-        .song-card { flex-basis: min(330px, 78vw); border-radius: 24px; }
-        .song-copy h2 { font-size: 20px; }
+        h1 { font-size: 29px; }
+        .event-detail { font-size: 14px; }
+        .song-stage { padding-inline: calc((100% - min(310px, 76vw, 43vh)) / 2); }
+        .song-card { flex-basis: min(310px, 76vw, 43vh); border-radius: 22px; }
+        .song-copy h2 { font-size: 18px; }
       }
     </style>
   </head>
@@ -547,7 +548,7 @@ export default async (req: Request, context: Context) => {
 
   const html = renderPreviewHtml({
     appUrl,
-    description: preview?.description || 'Open the event setlist, assignments, and team details in ServeSync.',
+    description: preview?.detailLine || 'Open in ServeSync',
     imageUrl: `${shareBaseUrl}/image?${previewQuery}`,
     shareUrl,
     songs: preview?.songs || [],

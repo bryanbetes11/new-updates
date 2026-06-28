@@ -401,7 +401,6 @@ function renderSongCards(songs: PreviewSong[]) {
     const safeTitle = escapeHtml(truncateText(song.title || `Song ${index + 1}`, 42));
     const safeArtist = escapeHtml(truncateText(song.artist || 'Unknown artist', 38));
     const safeCategory = escapeHtml(song.category || 'Worship');
-    const safeSongKey = escapeHtml(song.songKey || '-');
     const safeArtworkUrl = song.artworkUrl ? escapeHtml(song.artworkUrl) : '';
 
     return `<article class="song-card">
@@ -413,7 +412,6 @@ function renderSongCards(songs: PreviewSong[]) {
         <h2>${safeTitle}</h2>
         <p>${safeArtist}</p>
         <div class="song-meta">
-          <span>Key ${safeSongKey}</span>
           <span>${safeCategory}</span>
         </div>
       </div>

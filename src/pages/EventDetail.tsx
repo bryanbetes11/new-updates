@@ -1664,7 +1664,7 @@ const openLyricsModal = (ss: SetlistSong) => {
     if (typeof window === 'undefined' || !url) return url;
 
     const shareUrl = new URL(url);
-    shareUrl.searchParams.set('preview', `portrait-artwork-v3-${Date.now().toString(36)}`);
+    shareUrl.searchParams.set('preview', `six-song-grid-v4-${Date.now().toString(36)}`);
     return shareUrl.toString();
   };
 

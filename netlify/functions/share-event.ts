@@ -196,7 +196,7 @@ async function fetchImageDataUrl(url?: string | null) {
     if (!contentType.toLowerCase().startsWith('image/')) return null;
 
     const buffer = await response.arrayBuffer();
-    if (buffer.byteLength > 1_000_000) return null;
+    if (buffer.byteLength > 650_000) return null;
 
     return `data:${contentType.split(';')[0]};base64,${arrayBufferToBase64(buffer)}`;
   } catch {
@@ -208,7 +208,7 @@ async function fetchImageDataUrl(url?: string | null) {
 
 async function withEmbeddedArtwork(songs: PreviewSong[]) {
   const hydrated = await Promise.all(
-    songs.slice(0, 4).map(async song => ({
+    songs.slice(0, 6).map(async song => ({
       ...song,
       artworkDataUrl: await fetchImageDataUrl(song.artworkUrl),
     })),
@@ -256,7 +256,7 @@ async function getEventPreview(token: string, origin: string) {
   const eventType = snapshot.eventType || '';
   const detailLine = [eventType, leaderName, dateLabel, timeLabel].filter(Boolean).join(' - ');
   const songLine = previewSongs.length > 0
-    ? previewSongs.slice(0, 4).map(song => song.title).filter(Boolean).join(' - ')
+    ? previewSongs.slice(0, 6).map(song => song.title).filter(Boolean).join(' - ')
     : '';
 
   return {
@@ -273,31 +273,34 @@ async function getEventPreview(token: string, origin: string) {
   } satisfies EventPreview;
 }
 
-function renderArtworkTile(song: PreviewSong | undefined, index: number, x: number, y: number, size: number) {
+function renderArtworkTile(song: PreviewSong | undefined, index: number, x: number, y: number, width: number, height = width) {
   const fallbackColors = [
     ['#34d399', '#052e22'],
     ['#a78bfa', '#111827'],
     ['#38bdf8', '#082f49'],
     ['#fb7185', '#2e1018'],
-  ][index % 4];
-  const titleSize = Math.max(24, Math.round(size * 0.068));
-  const artistSize = Math.max(17, Math.round(size * 0.046));
-  const titleLength = size > 400 ? 24 : 34;
+    ['#facc15', '#271a07'],
+    ['#f472b6', '#2e1024'],
+  ][index % 6];
+  const textScale = Math.min(width, height);
+  const titleSize = Math.max(21, Math.round(textScale * 0.095));
+  const artistSize = Math.max(15, Math.round(textScale * 0.062));
+  const titleLength = width < 430 ? 24 : 34;
   const safeTitle = escapeHtml(truncateText(song?.title || 'ServeSync', titleLength));
   const safeArtist = escapeHtml(truncateText(song?.artist || song?.category || 'Worship', titleLength));
   const safeArtworkUrl = song?.artworkDataUrl || song?.artworkUrl ? escapeHtml(song?.artworkDataUrl || song?.artworkUrl || '') : null;
 
   return `<g clip-path="url(#tile-${index})">
-    <rect x="${x}" y="${y}" width="${size}" height="${size}" fill="${fallbackColors[1]}" />
+    <rect x="${x}" y="${y}" width="${width}" height="${height}" fill="${fallbackColors[1]}" />
     <linearGradient id="tile-fallback-${index}" x1="0" y1="0" x2="1" y2="1">
       <stop stop-color="${fallbackColors[0]}" />
       <stop offset="1" stop-color="${fallbackColors[1]}" />
     </linearGradient>
-    <rect x="${x}" y="${y}" width="${size}" height="${size}" fill="url(#tile-fallback-${index})" />
-    ${safeArtworkUrl ? `<image href="${safeArtworkUrl}" x="${x}" y="${y}" width="${size}" height="${size}" preserveAspectRatio="xMidYMid slice" />` : ''}
-    <rect x="${x}" y="${y}" width="${size}" height="${size}" fill="url(#tile-shade)" />
-    <text x="${x + Math.round(size * 0.07)}" y="${y + size - Math.round(size * 0.14)}" fill="#ffffff" font-size="${titleSize}" font-weight="850" font-family="Inter, Arial, sans-serif">${safeTitle}</text>
-    <text x="${x + Math.round(size * 0.07)}" y="${y + size - Math.round(size * 0.065)}" fill="#d6fff0" font-size="${artistSize}" font-weight="700" font-family="Inter, Arial, sans-serif">${safeArtist}</text>
+    <rect x="${x}" y="${y}" width="${width}" height="${height}" fill="url(#tile-fallback-${index})" />
+    ${safeArtworkUrl ? `<image href="${safeArtworkUrl}" x="${x}" y="${y}" width="${width}" height="${height}" preserveAspectRatio="xMidYMid slice" />` : ''}
+    <rect x="${x}" y="${y}" width="${width}" height="${height}" fill="url(#tile-shade)" />
+    <text x="${x + 22}" y="${y + height - 46}" fill="#ffffff" font-size="${titleSize}" font-weight="850" font-family="Inter, Arial, sans-serif">${safeTitle}</text>
+    <text x="${x + 22}" y="${y + height - 19}" fill="#d6fff0" font-size="${artistSize}" font-weight="700" font-family="Inter, Arial, sans-serif">${safeArtist}</text>
   </g>`;
 }
 
@@ -337,13 +340,10 @@ async function renderPreviewImageSvg(preview: EventPreview | null, origin: strin
     ? data.songs
     : [{ artist: 'ServeSync', artworkUrl: data.imageUrl, category: 'Worship', title: data.title }]);
   const safeTitle = escapeHtml(truncateText(data.title, 25));
-  const safeDetailLine = escapeHtml(truncateText(data.detailLine || data.description, 54));
-  const safeSongsLine = escapeHtml(truncateText(
-    data.songs.slice(0, 4).map(song => song.title).filter(Boolean).join('  -  '),
-    54,
-  ));
+  const safeDetailLine = escapeHtml(truncateText(data.detailLine || data.description, 62));
+  const safeSongCount = escapeHtml(`${data.songs.length || artworkSongs.length} songs`);
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1350" viewBox="0 0 1080 1350">
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#18251e" />
@@ -365,26 +365,29 @@ async function renderPreviewImageSvg(preview: EventPreview | null, origin: strin
       <stop offset="0.45" stop-color="#07140f" />
       <stop offset="1" stop-color="#050505" />
     </linearGradient>
-    <clipPath id="frame-clip"><rect x="0" y="0" width="1080" height="1350" rx="58" /></clipPath>
-    <clipPath id="tile-0"><rect x="0" y="0" width="540" height="540" /></clipPath>
-    <clipPath id="tile-1"><rect x="540" y="0" width="540" height="540" /></clipPath>
-    <clipPath id="tile-2"><rect x="0" y="540" width="540" height="540" /></clipPath>
-    <clipPath id="tile-3"><rect x="540" y="540" width="540" height="540" /></clipPath>
+    <clipPath id="frame-clip"><rect x="0" y="0" width="1200" height="630" rx="38" /></clipPath>
+    <clipPath id="tile-0"><rect x="0" y="0" width="400" height="245" /></clipPath>
+    <clipPath id="tile-1"><rect x="400" y="0" width="400" height="245" /></clipPath>
+    <clipPath id="tile-2"><rect x="800" y="0" width="400" height="245" /></clipPath>
+    <clipPath id="tile-3"><rect x="0" y="245" width="400" height="245" /></clipPath>
+    <clipPath id="tile-4"><rect x="400" y="245" width="400" height="245" /></clipPath>
+    <clipPath id="tile-5"><rect x="800" y="245" width="400" height="245" /></clipPath>
   </defs>
   <g clip-path="url(#frame-clip)">
-    <rect width="1080" height="1350" fill="url(#bg)" />
-    <rect width="1080" height="1350" fill="url(#glow)" />
-    ${renderArtworkTile(artworkSongs[0], 0, 0, 0, 540)}
-    ${renderArtworkTile(artworkSongs[1] || artworkSongs[0], 1, 540, 0, 540)}
-    ${renderArtworkTile(artworkSongs[2] || artworkSongs[0], 2, 0, 540, 540)}
-    ${renderArtworkTile(artworkSongs[3] || artworkSongs[1] || artworkSongs[0], 3, 540, 540, 540)}
-    <rect x="0" y="1080" width="1080" height="270" fill="url(#detail-bg)" />
-    <rect x="0" y="1054" width="1080" height="296" fill="url(#detail-bg)" opacity="0.92" />
-    <rect x="0" y="1080" width="1080" height="1" fill="#ffffff" opacity="0.13" />
-    <text x="74" y="1160" fill="#ffffff" font-size="58" font-weight="950" font-family="Inter, Arial, sans-serif">${safeTitle}</text>
-    <text x="74" y="1224" fill="#48e6a0" font-size="36" font-weight="800" font-family="Inter, Arial, sans-serif">${safeDetailLine}</text>
-    <text x="74" y="1286" fill="#aeb7b3" font-size="34" font-weight="650" font-family="Inter, Arial, sans-serif">${safeSongsLine}</text>
-    <text x="74" y="1332" fill="#6e7773" font-size="28" font-weight="700" font-family="Inter, Arial, sans-serif">mcjcworship.org</text>
+    <rect width="1200" height="630" fill="url(#bg)" />
+    <rect width="1200" height="630" fill="url(#glow)" />
+    ${renderArtworkTile(artworkSongs[0], 0, 0, 0, 400, 245)}
+    ${renderArtworkTile(artworkSongs[1] || artworkSongs[0], 1, 400, 0, 400, 245)}
+    ${renderArtworkTile(artworkSongs[2] || artworkSongs[0], 2, 800, 0, 400, 245)}
+    ${renderArtworkTile(artworkSongs[3] || artworkSongs[0], 3, 0, 245, 400, 245)}
+    ${renderArtworkTile(artworkSongs[4] || artworkSongs[1] || artworkSongs[0], 4, 400, 245, 400, 245)}
+    ${renderArtworkTile(artworkSongs[5] || artworkSongs[2] || artworkSongs[0], 5, 800, 245, 400, 245)}
+    <rect x="0" y="490" width="1200" height="140" fill="url(#detail-bg)" />
+    <rect x="0" y="489" width="1200" height="1" fill="#ffffff" opacity="0.14" />
+    <text x="46" y="545" fill="#ffffff" font-size="46" font-weight="950" font-family="Inter, Arial, sans-serif">${safeTitle}</text>
+    <text x="46" y="587" fill="#48e6a0" font-size="25" font-weight="800" font-family="Inter, Arial, sans-serif">${safeDetailLine}</text>
+    <text x="1010" y="545" text-anchor="end" fill="#63f2b3" font-size="23" font-weight="900" font-family="Inter, Arial, sans-serif">${safeSongCount}</text>
+    <text x="1010" y="587" text-anchor="end" fill="#6e7773" font-size="23" font-weight="700" font-family="Inter, Arial, sans-serif">mcjcworship.org</text>
   </g>
 </svg>`;
 }
@@ -425,8 +428,8 @@ function renderPreviewHtml({
     <meta property="og:image" content="${safeImageUrl}" />
     <meta property="og:image:secure_url" content="${safeImageUrl}" />
     <meta property="og:image:type" content="image/svg+xml" />
-    <meta property="og:image:width" content="1080" />
-    <meta property="og:image:height" content="1350" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${safeTitle}" />
     <meta name="twitter:description" content="${safeDescription}" />
@@ -434,7 +437,7 @@ function renderPreviewHtml({
     <style>
       body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #050505; color: white; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
       main { width: min(560px, calc(100vw - 32px)); }
-      img { display: block; width: 100%; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 16px; background: #111; }
+      img { display: block; width: 100%; aspect-ratio: 1.91 / 1; object-fit: cover; border-radius: 16px; background: #111; }
       h1 { margin: 18px 0 8px; font-size: 28px; line-height: 1.05; }
       p { margin: 0 0 20px; color: #c9c9c9; line-height: 1.45; }
       a { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 18px; border-radius: 999px; background: #18c985; color: #04140e; font-weight: 800; text-decoration: none; }
@@ -456,7 +459,7 @@ export default async (req: Request, context: Context) => {
   const requestUrl = new URL(req.url);
   const origin = requestUrl.origin;
   const shareBaseUrl = `${origin}/share/events/${encodeURIComponent(token)}`;
-  const previewVersion = requestUrl.searchParams.get('preview') || 'portrait-artwork-v3';
+  const previewVersion = requestUrl.searchParams.get('preview') || 'six-song-grid-v4';
   const previewQuery = `preview=${encodeURIComponent(previewVersion)}`;
   const shareUrl = `${shareBaseUrl}?${previewQuery}`;
   const preview = await getEventPreview(token, origin).catch(() => null);

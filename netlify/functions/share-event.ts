@@ -69,6 +69,25 @@ function truncateText(value: string, maxLength: number) {
   return `${value.slice(0, Math.max(0, maxLength - 1)).trim()}...`;
 }
 
+function fromBase64Url(value: string) {
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized.padEnd(normalized.length + ((4 - normalized.length % 4) % 4), '=');
+  const binary = atob(padded);
+  const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+function getSnapshotFromInlineToken(token: string) {
+  if (!token.startsWith('snapshot-')) return null;
+
+  try {
+    const parsed = JSON.parse(fromBase64Url(token.slice('snapshot-'.length))) as PublicShareSnapshot;
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function getEnv(name: string) {
   return Netlify.env.get(name);
 }
@@ -159,13 +178,11 @@ async function getPublicShare(token: string, config: { key: string; url: string 
 }
 
 async function getEventPreview(token: string, origin: string) {
-  const config = getSupabaseConfig();
-  if (!config) return null;
-
-  const share = await getPublicShare(token, config);
-  if (!share) return null;
-
-  const snapshot = share.snapshot || {};
+  const inlineSnapshot = getSnapshotFromInlineToken(token);
+  const config = inlineSnapshot ? null : getSupabaseConfig();
+  const share = config ? await getPublicShare(token, config) : null;
+  const snapshot = inlineSnapshot || share?.snapshot || {};
+  if (!inlineSnapshot && !share) return null;
   const rawSongs = Array.isArray(snapshot.songs) ? snapshot.songs : [];
   const previewSongs = rawSongs
     .filter(song => song?.title)
@@ -190,7 +207,7 @@ async function getEventPreview(token: string, origin: string) {
     dateLabel,
     description: [detailLine, songLine].filter(Boolean).join(' | '),
     detailLine,
-    eventId: snapshot.eventId || share.event_id,
+    eventId: snapshot.eventId || share?.event_id || '',
     eventType,
     imageUrl,
     leaderName,

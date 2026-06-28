@@ -68,6 +68,18 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
   return fallback;
 };
 
+function toBase64Url(value: string) {
+  const bytes = new TextEncoder().encode(value);
+  let binary = '';
+  bytes.forEach(byte => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
 export function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -1648,6 +1660,29 @@ const openLyricsModal = (ss: SetlistSong) => {
   ].filter(Boolean);
   const eventShareUrl = typeof window !== 'undefined' ? `${window.location.origin}/share/events/${event.id}` : '';
 
+  const createSnapshotEventShareUrl = () => {
+    const snapshot = {
+      eventDate: event.event_date,
+      eventId: event.id,
+      eventType: event.event_type,
+      songs: eventDetailSongs
+        .filter((song): song is SetlistSong & { songs: Song } => !!song?.songs)
+        .slice(0, 6)
+        .map(song => ({
+          artist: song.songs.artist || '',
+          category: song.song_category || '',
+          title: song.songs.title || 'Untitled Song',
+          youtubeUrl: song.youtube_url || song.songs.youtube_url || '',
+        })),
+      songLeaderName,
+      startTime: event.start_time,
+      title: eventDisplayTitle,
+    };
+    return typeof window !== 'undefined'
+      ? `${window.location.origin}/share/events/snapshot-${toBase64Url(JSON.stringify(snapshot))}`
+      : eventShareUrl;
+  };
+
   const createPublicEventShareUrl = async () => {
     const { data, error } = await supabase.rpc('create_public_event_share', { p_event_id: event.id });
     if (error) throw error;
@@ -1665,7 +1700,15 @@ const openLyricsModal = (ss: SetlistSong) => {
     setSharingEvent(true);
 
     try {
-      const publicShareUrl = await createPublicEventShareUrl();
+      let publicShareUrl = '';
+
+      try {
+        publicShareUrl = await createPublicEventShareUrl();
+      } catch (error) {
+        const message = getErrorMessage(error, '');
+        if (!message.toLowerCase().includes('create_public_event_share')) throw error;
+        publicShareUrl = createSnapshotEventShareUrl();
+      }
 
       if (typeof navigator.share === 'function') {
         await navigator.share({

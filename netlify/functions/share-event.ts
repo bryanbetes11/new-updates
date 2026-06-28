@@ -35,6 +35,7 @@ type PublicShareRow = {
 
 type PreviewSong = {
   artist: string;
+  artworkDataUrl?: string | null;
   artworkUrl: string | null;
   category: string;
   title: string;
@@ -161,6 +162,61 @@ function getSongArtworkUrl(song?: SnapshotSong | null) {
     || getSearchArtworkUrl(song);
 }
 
+function arrayBufferToBase64(buffer: ArrayBuffer) {
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 8192;
+  let binary = '';
+
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.slice(index, index + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+
+  return btoa(binary);
+}
+
+async function fetchImageDataUrl(url?: string | null) {
+  if (!url) return null;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3500);
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        'User-Agent': 'ServeSyncSharePreview/1.0',
+      },
+      signal: controller.signal,
+    });
+
+    if (!response.ok) return null;
+
+    const contentType = response.headers.get('content-type') || 'image/jpeg';
+    if (!contentType.toLowerCase().startsWith('image/')) return null;
+
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength > 1_000_000) return null;
+
+    return `data:${contentType.split(';')[0]};base64,${arrayBufferToBase64(buffer)}`;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function withEmbeddedArtwork(songs: PreviewSong[]) {
+  const hydrated = await Promise.all(
+    songs.slice(0, 4).map(async song => ({
+      ...song,
+      artworkDataUrl: await fetchImageDataUrl(song.artworkUrl),
+    })),
+  );
+
+  return songs.map((song, index) => hydrated[index] || song);
+}
+
 async function getPublicShare(token: string, config: { key: string; url: string }) {
   const response = await fetch(`${config.url}/rest/v1/rpc/get_public_event_share`, {
     body: JSON.stringify({ p_token: token }),
@@ -224,9 +280,12 @@ function renderArtworkTile(song: PreviewSong | undefined, index: number, x: numb
     ['#38bdf8', '#082f49'],
     ['#fb7185', '#2e1018'],
   ][index % 4];
-  const safeTitle = escapeHtml(truncateText(song?.title || 'ServeSync', 34));
-  const safeArtist = escapeHtml(truncateText(song?.artist || song?.category || 'Worship', 34));
-  const safeArtworkUrl = song?.artworkUrl ? escapeHtml(song.artworkUrl) : null;
+  const titleSize = Math.max(24, Math.round(size * 0.068));
+  const artistSize = Math.max(17, Math.round(size * 0.046));
+  const titleLength = size > 400 ? 24 : 34;
+  const safeTitle = escapeHtml(truncateText(song?.title || 'ServeSync', titleLength));
+  const safeArtist = escapeHtml(truncateText(song?.artist || song?.category || 'Worship', titleLength));
+  const safeArtworkUrl = song?.artworkDataUrl || song?.artworkUrl ? escapeHtml(song?.artworkDataUrl || song?.artworkUrl || '') : null;
 
   return `<g clip-path="url(#tile-${index})">
     <rect x="${x}" y="${y}" width="${size}" height="${size}" fill="${fallbackColors[1]}" />
@@ -237,8 +296,8 @@ function renderArtworkTile(song: PreviewSong | undefined, index: number, x: numb
     <rect x="${x}" y="${y}" width="${size}" height="${size}" fill="url(#tile-fallback-${index})" />
     ${safeArtworkUrl ? `<image href="${safeArtworkUrl}" x="${x}" y="${y}" width="${size}" height="${size}" preserveAspectRatio="xMidYMid slice" />` : ''}
     <rect x="${x}" y="${y}" width="${size}" height="${size}" fill="url(#tile-shade)" />
-    <text x="${x + 24}" y="${y + size - 50}" fill="#ffffff" font-size="24" font-weight="800" font-family="Inter, Arial, sans-serif">${safeTitle}</text>
-    <text x="${x + 24}" y="${y + size - 22}" fill="#d6fff0" font-size="17" font-weight="650" font-family="Inter, Arial, sans-serif">${safeArtist}</text>
+    <text x="${x + Math.round(size * 0.07)}" y="${y + size - Math.round(size * 0.14)}" fill="#ffffff" font-size="${titleSize}" font-weight="850" font-family="Inter, Arial, sans-serif">${safeTitle}</text>
+    <text x="${x + Math.round(size * 0.07)}" y="${y + size - Math.round(size * 0.065)}" fill="#d6fff0" font-size="${artistSize}" font-weight="700" font-family="Inter, Arial, sans-serif">${safeArtist}</text>
   </g>`;
 }
 
@@ -260,7 +319,7 @@ function renderSongRow(song: PreviewSong | undefined, index: number, x: number, 
   </g>`;
 }
 
-function renderPreviewImageSvg(preview: EventPreview | null, origin: string) {
+async function renderPreviewImageSvg(preview: EventPreview | null, origin: string) {
   const fallbackPreview: EventPreview = {
     dateLabel: '',
     description: 'Open the event setlist, assignments, and team details in ServeSync.',
@@ -274,17 +333,17 @@ function renderPreviewImageSvg(preview: EventPreview | null, origin: string) {
     title: 'ServeSync Event',
   };
   const data = preview || fallbackPreview;
-  const artworkSongs = data.songs.length > 0
+  const artworkSongs = await withEmbeddedArtwork(data.songs.length > 0
     ? data.songs
-    : [{ artist: 'ServeSync', artworkUrl: data.imageUrl, category: 'Worship', title: data.title }];
+    : [{ artist: 'ServeSync', artworkUrl: data.imageUrl, category: 'Worship', title: data.title }]);
   const safeTitle = escapeHtml(truncateText(data.title, 25));
-  const safeDetailLine = escapeHtml(truncateText(data.detailLine || data.description, 58));
-  const safeEventType = escapeHtml(truncateText(data.eventType || 'Event', 18).toUpperCase());
-  const safeLeaderName = escapeHtml(truncateText(data.leaderName || 'ServeSync', 24));
-  const safeDateTime = escapeHtml(truncateText([data.dateLabel, data.timeLabel].filter(Boolean).join(' - '), 26));
-  const songRows = Array.from({ length: 5 }).map((_, index) => renderSongRow(data.songs[index], index, 724, 244 + index * 66)).join('');
+  const safeDetailLine = escapeHtml(truncateText(data.detailLine || data.description, 54));
+  const safeSongsLine = escapeHtml(truncateText(
+    data.songs.slice(0, 4).map(song => song.title).filter(Boolean).join('  -  '),
+    54,
+  ));
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1350" viewBox="0 0 1080 1350">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#18251e" />
@@ -301,40 +360,31 @@ function renderPreviewImageSvg(preview: EventPreview | null, origin: string) {
       <stop offset="0.52" stop-color="#000000" stop-opacity="0.08" />
       <stop offset="1" stop-color="#000000" stop-opacity="0.68" />
     </linearGradient>
-    <clipPath id="card-clip"><rect x="52" y="42" width="1096" height="546" rx="42" /></clipPath>
-    <clipPath id="art-clip"><rect x="88" y="78" width="576" height="474" rx="34" /></clipPath>
-    <clipPath id="tile-0"><rect x="88" y="78" width="286" height="235" rx="26" /></clipPath>
-    <clipPath id="tile-1"><rect x="378" y="78" width="286" height="235" rx="26" /></clipPath>
-    <clipPath id="tile-2"><rect x="88" y="317" width="286" height="235" rx="26" /></clipPath>
-    <clipPath id="tile-3"><rect x="378" y="317" width="286" height="235" rx="26" /></clipPath>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="28" stdDeviation="32" flood-color="#000000" flood-opacity="0.55" />
-    </filter>
+    <linearGradient id="detail-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#111513" />
+      <stop offset="0.45" stop-color="#07140f" />
+      <stop offset="1" stop-color="#050505" />
+    </linearGradient>
+    <clipPath id="frame-clip"><rect x="0" y="0" width="1080" height="1350" rx="58" /></clipPath>
+    <clipPath id="tile-0"><rect x="0" y="0" width="540" height="540" /></clipPath>
+    <clipPath id="tile-1"><rect x="540" y="0" width="540" height="540" /></clipPath>
+    <clipPath id="tile-2"><rect x="0" y="540" width="540" height="540" /></clipPath>
+    <clipPath id="tile-3"><rect x="540" y="540" width="540" height="540" /></clipPath>
   </defs>
-  <rect width="1200" height="630" fill="url(#bg)" />
-  <rect width="1200" height="630" fill="url(#glow)" />
-  <g filter="url(#shadow)" clip-path="url(#card-clip)">
-    <rect x="52" y="42" width="1096" height="546" rx="42" fill="#080a09" />
-    <rect x="52" y="42" width="1096" height="546" rx="42" fill="#ffffff" fill-opacity="0.035" />
-    <g clip-path="url(#art-clip)">
-      <rect x="88" y="78" width="576" height="474" fill="#0d0f0e" />
-      ${renderArtworkTile(artworkSongs[0], 0, 88, 78, 286)}
-      ${renderArtworkTile(artworkSongs[1] || artworkSongs[0], 1, 378, 78, 286)}
-      ${renderArtworkTile(artworkSongs[2] || artworkSongs[0], 2, 88, 317, 286)}
-      ${renderArtworkTile(artworkSongs[3] || artworkSongs[1] || artworkSongs[0], 3, 378, 317, 286)}
-    </g>
-    <rect x="88" y="78" width="576" height="474" rx="34" fill="none" stroke="#ffffff" stroke-opacity="0.12" />
-    <text x="724" y="112" fill="#18c985" font-size="20" font-weight="900" letter-spacing="4" font-family="Inter, Arial, sans-serif">${safeEventType}</text>
-    <text x="724" y="166" fill="#ffffff" font-size="58" font-weight="950" font-family="Inter, Arial, sans-serif">${safeTitle}</text>
-    <text x="724" y="204" fill="#d7dedb" font-size="22" font-weight="700" font-family="Inter, Arial, sans-serif">${safeDetailLine}</text>
-    <g>
-      <rect x="724" y="214" width="164" height="36" rx="18" fill="#18c985" fill-opacity="0.16" stroke="#18c985" stroke-opacity="0.32" />
-      <text x="746" y="238" fill="#6dffbf" font-size="16" font-weight="900" font-family="Inter, Arial, sans-serif">${safeLeaderName}</text>
-      <text x="912" y="238" fill="#aeb8b4" font-size="17" font-weight="800" font-family="Inter, Arial, sans-serif">${safeDateTime}</text>
-    </g>
-    ${songRows}
-    <text x="88" y="574" fill="#6e7773" font-size="18" font-weight="750" font-family="Inter, Arial, sans-serif">ServeSync</text>
-    <text x="724" y="574" fill="#6e7773" font-size="18" font-weight="750" font-family="Inter, Arial, sans-serif">Open setlist, assignments, and event details</text>
+  <g clip-path="url(#frame-clip)">
+    <rect width="1080" height="1350" fill="url(#bg)" />
+    <rect width="1080" height="1350" fill="url(#glow)" />
+    ${renderArtworkTile(artworkSongs[0], 0, 0, 0, 540)}
+    ${renderArtworkTile(artworkSongs[1] || artworkSongs[0], 1, 540, 0, 540)}
+    ${renderArtworkTile(artworkSongs[2] || artworkSongs[0], 2, 0, 540, 540)}
+    ${renderArtworkTile(artworkSongs[3] || artworkSongs[1] || artworkSongs[0], 3, 540, 540, 540)}
+    <rect x="0" y="1080" width="1080" height="270" fill="url(#detail-bg)" />
+    <rect x="0" y="1054" width="1080" height="296" fill="url(#detail-bg)" opacity="0.92" />
+    <rect x="0" y="1080" width="1080" height="1" fill="#ffffff" opacity="0.13" />
+    <text x="74" y="1160" fill="#ffffff" font-size="58" font-weight="950" font-family="Inter, Arial, sans-serif">${safeTitle}</text>
+    <text x="74" y="1224" fill="#48e6a0" font-size="36" font-weight="800" font-family="Inter, Arial, sans-serif">${safeDetailLine}</text>
+    <text x="74" y="1286" fill="#aeb7b3" font-size="34" font-weight="650" font-family="Inter, Arial, sans-serif">${safeSongsLine}</text>
+    <text x="74" y="1332" fill="#6e7773" font-size="28" font-weight="700" font-family="Inter, Arial, sans-serif">mcjcworship.org</text>
   </g>
 </svg>`;
 }
@@ -375,8 +425,8 @@ function renderPreviewHtml({
     <meta property="og:image" content="${safeImageUrl}" />
     <meta property="og:image:secure_url" content="${safeImageUrl}" />
     <meta property="og:image:type" content="image/svg+xml" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
+    <meta property="og:image:width" content="1080" />
+    <meta property="og:image:height" content="1350" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${safeTitle}" />
     <meta name="twitter:description" content="${safeDescription}" />
@@ -384,7 +434,7 @@ function renderPreviewHtml({
     <style>
       body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #050505; color: white; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
       main { width: min(560px, calc(100vw - 32px)); }
-      img { display: block; width: 100%; aspect-ratio: 1.91 / 1; object-fit: cover; border-radius: 16px; background: #111; }
+      img { display: block; width: 100%; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 16px; background: #111; }
       h1 { margin: 18px 0 8px; font-size: 28px; line-height: 1.05; }
       p { margin: 0 0 20px; color: #c9c9c9; line-height: 1.45; }
       a { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 18px; border-radius: 999px; background: #18c985; color: #04140e; font-weight: 800; text-decoration: none; }
@@ -412,7 +462,7 @@ export default async (req: Request, context: Context) => {
     : `${origin}/login`;
 
   if (requestUrl.pathname.endsWith('/image')) {
-    return new Response(renderPreviewImageSvg(preview, origin), {
+    return new Response(await renderPreviewImageSvg(preview, origin), {
       headers: {
         'Cache-Control': 'public, max-age=300, s-maxage=300',
         'Content-Type': 'image/svg+xml; charset=utf-8',

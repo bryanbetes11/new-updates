@@ -1182,6 +1182,13 @@ export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false
           willChange: 'transform',
         }}
       >
+        <div
+          className="pointer-events-none absolute inset-x-0 z-0 bg-[#050505]"
+          style={{
+            top: 'max(0px, calc(env(safe-area-inset-top) - 2px))',
+            height: '4px',
+          }}
+        />
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-white/[0.06]" />
         <div className="relative flex h-14 w-full items-center justify-between gap-2 pb-0">
           <button

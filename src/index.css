@@ -73,17 +73,6 @@
     backdrop-filter: none;
   }
 
-  html.event-detail-active::before {
-    display: block;
-    background:
-      radial-gradient(circle at 50% -6%, rgba(255,255,255,0.22), transparent 32%),
-      radial-gradient(circle at 70% 18%, rgba(239,68,68,0.20), transparent 36%),
-      radial-gradient(circle at 24% 24%, rgba(245,158,11,0.13), transparent 38%),
-      linear-gradient(180deg, #6f6259 0%, #2b211d 100%);
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-
   #root {
     width: 100%;
     max-width: 100%;

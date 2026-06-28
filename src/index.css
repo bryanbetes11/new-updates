@@ -61,7 +61,7 @@
   html::before {
     content: '';
     position: fixed;
-    z-index: 40;
+    z-index: 20;
     top: 0;
     left: 0;
     right: 0;

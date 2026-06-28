@@ -10,31 +10,27 @@ type Context = {
   };
 };
 
-type EventRow = {
-  event_date?: string | null;
-  event_type?: string | null;
-  id: string;
-  song_leader_id?: string | null;
-  start_time?: string | null;
+type SnapshotSong = {
+  artist?: string | null;
+  category?: string | null;
+  title?: string | null;
+  youtubeUrl?: string | null;
+};
+
+type PublicShareSnapshot = {
+  eventDate?: string | null;
+  eventId?: string | null;
+  eventType?: string | null;
+  songs?: SnapshotSong[] | null;
+  songLeaderName?: string | null;
+  startTime?: string | null;
   title?: string | null;
 };
 
-type ProfileRow = {
-  first_name?: string | null;
-  id: string;
-  last_name?: string | null;
-  nickname?: string | null;
-};
-
-type SetlistSongRow = {
-  position?: number | null;
-  song_category?: string | null;
-  songs?: {
-    artist?: string | null;
-    title?: string | null;
-    youtube_url?: string | null;
-  } | null;
-  youtube_url?: string | null;
+type PublicShareRow = {
+  event_id: string;
+  snapshot: PublicShareSnapshot;
+  token: string;
 };
 
 type PreviewSong = {
@@ -48,6 +44,7 @@ type EventPreview = {
   dateLabel: string;
   description: string;
   detailLine: string;
+  eventId: string;
   eventType: string;
   imageUrl: string;
   leaderName: string;
@@ -82,10 +79,6 @@ function getSupabaseConfig() {
   return url && key ? { key, url } : null;
 }
 
-function isPreviewBot(userAgent: string) {
-  return /bot|crawler|spider|facebookexternalhit|facebot|twitterbot|whatsapp|telegrambot|linkedinbot|discordbot|slackbot|skypeuripreview|pinterest/i.test(userAgent);
-}
-
 function formatEventDate(dateValue?: string | null) {
   if (!dateValue) return '';
   const date = new Date(`${dateValue}T00:00:00+08:00`);
@@ -109,11 +102,6 @@ function formatEventTime(timeValue?: string | null) {
   return `${hour12}:${String(minute).padStart(2, '0')} ${suffix}`;
 }
 
-function getLeaderName(profile?: ProfileRow | null) {
-  if (!profile) return '';
-  return profile.nickname || [profile.first_name, profile.last_name].filter(Boolean).join(' ');
-}
-
 function getYouTubeThumbnailUrl(url?: string | null) {
   if (!url) return null;
   const trimmed = url.trim();
@@ -130,9 +118,9 @@ function getYouTubeThumbnailUrl(url?: string | null) {
   return null;
 }
 
-function getSearchArtworkUrl(song?: SetlistSongRow | null) {
-  const title = song?.songs?.title?.trim();
-  const artist = song?.songs?.artist?.trim();
+function getSearchArtworkUrl(song?: SnapshotSong | null) {
+  const title = song?.title?.trim();
+  const artist = song?.artist?.trim();
   const searchTerm = [title, artist, 'album cover'].filter(Boolean).join(' ');
   if (!searchTerm) return null;
 
@@ -149,70 +137,51 @@ function getSearchArtworkUrl(song?: SetlistSongRow | null) {
   return `https://tse.mm.bing.net/th?${params.toString()}`;
 }
 
-function getSongArtworkUrl(song?: SetlistSongRow | null) {
-  return getYouTubeThumbnailUrl(song?.youtube_url || song?.songs?.youtube_url)
+function getSongArtworkUrl(song?: SnapshotSong | null) {
+  return getYouTubeThumbnailUrl(song?.youtubeUrl)
     || getSearchArtworkUrl(song);
 }
 
-async function supabaseGet<T>(path: string, params: URLSearchParams, config: { key: string; url: string }) {
-  const response = await fetch(`${config.url}/rest/v1/${path}?${params.toString()}`, {
+async function getPublicShare(token: string, config: { key: string; url: string }) {
+  const response = await fetch(`${config.url}/rest/v1/rpc/get_public_event_share`, {
+    body: JSON.stringify({ p_token: token }),
     headers: {
       apikey: config.key,
       Authorization: `Bearer ${config.key}`,
+      'Content-Type': 'application/json',
     },
+    method: 'POST',
   });
 
   if (!response.ok) return null;
-  return await response.json() as T;
+  const data = await response.json() as PublicShareRow[];
+  return data[0] || null;
 }
 
-async function getEventPreview(eventId: string, origin: string) {
+async function getEventPreview(token: string, origin: string) {
   const config = getSupabaseConfig();
   if (!config) return null;
 
-  const eventParams = new URLSearchParams({
-    id: `eq.${eventId}`,
-    limit: '1',
-    select: 'id,title,event_date,start_time,event_type,song_leader_id',
-  });
-  const events = await supabaseGet<EventRow[]>('events', eventParams, config);
-  const event = events?.[0];
-  if (!event) return null;
+  const share = await getPublicShare(token, config);
+  if (!share) return null;
 
-  const setlistParams = new URLSearchParams({
-    event_id: `eq.${eventId}`,
-    limit: '1',
-    select: 'setlist_songs(position,song_category,youtube_url,songs(title,artist,youtube_url))',
-  });
-  const setlists = await supabaseGet<Array<{ setlist_songs?: SetlistSongRow[] | null }>>('setlists', setlistParams, config);
-  const songs = (setlists?.[0]?.setlist_songs || [])
-    .slice()
-    .sort((a, b) => (a.position || 0) - (b.position || 0));
-
-  let leaderName = '';
-  if (event.song_leader_id) {
-    const profileParams = new URLSearchParams({
-      id: `eq.${event.song_leader_id}`,
-      limit: '1',
-      select: 'id,first_name,last_name,nickname',
-    });
-    const profiles = await supabaseGet<ProfileRow[]>('profiles', profileParams, config);
-    leaderName = getLeaderName(profiles?.[0]);
-  }
-
-  const previewSongs = songs
-    .filter(song => song.songs?.title)
+  const snapshot = share.snapshot || {};
+  const rawSongs = Array.isArray(snapshot.songs) ? snapshot.songs : [];
+  const previewSongs = rawSongs
+    .filter(song => song?.title)
     .slice(0, 6)
     .map(song => ({
-      artist: song.songs?.artist || '',
+      artist: song.artist || '',
       artworkUrl: getSongArtworkUrl(song),
-      category: song.song_category || '',
-      title: song.songs?.title || '',
+      category: song.category || '',
+      title: song.title || '',
     }));
   const imageUrl = previewSongs[0]?.artworkUrl || `${origin}${fallbackImagePath}`;
-  const dateLabel = formatEventDate(event.event_date);
-  const timeLabel = formatEventTime(event.start_time);
-  const detailLine = [event.event_type, leaderName, dateLabel, timeLabel].filter(Boolean).join(' - ');
+  const dateLabel = formatEventDate(snapshot.eventDate);
+  const timeLabel = formatEventTime(snapshot.startTime);
+  const leaderName = snapshot.songLeaderName || '';
+  const eventType = snapshot.eventType || '';
+  const detailLine = [eventType, leaderName, dateLabel, timeLabel].filter(Boolean).join(' - ');
   const songLine = previewSongs.length > 0
     ? previewSongs.slice(0, 4).map(song => song.title).filter(Boolean).join(' - ')
     : '';
@@ -221,12 +190,13 @@ async function getEventPreview(eventId: string, origin: string) {
     dateLabel,
     description: [detailLine, songLine].filter(Boolean).join(' | '),
     detailLine,
-    eventType: event.event_type || '',
+    eventId: snapshot.eventId || share.event_id,
+    eventType,
     imageUrl,
     leaderName,
     songs: previewSongs,
     timeLabel,
-    title: event.title || 'ServeSync Event',
+    title: snapshot.title || 'ServeSync Event',
   } satisfies EventPreview;
 }
 
@@ -278,6 +248,7 @@ function renderPreviewImageSvg(preview: EventPreview | null, origin: string) {
     dateLabel: '',
     description: 'Open the event setlist, assignments, and team details in ServeSync.',
     detailLine: 'Open in ServeSync',
+    eventId: '',
     eventType: 'Event',
     imageUrl: `${origin}${fallbackImagePath}`,
     leaderName: '',
@@ -414,12 +385,14 @@ function renderPreviewHtml({
 }
 
 export default async (req: Request, context: Context) => {
-  const eventId = context.params.id;
+  const token = context.params.id;
   const requestUrl = new URL(req.url);
   const origin = requestUrl.origin;
-  const appUrl = `${origin}/events/${encodeURIComponent(eventId)}`;
-  const shareUrl = `${origin}/share/events/${encodeURIComponent(eventId)}`;
-  const preview = await getEventPreview(eventId, origin).catch(() => null);
+  const shareUrl = `${origin}/share/events/${encodeURIComponent(token)}`;
+  const preview = await getEventPreview(token, origin).catch(() => null);
+  const appUrl = preview?.eventId
+    ? `${origin}/events/${encodeURIComponent(preview.eventId)}`
+    : `${origin}/login`;
 
   if (requestUrl.pathname.endsWith('/image')) {
     return new Response(renderPreviewImageSvg(preview, origin), {
@@ -428,10 +401,6 @@ export default async (req: Request, context: Context) => {
         'Content-Type': 'image/svg+xml; charset=utf-8',
       },
     });
-  }
-
-  if (!isPreviewBot(req.headers.get('user-agent') || '')) {
-    return Response.redirect(appUrl, 302);
   }
 
   const html = renderPreviewHtml({

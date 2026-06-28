@@ -99,6 +99,7 @@ export function EventDetail() {
   const [linkedSongLeaderAssignment, setLinkedSongLeaderAssignment] = useState<EventAssignment | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sharingEvent, setSharingEvent] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
   const [showAssign, setShowAssign] = useState(false);
   const [showSetlist, setShowSetlist] = useState(false);
@@ -1647,29 +1648,41 @@ const openLyricsModal = (ss: SetlistSong) => {
   ].filter(Boolean);
   const eventShareUrl = typeof window !== 'undefined' ? `${window.location.origin}/share/events/${event.id}` : '';
 
+  const createPublicEventShareUrl = async () => {
+    const { data, error } = await supabase.rpc('create_public_event_share', { p_event_id: event.id });
+    if (error) throw error;
+
+    const token = typeof data === 'string' ? data : '';
+    if (!token) throw new Error('Unable to create public event share link');
+
+    return typeof window !== 'undefined'
+      ? `${window.location.origin}/share/events/${token}`
+      : eventShareUrl;
+  };
+
   const handleShareEvent = async () => {
     const title = `ServeSync - ${eventDisplayTitle}`;
+    setSharingEvent(true);
 
     try {
+      const publicShareUrl = await createPublicEventShareUrl();
+
       if (typeof navigator.share === 'function') {
         await navigator.share({
           title,
-          url: eventShareUrl,
+          url: publicShareUrl,
         });
         return;
       }
 
-      await navigator.clipboard.writeText(eventShareUrl);
+      await navigator.clipboard.writeText(publicShareUrl);
       toast('success', 'Event link copied');
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
 
-      try {
-        await navigator.clipboard.writeText(eventShareUrl);
-        toast('success', 'Event link copied');
-      } catch {
-        toast('error', getErrorMessage(error, 'Unable to share this event'));
-      }
+      toast('error', getErrorMessage(error, 'Unable to create public event share link'));
+    } finally {
+      setSharingEvent(false);
     }
   };
   const serviceModeSong = serviceModeIndex === null ? null : serviceModeSongs[serviceModeIndex] || null;
@@ -1910,11 +1923,12 @@ const openLyricsModal = (ss: SetlistSong) => {
                   <div className="flex shrink-0 items-center gap-2">
                       <button
                         onClick={handleShareEvent}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white active:scale-95"
+                        disabled={sharingEvent}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white active:scale-95 disabled:cursor-wait disabled:opacity-60"
                         title="Share event"
                         aria-label="Share event"
                       >
-                        <Upload className="h-4 w-4" strokeWidth={2.6} />
+                        <Upload className={`h-4 w-4 ${sharingEvent ? 'animate-pulse' : ''}`} strokeWidth={2.6} />
                       </button>
                       {myAssignment && myAssignment.status !== 'declined' && (
                         <button

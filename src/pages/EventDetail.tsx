@@ -68,13 +68,6 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
   return fallback;
 };
 
-type EventShareSong = {
-  artist?: string | null;
-  category?: string | null;
-  key?: string | null;
-  title: string;
-};
-
 export function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -1652,29 +1645,17 @@ const openLyricsModal = (ss: SetlistSong) => {
       ? `Due ${formatInTimeZone(parseISO(event.proposal_due_date), 'Asia/Manila', 'MMM dd, h:mm a')}`
       : '',
   ].filter(Boolean);
-  const eventShareSongs = eventDetailSongs
-    .filter((song): song is SetlistSong & { songs: Song } => !!song?.songs)
-    .map(song => ({
-      artist: song.songs.artist,
-      category: song.song_category,
-      key: song.performed_key || song.songs.song_key,
-      title: song.songs.title,
-    }));
   const eventShareDateLabel = format(parseISO(event.event_date), 'EEE, MMM d');
   const eventShareTimeLabel = formatTime12Hour(event.start_time || '');
   const eventShareStatusLabel = heroHasApprovedSetlist ? 'Setlist approved' : setlist?.status ? `Setlist ${statusLabels[setlist.status] || setlist.status}` : 'Event setlist';
   const eventShareUrl = typeof window !== 'undefined' ? window.location.href : '';
+  const eventShareSubtitle = [event.event_type, songLeaderName, eventShareDateLabel, eventShareTimeLabel].filter(Boolean).join(' - ');
   const eventShareText = [
     `${eventShareStatusLabel}: ${eventDisplayTitle}`,
-    [event.event_type, songLeaderName, eventShareDateLabel, eventShareTimeLabel].filter(Boolean).join(' - '),
-    eventShareSongs.length > 0 ? `${eventShareSongs.length} songs:` : '',
-    ...eventShareSongs.slice(0, 8).map((song, index) => {
-      const details = [song.artist, song.category, song.key ? `Key ${song.key}` : ''].filter(Boolean).join(' - ');
-      return `${index + 1}. ${song.title}${details ? ` (${details})` : ''}`;
-    }),
-    eventShareSongs.length > 8 ? `+ ${eventShareSongs.length - 8} more songs` : '',
-    eventShareUrl,
+    eventShareSubtitle,
+    'Open in ServeSync',
   ].filter(Boolean).join('\n');
+  const eventShareClipboardText = [eventShareText, eventShareUrl].filter(Boolean).join('\n');
 
   const handleShareEvent = async () => {
     const title = `ServeSync - ${eventDisplayTitle}`;
@@ -1689,13 +1670,13 @@ const openLyricsModal = (ss: SetlistSong) => {
         return;
       }
 
-      await navigator.clipboard.writeText(eventShareText);
+      await navigator.clipboard.writeText(eventShareClipboardText);
       toast('success', 'Event share details copied');
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
 
       try {
-        await navigator.clipboard.writeText(eventShareText);
+        await navigator.clipboard.writeText(eventShareClipboardText);
         toast('success', 'Event share details copied');
       } catch {
         toast('error', getErrorMessage(error, 'Unable to share this event'));

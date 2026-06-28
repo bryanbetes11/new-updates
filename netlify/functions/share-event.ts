@@ -13,6 +13,7 @@ type Context = {
 type SnapshotSong = {
   artist?: string | null;
   category?: string | null;
+  songKey?: string | null;
   title?: string | null;
   youtubeUrl?: string | null;
 };
@@ -38,6 +39,7 @@ type PreviewSong = {
   artworkDataUrl?: string | null;
   artworkUrl: string | null;
   category: string;
+  songKey: string;
   title: string;
 };
 
@@ -242,11 +244,11 @@ async function getEventPreview(token: string, origin: string) {
   const rawSongs = Array.isArray(snapshot.songs) ? snapshot.songs : [];
   const previewSongs = rawSongs
     .filter(song => song?.title)
-    .slice(0, 6)
     .map(song => ({
       artist: song.artist || '',
       artworkUrl: getSongArtworkUrl(song),
       category: song.category || '',
+      songKey: song.songKey || '',
       title: song.title || '',
     }));
   const imageUrl = previewSongs[0]?.artworkUrl || `${origin}${fallbackImagePath}`;
@@ -338,7 +340,7 @@ async function renderPreviewImageSvg(preview: EventPreview | null, origin: strin
   const data = preview || fallbackPreview;
   const artworkSongs = await withEmbeddedArtwork(data.songs.length > 0
     ? data.songs
-    : [{ artist: 'ServeSync', artworkUrl: data.imageUrl, category: 'Worship', title: data.title }]);
+    : [{ artist: 'ServeSync', artworkUrl: data.imageUrl, category: 'Worship', songKey: '', title: data.title }]);
   const safeTitle = escapeHtml(truncateText(data.title, 25));
   const safeDetailLine = escapeHtml(truncateText(data.detailLine || data.description, 62));
   const safeSongCount = escapeHtml(`${data.songs.length || artworkSongs.length} songs`);
@@ -392,17 +394,54 @@ async function renderPreviewImageSvg(preview: EventPreview | null, origin: strin
 </svg>`;
 }
 
+function renderSongCards(songs: PreviewSong[]) {
+  if (songs.length === 0) return '';
+
+  const cards = songs.map((song, index) => {
+    const safeTitle = escapeHtml(truncateText(song.title || `Song ${index + 1}`, 42));
+    const safeArtist = escapeHtml(truncateText(song.artist || 'Unknown artist', 38));
+    const safeCategory = escapeHtml(song.category || 'Worship');
+    const safeSongKey = escapeHtml(song.songKey || '-');
+    const safeArtworkUrl = song.artworkUrl ? escapeHtml(song.artworkUrl) : '';
+
+    return `<article class="song-card">
+      <div class="song-art">
+        ${safeArtworkUrl ? `<img src="${safeArtworkUrl}" alt="" loading="lazy" />` : ''}
+        <span>${index + 1}</span>
+      </div>
+      <div class="song-copy">
+        <h2>${safeTitle}</h2>
+        <p>${safeArtist}</p>
+        <div class="song-meta">
+          <span>Key ${safeSongKey}</span>
+          <span>${safeCategory}</span>
+        </div>
+      </div>
+    </article>`;
+  }).join('');
+
+  return `<section class="setlist-section" aria-label="Setlist songs">
+    <div class="section-heading">
+      <h2>Setlist</h2>
+      <span>${songs.length} songs</span>
+    </div>
+    <div class="song-strip">${cards}</div>
+  </section>`;
+}
+
 function renderPreviewHtml({
   appUrl,
   description,
   imageUrl,
   shareUrl,
+  songs,
   title,
 }: {
   appUrl: string;
   description: string;
   imageUrl: string;
   shareUrl: string;
+  songs: PreviewSong[];
   title: string;
 }) {
   const pageTitle = `ServeSync - ${title}`;
@@ -411,6 +450,7 @@ function renderPreviewHtml({
   const safeImageUrl = escapeHtml(imageUrl);
   const safeShareUrl = escapeHtml(shareUrl);
   const safeAppUrl = escapeHtml(appUrl);
+  const songCards = renderSongCards(songs);
 
   return `<!doctype html>
 <html lang="en">
@@ -435,20 +475,41 @@ function renderPreviewHtml({
     <meta name="twitter:description" content="${safeDescription}" />
     <meta name="twitter:image" content="${safeImageUrl}" />
     <style>
+      * { box-sizing: border-box; }
       body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #050505; color: white; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-      main { width: min(560px, calc(100vw - 32px)); }
-      img { display: block; width: 100%; aspect-ratio: 1.91 / 1; object-fit: cover; border-radius: 16px; background: #111; }
+      main { width: min(640px, calc(100vw - 28px)); padding: 34px 0 42px; }
+      .preview-image { display: block; width: 100%; aspect-ratio: 1.91 / 1; object-fit: cover; border-radius: 16px; background: #111; }
       h1 { margin: 18px 0 8px; font-size: 28px; line-height: 1.05; }
       p { margin: 0 0 20px; color: #c9c9c9; line-height: 1.45; }
-      a { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 18px; border-radius: 999px; background: #18c985; color: #04140e; font-weight: 800; text-decoration: none; }
+      .open-button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 18px; border-radius: 999px; background: #18c985; color: #04140e; font-weight: 800; text-decoration: none; }
+      .setlist-section { margin-top: 28px; }
+      .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+      .section-heading h2 { margin: 0; font-size: 22px; letter-spacing: 0; }
+      .section-heading span { color: #6dffbf; font-size: 13px; font-weight: 800; text-transform: uppercase; }
+      .song-strip { display: flex; gap: 12px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; padding: 2px 2px 14px; scrollbar-width: thin; scrollbar-color: #18c985 #121212; }
+      .song-card { flex: 0 0 calc((100% - 24px) / 3); min-width: 170px; scroll-snap-align: start; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; background: #111513; }
+      .song-art { position: relative; aspect-ratio: 1 / 1; overflow: hidden; background: linear-gradient(135deg, #18c985, #07140f); }
+      .song-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      .song-art::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 42%, rgba(0,0,0,0.58)); }
+      .song-art span { position: absolute; left: 10px; bottom: 9px; z-index: 1; display: grid; place-items: center; min-width: 28px; height: 28px; border-radius: 999px; background: #18c985; color: #04140e; font-weight: 950; font-size: 13px; }
+      .song-copy { padding: 12px; }
+      .song-copy h2 { margin: 0 0 5px; font-size: 15px; line-height: 1.14; }
+      .song-copy p { margin: 0 0 10px; color: #aeb7b3; font-size: 12px; line-height: 1.25; }
+      .song-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+      .song-meta span { display: inline-flex; align-items: center; min-height: 22px; padding: 0 8px; border-radius: 999px; background: rgba(24,201,133,0.12); color: #6dffbf; font-size: 11px; font-weight: 800; }
+      @media (max-width: 520px) {
+        main { width: min(100vw - 20px, 640px); padding-top: 22px; }
+        .song-card { flex-basis: calc((100% - 18px) / 2.35); min-width: 138px; }
+      }
     </style>
   </head>
   <body>
     <main>
-      <img src="${safeImageUrl}" alt="" />
+      <img class="preview-image" src="${safeImageUrl}" alt="" />
       <h1>${escapeHtml(title)}</h1>
       <p>${safeDescription}</p>
-      <a href="${safeAppUrl}">Open in ServeSync</a>
+      <a class="open-button" href="${safeAppUrl}">Open in ServeSync</a>
+      ${songCards}
     </main>
   </body>
 </html>`;
@@ -481,6 +542,7 @@ export default async (req: Request, context: Context) => {
     description: preview?.description || 'Open the event setlist, assignments, and team details in ServeSync.',
     imageUrl: `${shareBaseUrl}/image?${previewQuery}`,
     shareUrl,
+    songs: preview?.songs || [],
     title: preview?.title || 'ServeSync Event',
   });
 

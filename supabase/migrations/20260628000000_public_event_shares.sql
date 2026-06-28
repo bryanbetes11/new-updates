@@ -67,6 +67,7 @@ begin
             'title', coalesce(nullif(trim(s.title), ''), 'Untitled Song'),
             'artist', coalesce(nullif(trim(s.artist), ''), ''),
             'category', coalesce(nullif(trim(ss.song_category), ''), ''),
+            'songKey', coalesce(nullif(trim(ss.performed_key), ''), nullif(trim(s.song_key), '')),
             'youtubeUrl', coalesce(nullif(trim(ss.youtube_url), ''), nullif(trim(s.youtube_url), ''))
           )
           order by ss.position

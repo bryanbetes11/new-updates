@@ -1675,10 +1675,10 @@ const openLyricsModal = (ss: SetlistSong) => {
       eventType: event.event_type,
       songs: eventDetailSongs
         .filter((song): song is SetlistSong & { songs: Song } => !!song?.songs)
-        .slice(0, 6)
         .map(song => ({
           artist: song.songs.artist || '',
           category: song.song_category || '',
+          songKey: song.performed_key || song.songs.song_key || '',
           title: song.songs.title || 'Untitled Song',
           youtubeUrl: song.youtube_url || song.songs.youtube_url || '',
         })),

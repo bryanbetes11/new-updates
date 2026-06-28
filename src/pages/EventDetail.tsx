@@ -4,7 +4,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { format, parseISO, differenceInDays, startOfDay, subWeeks, previousSunday, addDays, subDays } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { animate, motion, useMotionValue, AnimatePresence, type PanInfo } from 'framer-motion';
-import { ArrowLeft, Calendar, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, ListOrdered, Pause, Play, Settings2, MoreHorizontal } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, ListOrdered, Pause, Play, Settings2, MoreHorizontal, Upload } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -67,6 +67,182 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
   }
   return fallback;
 };
+
+type EventShareSong = {
+  artist?: string | null;
+  category?: string | null;
+  key?: string | null;
+  title: string;
+};
+
+type EventSharePayload = {
+  dateLabel: string;
+  eventType: string;
+  leaderName: string;
+  songs: EventShareSong[];
+  statusLabel: string;
+  timeLabel: string;
+  title: string;
+  url: string;
+};
+
+function drawRoundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + width, y, x + width, y + height, r);
+  ctx.arcTo(x + width, y + height, x, y + height, r);
+  ctx.arcTo(x, y + height, x, y, r);
+  ctx.arcTo(x, y, x + width, y, r);
+  ctx.closePath();
+}
+
+function wrapCanvasText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, maxLines: number) {
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let line = '';
+
+  words.forEach(word => {
+    const testLine = line ? `${line} ${word}` : word;
+    if (ctx.measureText(testLine).width <= maxWidth) {
+      line = testLine;
+      return;
+    }
+
+    if (line) lines.push(line);
+    line = word;
+  });
+
+  if (line) lines.push(line);
+
+  if (lines.length <= maxLines) return lines;
+
+  const trimmed = lines.slice(0, maxLines);
+  let last = trimmed[trimmed.length - 1];
+  while (last.length > 0 && ctx.measureText(`${last}...`).width > maxWidth) {
+    last = last.slice(0, -1);
+  }
+  trimmed[trimmed.length - 1] = `${last.trim()}...`;
+  return trimmed;
+}
+
+function createShareCardFile(payload: EventSharePayload): Promise<File | null> {
+  return new Promise(resolve => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1080;
+    canvas.height = 1350;
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) {
+      resolve(null);
+      return;
+    }
+
+    const bg = ctx.createLinearGradient(0, 0, 1080, 1350);
+    bg.addColorStop(0, '#6f6259');
+    bg.addColorStop(0.36, '#161313');
+    bg.addColorStop(1, '#050505');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, 1080, 1350);
+
+    const glow = ctx.createRadialGradient(540, 90, 40, 540, 90, 720);
+    glow.addColorStop(0, 'rgba(255,255,255,0.26)');
+    glow.addColorStop(0.42, 'rgba(16,185,129,0.16)');
+    glow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, 1080, 720);
+
+    ctx.fillStyle = 'rgba(5,5,5,0.36)';
+    drawRoundedRect(ctx, 58, 58, 964, 1234, 44);
+    ctx.fill();
+
+    ctx.fillStyle = '#34d399';
+    ctx.font = '700 28px "Plus Jakarta Sans", Arial, sans-serif';
+    ctx.fillText(payload.statusLabel.toUpperCase(), 96, 130);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '900 78px "Plus Jakarta Sans", Arial, sans-serif';
+    wrapCanvasText(ctx, payload.title, 850, 2).forEach((line, index) => {
+      ctx.fillText(line, 96, 220 + index * 84);
+    });
+
+    ctx.font = '700 32px "Plus Jakarta Sans", Arial, sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.72)';
+    const details = [payload.eventType, payload.leaderName, payload.dateLabel, payload.timeLabel].filter(Boolean).join('  -  ');
+    wrapCanvasText(ctx, details, 880, 2).forEach((line, index) => {
+      ctx.fillText(line, 96, 386 + index * 42);
+    });
+
+    const songLimit = Math.min(payload.songs.length, 6);
+    const songs = payload.songs.slice(0, songLimit);
+    const cardTop = 520;
+    songs.forEach((song, index) => {
+      const y = cardTop + index * 112;
+      const offset = index * 7;
+
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.32)';
+      ctx.shadowBlur = 26;
+      ctx.shadowOffsetY = 16;
+      ctx.fillStyle = index % 2 === 0 ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.10)';
+      drawRoundedRect(ctx, 96 + offset, y, 888 - offset * 2, 94, 24);
+      ctx.fill();
+      ctx.restore();
+
+      ctx.fillStyle = 'rgba(52,211,153,0.95)';
+      drawRoundedRect(ctx, 120 + offset, y + 22, 50, 50, 16);
+      ctx.fill();
+
+      ctx.fillStyle = '#052e1d';
+      ctx.font = '900 24px "Plus Jakarta Sans", Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(String(index + 1), 145 + offset, y + 55);
+      ctx.textAlign = 'left';
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '800 34px "Plus Jakarta Sans", Arial, sans-serif';
+      wrapCanvasText(ctx, song.title, 640, 1).forEach(line => {
+        ctx.fillText(line, 196 + offset, y + 43);
+      });
+
+      ctx.fillStyle = 'rgba(255,255,255,0.58)';
+      ctx.font = '600 24px "Plus Jakarta Sans", Arial, sans-serif';
+      const meta = [song.artist, song.category].filter(Boolean).join(' - ');
+      wrapCanvasText(ctx, meta || 'Setlist song', 570, 1).forEach(line => {
+        ctx.fillText(line, 196 + offset, y + 73);
+      });
+
+      if (song.key) {
+        ctx.fillStyle = 'rgba(255,255,255,0.16)';
+        drawRoundedRect(ctx, 892 - offset, y + 27, 58, 40, 12);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.86)';
+        ctx.font = '800 22px "Plus Jakarta Sans", Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(song.key, 921 - offset, y + 54);
+        ctx.textAlign = 'left';
+      }
+    });
+
+    if (payload.songs.length > songLimit) {
+      ctx.fillStyle = 'rgba(255,255,255,0.58)';
+      ctx.font = '700 28px "Plus Jakarta Sans", Arial, sans-serif';
+      ctx.fillText(`+ ${payload.songs.length - songLimit} more songs`, 126, cardTop + songLimit * 112 + 40);
+    }
+
+    ctx.fillStyle = 'rgba(255,255,255,0.42)';
+    ctx.font = '700 24px "Plus Jakarta Sans", Arial, sans-serif';
+    ctx.fillText('ServeSync', 96, 1230);
+
+    canvas.toBlob(blob => {
+      if (!blob) {
+        resolve(null);
+        return;
+      }
+      resolve(new File([blob], 'servesync-event-setlist.png', { type: 'image/png' }));
+    }, 'image/png', 0.92);
+  });
+}
 
 export function EventDetail() {
   const { id } = useParams<{ id: string }>();
@@ -1645,6 +1821,78 @@ const openLyricsModal = (ss: SetlistSong) => {
       ? `Due ${formatInTimeZone(parseISO(event.proposal_due_date), 'Asia/Manila', 'MMM dd, h:mm a')}`
       : '',
   ].filter(Boolean);
+  const eventShareSongs = eventDetailSongs
+    .filter((song): song is SetlistSong & { songs: Song } => !!song?.songs)
+    .map(song => ({
+      artist: song.songs.artist,
+      category: song.song_category,
+      key: song.performed_key || song.songs.song_key,
+      title: song.songs.title,
+    }));
+  const eventShareDateLabel = format(parseISO(event.event_date), 'EEE, MMM d');
+  const eventShareTimeLabel = formatTime12Hour(event.start_time || '');
+  const eventShareStatusLabel = heroHasApprovedSetlist ? 'Setlist approved' : setlist?.status ? `Setlist ${statusLabels[setlist.status] || setlist.status}` : 'Event setlist';
+  const eventShareUrl = typeof window !== 'undefined' ? window.location.href : '';
+  const eventSharePayload: EventSharePayload = {
+    dateLabel: eventShareDateLabel,
+    eventType: event.event_type,
+    leaderName: songLeaderName || eventDisplayTitle,
+    songs: eventShareSongs,
+    statusLabel: eventShareStatusLabel,
+    timeLabel: eventShareTimeLabel,
+    title: eventDisplayTitle,
+    url: eventShareUrl,
+  };
+  const eventShareText = [
+    `${eventShareStatusLabel}: ${eventDisplayTitle}`,
+    [event.event_type, songLeaderName, eventShareDateLabel, eventShareTimeLabel].filter(Boolean).join(' - '),
+    eventShareSongs.length > 0 ? `${eventShareSongs.length} songs:` : '',
+    ...eventShareSongs.slice(0, 8).map((song, index) => {
+      const details = [song.artist, song.category, song.key ? `Key ${song.key}` : ''].filter(Boolean).join(' - ');
+      return `${index + 1}. ${song.title}${details ? ` (${details})` : ''}`;
+    }),
+    eventShareSongs.length > 8 ? `+ ${eventShareSongs.length - 8} more songs` : '',
+    eventShareUrl,
+  ].filter(Boolean).join('\n');
+
+  const handleShareEvent = async () => {
+    const title = `ServeSync - ${eventDisplayTitle}`;
+
+    try {
+      const shareCard = await createShareCardFile(eventSharePayload);
+      const canShareFiles = !!shareCard && typeof navigator.canShare === 'function' && navigator.canShare({ files: [shareCard] });
+
+      if (typeof navigator.share === 'function') {
+        if (canShareFiles && shareCard) {
+          await navigator.share({
+            files: [shareCard],
+            text: eventShareText,
+            title,
+          });
+          return;
+        }
+
+        await navigator.share({
+          text: eventShareText,
+          title,
+          url: eventShareUrl,
+        });
+        return;
+      }
+
+      await navigator.clipboard.writeText(eventShareText);
+      toast('success', 'Event share details copied');
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+
+      try {
+        await navigator.clipboard.writeText(eventShareText);
+        toast('success', 'Event share details copied');
+      } catch {
+        toast('error', getErrorMessage(error, 'Unable to share this event'));
+      }
+    }
+  };
   const serviceModeSong = serviceModeIndex === null ? null : serviceModeSongs[serviceModeIndex] || null;
   const serviceModeSongKey = serviceModeDisplayKey || serviceModeSong?.performed_key || serviceModeSong?.songs?.song_key || '';
 	  const serviceModeSourceLabel = event.event_type === 'Rehearsals' && linkedReferenceSongs.length > 0
@@ -1839,7 +2087,7 @@ const openLyricsModal = (ss: SetlistSong) => {
         {/* ── Event Summary ────────────────────────────── */}
         <motion.div
           {...blurUp(0.08)}
-          className="relative isolate -mx-4 -mt-[env(safe-area-inset-top)] overflow-hidden bg-[#050505] px-4 pb-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] sm:-mx-6 sm:px-6 sm:pb-5 sm:pt-3 lg:-mx-8 lg:mt-0 lg:px-8"
+          className="relative isolate z-10 -mx-4 -mt-[env(safe-area-inset-top)] overflow-visible bg-[#050505] px-4 pb-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] sm:-mx-6 sm:px-6 sm:pb-5 sm:pt-3 lg:-mx-8 lg:mt-0 lg:px-8"
           style={{
             opacity: heroIsPast ? 0.85 : 1,
           }}
@@ -1880,8 +2128,15 @@ const openLyricsModal = (ss: SetlistSong) => {
                   <h1 className="min-w-0 flex-1 text-[1.75rem] font-black leading-[1.04] text-white sm:text-[2.5rem] lg:text-[4.5rem] xl:text-[5.5rem]" style={{ letterSpacing: '-0.04em' }}>
                     {eventDisplayTitle}
                   </h1>
-                  {(eventConversationId !== undefined || (myAssignment && myAssignment.status !== 'declined') || isLeader || canEditEvent) && (
-                    <div className="flex shrink-0 items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-2">
+                      <button
+                        onClick={handleShareEvent}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white active:scale-95"
+                        title="Share event"
+                        aria-label="Share event"
+                      >
+                        <Upload className="h-4 w-4" strokeWidth={2.6} />
+                      </button>
                       {myAssignment && myAssignment.status !== 'declined' && (
                         <button
                           onClick={() => setShowSwapModal(true)}
@@ -1928,7 +2183,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                 animate={{ opacity: 1, y: 0, scale: 1 }}
                                 exit={{ opacity: 0, y: -4, scale: 0.98 }}
                                 transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
-                                className="absolute right-0 top-11 z-40 w-44 overflow-hidden rounded-2xl border border-white/[0.1] bg-[#181818]/95 p-1.5 shadow-2xl shadow-black/50 backdrop-blur-xl"
+                                className="absolute right-0 top-11 z-[70] w-44 overflow-hidden rounded-2xl border border-white/[0.1] bg-[#181818]/95 p-1.5 shadow-2xl shadow-black/50 backdrop-blur-xl"
                                 role="menu"
                               >
                                 {canEditEvent && (
@@ -1963,7 +2218,6 @@ const openLyricsModal = (ss: SetlistSong) => {
                         </div>
                       )}
                     </div>
-                  )}
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] font-medium text-white/60">
                   <span className="badge-blue text-[10px]">{event.event_type}</span>

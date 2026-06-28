@@ -107,9 +107,10 @@ function formatEventDate(dateValue?: string | null) {
   if (Number.isNaN(date.getTime())) return dateValue;
   return new Intl.DateTimeFormat('en-US', {
     day: 'numeric',
-    month: 'short',
+    month: 'long',
     timeZone: 'Asia/Manila',
     weekday: 'short',
+    year: 'numeric',
   }).format(date);
 }
 
@@ -420,7 +421,6 @@ function renderSongCards(songs: PreviewSong[]) {
 
   return `<section class="setlist-section" aria-label="Setlist songs">
     <div class="section-heading">
-      <h2>Setlist</h2>
       <span>${songs.length} songs</span>
     </div>
     <div class="song-stage">${cards}</div>
@@ -431,20 +431,30 @@ function renderPreviewHtml({
   appUrl,
   description,
   imageUrl,
+  dateLabel,
+  eventType,
+  leaderName,
   shareUrl,
   songs,
+  timeLabel,
   title,
 }: {
   appUrl: string;
   description: string;
   imageUrl: string;
+  dateLabel: string;
+  eventType: string;
+  leaderName: string;
   shareUrl: string;
   songs: PreviewSong[];
+  timeLabel: string;
   title: string;
 }) {
   const pageTitle = `ServeSync - ${title}`;
   const safeTitle = escapeHtml(pageTitle);
   const safeDescription = escapeHtml(description || 'Open this event in ServeSync.');
+  const safeHeaderTitle = escapeHtml(`${eventType || 'Sunday Service'} Setlist`);
+  const safeHeaderMeta = escapeHtml([leaderName || title, dateLabel, timeLabel].filter(Boolean).join(' . '));
   const safeImageUrl = escapeHtml(imageUrl);
   const safeShareUrl = escapeHtml(shareUrl);
   const safeAppUrl = escapeHtml(appUrl);
@@ -477,14 +487,13 @@ function renderPreviewHtml({
       body { margin: 0; min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; overflow: hidden; background: radial-gradient(circle at 50% 0%, rgba(36, 44, 40, 0.72), rgba(5, 5, 5, 0.72) 38%, #050505 72%); color: white; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
       main { width: min(720px, 100vw); padding: 22px 0 18px; }
       .event-header { width: min(560px, calc(100vw - 44px)); margin: 0 auto 14px; text-align: center; }
-      .eyebrow { margin: 0 0 8px; color: #6dffbf; font-size: 11px; font-weight: 900; letter-spacing: 0.22em; text-transform: uppercase; }
+      .eyebrow { margin: 0 0 7px; color: #6dffbf; font-size: 15px; font-weight: 900; letter-spacing: 0; }
       h1 { margin: 0 0 8px; font-size: 32px; line-height: 1.05; }
       p { margin: 0; color: #c9c9c9; line-height: 1.45; }
       .event-detail { margin-bottom: 14px; font-size: 15px; }
       .open-button { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 0 17px; border-radius: 999px; background: #18c985; color: #04140e; font-weight: 800; text-decoration: none; }
       .setlist-section { margin-top: 22px; }
-      .section-heading { width: min(560px, calc(100vw - 44px)); margin: 0 auto 12px; text-align: center; }
-      .section-heading h2 { margin: 0 0 5px; font-size: 23px; letter-spacing: 0; }
+      .section-heading { width: min(560px, calc(100vw - 44px)); margin: 0 auto 10px; text-align: center; }
       .section-heading span { color: #6dffbf; font-size: 12px; font-weight: 800; text-transform: uppercase; }
       .song-stage { display: flex; gap: 18px; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; padding: 8px calc((100% - min(340px, 76vw, 44vh)) / 2) 14px; scrollbar-width: thin; scrollbar-color: #18c985 #121212; }
       .song-card { flex: 0 0 min(340px, 76vw, 44vh); scroll-snap-align: center; overflow: hidden; border: 1px solid rgba(255,255,255,0.12); border-radius: 24px; background: linear-gradient(180deg, #171a19, #0d0f0e); box-shadow: 0 20px 58px rgba(0,0,0,0.48); }
@@ -527,9 +536,9 @@ function renderPreviewHtml({
   <body>
     <main>
       <header class="event-header">
-        <p class="eyebrow">ServeSync Setlist</p>
-        <h1>${escapeHtml(title)}</h1>
-        <p class="event-detail">${safeDescription}</p>
+        <p class="eyebrow">ServeSync</p>
+        <h1>${safeHeaderTitle}</h1>
+        <p class="event-detail">${safeHeaderMeta}</p>
       </header>
       ${songCards}
       <div class="share-action">
@@ -564,10 +573,14 @@ export default async (req: Request, context: Context) => {
 
   const html = renderPreviewHtml({
     appUrl,
+    dateLabel: preview?.dateLabel || '',
     description: preview?.detailLine || 'Open in ServeSync',
+    eventType: preview?.eventType || '',
     imageUrl: `${shareBaseUrl}/image?${previewQuery}`,
+    leaderName: preview?.leaderName || '',
     shareUrl,
     songs: preview?.songs || [],
+    timeLabel: preview?.timeLabel || '',
     title: preview?.title || 'ServeSync Event',
   });
 

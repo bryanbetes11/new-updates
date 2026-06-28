@@ -499,6 +499,7 @@ function renderPreviewHtml({
       .song-copy p { margin: 0 0 11px; color: #aeb7b3; font-size: 14px; line-height: 1.25; }
       .song-meta { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
       .song-meta span { display: inline-flex; align-items: center; min-height: 26px; padding: 0 10px; border-radius: 999px; background: rgba(24,201,133,0.12); color: #6dffbf; font-size: 12px; font-weight: 800; }
+      .share-action { margin-top: 10px; text-align: center; }
       @media (max-width: 520px) {
         main { padding-top: 18px; padding-bottom: 12px; }
         .event-header { width: min(100vw - 32px, 560px); }
@@ -516,9 +517,11 @@ function renderPreviewHtml({
         <p class="eyebrow">ServeSync Setlist</p>
         <h1>${escapeHtml(title)}</h1>
         <p class="event-detail">${safeDescription}</p>
-        <a class="open-button" href="${safeAppUrl}">Open in ServeSync</a>
       </header>
       ${songCards}
+      <div class="share-action">
+        <a class="open-button" href="${safeAppUrl}">Open in ServeSync</a>
+      </div>
     </main>
   </body>
 </html>`;

@@ -1660,6 +1660,14 @@ const openLyricsModal = (ss: SetlistSong) => {
   ].filter(Boolean);
   const eventShareUrl = typeof window !== 'undefined' ? `${window.location.origin}/share/events/${event.id}` : '';
 
+  const withSharePreviewVersion = (url: string) => {
+    if (typeof window === 'undefined' || !url) return url;
+
+    const shareUrl = new URL(url);
+    shareUrl.searchParams.set('preview', `portrait-artwork-v3-${Date.now().toString(36)}`);
+    return shareUrl.toString();
+  };
+
   const createSnapshotEventShareUrl = () => {
     const snapshot = {
       eventDate: event.event_date,
@@ -1679,7 +1687,7 @@ const openLyricsModal = (ss: SetlistSong) => {
       title: eventDisplayTitle,
     };
     return typeof window !== 'undefined'
-      ? `${window.location.origin}/share/events/snapshot-${toBase64Url(JSON.stringify(snapshot))}`
+      ? withSharePreviewVersion(`${window.location.origin}/share/events/snapshot-${toBase64Url(JSON.stringify(snapshot))}`)
       : eventShareUrl;
   };
 
@@ -1691,7 +1699,7 @@ const openLyricsModal = (ss: SetlistSong) => {
     if (!token) throw new Error('Unable to create public event share link');
 
     return typeof window !== 'undefined'
-      ? `${window.location.origin}/share/events/${token}`
+      ? withSharePreviewVersion(`${window.location.origin}/share/events/${token}`)
       : eventShareUrl;
   };
 

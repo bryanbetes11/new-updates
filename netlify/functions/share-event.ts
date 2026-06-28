@@ -455,7 +455,10 @@ export default async (req: Request, context: Context) => {
   const token = context.params.id;
   const requestUrl = new URL(req.url);
   const origin = requestUrl.origin;
-  const shareUrl = `${origin}/share/events/${encodeURIComponent(token)}`;
+  const shareBaseUrl = `${origin}/share/events/${encodeURIComponent(token)}`;
+  const previewVersion = requestUrl.searchParams.get('preview') || 'portrait-artwork-v3';
+  const previewQuery = `preview=${encodeURIComponent(previewVersion)}`;
+  const shareUrl = `${shareBaseUrl}?${previewQuery}`;
   const preview = await getEventPreview(token, origin).catch(() => null);
   const appUrl = preview?.eventId
     ? `${origin}/events/${encodeURIComponent(preview.eventId)}`
@@ -473,7 +476,7 @@ export default async (req: Request, context: Context) => {
   const html = renderPreviewHtml({
     appUrl,
     description: preview?.description || 'Open the event setlist, assignments, and team details in ServeSync.',
-    imageUrl: `${shareUrl}/image`,
+    imageUrl: `${shareBaseUrl}/image?${previewQuery}`,
     shareUrl,
     title: preview?.title || 'ServeSync Event',
   });

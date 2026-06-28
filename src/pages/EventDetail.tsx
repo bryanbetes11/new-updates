@@ -75,175 +75,6 @@ type EventShareSong = {
   title: string;
 };
 
-type EventSharePayload = {
-  dateLabel: string;
-  eventType: string;
-  leaderName: string;
-  songs: EventShareSong[];
-  statusLabel: string;
-  timeLabel: string;
-  title: string;
-  url: string;
-};
-
-function drawRoundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
-  const r = Math.min(radius, width / 2, height / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + width, y, x + width, y + height, r);
-  ctx.arcTo(x + width, y + height, x, y + height, r);
-  ctx.arcTo(x, y + height, x, y, r);
-  ctx.arcTo(x, y, x + width, y, r);
-  ctx.closePath();
-}
-
-function wrapCanvasText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, maxLines: number) {
-  const words = text.split(' ');
-  const lines: string[] = [];
-  let line = '';
-
-  words.forEach(word => {
-    const testLine = line ? `${line} ${word}` : word;
-    if (ctx.measureText(testLine).width <= maxWidth) {
-      line = testLine;
-      return;
-    }
-
-    if (line) lines.push(line);
-    line = word;
-  });
-
-  if (line) lines.push(line);
-
-  if (lines.length <= maxLines) return lines;
-
-  const trimmed = lines.slice(0, maxLines);
-  let last = trimmed[trimmed.length - 1];
-  while (last.length > 0 && ctx.measureText(`${last}...`).width > maxWidth) {
-    last = last.slice(0, -1);
-  }
-  trimmed[trimmed.length - 1] = `${last.trim()}...`;
-  return trimmed;
-}
-
-function createShareCardFile(payload: EventSharePayload): Promise<File | null> {
-  return new Promise(resolve => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 1080;
-    canvas.height = 1350;
-    const ctx = canvas.getContext('2d');
-
-    if (!ctx) {
-      resolve(null);
-      return;
-    }
-
-    const bg = ctx.createLinearGradient(0, 0, 1080, 1350);
-    bg.addColorStop(0, '#6f6259');
-    bg.addColorStop(0.36, '#161313');
-    bg.addColorStop(1, '#050505');
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, 1080, 1350);
-
-    const glow = ctx.createRadialGradient(540, 90, 40, 540, 90, 720);
-    glow.addColorStop(0, 'rgba(255,255,255,0.26)');
-    glow.addColorStop(0.42, 'rgba(16,185,129,0.16)');
-    glow.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = glow;
-    ctx.fillRect(0, 0, 1080, 720);
-
-    ctx.fillStyle = 'rgba(5,5,5,0.36)';
-    drawRoundedRect(ctx, 58, 58, 964, 1234, 44);
-    ctx.fill();
-
-    ctx.fillStyle = '#34d399';
-    ctx.font = '700 28px "Plus Jakarta Sans", Arial, sans-serif';
-    ctx.fillText(payload.statusLabel.toUpperCase(), 96, 130);
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '900 78px "Plus Jakarta Sans", Arial, sans-serif';
-    wrapCanvasText(ctx, payload.title, 850, 2).forEach((line, index) => {
-      ctx.fillText(line, 96, 220 + index * 84);
-    });
-
-    ctx.font = '700 32px "Plus Jakarta Sans", Arial, sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.72)';
-    const details = [payload.eventType, payload.leaderName, payload.dateLabel, payload.timeLabel].filter(Boolean).join('  -  ');
-    wrapCanvasText(ctx, details, 880, 2).forEach((line, index) => {
-      ctx.fillText(line, 96, 386 + index * 42);
-    });
-
-    const songLimit = Math.min(payload.songs.length, 6);
-    const songs = payload.songs.slice(0, songLimit);
-    const cardTop = 520;
-    songs.forEach((song, index) => {
-      const y = cardTop + index * 112;
-      const offset = index * 7;
-
-      ctx.save();
-      ctx.shadowColor = 'rgba(0,0,0,0.32)';
-      ctx.shadowBlur = 26;
-      ctx.shadowOffsetY = 16;
-      ctx.fillStyle = index % 2 === 0 ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.10)';
-      drawRoundedRect(ctx, 96 + offset, y, 888 - offset * 2, 94, 24);
-      ctx.fill();
-      ctx.restore();
-
-      ctx.fillStyle = 'rgba(52,211,153,0.95)';
-      drawRoundedRect(ctx, 120 + offset, y + 22, 50, 50, 16);
-      ctx.fill();
-
-      ctx.fillStyle = '#052e1d';
-      ctx.font = '900 24px "Plus Jakarta Sans", Arial, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(String(index + 1), 145 + offset, y + 55);
-      ctx.textAlign = 'left';
-
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '800 34px "Plus Jakarta Sans", Arial, sans-serif';
-      wrapCanvasText(ctx, song.title, 640, 1).forEach(line => {
-        ctx.fillText(line, 196 + offset, y + 43);
-      });
-
-      ctx.fillStyle = 'rgba(255,255,255,0.58)';
-      ctx.font = '600 24px "Plus Jakarta Sans", Arial, sans-serif';
-      const meta = [song.artist, song.category].filter(Boolean).join(' - ');
-      wrapCanvasText(ctx, meta || 'Setlist song', 570, 1).forEach(line => {
-        ctx.fillText(line, 196 + offset, y + 73);
-      });
-
-      if (song.key) {
-        ctx.fillStyle = 'rgba(255,255,255,0.16)';
-        drawRoundedRect(ctx, 892 - offset, y + 27, 58, 40, 12);
-        ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,0.86)';
-        ctx.font = '800 22px "Plus Jakarta Sans", Arial, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(song.key, 921 - offset, y + 54);
-        ctx.textAlign = 'left';
-      }
-    });
-
-    if (payload.songs.length > songLimit) {
-      ctx.fillStyle = 'rgba(255,255,255,0.58)';
-      ctx.font = '700 28px "Plus Jakarta Sans", Arial, sans-serif';
-      ctx.fillText(`+ ${payload.songs.length - songLimit} more songs`, 126, cardTop + songLimit * 112 + 40);
-    }
-
-    ctx.fillStyle = 'rgba(255,255,255,0.42)';
-    ctx.font = '700 24px "Plus Jakarta Sans", Arial, sans-serif';
-    ctx.fillText('ServeSync', 96, 1230);
-
-    canvas.toBlob(blob => {
-      if (!blob) {
-        resolve(null);
-        return;
-      }
-      resolve(new File([blob], 'servesync-event-setlist.png', { type: 'image/png' }));
-    }, 'image/png', 0.92);
-  });
-}
-
 export function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -1833,16 +1664,6 @@ const openLyricsModal = (ss: SetlistSong) => {
   const eventShareTimeLabel = formatTime12Hour(event.start_time || '');
   const eventShareStatusLabel = heroHasApprovedSetlist ? 'Setlist approved' : setlist?.status ? `Setlist ${statusLabels[setlist.status] || setlist.status}` : 'Event setlist';
   const eventShareUrl = typeof window !== 'undefined' ? window.location.href : '';
-  const eventSharePayload: EventSharePayload = {
-    dateLabel: eventShareDateLabel,
-    eventType: event.event_type,
-    leaderName: songLeaderName || eventDisplayTitle,
-    songs: eventShareSongs,
-    statusLabel: eventShareStatusLabel,
-    timeLabel: eventShareTimeLabel,
-    title: eventDisplayTitle,
-    url: eventShareUrl,
-  };
   const eventShareText = [
     `${eventShareStatusLabel}: ${eventDisplayTitle}`,
     [event.event_type, songLeaderName, eventShareDateLabel, eventShareTimeLabel].filter(Boolean).join(' - '),
@@ -1859,19 +1680,7 @@ const openLyricsModal = (ss: SetlistSong) => {
     const title = `ServeSync - ${eventDisplayTitle}`;
 
     try {
-      const shareCard = await createShareCardFile(eventSharePayload);
-      const canShareFiles = !!shareCard && typeof navigator.canShare === 'function' && navigator.canShare({ files: [shareCard] });
-
       if (typeof navigator.share === 'function') {
-        if (canShareFiles && shareCard) {
-          await navigator.share({
-            files: [shareCard],
-            text: eventShareText,
-            title,
-          });
-          return;
-        }
-
         await navigator.share({
           text: eventShareText,
           title,

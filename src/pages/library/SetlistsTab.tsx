@@ -74,6 +74,23 @@ type SortKey = 'date_desc' | 'date_asc' | 'songs_desc';
 const ULTIMATE_GUITAR_SEARCH_URL = (query: string) =>
   `https://www.ultimate-guitar.com/search.php?search_type=title&value=${encodeURIComponent(query)}`;
 
+function getLibrarySongSortGroup(song: SongUsage) {
+  if (song.is_safe && song.days_since !== null) return 0;
+  if (song.days_since === null) return 1;
+  return 2;
+}
+
+function compareLibrarySongs(a: SongUsage, b: SongUsage) {
+  const groupDelta = getLibrarySongSortGroup(a) - getLibrarySongSortGroup(b);
+  if (groupDelta !== 0) return groupDelta;
+
+  if (a.days_since !== null && b.days_since !== null && a.days_since !== b.days_since) {
+    return b.days_since - a.days_since;
+  }
+
+  return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
+}
+
 type NormalizeChartInputOptions = Parameters<typeof import('../../lib/chordSheetAdapter').normalizeImportedChordSheet>[1];
 
 async function normalizeChartInput(text: string, options?: NormalizeChartInputOptions) {
@@ -195,12 +212,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
       sanitizeTitle: sanitizeSongTitle,
     });
 
-    usages.sort((a, b) => {
-      if (a.days_since === null && b.days_since === null) return 0;
-      if (a.days_since === null) return 1;
-      if (b.days_since === null) return -1;
-      return a.days_since - b.days_since;
-    });
+    usages.sort(compareLibrarySongs);
 
     setSongUsages(usages);
     setLoading(false);
@@ -1471,7 +1483,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
               return (
                 <div
                   key={song.id}
-                  className={`flex items-start gap-3 py-3 transition-colors ${
+                  className={`flex flex-wrap items-start gap-3 py-3 transition-colors ${
                     selectedSongs.has(song.id)
                       ? 'bg-[#22c55e]/10'
                       : 'hover:bg-white/[0.035]'
@@ -1501,9 +1513,16 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                       {song.last_used_date ? format(parseISO(song.last_used_date), 'MMM d, yyyy') : 'Never used'}
                     </p>
                     {latestUsage && (
-                      <div className="mt-2 rounded-xl border border-red-200/80 bg-red-50 px-2.5 py-2 text-[11px] leading-4 text-red-700 dark:border-red-500/20 dark:bg-red-500/[0.10] dark:text-red-200">
+                      <div className="hidden">
                         <span className="font-black">Used in {latestUsage.event_title}</span>
-                        <span className="block text-red-700/75 dark:text-red-200/70">
+                        <span className="text-red-700/75 dark:text-red-200/70">
+                          {' - '}
+                          {format(parseISO(latestUsage.event_date), 'MMM d, yyyy')}
+                          {latestUsage.event_type ? ` - ${latestUsage.event_type}` : ''}
+                          {song.usages.length > 1 ? ` - ${song.usages.length} total uses` : ''}
+                        </span>
+                        <span className="hidden text-red-700/75 dark:text-red-200/70">
+                          {' Â· '}
                           {format(parseISO(latestUsage.event_date), 'MMM d, yyyy')}
                           {latestUsage.event_type ? ` · ${latestUsage.event_type}` : ''}
                           {song.usages.length > 1 ? ` · ${song.usages.length} total uses` : ''}
@@ -1546,6 +1565,17 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                       </span>
                     )}
                   </div>
+                  {latestUsage && (
+                    <div className="basis-full rounded-xl border border-red-200/80 bg-red-50 px-2.5 py-1.5 text-[11px] leading-4 text-red-700 dark:border-red-500/20 dark:bg-red-500/[0.10] dark:text-red-200">
+                      <span className="font-black">Used in {latestUsage.event_title}</span>
+                      <span className="text-red-700/75 dark:text-red-200/70">
+                        {' - '}
+                        {format(parseISO(latestUsage.event_date), 'MMM d, yyyy')}
+                        {latestUsage.event_type ? ` - ${latestUsage.event_type}` : ''}
+                        {song.usages.length > 1 ? ` - ${song.usages.length} total uses` : ''}
+                      </span>
+                    </div>
+                  )}
                 </div>
               );
             })}

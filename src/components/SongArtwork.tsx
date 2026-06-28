@@ -146,7 +146,7 @@ export function SongArtwork({ song, youtubeUrl, className = 'h-10 w-10 rounded-l
           src={artworkUrl}
           alt=""
           loading="lazy"
-          className="h-full w-full object-contain"
+          className="h-full w-full object-cover"
           referrerPolicy="no-referrer"
           onError={() => setFailedUrls((current) => new Set(current).add(artworkUrl))}
         />

@@ -41,6 +41,7 @@ type PreviewSong = {
   category: string;
   songKey: string;
   title: string;
+  youtubeUrl: string;
 };
 
 type EventPreview = {
@@ -165,6 +166,15 @@ function getSongArtworkUrl(song?: SnapshotSong | null) {
     || getSearchArtworkUrl(song);
 }
 
+function getSongListenUrl(song?: Pick<PreviewSong, 'artist' | 'title' | 'youtubeUrl'> | null) {
+  const youtubeUrl = song?.youtubeUrl?.trim();
+  if (youtubeUrl) return youtubeUrl;
+
+  const searchTerm = [song?.title?.trim(), song?.artist?.trim()].filter(Boolean).join(' ');
+  if (!searchTerm) return 'https://www.youtube.com/';
+  return `https://www.youtube.com/results?search_query=${encodeURIComponent(searchTerm)}`;
+}
+
 function arrayBufferToBase64(buffer: ArrayBuffer) {
   const bytes = new Uint8Array(buffer);
   const chunkSize = 8192;
@@ -251,6 +261,7 @@ async function getEventPreview(token: string, origin: string) {
       category: song.category || '',
       songKey: song.songKey || '',
       title: song.title || '',
+      youtubeUrl: song.youtubeUrl || '',
     }));
   const imageUrl = previewSongs[0]?.artworkUrl || `${origin}${fallbackImagePath}`;
   const dateLabel = formatEventDate(snapshot.eventDate);
@@ -341,7 +352,7 @@ async function renderPreviewImageSvg(preview: EventPreview | null, origin: strin
   const data = preview || fallbackPreview;
   const artworkSongs = await withEmbeddedArtwork(data.songs.length > 0
     ? data.songs
-    : [{ artist: 'ServeSync', artworkUrl: data.imageUrl, category: 'Worship', songKey: '', title: data.title }]);
+    : [{ artist: 'ServeSync', artworkUrl: data.imageUrl, category: 'Worship', songKey: '', title: data.title, youtubeUrl: '' }]);
   const safeTitle = escapeHtml(truncateText(data.title, 25));
   const safeDetailLine = escapeHtml(truncateText(data.detailLine || data.description, 62));
   const safeSongCount = escapeHtml(`${data.songs.length || artworkSongs.length} songs`);
@@ -403,8 +414,9 @@ function renderSongCards(songs: PreviewSong[]) {
     const safeArtist = escapeHtml(truncateText(song.artist || 'Unknown artist', 38));
     const safeCategory = escapeHtml(song.category || 'Worship');
     const safeArtworkUrl = song.artworkUrl ? escapeHtml(song.artworkUrl) : '';
+    const safeListenUrl = escapeHtml(getSongListenUrl(song));
 
-    return `<article class="song-card">
+    return `<a class="song-card" href="${safeListenUrl}" target="_blank" rel="noopener noreferrer" aria-label="Open ${safeTitle} on YouTube">
       <div class="song-art">
         ${safeArtworkUrl ? `<img src="${safeArtworkUrl}" alt="" loading="lazy" />` : ''}
         <span>${index + 1}</span>
@@ -416,7 +428,7 @@ function renderSongCards(songs: PreviewSong[]) {
           <span>${safeCategory}</span>
         </div>
       </div>
-    </article>`;
+    </a>`;
   }).join('');
 
   return `<section class="setlist-section" aria-label="Setlist songs">
@@ -496,7 +508,9 @@ function renderPreviewHtml({
       .section-heading { width: min(560px, calc(100vw - 44px)); margin: 0 auto 10px; text-align: center; }
       .section-heading span { color: #6dffbf; font-size: 12px; font-weight: 800; text-transform: uppercase; }
       .song-stage { display: flex; gap: 18px; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; padding: 8px calc((100% - min(340px, 76vw, 44vh)) / 2) 14px; scrollbar-width: thin; scrollbar-color: #18c985 #121212; }
-      .song-card { flex: 0 0 min(340px, 76vw, 44vh); scroll-snap-align: center; overflow: hidden; border: 1px solid rgba(255,255,255,0.12); border-radius: 24px; background: linear-gradient(180deg, #171a19, #0d0f0e); box-shadow: 0 20px 58px rgba(0,0,0,0.48); }
+      .song-card { display: block; flex: 0 0 min(340px, 76vw, 44vh); scroll-snap-align: center; overflow: hidden; border: 1px solid rgba(255,255,255,0.12); border-radius: 24px; background: linear-gradient(180deg, #171a19, #0d0f0e); color: white; text-decoration: none; box-shadow: 0 20px 58px rgba(0,0,0,0.48); transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease; }
+      .song-card:hover { transform: translateY(-3px); border-color: rgba(109,255,191,0.38); box-shadow: 0 24px 64px rgba(0,0,0,0.52); }
+      .song-card:focus-visible { outline: 3px solid rgba(109,255,191,0.75); outline-offset: 4px; }
       .song-art { position: relative; aspect-ratio: 1 / 0.86; overflow: hidden; background: linear-gradient(135deg, #18c985, #07140f); border-bottom: 1px solid rgba(255,255,255,0.08); }
       .song-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
       .song-art::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 42%, rgba(0,0,0,0.58)); }

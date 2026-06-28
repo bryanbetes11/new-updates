@@ -1645,17 +1645,7 @@ const openLyricsModal = (ss: SetlistSong) => {
       ? `Due ${formatInTimeZone(parseISO(event.proposal_due_date), 'Asia/Manila', 'MMM dd, h:mm a')}`
       : '',
   ].filter(Boolean);
-  const eventShareDateLabel = format(parseISO(event.event_date), 'EEE, MMM d');
-  const eventShareTimeLabel = formatTime12Hour(event.start_time || '');
-  const eventShareStatusLabel = heroHasApprovedSetlist ? 'Setlist approved' : setlist?.status ? `Setlist ${statusLabels[setlist.status] || setlist.status}` : 'Event setlist';
-  const eventShareUrl = typeof window !== 'undefined' ? window.location.href : '';
-  const eventShareSubtitle = [event.event_type, songLeaderName, eventShareDateLabel, eventShareTimeLabel].filter(Boolean).join(' - ');
-  const eventShareText = [
-    `${eventShareStatusLabel}: ${eventDisplayTitle}`,
-    eventShareSubtitle,
-    'Open in ServeSync',
-  ].filter(Boolean).join('\n');
-  const eventShareClipboardText = [eventShareText, eventShareUrl].filter(Boolean).join('\n');
+  const eventShareUrl = typeof window !== 'undefined' ? `${window.location.origin}/share/events/${event.id}` : '';
 
   const handleShareEvent = async () => {
     const title = `ServeSync - ${eventDisplayTitle}`;
@@ -1663,21 +1653,20 @@ const openLyricsModal = (ss: SetlistSong) => {
     try {
       if (typeof navigator.share === 'function') {
         await navigator.share({
-          text: eventShareText,
           title,
           url: eventShareUrl,
         });
         return;
       }
 
-      await navigator.clipboard.writeText(eventShareClipboardText);
-      toast('success', 'Event share details copied');
+      await navigator.clipboard.writeText(eventShareUrl);
+      toast('success', 'Event link copied');
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
 
       try {
-        await navigator.clipboard.writeText(eventShareClipboardText);
-        toast('success', 'Event share details copied');
+        await navigator.clipboard.writeText(eventShareUrl);
+        toast('success', 'Event link copied');
       } catch {
         toast('error', getErrorMessage(error, 'Unable to share this event'));
       }

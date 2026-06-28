@@ -60,6 +60,7 @@
 
   html::before {
     content: '';
+    display: none;
     position: fixed;
     z-index: 20;
     top: 0;
@@ -73,6 +74,7 @@
   }
 
   html.event-detail-active::before {
+    display: block;
     background:
       radial-gradient(circle at 50% -6%, rgba(255,255,255,0.22), transparent 32%),
       radial-gradient(circle at 70% 18%, rgba(239,68,68,0.20), transparent 36%),

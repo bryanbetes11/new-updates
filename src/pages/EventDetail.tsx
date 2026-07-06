@@ -60,6 +60,7 @@ const blurUp = (delay = 0) => ({
 const serviceSongPanelTransition = { type: 'spring' as const, stiffness: 380, damping: 36, mass: 0.88 };
 const serviceSwipeOffsets = [-1, 0, 1] as const;
 const EVENT_CHART_OPEN_STORAGE_PREFIX = 'servesync:event-chart:open-song-id';
+const SONG_READY_DAYS = 90;
 
 const getErrorMessage = (error: unknown, fallback: string): string => {
   if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
@@ -78,6 +79,35 @@ function toBase64Url(value: string) {
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=+$/g, '');
+}
+
+type SongUsageAge = { lastDate: string; days: number };
+
+function getSongReadinessBadge(usage?: SongUsageAge) {
+  if (!usage) {
+    return {
+      label: 'Ready',
+      detail: 'Never used',
+      className: 'bg-green-50 text-green-700 ring-green-200/70 dark:bg-green-950/60 dark:text-green-300 dark:ring-green-700/40',
+      Icon: CheckCircle,
+    };
+  }
+
+  if (usage.days >= SONG_READY_DAYS) {
+    return {
+      label: 'Ready',
+      detail: `${usage.days}d`,
+      className: 'bg-green-50 text-green-700 ring-green-200/70 dark:bg-green-950/60 dark:text-green-300 dark:ring-green-700/40',
+      Icon: CheckCircle,
+    };
+  }
+
+  return {
+    label: 'Not ready',
+    detail: `${usage.days}d`,
+    className: 'bg-red-50 text-red-700 ring-red-200/70 dark:bg-red-950/60 dark:text-red-300 dark:ring-red-700/40',
+    Icon: AlertTriangle,
+  };
 }
 
 export function EventDetail() {
@@ -137,7 +167,7 @@ export function EventDetail() {
   const [rejectReason, setRejectReason] = useState('');
   const [editingSongId, setEditingSongId] = useState<string | null>(null);
   const [editSongForm, setEditSongForm] = useState({ category: '', youtube_url: '', performed_key: '' });
-  const [songUsage, setSongUsage] = useState<Record<string, { lastDate: string; days: number }>>({});
+  const [songUsage, setSongUsage] = useState<Record<string, SongUsageAge>>({});
   const [showEditEvent, setShowEditEvent] = useState(false);
   const [editForm, setEditForm] = useState({ title: '', description: '', event_type: '', event_date: '', start_time: '', end_time: '', song_leader_id: '', linked_event_id: '' });
   const [savingEventEdit, setSavingEventEdit] = useState(false);
@@ -480,7 +510,7 @@ export function EventDetail() {
       setSongs(songsRes.data || []);
       setSundayServices(sundayServicesRes.data || []);
 
-      const usage: Record<string, { lastDate: string; days: number }> = {};
+      const usage: Record<string, SongUsageAge> = {};
       (allSetlistsRes.data || []).forEach((sl: any) => {
         if (sl.event_id === id) return;
         const eventDate = sl.events?.event_date;
@@ -2688,7 +2718,8 @@ const openLyricsModal = (ss: SetlistSong) => {
                     <div className="space-y-1">
                       {setlistSongs.sort((a, b) => a.position - b.position).map((ss, i) => {
                         const usage = songUsage[ss.song_id];
-                        const isSafe = !usage || usage.days >= 90;
+                        const readiness = getSongReadinessBadge(usage);
+                        const ReadinessIcon = readiness.Icon;
                         const displayKey = ss.performed_key || ss.songs?.song_key || '';
                         const keyChanged = ss.performed_key && ss.songs?.song_key && ss.performed_key !== ss.songs.song_key;
                         const lyricsMissing = !ss.songs?.lyrics?.trim();
@@ -2733,16 +2764,14 @@ const openLyricsModal = (ss: SetlistSong) => {
                                   <Play className="h-3 w-3" /> Video
                                 </a>
                               )}
-                              {showSetlistEditControls && (usage ? (
-                                <span className={`inline-flex items-center gap-1 text-xs font-medium shrink-0 ${isSafe ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                                  {isSafe ? <CheckCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
-                                  {usage.days}d
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-400 shrink-0">
-                                  <CheckCircle className="h-4 w-4" /> New
-                                </span>
-                              ))}
+                              <span
+                                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold ring-1 shrink-0 ${readiness.className}`}
+                                title={usage ? `Last used ${usage.days} days ago` : 'No approved setlist usage found'}
+                              >
+                                <ReadinessIcon className="h-3.5 w-3.5" />
+                                <span>{readiness.label}</span>
+                                <span className="opacity-75">- {readiness.detail}</span>
+                              </span>
                               {showSetlistEditControls && <button
                                 onClick={() => openLyricsModal(ss)}
                                 title={ss.songs?.lyrics ? 'Edit lyrics' : 'Add lyrics'}
@@ -2799,6 +2828,14 @@ const openLyricsModal = (ss: SetlistSong) => {
                                       Lyrics needed
                                     </span>
                                   )}
+                                  <span
+                                    className={`mt-1 inline-flex w-fit items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${readiness.className}`}
+                                    title={usage ? `Last used ${usage.days} days ago` : 'No approved setlist usage found'}
+                                  >
+                                    <ReadinessIcon className="h-3 w-3" />
+                                    <span>{readiness.label}</span>
+                                    <span className="opacity-75">- {readiness.detail}</span>
+                                  </span>
                                 </div>
                                 <div className="flex shrink-0 items-center gap-0.5">
                                   {videoUrl && (
@@ -3134,7 +3171,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                 })
                 .map(song => {
                   const usage = songUsage[song.id];
-                  const isSafe = !usage || usage.days >= 90;
+                  const isSafe = !usage || usage.days >= SONG_READY_DAYS;
                   return (
                     <button
                       key={song.id}

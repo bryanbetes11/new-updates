@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { format, isAfter, parseISO, startOfToday } from 'date-fns';
-import { ArrowLeftRight, Calendar, ChevronRight, Clock, Search, UserPlus } from 'lucide-react';
+import { ArrowLeftRight, Calendar, CheckCircle, ChevronRight, Clock, Search, UserPlus } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { useToast } from '../contexts/ToastContext';
 import { Modal } from './Modal';
 import { Avatar } from './Avatar';
 import { formatTime12Hour } from '../lib/timeFormat';
@@ -17,6 +16,13 @@ interface Props {
 }
 
 type Step = 'pick_member' | 'pick_assignment' | 'reason';
+
+interface SubmissionResult {
+  requestType: 'sub' | 'swap';
+  targetName: string;
+  eventTitle: string;
+  notificationWarning: boolean;
+}
 
 const stepVariants = {
   enter: (dir: number) => ({ x: dir * 28, opacity: 0 }),
@@ -45,7 +51,6 @@ function formatRequestError(error: unknown, isSub: boolean) {
 
 export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
   const { user, profile } = useAuth();
-  const { toast } = useToast();
 
   const myRoleName = myAssignment?.roles?.name ?? '';
   const isSub = myRoleName !== 'Song Leader'; // non-song-leader = sub request
@@ -75,6 +80,8 @@ export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
 
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submissionResult, setSubmissionResult] = useState<SubmissionResult | null>(null);
 
   // Load eligible members
   useEffect(() => {
@@ -195,6 +202,8 @@ export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
     setReason('');
     setAssignedToEvent(new Set());
     setAssignedRoleNames({});
+    setSubmitError(null);
+    setSubmissionResult(null);
   };
 
   const handleClose = () => { reset(); onClose(); };
@@ -202,9 +211,10 @@ export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
   const handleSubmit = async () => {
     if (!user || !myAssignment || !selectedMember || !reason.trim()) return;
     if (!isSub && !selectedTarget) return;
+    setSubmitError(null);
     const eventDate = myAssignment.events?.event_date;
     if (!eventDate) {
-      toast('error', 'This assignment is missing an event date.');
+      setSubmitError('This assignment is missing an event date.');
       return;
     }
 
@@ -250,13 +260,15 @@ export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
         console.warn('[SwapRequestModal] Request was saved but notification insert failed:', notificationError);
       }
 
-      toast('success', notificationError
-        ? `${isSub ? 'Sub' : 'Swap'} request saved. The member can still respond from the Dashboard.`
-        : isSub ? 'Sub request sent!' : 'Swap request sent!');
-      handleClose();
+      setSubmissionResult({
+        requestType: isSub ? 'sub' : 'swap',
+        targetName: selectedMember.nickname || `${selectedMember.first_name} ${selectedMember.last_name}`.trim() || 'the selected member',
+        eventTitle: myEventTitle,
+        notificationWarning: Boolean(notificationError),
+      });
     } catch (error) {
       console.error('[SwapRequestModal] Failed to create request:', error);
-      toast('error', formatRequestError(error, isSub));
+      setSubmitError(formatRequestError(error, isSub));
     } finally {
       setSubmitting(false);
     }
@@ -277,10 +289,48 @@ export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
 
   if (!myAssignment) return null;
 
-  const modalTitle = isSub ? 'Find a Sub' : 'Request Schedule Swap';
+  const modalTitle = submissionResult
+    ? submissionResult.requestType === 'sub'
+      ? 'Sub Request Submitted'
+      : 'Swap Request Submitted'
+    : isSub ? 'Find a Sub' : 'Request Schedule Swap';
 
   return (
     <Modal open={open} onClose={handleClose} title={modalTitle} size="md">
+      {submissionResult ? (
+        <div className="space-y-4">
+          <div className="rounded-3xl border border-emerald-400/20 bg-emerald-500/[0.10] px-4 py-5 text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-400 text-emerald-950 shadow-[0_16px_30px_-18px_rgba(16,185,129,0.85)]">
+              <CheckCircle className="h-6 w-6" />
+            </div>
+            <h3 className="mt-3 text-[18px] font-black text-gray-900 dark:text-white">
+              {submissionResult.requestType === 'sub' ? 'Sub request sent' : 'Swap request sent'}
+            </h3>
+            <p className="mt-2 text-[13px] leading-relaxed text-gray-600 dark:text-white/60">
+              {submissionResult.requestType === 'sub'
+                ? `${submissionResult.targetName} has been asked to cover your ${myRoleName} assignment for ${submissionResult.eventTitle}.`
+                : `${submissionResult.targetName} has been asked to accept your schedule swap for ${submissionResult.eventTitle}.`}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-white/[0.08] dark:bg-white/[0.04]">
+            <p className="text-[10px] font-mono font-bold uppercase tracking-[0.16em] text-brand-600 dark:text-brand-400">What happens next</p>
+            <p className="mt-1.5 text-[13px] leading-relaxed text-gray-600 dark:text-white/60">
+              You will be notified when {submissionResult.targetName} responds. If they accept, the request will move to leadership approval before the schedule is changed.
+            </p>
+            {submissionResult.notificationWarning && (
+              <p className="mt-2 text-[12px] leading-relaxed text-amber-700 dark:text-amber-300">
+                The request was saved, but the notification could not be sent. The member can still respond from the Dashboard.
+              </p>
+            )}
+          </div>
+
+          <button type="button" onClick={handleClose} className="btn-primary w-full">
+            Done
+          </button>
+        </div>
+      ) : (
+      <>
       {/* My assignment summary */}
       <div className="mb-4 rounded-2xl bg-brand-50 dark:bg-brand-900/20 border border-brand-100 dark:border-brand-800/30 px-4 py-3">
         <p className="text-[10px] font-mono font-bold uppercase tracking-[0.18em] text-brand-600 dark:text-brand-400 mb-1">Your assignment</p>
@@ -556,11 +606,18 @@ export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
                   {submitting ? 'Sending…' : isSub ? 'Send Sub Request' : 'Send Swap Request'}
                 </button>
               </div>
+              {submitError && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-medium leading-relaxed text-red-800 dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-200">
+                  {submitError}
+                </div>
+              )}
             </motion.div>
           )}
 
         </AnimatePresence>
       </div>
+      </>
+      )}
     </Modal>
   );
 }

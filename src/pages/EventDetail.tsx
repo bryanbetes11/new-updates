@@ -69,6 +69,33 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
   return fallback;
 };
 
+const getFunctionErrorMessage = async (error: unknown, fallback: string): Promise<string> => {
+  if (!error || typeof error !== 'object') return fallback;
+
+  const context = (error as { context?: unknown }).context;
+  if (context instanceof Response) {
+    try {
+      const payload = await context.clone().json();
+      if (payload && typeof payload === 'object' && typeof (payload as { error?: unknown }).error === 'string') {
+        return (payload as { error: string }).error;
+      }
+    } catch {
+      try {
+        const text = await context.clone().text();
+        if (text.trim()) return text.trim();
+      } catch {
+        // Fall through to the generic error message.
+      }
+    }
+  }
+
+  if ('message' in error && typeof error.message === 'string' && !error.message.toLowerCase().includes('non-2xx')) {
+    return error.message;
+  }
+
+  return fallback;
+};
+
 function toBase64Url(value: string) {
   const bytes = new TextEncoder().encode(value);
   let binary = '';
@@ -203,6 +230,7 @@ export function EventDetail() {
   const [artistPromptVisible, setArtistPromptVisible] = useState(false);
   const [artistPromptValue, setArtistPromptValue] = useState('');
   const [lyricsSearchResults, setLyricsSearchResults] = useState<LyricsSearchResult[]>([]);
+  const [lyricsSearchNotice, setLyricsSearchNotice] = useState<{ type: 'info' | 'success' | 'error'; text: string } | null>(null);
   const [countdownParts, setCountdownParts] = useState<{ hours: number; minutes: number; seconds: number }>({ hours: 0, minutes: 0, seconds: 0 });
   const [serviceFormat, setServiceFormat] = useState<ServiceFormat | null>(null);
   const [isReordering, setIsReordering] = useState(false);
@@ -435,7 +463,7 @@ export function EventDetail() {
     try {
       const [eventRes, assignRes, membersRes, memberRolesRes, setlistRes, songsRes, allSetlistsRes, sundayServicesRes, convRes] = await Promise.all([
         supabase.from('events').select('*').eq('id', id).maybeSingle(),
-        supabase.from('event_assignments').select('*, profiles(first_name, last_name, gender, avatar_url), roles(name)').eq('event_id', id),
+        supabase.from('event_assignments').select('*, events(*), profiles(first_name, last_name, gender, avatar_url), roles(name)').eq('event_id', id),
         supabase.from('profiles').select('id, first_name, last_name'),
         supabase.from('user_roles').select('user_id, role_id'),
         supabase.from('setlists').select('*, setlist_songs(*, songs(*))').eq('event_id', id).maybeSingle(),
@@ -1265,6 +1293,7 @@ const openLyricsModal = (ss: SetlistSong) => {
     setLyricsModalSong(ss);
     setLyricsInput(ss.songs?.lyrics || '');
     setLyricsSearchResults([]);
+    setLyricsSearchNotice(null);
   };
 
   const persistCheckReport = useCallback(async (report: SetlistCheckReport) => {
@@ -1306,6 +1335,7 @@ const openLyricsModal = (ss: SetlistSong) => {
 
     setArtistPromptVisible(false);
     setLyricsSearchResults([]);
+    setLyricsSearchNotice(null);
     setFetchingLyrics(true);
     const { data, error } = await supabase.functions.invoke('fetch-lyrics-from-link', {
       body: {
@@ -1317,22 +1347,29 @@ const openLyricsModal = (ss: SetlistSong) => {
 
     if (error) {
       console.error('Failed to find lyrics:', error);
-      toast('error', error.message || 'Failed to find lyrics');
+      const message = await getFunctionErrorMessage(error, 'No lyrics found for this song');
+      setLyricsSearchNotice({
+        type: message.toLowerCase().includes('no lyrics found') ? 'info' : 'error',
+        text: message,
+      });
       return;
     }
 
     const results = normalizeLyricsSearchResults(data);
     if (results.length === 0) {
-      toast('error', 'No lyrics found for this song');
+      setLyricsSearchNotice({ type: 'info', text: 'No lyrics found for this song. You can paste lyrics manually below.' });
       return;
     }
 
     setLyricsSearchResults(results);
+    setLyricsSearchNotice({
+      type: 'success',
+      text: `Found ${results.length} lyrics result${results.length > 1 ? 's' : ''}. Choose one below to fill the lyrics box.`,
+    });
     const autofillLyrics = getSingleLyricsAutofill(results);
     if (autofillLyrics) {
       setLyricsInput(autofillLyrics);
     }
-    toast('success', `Found ${results.length} lyrics result${results.length > 1 ? 's' : ''}`);
   };
 
   const handleSaveLyrics = async () => {
@@ -1353,6 +1390,7 @@ const openLyricsModal = (ss: SetlistSong) => {
     ));
     toast('success', 'Lyrics saved');
     setLyricsModalSong(null);
+    setLyricsSearchNotice(null);
   };
 
   const getSetlistSongChartText = (song: SetlistSong | null | undefined) =>
@@ -3956,7 +3994,7 @@ const openLyricsModal = (ss: SetlistSong) => {
           )}
         </Modal>
 
-        <Modal open={!!lyricsModalSong} onClose={() => { setLyricsModalSong(null); setArtistPromptVisible(false); setArtistPromptValue(''); }} title="Song Lyrics">
+        <Modal open={!!lyricsModalSong} onClose={() => { setLyricsModalSong(null); setArtistPromptVisible(false); setArtistPromptValue(''); setLyricsSearchNotice(null); }} title="Song Lyrics">
           {lyricsModalSong && (
             <div className="space-y-4">
               <div>
@@ -4035,6 +4073,28 @@ const openLyricsModal = (ss: SetlistSong) => {
                 </AnimatePresence>
 
                 {/* Artist prompt — shown when song has no artist */}
+                <AnimatePresence>
+                  {lyricsSearchNotice && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -6, height: 0 }}
+                      animate={{ opacity: 1, y: 0, height: 'auto' }}
+                      exit={{ opacity: 0, y: -6, height: 0 }}
+                      transition={{ duration: 0.22, ease: 'easeOut' }}
+                      className="overflow-hidden"
+                    >
+                      <div className={`mt-2 rounded-xl border px-3 py-2.5 text-xs font-medium leading-relaxed ${
+                        lyricsSearchNotice.type === 'success'
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-200'
+                          : lyricsSearchNotice.type === 'error'
+                            ? 'border-red-200 bg-red-50 text-red-800 dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-200'
+                            : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-200'
+                      }`}>
+                        {lyricsSearchNotice.text}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
                 <AnimatePresence>
                   {artistPromptVisible && !lyricsModalSong.songs?.artist?.trim() && (
                     <motion.div
@@ -4146,7 +4206,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                 </p>
               </div>
               <div className="flex justify-end gap-3">
-                <button onClick={() => setLyricsModalSong(null)} className="btn-secondary text-sm">Cancel</button>
+                <button onClick={() => { setLyricsModalSong(null); setLyricsSearchNotice(null); }} className="btn-secondary text-sm">Cancel</button>
                 <button onClick={handleSaveLyrics} disabled={savingLyrics} className="btn-primary text-sm">
                   {savingLyrics ? 'Saving...' : 'Save Lyrics'}
                 </button>

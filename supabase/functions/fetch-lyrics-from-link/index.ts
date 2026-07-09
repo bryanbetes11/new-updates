@@ -161,7 +161,7 @@ Deno.serve(async (req: Request) => {
     }
 
     return new Response(JSON.stringify({ error: "No lyrics found for this song", results: [] }), {
-      status: 404,
+      status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {

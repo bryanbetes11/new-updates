@@ -80,6 +80,45 @@ type PendingReviewSetlist = Setlist & {
   setlist_songs?: Array<DashboardSongArtwork>;
 };
 
+function SwapOutcomeBoard({
+  isSub,
+  requesterName,
+  targetName,
+  requesterAssignment,
+  targetAssignment,
+}: {
+  isSub: boolean;
+  requesterName: string;
+  targetName: string;
+  requesterAssignment?: (EventAssignment & { events?: Event; roles?: { name?: string | null } }) | null;
+  targetAssignment?: (EventAssignment & { events?: Event; roles?: { name?: string | null } }) | null;
+}) {
+  const requesterRole = requesterAssignment?.roles?.name || 'Team';
+  const requesterDate = requesterAssignment?.events?.event_date ? format(parseISO(requesterAssignment.events.event_date), 'MMM d') : 'Date TBD';
+  const targetRole = targetAssignment?.roles?.name || 'Team';
+  const targetDate = targetAssignment?.events?.event_date ? format(parseISO(targetAssignment.events.event_date), 'MMM d') : 'Date TBD';
+
+  return (
+    <div className="mb-3 rounded-[0.7rem] border border-[#1DB954]/15 bg-black/25 px-3 py-2.5">
+      <p className="mb-2 text-[8px] font-black uppercase tracking-[0.18em] text-[#1DB954]">Final schedule</p>
+      <div className={`grid gap-2 ${isSub ? 'grid-cols-1' : 'grid-cols-2'}`}>
+        <div className="min-w-0 rounded-[0.6rem] border border-white/[0.07] bg-[#202020] px-3 py-2">
+          <p className="text-[9px] font-black uppercase tracking-[0.12em] text-white/35">{requesterDate}</p>
+          <p className="mt-1 truncate text-[14px] font-black leading-tight text-white">{targetName}</p>
+          <p className="mt-0.5 truncate text-[10px] font-semibold text-[#1DB954]">{requesterRole}</p>
+        </div>
+        {!isSub && (
+          <div className="min-w-0 rounded-[0.6rem] border border-[#1DB954]/20 bg-[#1DB954]/[0.08] px-3 py-2">
+            <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[#1DB954]">{targetDate}</p>
+            <p className="mt-1 truncate text-[14px] font-black leading-tight text-white">{requesterName}</p>
+            <p className="mt-0.5 truncate text-[10px] font-semibold text-[#1DB954]">{targetRole}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 async function withDashboardTimeout<T>(request: PromiseLike<T>, fallback: T, label: string): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<T>((resolve) => {
@@ -250,7 +289,7 @@ async function getSongArtworkUrls(setlistSongs?: DashboardSongArtwork[] | null) 
 }
 
 export function Dashboard() {
-  const { user, profile, isLeader, isProductionDirector } = useAuth();
+  const { user, profile, isLeader, isOrgAdmin, isProductionDirector } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -265,7 +304,11 @@ export function Dashboard() {
   const [pendingLeaveCount, setPendingLeaveCount] = useState(0);
   const [stats, setStats] = useState({ total: 0, confirmed: 0, pending: 0 });
   const [incomingSwapRequests, setIncomingSwapRequests] = useState<SwapRequest[]>([]);
+  const [leadershipSwapRequests, setLeadershipSwapRequests] = useState<SwapRequest[]>([]);
+  const [sentSwapRequests, setSentSwapRequests] = useState<SwapRequest[]>([]);
+  const [dismissedSwapIds, setDismissedSwapIds] = useState<Set<string>>(new Set());
   const [respondingSwap, setRespondingSwap] = useState<string | null>(null);
+  const [remindingSwap, setRemindingSwap] = useState<string | null>(null);
   const [selectedUnavailability, setSelectedUnavailability] = useState<UserAvailability | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [now, setNow] = useState(new Date());
@@ -276,19 +319,35 @@ export function Dashboard() {
   const refreshInFlightRef = useRef(false);
 
   const todayVerse = verses[new Date().getDay() % verses.length];
+  const dismissedSwapStorageKey = user ? `servesync_dashboard_dismissed_swaps_${user.id}` : null;
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(id);
   }, []);
 
+  useEffect(() => {
+    if (!dismissedSwapStorageKey) {
+      setDismissedSwapIds(new Set());
+      return;
+    }
+
+    try {
+      const stored = JSON.parse(localStorage.getItem(dismissedSwapStorageKey) || '[]');
+      setDismissedSwapIds(new Set(Array.isArray(stored) ? stored : []));
+    } catch {
+      setDismissedSwapIds(new Set());
+    }
+  }, [dismissedSwapStorageKey]);
+
   const fetchIncomingSwaps = useCallback(async () => {
     if (!user) return;
-    const { data: swapData } = await supabase
+    const shouldLoadLeadershipApprovals = isLeader || isOrgAdmin;
+    const incomingPromise = supabase
       .from('user_availability')
       .select(`
         *,
-        requester:user_id(id, first_name, last_name, nickname, avatar_url),
+        requester:user_id(id, first_name, last_name, nickname, gender, avatar_url),
         requester_assignment:requester_assignment_id(*, events(*), roles(*)),
         target_assignment:target_assignment_id(*, events(*), roles(*))
       `)
@@ -297,8 +356,42 @@ export function Dashboard() {
       .eq('status', 'pending')
       .is('target_response_at', null)
       .order('created_at', { ascending: false });
-    setIncomingSwapRequests((swapData || []) as any[]);
-  }, [user]);
+
+    const leadershipPromise = shouldLoadLeadershipApprovals
+      ? supabase
+          .from('user_availability')
+          .select(`
+            *,
+            requester:user_id(id, first_name, last_name, nickname, gender, avatar_url),
+            target:target_id(id, first_name, last_name, nickname, gender, avatar_url),
+            requester_assignment:requester_assignment_id(*, events(*), roles(*)),
+            target_assignment:target_assignment_id(*, events(*), roles(*))
+          `)
+          .in('request_type', ['sub', 'swap'])
+          .eq('status', 'pending')
+          .not('target_response_at', 'is', null)
+          .order('created_at', { ascending: true })
+          .limit(3)
+      : Promise.resolve({ data: [] });
+
+    const sentPromise = supabase
+      .from('user_availability')
+      .select(`
+        *,
+        target:target_id(id, first_name, last_name, nickname, gender, avatar_url),
+        requester_assignment:requester_assignment_id(*, events(*), roles(*)),
+        target_assignment:target_assignment_id(*, events(*), roles(*))
+      `)
+      .eq('user_id', user.id)
+      .in('request_type', ['sub', 'swap'])
+      .order('created_at', { ascending: false })
+      .limit(8);
+
+    const [incomingRes, leadershipRes, sentRes] = await Promise.all([incomingPromise, leadershipPromise, sentPromise]);
+    setIncomingSwapRequests((incomingRes.data || []) as any[]);
+    setLeadershipSwapRequests((leadershipRes.data || []) as any[]);
+    setSentSwapRequests(((sentRes.data || []) as any[]).filter(req => !dismissedSwapIds.has(req.id)));
+  }, [user, isLeader, isOrgAdmin, dismissedSwapIds]);
 
   const loadDashboardData = useCallback(async (options?: { silent?: boolean }) => {
     if (!user) return;
@@ -480,14 +573,13 @@ export function Dashboard() {
     // Initial fetch
     fetchIncomingSwaps();
 
-    // Subscribe to real-time changes for swap/sub requests targeting me
+    // Subscribe to swap/sub updates that can affect incoming, sent, or leadership queues.
     const channel = supabase
       .channel('dashboard-swap-requests')
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'user_availability',
-        filter: `target_id=eq.${user.id}`,
       }, () => {
         fetchIncomingSwaps();
       })
@@ -658,6 +750,42 @@ export function Dashboard() {
     } finally {
       setRespondingSwap(null);
     }
+  };
+
+  const handleRemindSwapTarget = async (req: SwapRequest) => {
+    if (!user || !req.target_id) return;
+    setRemindingSwap(req.id);
+    try {
+      const isSub = req.request_type === 'sub';
+      const requesterName = profile?.nickname || `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || 'A team member';
+      const eventTitle = req.requester_assignment?.events?.title || 'an upcoming assignment';
+      const { error } = await supabase.from('notifications').insert({
+        user_id: req.target_id,
+        type: isSub ? 'sub_request' : 'swap_request',
+        title: `${requesterName} is waiting for your response`,
+        body: isSub
+          ? `${requesterName} asked you to cover ${eventTitle}.`
+          : `${requesterName} asked to swap schedules for ${eventTitle}.`,
+        data: { url: '/dashboard', swap_request_id: req.id },
+      });
+      if (error) throw error;
+      toast('success', 'Reminder sent');
+    } catch (error) {
+      console.error('[Dashboard] Failed to send swap/sub reminder:', error);
+      toast('error', 'Could not send reminder');
+    } finally {
+      setRemindingSwap(null);
+    }
+  };
+
+  const dismissSentSwapRequest = (swapId: string) => {
+    const next = new Set(dismissedSwapIds);
+    next.add(swapId);
+    setDismissedSwapIds(next);
+    if (dismissedSwapStorageKey) {
+      localStorage.setItem(dismissedSwapStorageKey, JSON.stringify(Array.from(next)));
+    }
+    setSentSwapRequests(prev => prev.filter(req => req.id !== swapId));
   };
 
   const handleConfirmDelete = async () => {
@@ -890,6 +1018,287 @@ export function Dashboard() {
             </div>
         </motion.section>
 
+        {/* Sent Swap Requests */}
+        {sentSwapRequests.length > 0 && (
+          <motion.section variants={item}>
+            <div className="space-y-2">
+              {sentSwapRequests.map(req => {
+                const targetName = req.target ? formatDashboardLeaderName(req.target) || 'Team member' : 'Team member';
+                const isSub = req.request_type === 'sub';
+                const targetResponded = !!req.target_response_at;
+                const canRemind = req.status === 'pending' && !targetResponded && !!req.target_id;
+                const canDismiss = ['approved', 'rejected', 'withdrawn'].includes(req.status);
+                const statusLabel = req.status === 'approved'
+                  ? 'Approved'
+                  : req.status === 'rejected'
+                    ? 'Declined'
+                    : req.status === 'withdrawn'
+                      ? 'Withdrawn'
+                      : targetResponded
+                        ? 'Waiting for leadership'
+                        : 'Waiting for response';
+                const statusTone = req.status === 'approved'
+                  ? 'text-[#1DB954] border-[#1DB954]/25 bg-[#1DB954]/10'
+                  : req.status === 'rejected'
+                    ? 'text-red-300 border-red-400/25 bg-red-500/10'
+                    : targetResponded
+                      ? 'text-amber-200 border-amber-300/25 bg-amber-400/10'
+                      : 'text-white/70 border-white/[0.08] bg-white/[0.05]';
+
+                return (
+                  <div
+                    key={req.id}
+                    className="relative overflow-hidden rounded-[1rem] border border-white/[0.08] bg-[#181818]"
+                    style={{ boxShadow: '0 22px 70px -42px rgba(0,0,0,0.95)' }}
+                  >
+                    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_0%,rgba(29,185,84,0.24),transparent_34%),linear-gradient(135deg,rgba(29,185,84,0.09),transparent_50%)]" />
+                    <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[#1DB954]/45" />
+                    <div className="relative px-4 py-4 sm:px-5">
+                      <div className="mb-3 flex items-center gap-2">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#1DB954]/25 bg-[#1DB954]/12">
+                          <ArrowLeftRight className="h-3 w-3 text-[#1DB954]" />
+                        </div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#1DB954]">
+                          Your {isSub ? 'Sub' : 'Swap'} Request
+                        </p>
+                        <span className={`ml-auto rounded-full border px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] ${statusTone}`}>
+                          {statusLabel}
+                        </span>
+                      </div>
+
+                      <p className="mb-0.5 text-[15px] font-black leading-tight text-white" style={{ letterSpacing: '-0.03em' }}>
+                        {isSub ? `You asked ${targetName} to cover` : `You asked ${targetName} to swap`}
+                      </p>
+
+                      <div className={`my-3 grid ${isSub ? 'grid-cols-1' : 'grid-cols-2'} gap-2`}>
+                        <div className="rounded-[0.7rem] border border-white/[0.07] bg-[#232323] px-3 py-2.5">
+                          <p className="mb-1 text-[8px] font-black uppercase tracking-[0.18em] text-white/38">Your current assignment</p>
+                          <p className="truncate text-[12px] font-black leading-tight text-white">{req.requester_assignment?.events?.title}</p>
+                          <p className="mt-0.5 text-[10px] font-semibold text-white/42">
+                            {req.requester_assignment?.events?.event_date && format(parseISO(req.requester_assignment.events.event_date), 'MMM d')}
+                            {req.requester_assignment?.roles?.name && ` - ${req.requester_assignment.roles.name}`}
+                          </p>
+                        </div>
+                        {!isSub && (
+                          <div className="rounded-[0.7rem] border border-[#1DB954]/20 bg-[#1DB954]/[0.08] px-3 py-2.5">
+                            <p className="mb-1 text-[8px] font-black uppercase tracking-[0.18em] text-[#1DB954]">Their current assignment</p>
+                            <p className="truncate text-[12px] font-black leading-tight text-white">{req.target_assignment?.events?.title}</p>
+                            <p className="mt-0.5 text-[10px] font-semibold text-white/48">
+                              {req.target_assignment?.events?.event_date && format(parseISO(req.target_assignment.events.event_date), 'MMM d')}
+                              {req.target_assignment?.roles?.name && ` - ${req.target_assignment.roles.name}`}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      <SwapOutcomeBoard
+                        isSub={isSub}
+                        requesterName="You"
+                        targetName={targetName}
+                        requesterAssignment={req.requester_assignment}
+                        targetAssignment={req.target_assignment}
+                      />
+
+                      <div className="flex gap-2">
+                        {canRemind && (
+                          <button
+                            onClick={() => handleRemindSwapTarget(req)}
+                            disabled={remindingSwap === req.id}
+                            className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full border border-[#1DB954] bg-[#1DB954] text-[12px] font-black text-[#06130a] transition-colors hover:bg-[#22c55e] disabled:opacity-50"
+                          >
+                            <RefreshCw className="h-3.5 w-3.5" /> {remindingSwap === req.id ? 'Sending' : 'Send reminder'}
+                          </button>
+                        )}
+                        {canDismiss && (
+                          <button
+                            onClick={() => dismissSentSwapRequest(req.id)}
+                            className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full border border-white/[0.08] bg-[#2a2a2a] text-[12px] font-black text-white/88 transition-colors hover:bg-[#333333]"
+                          >
+                            <X className="h-3.5 w-3.5" /> Remove from dashboard
+                          </button>
+                        )}
+                        {!canRemind && !canDismiss && (
+                          <button
+                            onClick={() => navigate('/my-assignments')}
+                            className="flex h-10 w-full items-center justify-center gap-1.5 rounded-full border border-white/[0.08] bg-[#2a2a2a] text-[12px] font-black text-white/88 transition-colors hover:bg-[#333333]"
+                          >
+                            View request
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.section>
+        )}
+
+        {/* Leadership Swap Approvals */}
+        {leadershipSwapRequests.length > 0 && (
+          <motion.section variants={item}>
+            <div className="space-y-2">
+              {leadershipSwapRequests.map(req => {
+                const requesterName = req.requester ? formatDashboardLeaderName(req.requester) || 'Member' : 'Member';
+                const targetName = req.target ? formatDashboardLeaderName(req.target) || 'Team member' : 'Team member';
+                const isSub = req.request_type === 'sub';
+                return (
+                  <div
+                    key={req.id}
+                    className="relative overflow-hidden rounded-[1rem] border border-white/[0.08] bg-[#181818]"
+                    style={{ boxShadow: '0 22px 70px -42px rgba(0,0,0,0.95)' }}
+                  >
+                    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_0%,rgba(29,185,84,0.28),transparent_34%),linear-gradient(135deg,rgba(29,185,84,0.11),transparent_50%)]" />
+                    <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[#1DB954]/45" />
+                    <div className="relative px-4 py-4 sm:px-5">
+                      <div className="mb-3 flex items-center gap-2">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#1DB954]/25 bg-[#1DB954]/12">
+                          <Shield className="h-3 w-3 text-[#1DB954]" />
+                        </div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#1DB954]">
+                          Final Approval
+                        </p>
+                      </div>
+
+                      <p className="mb-0.5 text-[15px] font-black leading-tight text-white" style={{ letterSpacing: '-0.03em' }}>
+                        {requesterName} and {targetName} agreed to this {isSub ? 'sub' : 'swap'}
+                      </p>
+
+                      <div className={`my-3 grid ${isSub ? 'grid-cols-1' : 'grid-cols-2'} gap-2`}>
+                        <div className="rounded-[0.7rem] border border-white/[0.07] bg-[#232323] px-3 py-2.5">
+                          <p className="mb-1 text-[8px] font-black uppercase tracking-[0.18em] text-white/38">Original assignment</p>
+                          <p className="truncate text-[12px] font-black leading-tight text-white">{req.requester_assignment?.events?.title}</p>
+                          <p className="mt-0.5 text-[10px] font-semibold text-white/42">
+                            {req.requester_assignment?.events?.event_date && format(parseISO(req.requester_assignment.events.event_date), 'MMM d')}
+                            {req.requester_assignment?.roles?.name && ` · ${req.requester_assignment.roles.name}`}
+                          </p>
+                        </div>
+                        {!isSub && (
+                          <div className="rounded-[0.7rem] border border-[#1DB954]/20 bg-[#1DB954]/[0.08] px-3 py-2.5">
+                            <p className="mb-1 text-[8px] font-black uppercase tracking-[0.18em] text-[#1DB954]">Swap assignment</p>
+                            <p className="truncate text-[12px] font-black leading-tight text-white">{req.target_assignment?.events?.title}</p>
+                            <p className="mt-0.5 text-[10px] font-semibold text-white/48">
+                              {req.target_assignment?.events?.event_date && format(parseISO(req.target_assignment.events.event_date), 'MMM d')}
+                              {req.target_assignment?.roles?.name && ` · ${req.target_assignment.roles.name}`}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      <SwapOutcomeBoard
+                        isSub={isSub}
+                        requesterName={requesterName}
+                        targetName={targetName}
+                        requesterAssignment={req.requester_assignment}
+                        targetAssignment={req.target_assignment}
+                      />
+
+                      <p className="mb-3 line-clamp-2 text-[11px] font-semibold italic leading-relaxed text-white/46">
+                        "{req.reason}"
+                      </p>
+
+                      <button
+                        onClick={() => navigate('/leadership/swaps')}
+                        className="flex h-10 w-full items-center justify-center gap-1.5 rounded-full border border-[#1DB954] bg-[#1DB954] text-[12px] font-black text-[#06130a] transition-colors hover:bg-[#22c55e]"
+                      >
+                        <Check className="h-3.5 w-3.5" /> Review final approval
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.section>
+        )}
+
+        {/* Incoming Swap Requests */}
+        {incomingSwapRequests.length > 0 && (
+          <motion.section variants={item}>
+            <div className="space-y-2">
+              {incomingSwapRequests.map(req => {
+                const requesterName = req.requester ? formatDashboardLeaderName(req.requester) || 'Member' : 'Member';
+                const receiverName = profile ? formatDashboardLeaderName(profile) || 'You' : 'You';
+                const isResponding = respondingSwap === req.id;
+                const isSub = !req.target_assignment_id;
+                return (
+                  <div
+                    key={req.id}
+                    className="relative overflow-hidden rounded-[1rem] border border-white/[0.08] bg-[#181818]"
+                    style={{ boxShadow: '0 22px 70px -42px rgba(0,0,0,0.95)' }}
+                  >
+                    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_0%,rgba(29,185,84,0.28),transparent_34%),linear-gradient(135deg,rgba(29,185,84,0.11),transparent_50%)]" />
+                    <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[#1DB954]/45" />
+                    <div className="relative px-4 py-4 sm:px-5">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#1DB954]/25 bg-[#1DB954]/12">
+                          <ArrowLeftRight className="h-3 w-3 text-[#1DB954]" />
+                        </div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#1DB954]">
+                          {isSub ? 'Sub Request' : 'Swap Request'}
+                        </p>
+                      </div>
+
+                      <p className="mb-0.5 text-[15px] font-black leading-tight text-white" style={{ letterSpacing: '-0.03em' }}>
+                        {requesterName} {isSub ? 'needs a sub' : 'wants to swap schedules'}
+                      </p>
+
+                      <div className={`grid ${isSub ? 'grid-cols-1' : 'grid-cols-2'} gap-2 my-3`}>
+                        <div className="rounded-[0.7rem] border border-white/[0.07] bg-[#232323] px-3 py-2.5">
+                          <p className="mb-1 text-[8px] font-black uppercase tracking-[0.18em] text-white/38">Their assignment</p>
+                          <p className="truncate text-[12px] font-black leading-tight text-white">{req.requester_assignment?.events?.title}</p>
+                          <p className="mt-0.5 text-[10px] font-semibold text-white/42">
+                            {req.requester_assignment?.events?.event_date && format(parseISO(req.requester_assignment.events.event_date), 'MMM d')}
+                            {req.requester_assignment?.roles?.name && ` · ${req.requester_assignment.roles.name}`}
+                          </p>
+                        </div>
+                        {!isSub && (
+                          <div className="rounded-[0.7rem] border border-[#1DB954]/20 bg-[#1DB954]/[0.08] px-3 py-2.5">
+                            <p className="mb-1 text-[8px] font-black uppercase tracking-[0.18em] text-[#1DB954]">Your assignment</p>
+                            <p className="truncate text-[12px] font-black leading-tight text-white">{req.target_assignment?.events?.title}</p>
+                            <p className="mt-0.5 text-[10px] font-semibold text-white/48">
+                              {req.target_assignment?.events?.event_date && format(parseISO(req.target_assignment.events.event_date), 'MMM d')}
+                              {req.target_assignment?.roles?.name && ` · ${req.target_assignment.roles.name}`}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      <SwapOutcomeBoard
+                        isSub={isSub}
+                        requesterName={requesterName}
+                        targetName={receiverName}
+                        requesterAssignment={req.requester_assignment}
+                        targetAssignment={req.target_assignment}
+                      />
+
+                      <p className="mb-3 line-clamp-2 text-[11px] font-semibold italic leading-relaxed text-white/46">
+                        "{req.reason}"
+                      </p>
+
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleSwapResponse(req, false)}
+                          disabled={isResponding}
+                          className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full border border-white/[0.08] bg-[#2a2a2a] text-[12px] font-black text-white/88 transition-colors hover:bg-[#333333] disabled:opacity-50"
+                        >
+                          <X className="h-3.5 w-3.5" /> Decline
+                        </button>
+                        <button
+                          onClick={() => handleSwapResponse(req, true)}
+                          disabled={isResponding}
+                          className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full border border-[#1DB954] bg-[#1DB954] text-[12px] font-black text-[#06130a] transition-colors hover:bg-[#22c55e] disabled:opacity-50"
+                        >
+                          <Check className="h-3.5 w-3.5" /> Accept
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.section>
+        )}
+
         <motion.section variants={item} className="grid min-w-0 gap-5 xl:grid-cols-[1.95fr_1fr]">
               <section className="min-w-0 self-start lg:flex lg:flex-col lg:rounded-[0.75rem] lg:border lg:border-white/[0.08] lg:bg-[#181818] lg:p-4 lg:shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)]">
                 <div className="mb-3 flex items-center justify-between">
@@ -1099,7 +1508,7 @@ export function Dashboard() {
               {[
                 { label: 'Setlists', value: pendingSetlists.length, path: '/leadership/setlists' },
                 { label: 'Leave', value: pendingLeaveCount, path: '/leadership/leave' },
-                { label: 'Swaps', value: incomingSwapRequests.length, path: '/leadership/swaps' },
+                { label: 'Swaps', value: (isLeader || isOrgAdmin) ? leadershipSwapRequests.length : incomingSwapRequests.length, path: '/leadership/swaps' },
                 { label: 'Pending', value: stats.pending, path: '/my-assignments?status=pending' },
               ].map(queue => (
                 <button key={queue.label} onClick={() => navigate(queue.path)} className="rounded-[0.55rem] bg-white/[0.045] px-3 py-3 text-left transition-colors hover:bg-white/[0.075]">
@@ -1143,84 +1552,6 @@ export function Dashboard() {
             ))}
           </div>
         </motion.section>
-
-        {/* ── Incoming Swap Requests ── */}
-        {incomingSwapRequests.length > 0 && (
-          <motion.section variants={item}>
-            <div className="space-y-2">
-              {incomingSwapRequests.map(req => {
-                const requesterName = req.requester?.nickname || `${req.requester?.first_name} ${req.requester?.last_name}`.trim();
-                const isResponding = respondingSwap === req.id;
-                const isSub = !req.target_assignment_id;
-                return (
-                  <div
-                    key={req.id}
-                    className="relative overflow-hidden rounded-[1.5rem] border border-black/[0.06] bg-white/82 dark:border-white/[0.06] dark:bg-[#181818]"
-                    style={{ boxShadow: '0 18px 40px rgba(15,23,42,0.10)' }}
-                  >
-                    <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(135deg, rgba(29,185,84,0.1) 0%, transparent 60%)' }} />
-                    <div className="relative px-4 py-4 sm:px-5">
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="h-6 w-6 rounded-lg flex items-center justify-center bg-black/[0.05] dark:bg-[#1f1f1f] shrink-0">
-                          <ArrowLeftRight className="h-3 w-3 text-[#1DB954]" />
-                        </div>
-                        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-white/54">
-                          {isSub ? 'Sub Request' : 'Swap Request'}
-                        </p>
-                      </div>
-
-                      <p className="text-[14px] font-bold text-gray-950 dark:text-white mb-0.5" style={{ letterSpacing: '-0.02em' }}>
-                        {requesterName} {isSub ? 'needs a sub' : 'wants to swap schedules'}
-                      </p>
-
-                      <div className={`grid ${isSub ? 'grid-cols-1' : 'grid-cols-2'} gap-2 my-3`}>
-                        <div className="rounded-xl bg-black/[0.03] border border-black/[0.05] px-3 py-2.5 dark:bg-[#202020] dark:border-white/[0.05]">
-                          <p className="text-[9px] font-mono font-bold uppercase tracking-[0.15em] text-gray-400 dark:text-white/28 mb-1">Their assignment</p>
-                          <p className="text-[12px] font-bold text-gray-900 dark:text-white truncate leading-tight">{req.requester_assignment?.events?.title}</p>
-                          <p className="text-[10px] text-gray-500 dark:text-white/34 font-mono mt-0.5">
-                            {req.requester_assignment?.events?.event_date && format(parseISO(req.requester_assignment.events.event_date), 'MMM d')}
-                            {req.requester_assignment?.roles?.name && ` · ${req.requester_assignment.roles.name}`}
-                          </p>
-                        </div>
-                        {!isSub && (
-                          <div className="rounded-xl bg-black/[0.03] border border-black/[0.05] px-3 py-2.5 dark:bg-[#202020] dark:border-white/[0.05]">
-                            <p className="text-[9px] font-mono font-bold uppercase tracking-[0.15em] text-[#1DB954] mb-1">Your assignment</p>
-                            <p className="text-[12px] font-bold text-gray-900 dark:text-white truncate leading-tight">{req.target_assignment?.events?.title}</p>
-                            <p className="text-[10px] text-gray-500 dark:text-white/34 font-mono mt-0.5">
-                              {req.target_assignment?.events?.event_date && format(parseISO(req.target_assignment.events.event_date), 'MMM d')}
-                              {req.target_assignment?.roles?.name && ` · ${req.target_assignment.roles.name}`}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-
-                      <p className="text-[11px] text-gray-500 dark:text-white/40 italic mb-3 leading-relaxed">
-                        "{req.reason}"
-                      </p>
-
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleSwapResponse(req, false)}
-                          disabled={isResponding}
-                          className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-[12px] font-bold text-gray-900 bg-black/[0.05] border border-black/[0.06] hover:bg-black/[0.08] transition-colors disabled:opacity-50 dark:text-white dark:bg-[#232323] dark:border-white/[0.06] dark:hover:bg-[#2a2a2a]"
-                        >
-                          <X className="h-3.5 w-3.5" /> Decline
-                        </button>
-                        <button
-                          onClick={() => handleSwapResponse(req, true)}
-                          disabled={isResponding}
-                          className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-[12px] font-bold text-[#191414] bg-[#1DB954] border border-[#1DB954] hover:brightness-105 transition-colors disabled:opacity-50"
-                        >
-                          <Check className="h-3.5 w-3.5" /> Accept
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </motion.section>
-        )}
 
         <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.75fr)] xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,0.8fr)]">
           <motion.section variants={item} className="min-w-0 overflow-hidden rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-3 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)] sm:p-4 lg:rounded-[1rem]">

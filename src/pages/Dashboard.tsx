@@ -182,7 +182,7 @@ function getYouTubeThumbnailUrl(url?: string | null) {
 
   for (const pattern of patterns) {
     const match = trimmed.match(pattern);
-    if (match?.[1]) return `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg`;
+    if (match?.[1]) return `https://i.ytimg.com/vi/${match[1]}/hq720.jpg`;
   }
 
   return null;

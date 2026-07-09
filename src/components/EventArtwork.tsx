@@ -97,7 +97,7 @@ function getYouTubeThumbnailUrl(url?: string | null) {
 
   for (const pattern of patterns) {
     const match = trimmed.match(pattern);
-    if (match?.[1]) return `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg`;
+    if (match?.[1]) return `https://i.ytimg.com/vi/${match[1]}/hq720.jpg`;
   }
 
   return null;
@@ -234,7 +234,7 @@ export function EventArtwork({ eventType, title, artworkUrls = [], songs = null,
                   src={url}
                   alt=""
                   loading="lazy"
-                  className="h-full w-full object-contain"
+                  className="h-full w-full object-cover"
                   referrerPolicy="no-referrer"
                   onError={() => setFailedUrls((current) => new Set(current).add(url))}
                 />

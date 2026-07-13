@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BookOpen, CalendarDays, Heart, Lightbulb, Music2, Sparkles, Users, Video, Zap } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { hasArtworkArtist } from '../lib/songArtworkEligibility';
 
 type EventArtworkSong = {
   title?: string | null;
@@ -110,6 +111,7 @@ function normalizeArtworkUrl(url?: string | null) {
 
 function getPublicSearchArtworkUrl(song: EventArtworkSong) {
   const nestedSong = getNestedSong(song);
+  if (!hasArtworkArtist(nestedSong.artist)) return null;
   const searchTerm = [nestedSong.title?.trim(), nestedSong.artist?.trim(), 'album cover'].filter(Boolean).join(' ');
   if (!searchTerm) return null;
   const params = new URLSearchParams({
@@ -161,6 +163,7 @@ async function fetchITunesArtwork(searchTerm: string, signal: AbortSignal) {
 
 async function fetchPublicArtwork(song: EventArtworkSong) {
   const nestedSong = getNestedSong(song);
+  if (!hasArtworkArtist(nestedSong.artist)) return null;
   const searchTerm = [nestedSong.title?.trim(), nestedSong.artist?.trim()].filter(Boolean).join(' ');
   if (!searchTerm) return null;
 
@@ -188,7 +191,10 @@ export function EventArtwork({ eventType, title, artworkUrls = [], songs = null,
   const Icon = meta.icon;
   const [publicArtworkUrls, setPublicArtworkUrls] = useState<string[]>([]);
   const [failedUrls, setFailedUrls] = useState<Set<string>>(() => new Set());
-  const firstSongs = useMemo(() => (songs || []).slice(0, 4), [songs]);
+  const firstSongs = useMemo(
+    () => (songs || []).filter((song) => hasArtworkArtist(getNestedSong(song).artist)).slice(0, 4),
+    [songs]
+  );
   const videoArtworkUrls = useMemo(
     () => firstSongs
       .map((song) => getYouTubeThumbnailUrl(song.youtube_url || getNestedSong(song).youtube_url))

@@ -12,6 +12,7 @@ import { formatTime12Hour } from '../lib/timeFormat';
 import { Modal } from '../components/Modal';
 import { EventArtwork } from '../components/EventArtwork';
 import { SongArtwork } from '../components/SongArtwork';
+import { hasArtworkArtist } from '../lib/songArtworkEligibility';
 import type { Event, EventAssignment, Setlist, Announcement, UserAvailability, SwapRequest } from '../types';
 
 const verses = [
@@ -226,7 +227,7 @@ async function fetchPublicSongArtwork(song: DashboardSongArtwork) {
   const nestedSong = getDashboardArtworkSong(song);
   const title = nestedSong?.title?.trim();
   const artist = nestedSong?.artist?.trim();
-  if (!title && !artist) return null;
+  if (!title || !hasArtworkArtist(artist)) return null;
 
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 1800);
@@ -271,6 +272,7 @@ async function getSongArtworkUrls(setlistSongs?: DashboardSongArtwork[] | null) 
   const orderedSongs = setlistSongs
     .slice()
     .sort((a, b) => (a.position ?? 999) - (b.position ?? 999))
+    .filter(song => hasArtworkArtist(getDashboardArtworkSong(song)?.artist))
     .slice(0, 4);
 
   const youtubeUrls = orderedSongs

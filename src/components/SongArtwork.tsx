@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Music } from 'lucide-react';
+import { hasArtworkArtist } from '../lib/songArtworkEligibility';
 
 type SongArtworkSong = {
   title?: string | null;
@@ -120,17 +121,21 @@ export function SongArtwork({ song, youtubeUrl, className = 'h-10 w-10 rounded-l
   );
   const title = normalizedSong?.title?.trim() || '';
   const artist = normalizedSong?.artist?.trim() || '';
-  const searchArtworkUrl = useMemo(() => getPublicSearchArtworkUrl(title, artist), [artist, title]);
-  const artworkUrl = [publicArtworkUrl, videoArtworkUrl, searchArtworkUrl].find(
+  const artworkEligible = hasArtworkArtist(artist);
+  const searchArtworkUrl = useMemo(
+    () => artworkEligible ? getPublicSearchArtworkUrl(title, artist) : null,
+    [artist, artworkEligible, title]
+  );
+  const artworkUrl = artworkEligible ? [publicArtworkUrl, videoArtworkUrl, searchArtworkUrl].find(
     (url): url is string => typeof url === 'string' && !failedUrls.has(url)
-  ) || null;
+  ) || null : null;
 
   useEffect(() => {
     let cancelled = false;
     setPublicArtworkUrl(null);
     setFailedUrls(new Set());
 
-    if (!title && !artist) return undefined;
+    if (!artworkEligible || !title) return undefined;
 
     fetchPublicArtwork(title, artist).then((url) => {
       if (!cancelled) setPublicArtworkUrl(url);
@@ -139,7 +144,7 @@ export function SongArtwork({ song, youtubeUrl, className = 'h-10 w-10 rounded-l
     return () => {
       cancelled = true;
     };
-  }, [artist, title, videoArtworkUrl]);
+  }, [artist, artworkEligible, title, videoArtworkUrl]);
 
   return (
     <div className={`relative isolate shrink-0 overflow-hidden bg-[#101010] ${className}`}>

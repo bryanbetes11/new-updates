@@ -199,7 +199,8 @@ export function EventDetail() {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [editingSongId, setEditingSongId] = useState<string | null>(null);
-  const [editSongForm, setEditSongForm] = useState({ category: '', youtube_url: '', performed_key: '' });
+  const [editSongForm, setEditSongForm] = useState({ artist: '', category: '', youtube_url: '', performed_key: '' });
+  const [savingSongEdit, setSavingSongEdit] = useState(false);
   const [songUsage, setSongUsage] = useState<Record<string, SongUsageAge>>({});
   const [showEditEvent, setShowEditEvent] = useState(false);
   const [editForm, setEditForm] = useState({ title: '', description: '', event_type: '', event_date: '', start_time: '', end_time: '', song_leader_id: '', linked_event_id: '' });
@@ -1060,6 +1061,7 @@ export function EventDetail() {
     setMobileSongActionsSong(null);
     setEditingSongId(ss.id);
     setEditSongForm({
+      artist: ss.songs?.artist || '',
       category: ss.song_category || '',
       youtube_url: ss.youtube_url || '',
       performed_key: ss.performed_key || ss.songs?.song_key || '',
@@ -1084,25 +1086,62 @@ export function EventDetail() {
   };
 
   const handleUpdateSetlistSong = async () => {
-    if (!editingSongId) return;
-    const originalSong = setlistSongs.find(song => song.id === editingSongId);
-    const categoryChanged = (originalSong?.song_category || '') !== editSongForm.category;
-    const videoChanged = (originalSong?.youtube_url || '') !== editSongForm.youtube_url;
-    const isKeyOnlyChange = !categoryChanged && !videoChanged;
+    if (!editingSongId || savingSongEdit) return;
+    const originalSong = setlistSongs.find(song => song.id === editingSongId)
+      || linkedSetlistSongs.find(song => song.id === editingSongId);
+    if (!originalSong) return;
 
-    const { error } = await supabase.from('setlist_songs').update({
-      song_category: editSongForm.category,
-      youtube_url: editSongForm.youtube_url,
-      performed_key: editSongForm.performed_key,
-    }).eq('id', editingSongId);
-    if (error) { toast('error', error.message); return; }
-    if (setlist?.status === 'approved' && !isKeyOnlyChange) {
-      await markSetlistNeedsReapproval();
-    } else {
-      toast('success', isKeyOnlyChange ? 'Key updated' : 'Song updated');
+    const artist = editSongForm.artist.trim();
+    const artistChanged = (originalSong.songs?.artist || '').trim() !== artist;
+    const categoryChanged = (originalSong?.song_category || '') !== editSongForm.category;
+    const videoChanged = (originalSong.youtube_url || '').trim() !== editSongForm.youtube_url.trim();
+    const isMetadataOnlyChange = !categoryChanged && !videoChanged;
+
+    setSavingSongEdit(true);
+    try {
+      if (artistChanged) {
+        const { error: artistError } = await supabase
+          .from('songs')
+          .update({ artist })
+          .eq('id', originalSong.song_id);
+        if (artistError) {
+          toast('error', artistError.message || 'Failed to update artist');
+          return;
+        }
+
+        const mergeArtist = (song: SetlistSong): SetlistSong => song.song_id === originalSong.song_id && song.songs
+          ? { ...song, songs: { ...song.songs, artist } }
+          : song;
+        setSongs(current => current.map(song => song.id === originalSong.song_id ? { ...song, artist } : song));
+        setSetlistSongs(current => current.map(mergeArtist));
+        setLinkedSetlistSongs(current => current.map(mergeArtist));
+        setChartModalSong(current => current?.song_id === originalSong.song_id && current.songs
+          ? { ...current, songs: { ...current.songs, artist } }
+          : current);
+        setLyricsModalSong(current => current?.song_id === originalSong.song_id && current.songs
+          ? { ...current, songs: { ...current.songs, artist } }
+          : current);
+      }
+
+      const { error } = await supabase.from('setlist_songs').update({
+        song_category: editSongForm.category,
+        youtube_url: editSongForm.youtube_url.trim(),
+        performed_key: editSongForm.performed_key,
+      }).eq('id', editingSongId);
+      if (error) {
+        toast('error', artistChanged ? `Artist saved, but setlist details failed: ${error.message}` : error.message);
+        return;
+      }
+      if (setlist?.status === 'approved' && !isMetadataOnlyChange) {
+        await markSetlistNeedsReapproval();
+      } else {
+        toast('success', artistChanged ? 'Artist and song details updated' : isMetadataOnlyChange ? 'Song details updated' : 'Song updated');
+      }
+      setEditingSongId(null);
+      await fetchAll();
+    } finally {
+      setSavingSongEdit(false);
     }
-    setEditingSongId(null);
-    fetchAll();
   };
 
   const handleCreateSong = async () => {
@@ -2747,7 +2786,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                             <SongArtwork song={ss.songs} youtubeUrl={ss.youtube_url || ss.songs?.youtube_url} className="h-10 w-10 rounded-lg" />
                             <div className="min-w-0 flex-1">
                               <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{ss.songs?.title}</p>
-                              <p className="text-xs text-gray-500 dark:text-gray-400">{ss.songs?.artist}</p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">{ss.songs?.artist || 'No artist listed'}</p>
                             </div>
                             <div className="flex items-center gap-1 shrink-0">
                               <button
@@ -2814,7 +2853,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                     <span className={keyBadgeClass}>{displayKey}</span>
                                   ))}
                                 </div>
-                                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{ss.songs?.artist}</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{ss.songs?.artist || 'No artist listed'}</p>
                               </div>
                               {videoUrl && (
                                 <a href={videoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 transition-colors shrink-0" title="Open video" aria-label={`Open video for ${ss.songs?.title || 'song'}`}>
@@ -3378,18 +3417,20 @@ const openLyricsModal = (ss: SetlistSong) => {
           </div>
         </Modal>
 
-        <Modal open={!!editingSongId} onClose={() => setEditingSongId(null)} title="Edit Song">
+        <Modal open={!!editingSongId} onClose={() => { if (!savingSongEdit) setEditingSongId(null); }} title="Edit Song">
           <div className="space-y-4">
             {editingSongId && (() => {
-              const ss = setlistSongs.find(s => s.id === editingSongId);
+              const ss = setlistSongs.find(s => s.id === editingSongId)
+                || linkedSetlistSongs.find(s => s.id === editingSongId);
               return ss?.songs ? (
                 <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
                   <p className="text-sm font-medium text-gray-900 dark:text-white">{ss.songs.title}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{ss.songs.artist}{ss.songs.song_key && ` -- Default Key: ${ss.songs.song_key}`}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{ss.songs.artist || 'No artist listed'}{ss.songs.song_key && ` -- Default Key: ${ss.songs.song_key}`}</p>
                   <button
                     type="button"
                     onClick={openLyricsFromEditingSong}
-                    className="mt-3 inline-flex h-9 items-center gap-2 rounded-xl bg-amber-50 px-3 text-xs font-bold text-amber-700 ring-1 ring-amber-200/80 transition-colors hover:bg-amber-100 dark:bg-amber-500/[0.12] dark:text-amber-200 dark:ring-amber-500/20 dark:hover:bg-amber-500/[0.18]"
+                    disabled={savingSongEdit}
+                    className="mt-3 inline-flex h-9 items-center gap-2 rounded-xl bg-amber-50 px-3 text-xs font-bold text-amber-700 ring-1 ring-amber-200/80 transition-colors hover:bg-amber-100 disabled:opacity-60 dark:bg-amber-500/[0.12] dark:text-amber-200 dark:ring-amber-500/20 dark:hover:bg-amber-500/[0.18]"
                   >
                     <FileText className="h-3.5 w-3.5" />
                     {ss.songs.lyrics ? 'Edit lyrics' : 'Add lyrics'}
@@ -3397,6 +3438,18 @@ const openLyricsModal = (ss: SetlistSong) => {
                 </div>
               ) : null;
             })()}
+            <div>
+              <label htmlFor="event-song-artist" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Artist</label>
+              <input
+                id="event-song-artist"
+                type="text"
+                value={editSongForm.artist}
+                onChange={e => setEditSongForm({ ...editSongForm, artist: e.target.value })}
+                className="input-field"
+                placeholder="e.g., Hillsong Worship"
+                autoComplete="off"
+              />
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Key</label>
               <Select
@@ -3434,8 +3487,10 @@ const openLyricsModal = (ss: SetlistSong) => {
               />
             </div>
             <div className="flex justify-end gap-3 pt-2">
-              <button onClick={() => setEditingSongId(null)} className="btn-secondary">Cancel</button>
-              <button onClick={handleUpdateSetlistSong} className="btn-primary">Save Changes</button>
+              <button onClick={() => setEditingSongId(null)} disabled={savingSongEdit} className="btn-secondary disabled:opacity-60">Cancel</button>
+              <button onClick={handleUpdateSetlistSong} disabled={savingSongEdit} className="btn-primary disabled:opacity-60">
+                {savingSongEdit ? 'Saving...' : 'Save Changes'}
+              </button>
             </div>
           </div>
         </Modal>

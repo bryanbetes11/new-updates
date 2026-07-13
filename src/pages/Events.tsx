@@ -19,6 +19,7 @@ import { describeSetlistReviewAge, getSetlistPendingMessage } from '../lib/setli
 import { EventArtwork } from '../components/EventArtwork';
 import { CalendarGrid } from '../components/CalendarGrid';
 import type { Event } from '../types';
+import { hasArtworkArtist } from '../lib/songArtworkEligibility';
 
 const eventTypes = ['Sunday Service', 'Prayer Meeting', 'LGTF (Midweek)', 'Rehearsals', 'Online Devotion', 'Equipping', 'Revamp Session', 'Youth Recharge', 'Custom'];
 
@@ -144,6 +145,7 @@ function hydrateEventArtworkSongs(setlistSongs: EventSongArtwork[] | null | unde
 
 async function fetchPublicSongArtwork(song: EventSongArtwork) {
   const nestedSong = getEventArtworkSong(song);
+  if (!hasArtworkArtist(nestedSong?.artist)) return null;
   const searchTerm = [nestedSong?.title?.trim(), nestedSong?.artist?.trim()].filter(Boolean).join(' ');
   if (!searchTerm) return null;
 
@@ -201,6 +203,7 @@ async function getEventSongArtworkUrls(setlistSongs?: EventSongArtwork[] | null)
   const orderedSongs = setlistSongs
     .slice()
     .sort((a, b) => (a.position ?? 999) - (b.position ?? 999))
+    .filter(song => hasArtworkArtist(getEventArtworkSong(song)?.artist))
     .slice(0, 4);
 
   const artworkUrls = orderedSongs

@@ -162,7 +162,7 @@ async function fetchLyrics(artist: string, title: string): Promise<{ lyrics: str
       } finally {
         clearTimeout(timeout);
       }
-    } catch (_e) {
+    } catch {
       // try next title variant
     }
   }

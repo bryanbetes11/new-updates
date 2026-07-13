@@ -77,8 +77,6 @@ interface NavItem {
   exact?: boolean;
 }
 
-const SongsNavIcon: NavIcon = ({ className, style }) => <BookOpen className={className} style={style} />;
-const VideosNavIcon: NavIcon = ({ className, style }) => <Video className={className} style={style} />;
 const SetsNavIcon: NavIcon = ({ className, style }) => <ListChecks className={className} style={style} />;
 const LibraryNavIcon: NavIcon = ({ className, style }) => <Layers3 className={className} style={style} />;
 const SwapsNavIcon: NavIcon = ({ className, style }) => <ArrowLeftRight className={className} style={style} />;

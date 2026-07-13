@@ -105,7 +105,7 @@ export function AttendanceMonitoring() {
 
     setStats(data || []);
     setLoading(false);
-  }, [selectedYear, selectedQuarter]);
+  }, [selectedYear, selectedQuarter, toast]);
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
 

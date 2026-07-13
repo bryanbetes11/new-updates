@@ -88,7 +88,7 @@ async function searchLrclib(title: string, artist?: string): Promise<LyricsResul
 
 async function searchLyricsOvh(title: string, artist: string): Promise<LyricsResult[]> {
   const url = `https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`;
-  let data: any;
+  let data: { lyrics?: unknown };
   try {
     const response = await fetchWithTimeout(url, {
       headers: {
@@ -97,7 +97,7 @@ async function searchLyricsOvh(title: string, artist: string): Promise<LyricsRes
     });
 
     if (!response.ok) return [];
-    data = await response.json();
+    data = await response.json() as { lyrics?: unknown };
   } catch (error) {
     console.warn("lyrics.ovh lyrics lookup failed:", error);
     return [];

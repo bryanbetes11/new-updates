@@ -12,6 +12,14 @@ export interface UnreadCounts {
   pendingSetlists: number;
 }
 
+function isLeadershipRole(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(isLeadershipRole);
+  return typeof value === 'object'
+    && value !== null
+    && 'is_leadership' in value
+    && value.is_leadership === true;
+}
+
 export function useUnreadCounts() {
   const { user } = useAuth();
   const [counts, setCounts] = useState<UnreadCounts>({ announcements: 0, events: 0, messages: 0, pendingLeave: 0, pendingSwaps: 0, pendingSetlists: 0 });
@@ -26,7 +34,7 @@ export function useUnreadCounts() {
     if (!user) return;
     const checkPerms = async () => {
       const { data: roles } = await supabase.from('user_roles').select('roles(name, is_leadership)').eq('user_id', user.id);
-      const isLdr = roles?.some(r => (r.roles as any)?.is_leadership) || false;
+      const isLdr = roles?.some(role => isLeadershipRole(role.roles)) || false;
       const isOrgAdmin = (await supabase.from('profiles').select('is_org_admin').eq('id', user.id).single()).data?.is_org_admin || false;
       
       setIsLeader(isLdr || isOrgAdmin);
@@ -38,42 +46,37 @@ export function useUnreadCounts() {
   const fetchCounts = useCallback(async () => {
     if (!user) return;
 
-    const queries = [
-      supabase.from('announcements').select('id, created_at').order('created_at', { ascending: false }).limit(20).then(res => res),
-      supabase.from('announcement_views').select('announcement_id').eq('user_id', user.id).then(res => res),
-      supabase.from('event_assignments').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('status', 'pending').then(res => res),
-      supabase.from('conversation_members').select('conversation_id, last_read_at').eq('user_id', user.id).then(res => res),
-    ];
-
-    if (canSeePendingLeave) {
-      queries.push(
-        supabase.from('user_availability').select('id', { count: 'exact', head: true }).eq('status', 'pending').eq('request_type', 'leave').then(res => res)
-      );
-    }
-
-    if (isLeader) {
-      queries.push(
-        supabase.from('setlists').select('id', { count: 'exact', head: true }).eq('status', 'pending_review').then(res => res)
-      );
-      queries.push(
-        supabase.from('user_availability')
-          .select('id', { count: 'exact', head: true })
-          .in('request_type', ['sub', 'swap'])
-          .eq('status', 'pending')
-          .not('target_response_at', 'is', null)
-          .then(res => res)
-      );
-    }
-
-    const results = await Promise.all(queries) as unknown[];
-    const [announcementRes, viewsRes, pendingAssignRes, membershipsRes] = results as [any, any, any, any];
-    const pendingLeaveRes = canSeePendingLeave ? results[4] as any : null;
-    const pendingSetlistsRes = isLeader ? results[canSeePendingLeave ? 5 : 4] as any : null;
-    const pendingSwapsRes = isLeader ? results[canSeePendingLeave ? 6 : 5] as any : null;
+    const [
+      announcementRes,
+      viewsRes,
+      pendingAssignRes,
+      membershipsRes,
+      pendingLeaveRes,
+      pendingSetlistsRes,
+      pendingSwapsRes,
+    ] = await Promise.all([
+      supabase.from('announcements').select('id, created_at').order('created_at', { ascending: false }).limit(20),
+      supabase.from('announcement_views').select('announcement_id').eq('user_id', user.id),
+      supabase.from('event_assignments').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('status', 'pending'),
+      supabase.from('conversation_members').select('conversation_id, last_read_at').eq('user_id', user.id),
+      canSeePendingLeave
+        ? supabase.from('user_availability').select('id', { count: 'exact', head: true }).eq('status', 'pending').eq('request_type', 'leave')
+        : Promise.resolve(null),
+      isLeader
+        ? supabase.from('setlists').select('id', { count: 'exact', head: true }).eq('status', 'pending_review')
+        : Promise.resolve(null),
+      isLeader
+        ? supabase.from('user_availability')
+            .select('id', { count: 'exact', head: true })
+            .in('request_type', ['sub', 'swap'])
+            .eq('status', 'pending')
+            .not('target_response_at', 'is', null)
+        : Promise.resolve(null),
+    ]);
 
     // Calc announcement unread
-    const viewedIds = new Set((viewsRes.data || []).map((v: any) => v.announcement_id));
-    const unreadAnnouncements = (announcementRes.data || []).filter((a: any) => !viewedIds.has(a.id)).length;
+    const viewedIds = new Set((viewsRes.data || []).map(view => view.announcement_id));
+    const unreadAnnouncements = (announcementRes.data || []).filter(announcement => !viewedIds.has(announcement.id)).length;
 
     // Calc message unread (simplified)
     let unreadMessages = 0;
@@ -81,12 +84,12 @@ export function useUnreadCounts() {
       const { data: recentMessages } = await supabase
         .from('messages')
         .select('conversation_id, created_at')
-        .in('conversation_id', membershipsRes.data.map((m: any) => m.conversation_id))
+        .in('conversation_id', membershipsRes.data.map(membership => membership.conversation_id))
         .order('created_at', { ascending: false });
 
-      membershipsRes.data.forEach((m: any) => {
-        const lastRead = m.last_read_at ? new Date(m.last_read_at) : new Date(0);
-        const hasNew = (recentMessages || []).some(msg => msg.conversation_id === m.conversation_id && new Date(msg.created_at) > lastRead);
+      membershipsRes.data.forEach(membership => {
+        const lastRead = membership.last_read_at ? new Date(membership.last_read_at) : new Date(0);
+        const hasNew = (recentMessages || []).some(msg => msg.conversation_id === membership.conversation_id && new Date(msg.created_at) > lastRead);
         if (hasNew) unreadMessages++;
       });
     }

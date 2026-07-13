@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { format, parseISO } from 'date-fns';
-import { motion } from 'framer-motion';
-import { Plus, Calendar, Trash2, Pencil, RotateCcw, Loader2, ClipboardCheck } from 'lucide-react';
+import { motion, type Variants } from 'framer-motion';
+import { Plus, Calendar, Trash2, Pencil, RotateCcw, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -18,14 +18,14 @@ const STATUS_TONE: Record<string, { label: string; cls: string; dot: string }> =
   withdrawn: { label: 'Withdrawn', cls: 'bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-white/45 border border-gray-200 dark:border-white/[0.08]',           dot: 'rgba(156,163,175,0.7)' },
 };
 
-const containerVariants = {
+const containerVariants: Variants = {
   hidden: {},
   show: { transition: { staggerChildren: 0.05 } },
 };
 
-const itemVariants = {
+const itemVariants: Variants = {
   hidden: { opacity: 0, y: 10, filter: 'blur(4px)' },
-  show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] } },
+  show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] } },
 };
 
 export function RequestLeave() {
@@ -37,7 +37,7 @@ export function RequestLeave() {
   const [confirmAction, setConfirmAction] = useState<{ id: string; type: 'delete' | 'withdraw'; displayDate: string } | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
-  const fetchAvailability = async () => {
+  const fetchAvailability = useCallback(async () => {
     if (!user) return;
     const { data } = await supabase
       .from('user_availability')
@@ -46,9 +46,9 @@ export function RequestLeave() {
       .order('unavailable_date', { ascending: false });
     setAvailability(data || []);
     setLoading(false);
-  };
+  }, [user]);
 
-  useEffect(() => { fetchAvailability(); }, [user]);
+  useEffect(() => { fetchAvailability(); }, [fetchAvailability]);
 
   const handleConfirmAction = async () => {
     if (!confirmAction) return;

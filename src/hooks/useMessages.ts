@@ -45,6 +45,24 @@ export interface MemberReadTime {
   last_read_at: string | null;
 }
 
+type MessageQueryRow = {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  content: string;
+  created_at: string;
+  is_pinned: boolean | null;
+  reply_to: string | null;
+  profiles: MessageSender | null;
+  message_reactions: MessageReaction[] | null;
+};
+
+type ReplyMessageQueryRow = {
+  id: string;
+  content: string;
+  profiles: Pick<MessageSender, 'first_name' | 'last_name' | 'nickname'> | null;
+};
+
 function getFullName(profile: { first_name: string | null; last_name: string | null } | null | undefined): string {
   return `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || 'Unknown';
 }
@@ -99,7 +117,8 @@ export function useMessages(conversationId: string | null) {
 
     if (!data) { setLoading(false); return; }
 
-    const replyIds = [...new Set(data.filter(m => m.reply_to).map(m => m.reply_to as string))];
+    const messageRows = data as unknown as MessageQueryRow[];
+    const replyIds = [...new Set(messageRows.filter(message => message.reply_to).map(message => message.reply_to as string))];
     let replyMap: Record<string, { content: string; sender_name: string }> = {};
     if (replyIds.length > 0) {
       const { data: replyData } = await supabase
@@ -107,25 +126,26 @@ export function useMessages(conversationId: string | null) {
         .select('id, content, profiles!sender_id(first_name, last_name, nickname)')
         .in('id', replyIds);
       if (replyData) {
-        replyMap = Object.fromEntries(replyData.map((r: any) => {
-          const p = r.profiles;
+        const replyRows = replyData as unknown as ReplyMessageQueryRow[];
+        replyMap = Object.fromEntries(replyRows.map(reply => {
+          const p = reply.profiles;
           const senderName = getFullName(p);
-          return [r.id, { content: r.content, sender_name: senderName }];
+          return [reply.id, { content: reply.content, sender_name: senderName }];
         }));
       }
     }
 
-    setMessages(data.map((m: any) => ({
-      id: m.id,
-      conversation_id: m.conversation_id,
-      sender_id: m.sender_id,
-      content: m.content,
-      created_at: m.created_at,
-      is_pinned: m.is_pinned ?? false,
-      reply_to: m.reply_to,
-      sender: m.profiles ?? { first_name: null, last_name: null, nickname: null, avatar_url: null },
-      reactions: m.message_reactions ?? [],
-      reply_preview: m.reply_to ? (replyMap[m.reply_to] ?? null) : null,
+    setMessages(messageRows.map(message => ({
+      id: message.id,
+      conversation_id: message.conversation_id,
+      sender_id: message.sender_id,
+      content: message.content,
+      created_at: message.created_at,
+      is_pinned: message.is_pinned ?? false,
+      reply_to: message.reply_to,
+      sender: message.profiles ?? { first_name: null, last_name: null, nickname: null, avatar_url: null },
+      reactions: message.message_reactions ?? [],
+      reply_preview: message.reply_to ? (replyMap[message.reply_to] ?? null) : null,
     })));
     setLoading(false);
   }, [conversationId]);
@@ -227,7 +247,6 @@ export function useMessages(conversationId: string | null) {
       reply_to: replyTo || null,
     });
     if (!error) {
-      await supabase.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', conversationId);
       markRead();
       dispatchMessagingRefresh();
     }

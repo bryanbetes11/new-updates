@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- The provider and its companion hook intentionally share this context module. */
 import { createContext, useContext, useEffect, type ReactNode } from 'react';
 
 type Theme = 'dark';

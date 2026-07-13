@@ -26,6 +26,17 @@ interface Event {
   linked_event?: { song_leader_id: string | null; song_leader_profile?: { first_name: string; last_name: string; gender: string | null } | null } | null;
 }
 
+interface NotificationInsert {
+  user_id: string;
+  type: string;
+  title: string;
+  body: string;
+  data: {
+    event_id: string;
+    url: string;
+  };
+}
+
 function getNamePrefix(gender: string | null): string {
   if (gender === "Male") return "Bro. ";
   if (gender === "Female") return "Sis. ";
@@ -39,11 +50,6 @@ function formatTime12Hour(time: string | null): string {
   const ampm = h >= 12 ? "PM" : "AM";
   const hour12 = h % 12 || 12;
   return `${hour12}:${minutes} ${ampm}`;
-}
-
-function formatDateLong(dateStr: string): string {
-  const date = new Date(dateStr + "T00:00:00");
-  return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
 
 Deno.serve(async (req: Request) => {
@@ -102,7 +108,7 @@ Deno.serve(async (req: Request) => {
     }
 
     let notificationsSent = 0;
-    const notifications: any[] = [];
+    const notifications: NotificationInsert[] = [];
 
     for (const event of (events || []) as Event[]) {
       let songLeaderName = "";
@@ -115,7 +121,6 @@ Deno.serve(async (req: Request) => {
         songLeaderName = `${prefix}${event.linked_event.song_leader_profile.first_name} ${event.linked_event.song_leader_profile.last_name}`;
       }
 
-      const eventDateFormatted = formatDateLong(event.event_date);
       const eventTime = formatTime12Hour(event.start_time);
 
       const isRehearsalLinked = event.event_type === "Rehearsal" && event.linked_event_id;

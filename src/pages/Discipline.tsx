@@ -90,7 +90,7 @@ export function Discipline({ embedded }: DisciplineProps = {}) {
       setRecords((data || []) as DisciplineRecordWithProfile[]);
     }
     setLoading(false);
-  }, [isLeader, user?.id]);
+  }, [isLeader, toast, user?.id]);
 
   const fetchMembers = useCallback(async () => {
     if (!canManageDiscipline) return;

@@ -318,24 +318,6 @@ function renderArtworkTile(song: PreviewSong | undefined, index: number, x: numb
   </g>`;
 }
 
-function renderSongRow(song: PreviewSong | undefined, index: number, x: number, y: number) {
-  const safeTitle = escapeHtml(truncateText(song?.title || `Song ${index + 1}`, 31));
-  const safeMeta = escapeHtml(truncateText([song?.artist, song?.category].filter(Boolean).join(' - ') || 'Worship', 38));
-  const safeKey = escapeHtml(String(index + 1));
-  const safeArtworkUrl = song?.artworkUrl ? escapeHtml(song.artworkUrl) : null;
-
-  return `<g>
-    <rect x="${x}" y="${y}" width="414" height="58" rx="15" fill="#ffffff" fill-opacity="0.085" stroke="#ffffff" stroke-opacity="0.105" />
-    <clipPath id="row-art-${index}"><rect x="${x + 10}" y="${y + 10}" width="38" height="38" rx="10" /></clipPath>
-    <rect x="${x + 10}" y="${y + 10}" width="38" height="38" rx="10" fill="#18c985" />
-    ${safeArtworkUrl ? `<image href="${safeArtworkUrl}" x="${x + 10}" y="${y + 10}" width="38" height="38" preserveAspectRatio="xMidYMid slice" clip-path="url(#row-art-${index})" />` : ''}
-    <rect x="${x + 10}" y="${y + 10}" width="38" height="38" rx="10" fill="#18c985" fill-opacity="0.35" />
-    <text x="${x + 29}" y="${y + 35}" text-anchor="middle" fill="#ffffff" font-size="16" font-weight="900" font-family="Inter, Arial, sans-serif">${safeKey}</text>
-    <text x="${x + 62}" y="${y + 28}" fill="#ffffff" font-size="21" font-weight="850" font-family="Inter, Arial, sans-serif">${safeTitle}</text>
-    <text x="${x + 62}" y="${y + 48}" fill="#a7b1ad" font-size="15" font-weight="650" font-family="Inter, Arial, sans-serif">${safeMeta}</text>
-  </g>`;
-}
-
 async function renderPreviewImageSvg(preview: EventPreview | null, origin: string) {
   const fallbackPreview: EventPreview = {
     dateLabel: '',

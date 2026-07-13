@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import type { ElementType } from 'react';
+import { useRef, useState, type ElementType, type KeyboardEvent } from 'react';
 import { BookOpen, ListChecks } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { SetlistsTab } from './library/SetlistsTab';
@@ -13,10 +12,37 @@ const tabs: { id: Tab; label: string; shortLabel: string; icon: ElementType }[] 
 
 export function Library() {
   const [tab, setTab] = useState<Tab>('songs');
+  const tabRefs = useRef<Record<Tab, HTMLButtonElement | null>>({
+    songs: null,
+    sets: null,
+  });
+
+  const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, currentTab: Tab) => {
+    const currentIndex = tabs.findIndex(item => item.id === currentTab);
+    let nextIndex: number | null = null;
+
+    if (event.key === 'ArrowRight') {
+      nextIndex = (currentIndex + 1) % tabs.length;
+    } else if (event.key === 'ArrowLeft') {
+      nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+    } else if (event.key === 'Home') {
+      nextIndex = 0;
+    } else if (event.key === 'End') {
+      nextIndex = tabs.length - 1;
+    }
+
+    if (nextIndex === null) return;
+
+    event.preventDefault();
+    const nextTab = tabs[nextIndex].id;
+    setTab(nextTab);
+    tabRefs.current[nextTab]?.focus();
+  };
 
   return (
     <div className="page-container page-bottom-pad overflow-hidden">
       <div className="max-w-2xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 space-y-5 sm:space-y-6">
+        <h1 className="sr-only">Library</h1>
 
         {/* ── Toolbar ────────────────────────────────── */}
         <motion.div
@@ -25,13 +51,27 @@ export function Library() {
           transition={{ duration: 0.4, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
           className="rounded-[1.6rem] border border-black/[0.05] bg-white/75 p-2 shadow-[0_16px_44px_-34px_rgba(15,23,42,0.65)] backdrop-blur-xl dark:border-white/[0.07] dark:bg-white/[0.035]"
         >
-          <div className="flex gap-1 rounded-[1.25rem] bg-gray-100/80 p-1 dark:bg-black/20">
+          <div
+            className="flex gap-1 rounded-[1.25rem] bg-gray-100/80 p-1 dark:bg-black/20"
+            role="tablist"
+            aria-label="Library views"
+          >
             {tabs.map(t => {
               const active = tab === t.id;
               return (
                 <button
                   key={t.id}
+                  ref={element => {
+                    tabRefs.current[t.id] = element;
+                  }}
+                  type="button"
+                  id={`library-tab-${t.id}`}
+                  role="tab"
+                  aria-selected={active}
+                  aria-controls="library-panel"
+                  tabIndex={active ? 0 : -1}
                   onClick={() => setTab(t.id)}
+                  onKeyDown={event => handleTabKeyDown(event, t.id)}
                   className={`relative flex-1 flex items-center justify-center gap-2 py-2.5 rounded-2xl transition-all duration-200 ${
                     active
                       ? 'bg-white text-gray-950 shadow-sm ring-1 ring-black/[0.04] dark:bg-white/[0.09] dark:text-white dark:ring-white/[0.08]'
@@ -53,6 +93,10 @@ export function Library() {
         {/* ── Tab Content ──────────────────────────────── */}
         <motion.div
           key={tab}
+          id="library-panel"
+          role="tabpanel"
+          aria-labelledby={`library-tab-${tab}`}
+          tabIndex={0}
           initial={{ opacity: 0, y: 8, filter: 'blur(3px)' }}
           animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
           transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}

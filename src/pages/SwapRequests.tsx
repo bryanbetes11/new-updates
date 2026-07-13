@@ -39,7 +39,7 @@ export function SwapRequests({ embedded }: Props) {
       .not('target_response_at', 'is', null)
       .order('created_at', { ascending: true });
 
-    setRequests((data || []) as any[]);
+    setRequests((data || []) as SwapRequest[]);
     setLoading(false);
   };
 

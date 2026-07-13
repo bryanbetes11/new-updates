@@ -59,7 +59,7 @@ export function MyAssignments() {
         .neq('request_type', 'leave')
         .not('status', 'in', '("approved","withdrawn")')
         .order('created_at', { ascending: false });
-      setSentSwapRequests((swapData || []) as any[]);
+      setSentSwapRequests((swapData || []) as SwapRequest[]);
 
       setLoading(false);
     };
@@ -75,7 +75,11 @@ export function MyAssignments() {
 
   const handleFilter = (f: Filter) => {
     setFilter(f);
-    f === 'all' ? setSearchParams({}) : setSearchParams({ status: f });
+    if (f === 'all') {
+      setSearchParams({});
+    } else {
+      setSearchParams({ status: f });
+    }
   };
 
   const filtered = filter === 'all' ? assignments : assignments.filter(a => a.status === filter);

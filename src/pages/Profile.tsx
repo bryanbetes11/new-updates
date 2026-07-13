@@ -121,7 +121,7 @@ export function Profile() {
       p_quarter: currentQuarter,
     });
     setAccountabilitySummary((data?.[0] as AccountabilitySummary) || null);
-  }, [user]);
+  }, [profile, user]);
 
   useEffect(() => { fetchMyAccountability(); }, [fetchMyAccountability]);
 

@@ -5,6 +5,7 @@ import { Navigation } from './Navigation';
 import { useAuth } from '../contexts/AuthContext';
 import { BillingStatusBanner } from './BillingStatusBanner';
 import { buildAppRoute, rememberRoute } from '../lib/navigationHistory';
+import { supabase } from '../lib/supabase';
 
 const scrollableOverflowValues = new Set(['auto', 'scroll', 'overlay']);
 const nativeWheelScrollSelectors = [

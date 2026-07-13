@@ -3,9 +3,19 @@ import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, X-Internal-Secret",
 };
+
+function secretsMatch(received: string | null, expected: string | null): boolean {
+  if (!received || !expected || received.length !== expected.length) return false;
+
+  let mismatch = 0;
+  for (let index = 0; index < received.length; index += 1) {
+    mismatch |= received.charCodeAt(index) ^ expected.charCodeAt(index);
+  }
+  return mismatch === 0;
+}
 
 interface Assignment {
   user_id: string;
@@ -20,6 +30,26 @@ interface Event {
   start_time: string | null;
   linked_event_id: string | null;
   event_assignments: Assignment[];
+}
+
+interface NotificationInsert {
+  user_id: string;
+  type: string;
+  title: string;
+  body: string;
+  data: {
+    event_id: string;
+    url: string;
+  };
+}
+
+interface AttendanceInsert {
+  event_id: string;
+  user_id: string;
+  status: "absent";
+  is_assigned: boolean;
+  checked_in_at: null;
+  notes: string;
 }
 
 function formatDateLong(dateStr: string): string {
@@ -51,10 +81,33 @@ Deno.serve(async (req: Request) => {
     });
   }
 
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    const { data: expectedSecret, error: secretError } = await supabase
+      .rpc("get_internal_webhook_secret", { p_purpose: "attendance_cron" });
+    if (secretError || typeof expectedSecret !== "string") {
+      console.error("Attendance webhook secret is unavailable:", secretError?.message);
+      return new Response(JSON.stringify({ error: "Attendance service is not configured" }), {
+        status: 503,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (!secretsMatch(req.headers.get("x-internal-secret"), expectedSecret)) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const url = new URL(req.url);
     const action = url.searchParams.get("action") || "remind";
@@ -63,7 +116,7 @@ Deno.serve(async (req: Request) => {
     const manilaNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Manila" }));
     const phToday = manilaNow.toISOString().split("T")[0];
 
-    let result: any = {};
+    let result: Record<string, string | number> = {};
 
     if (action === "timed_reminders") {
       const { data: events, error: eventsError } = await supabase
@@ -78,7 +131,7 @@ Deno.serve(async (req: Request) => {
       if (eventsError) throw eventsError;
 
       let notificationsSent = 0;
-      const notifications: any[] = [];
+      const notifications: NotificationInsert[] = [];
 
       for (const event of (events || []) as Event[]) {
         if (!event.start_time) continue;
@@ -183,7 +236,7 @@ Deno.serve(async (req: Request) => {
       if (eventsError) throw eventsError;
 
       let remindersSent = 0;
-      const notifications: any[] = [];
+      const notifications: NotificationInsert[] = [];
 
       for (const event of (events || []) as Event[]) {
         const isRehearsalLinked = event.event_type === "Rehearsal" && event.linked_event_id;
@@ -257,7 +310,7 @@ Deno.serve(async (req: Request) => {
       if (eventsError) throw eventsError;
 
       let absencesMarked = 0;
-      const attendanceRecords: any[] = [];
+      const attendanceRecords: AttendanceInsert[] = [];
 
       for (const event of (events || []) as Event[]) {
         for (const assignment of event.event_assignments || []) {

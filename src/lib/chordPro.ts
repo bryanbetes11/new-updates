@@ -195,7 +195,6 @@ export function detectChordProKey(chordpro: string, fallbackKey = ''): string {
   }
 
   const firstRoot = chordRoots[0];
-  const lastRoot = chordRoots[chordRoots.length - 1];
   let bestKey = firstRoot;
   let bestScore = -Infinity;
 

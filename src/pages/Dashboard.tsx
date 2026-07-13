@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
-import { motion } from 'framer-motion';
+import { motion, type Variants } from 'framer-motion';
 import { Calendar, Music, ChevronRight, Megaphone, Trash2, ListChecks, ArrowLeftRight, Check, X, RefreshCw, Heart, MoreHorizontal, Edit3, Upload, UserPlus, MessageCircle, UserX, ClipboardCheck, Shield } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -24,15 +24,15 @@ const verses = [
   { text: 'Worship the Lord with gladness. Come before him, singing with joy.', ref: 'Psalm 100:2 NLT' },
 ];
 
-const container = {
+const container: Variants = {
   initial: {},
   animate: { transition: { staggerChildren: 0.06, delayChildren: 0.05 } },
 };
-const item = {
+const item: Variants = {
   initial: { opacity: 0, y: 18, filter: 'blur(6px)' },
   animate: {
     opacity: 1, y: 0, filter: 'blur(0px)',
-    transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] },
+    transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] },
   },
 };
 
@@ -41,6 +41,12 @@ const DASHBOARD_REQUEST_TIMEOUT_MS = 8000;
 type DashboardEventCard = Pick<Event, 'title' | 'event_date' | 'start_time' | 'event_type' | 'id'> & { location?: string };
 type DashboardHubFilter = 'all' | 'week' | 'serving' | 'team';
 type DashboardMemberSummary = { id: string; first_name?: string | null; last_name?: string | null; gender?: string | null };
+type DashboardLeaderProfile = Omit<DashboardMemberSummary, 'id'>;
+type DashboardSongLeaderAssignment = {
+  event_id: string;
+  profiles?: DashboardLeaderProfile | DashboardLeaderProfile[] | null;
+};
+type DashboardAnnouncementCard = Pick<Announcement, 'id' | 'title' | 'content' | 'created_at'>;
 type DashboardSongArtwork = {
   id: string;
   song_id?: string | null;
@@ -388,9 +394,9 @@ export function Dashboard() {
       .limit(8);
 
     const [incomingRes, leadershipRes, sentRes] = await Promise.all([incomingPromise, leadershipPromise, sentPromise]);
-    setIncomingSwapRequests((incomingRes.data || []) as any[]);
-    setLeadershipSwapRequests((leadershipRes.data || []) as any[]);
-    setSentSwapRequests(((sentRes.data || []) as any[]).filter(req => !dismissedSwapIds.has(req.id)));
+    setIncomingSwapRequests((incomingRes.data || []) as SwapRequest[]);
+    setLeadershipSwapRequests((leadershipRes.data || []) as SwapRequest[]);
+    setSentSwapRequests(((sentRes.data || []) as SwapRequest[]).filter(req => !dismissedSwapIds.has(req.id)));
   }, [user, isLeader, isOrgAdmin, dismissedSwapIds]);
 
   const loadDashboardData = useCallback(async (options?: { silent?: boolean }) => {
@@ -401,7 +407,13 @@ export function Dashboard() {
     if (!silent) setLoading(true);
 
     try {
-      const emptyList = { data: [] } as any;
+      const emptyList = {
+        data: [],
+        error: null,
+        count: 0,
+        status: 200,
+        statusText: 'OK',
+      };
       const [eventsRes, assignRes, setlistsRes, announcementsRes, unavailableRes, pendingLeaveRes, songLeadersRes, membersRes] = await Promise.all([
         withDashboardTimeout(
           supabase.from('events').select('*').gte('event_date', today).order('event_date').limit(12),
@@ -435,7 +447,7 @@ export function Dashboard() {
         isLeader
           ? withDashboardTimeout(
               supabase.from('user_availability').select('id', { count: 'exact', head: true }).eq('status', 'pending').eq('request_type', 'leave'),
-              { count: 0 } as any,
+              emptyList,
               'Pending leave count',
             )
           : Promise.resolve({ count: 0 }),
@@ -527,7 +539,7 @@ export function Dashboard() {
       setEventArtworkSongsMap(artworkSongsByEventId);
 
       const leaderMap: Record<string, string> = {};
-      (songLeadersRes.data || []).forEach((assignment: any) => {
+      ((songLeadersRes.data || []) as DashboardSongLeaderAssignment[]).forEach((assignment) => {
         const profile = Array.isArray(assignment.profiles) ? assignment.profiles[0] : assignment.profiles;
         const name = profile ? formatDashboardLeaderName(profile) : '';
         if (name) leaderMap[assignment.event_id] = name;
@@ -663,7 +675,7 @@ export function Dashboard() {
     };
   }, [fetchIncomingSwaps, loadDashboardData]);
 
-  const handleSwapResponse = async (req: any, accepted: boolean) => {
+  const handleSwapResponse = async (req: SwapRequest, accepted: boolean) => {
     if (!user || !profile?.org_id) return;
     setRespondingSwap(req.id);
     try {
@@ -845,11 +857,12 @@ export function Dashboard() {
   const filteredAssignments = filterAssignmentsForHub(myAssignments);
   const assignmentRows = filteredAssignments.slice(0, 3);
   const reviewSets = filterSetlistsForHub(pendingSetlists).slice(0, 4);
-  const announcementRows = ((recentAnnouncements.length > 0 ? recentAnnouncements : [
+  const fallbackAnnouncements: DashboardAnnouncementCard[] = [
     { id: 'sample-ann-1', title: 'Leadership Meeting this Saturday', content: 'We will be discussing service flow, volunteer updates, and upcoming events.', created_at: new Date().toISOString() },
     { id: 'sample-ann-2', title: 'New Training: In-Ear Monitor Basics', content: 'Join us this Sunday after the morning service at the Media Room.', created_at: new Date().toISOString() },
     { id: 'sample-ann-3', title: 'Song Requests Open', content: "Submit your song requests for next month's setlists.", created_at: new Date().toISOString() },
-  ] as any[])
+  ];
+  const announcementRows = ((recentAnnouncements.length > 0 ? recentAnnouncements : fallbackAnnouncements)
     .filter(announcement => activeHubFilter !== 'week' || isThisWeekDate(announcement.created_at?.slice(0, 10)))
   ).slice(0, 3);
   const teamAvailabilityRows = filterAvailabilityForHub(unavailableMembers).slice(0, 3);
@@ -1387,7 +1400,7 @@ export function Dashboard() {
                 </div>
                 <div className={reviewSets.length > 0 ? 'space-y-1' : 'flex min-h-[270px] flex-1 items-center justify-center rounded-[0.6rem] border border-dashed border-white/[0.14] bg-white/[0.035] px-5 py-8'}>
                   {reviewSets.length > 0 ? (
-                    reviewSets.map((set, index) => {
+                    reviewSets.map((set) => {
                       const eventId = set.events?.id || set.event_id;
                       const songCount = set.setlist_songs?.length ?? 0;
                       const artworkUrls = eventId ? eventArtworkMap[eventId] || [] : [];

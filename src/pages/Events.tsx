@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { format, parseISO, startOfDay, subWeeks, previousSunday, addDays, subDays, differenceInDays, eachDayOfInterval } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
@@ -55,6 +55,11 @@ interface SetlistInfo {
   artworkSongs?: EventSongArtwork[];
   songCount?: number;
 }
+interface RelatedProfile {
+  first_name?: string | null;
+  last_name?: string | null;
+  gender?: string | null;
+}
 interface EventMemberSummary { id: string; first_name: string; last_name: string; gender?: string | null; }
 interface LinkedAssignmentRow {
   user_id: string;
@@ -73,6 +78,14 @@ interface EventFormState {
   description: string;
   song_leader_id: string;
   linked_event_id: string;
+}
+
+function emptyListResponse() {
+  return { data: [], error: null, count: null, status: 200, statusText: 'OK' };
+}
+
+function getRelatedProfile(profile: RelatedProfile | RelatedProfile[] | null | undefined) {
+  return Array.isArray(profile) ? profile[0] : profile;
 }
 
 const EVENT_TYPE_COLORS: Record<string, { lightBg: string; lightText: string; darkBg: string; darkText: string }> = {
@@ -293,7 +306,7 @@ function EmptyEventArtwork({ className = 'h-16 w-16' }: { className?: string }) 
   );
 }
 
-function formatSongLeaderName(profile: { first_name?: string | null; last_name?: string | null; gender?: string | null }) {
+function formatSongLeaderName(profile: RelatedProfile) {
   const firstName = profile.first_name?.trim();
   const lastName = profile.last_name?.trim();
   if (!firstName && !lastName) return '';
@@ -437,7 +450,7 @@ function BirthdayCard({ name, date, artworkClassName = 'h-16 w-16' }: { name: st
         .maybeSingle();
       if (data) {
         setAnnouncementId(data.id);
-        const alreadyWished = (data.announcement_reactions as any[])?.some(
+        const alreadyWished = data.announcement_reactions?.some(
           r => r.user_id === user.id
         );
         if (alreadyWished) setWished(true);
@@ -769,25 +782,23 @@ export function Events() {
   const [customName, setCustomName] = useState('');
   const [sundayServices, setSundayServices] = useState<Event[]>([]);
 
-  const fetchEvents = async () => {
-    const emptyList = { data: [], error: null };
-
+  const fetchEvents = useCallback(async () => {
     try {
       const [eventsRes, membersRes, userRolesRes, birthdaysRes, leaveRes, songLeadersRes, setlistsRes, sundayServicesRes] = await Promise.all([
-        withRequestTimeout(supabase.from('events').select('*').order('event_date', { ascending: false }), emptyList, 'Events list'),
-        withRequestTimeout(supabase.from('profiles').select('id, first_name, last_name, gender, birthday'), emptyList, 'Event members list'),
-        withRequestTimeout(supabase.from('user_roles').select('user_id, role_id'), emptyList, 'Event member roles'),
-        withRequestTimeout(supabase.from('profiles').select('first_name, last_name, birthday').not('birthday', 'is', null), emptyList, 'Birthdays list'),
-        withRequestTimeout(supabase.from('user_availability').select('leave_type, unavailable_date, start_date, end_date, status, profiles!user_availability_user_id_fkey(first_name, last_name)').eq('status', 'approved'), emptyList, 'Approved leave list'),
-        withRequestTimeout(supabase.from('event_assignments').select('event_id, profiles(first_name, last_name, gender), roles!inner(name)').eq('roles.name', 'Song Leader'), emptyList, 'Song leader list'),
+        withRequestTimeout(supabase.from('events').select('*').order('event_date', { ascending: false }), emptyListResponse(), 'Events list'),
+        withRequestTimeout(supabase.from('profiles').select('id, first_name, last_name, gender, birthday'), emptyListResponse(), 'Event members list'),
+        withRequestTimeout(supabase.from('user_roles').select('user_id, role_id'), emptyListResponse(), 'Event member roles'),
+        withRequestTimeout(supabase.from('profiles').select('first_name, last_name, birthday').not('birthday', 'is', null), emptyListResponse(), 'Birthdays list'),
+        withRequestTimeout(supabase.from('user_availability').select('leave_type, unavailable_date, start_date, end_date, status, profiles!user_availability_user_id_fkey(first_name, last_name)').eq('status', 'approved'), emptyListResponse(), 'Approved leave list'),
+        withRequestTimeout(supabase.from('event_assignments').select('event_id, profiles(first_name, last_name, gender), roles!inner(name)').eq('roles.name', 'Song Leader'), emptyListResponse(), 'Song leader list'),
         withRequestTimeout(
           supabase
             .from('setlists')
             .select('event_id, status, created_at, submitted_at, setlist_songs(id, song_id, position, youtube_url, songs(id, title, artist, youtube_url))'),
-          emptyList,
+          emptyListResponse(),
           'Event setlist statuses',
         ),
-        withRequestTimeout(supabase.from('events').select('*').eq('event_type', 'Sunday Service').gte('event_date', new Date().toISOString().split('T')[0]).order('event_date'), emptyList, 'Upcoming Sunday services'),
+        withRequestTimeout(supabase.from('events').select('*').eq('event_type', 'Sunday Service').gte('event_date', new Date().toISOString().split('T')[0]).order('event_date'), emptyListResponse(), 'Upcoming Sunday services'),
       ]);
       setEvents(eventsRes.data || []);
       setMembers(membersRes.data || []);
@@ -795,10 +806,11 @@ export function Events() {
       setSundayServices(sundayServicesRes.data || []);
 
       const slMap: Record<string, string> = {};
-      (songLeadersRes.data || []).forEach((a: any) => {
-        if (a.profiles) {
-          const name = formatSongLeaderName(a.profiles);
-          if (name) slMap[a.event_id] = name;
+      (songLeadersRes.data || []).forEach(assignment => {
+        const profile = getRelatedProfile(assignment.profiles);
+        if (profile) {
+          const name = formatSongLeaderName(profile);
+          if (name) slMap[assignment.event_id] = name;
         }
       });
 
@@ -822,7 +834,7 @@ export function Events() {
 
       const setlistRows = setlistsRes.data || [];
       const songIds = Array.from(new Set(
-        setlistRows.flatMap((setlist: any) =>
+        setlistRows.flatMap(setlist =>
           (setlist.setlist_songs || [])
             .map((song: EventSongArtwork) => song.song_id)
             .filter((id: string | null | undefined): id is string => Boolean(id))
@@ -832,7 +844,7 @@ export function Events() {
       if (songIds.length > 0) {
         const songsRes = await withRequestTimeout(
           supabase.from('songs').select('id, title, artist, youtube_url').in('id', songIds),
-          emptyList,
+          emptyListResponse(),
           'Event artwork song fallback',
         );
         (songsRes.data || []).forEach((song: ArtworkSongRecord) => {
@@ -841,23 +853,23 @@ export function Events() {
       }
 
       const setlistMap: Record<string, SetlistInfo> = {};
-      await Promise.all(setlistRows.map(async (s: any) => {
-        const setlistSongs = hydrateEventArtworkSongs(s.setlist_songs as EventSongArtwork[] | null, songsById);
+      await Promise.all(setlistRows.map(async setlist => {
+        const setlistSongs = hydrateEventArtworkSongs(setlist.setlist_songs, songsById);
         const artworkUrls = await getEventSongArtworkUrls(setlistSongs);
         const artworkSongs = setlistSongs
           .slice()
           .sort((a, b) => (a.position ?? 999) - (b.position ?? 999))
           .slice(0, 4);
         const nextInfo: SetlistInfo = {
-          status: s.status,
-          created_at: s.created_at,
-          submitted_at: s.submitted_at,
+          status: setlist.status,
+          created_at: setlist.created_at,
+          submitted_at: setlist.submitted_at,
           artworkUrls,
           artworkSongs,
-          songCount: s.setlist_songs?.length || 0,
+          songCount: setlist.setlist_songs?.length || 0,
         };
-        if (shouldReplaceSetlistInfo(setlistMap[s.event_id], nextInfo)) {
-          setlistMap[s.event_id] = nextInfo;
+        if (shouldReplaceSetlistInfo(setlistMap[setlist.event_id], nextInfo)) {
+          setlistMap[setlist.event_id] = nextInfo;
         }
       }));
       (eventsRes.data || []).forEach((event: Event) => {
@@ -868,20 +880,21 @@ export function Events() {
       setSetlistInfoMap(setlistMap);
 
       const entries: CalendarEntry[] = [];
-      (birthdaysRes.data || []).forEach((p: any) => {
-        if (p.birthday) {
+      (birthdaysRes.data || []).forEach(profile => {
+        if (profile.birthday) {
           const thisYear = new Date().getFullYear();
-          entries.push({ type: 'birthday', date: `${thisYear}-${p.birthday.slice(5)}`, name: `${p.first_name} ${p.last_name}` });
+          entries.push({ type: 'birthday', date: `${thisYear}-${profile.birthday.slice(5)}`, name: `${profile.first_name} ${profile.last_name}` });
         }
       });
-      (leaveRes.data || []).forEach((a: any) => {
-        const name = `${a.profiles?.first_name} ${a.profiles?.last_name}`;
-        if (a.leave_type === 'range' && a.start_date && a.end_date) {
-          eachDayOfInterval({ start: parseISO(a.start_date), end: parseISO(a.end_date) }).forEach(day => {
-            entries.push({ type: 'leave', date: format(day, 'yyyy-MM-dd'), name, status: a.status });
+      (leaveRes.data || []).forEach(availability => {
+        const profile = getRelatedProfile(availability.profiles);
+        const name = `${profile?.first_name} ${profile?.last_name}`;
+        if (availability.leave_type === 'range' && availability.start_date && availability.end_date) {
+          eachDayOfInterval({ start: parseISO(availability.start_date), end: parseISO(availability.end_date) }).forEach(day => {
+            entries.push({ type: 'leave', date: format(day, 'yyyy-MM-dd'), name, status: availability.status });
           });
-        } else if (a.unavailable_date) {
-          entries.push({ type: 'leave', date: a.unavailable_date, name, status: a.status });
+        } else if (availability.unavailable_date) {
+          entries.push({ type: 'leave', date: availability.unavailable_date, name, status: availability.status });
         }
       });
       setCalendarEntries(entries);
@@ -890,9 +903,9 @@ export function Events() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { fetchEvents(); }, []);
+  useEffect(() => { fetchEvents(); }, [fetchEvents]);
   useEffect(() => {
     const state = location.state as { deletedEventId?: string; refreshEventsAt?: number } | null;
     if (!state?.deletedEventId && !state?.refreshEventsAt) return;
@@ -915,7 +928,7 @@ export function Events() {
 
     fetchEvents();
     navigate(location.pathname, { replace: true, state: null });
-  }, [location.key]);
+  }, [fetchEvents, location.key, location.pathname, location.state, navigate]);
   useEffect(() => { localStorage.setItem('eventsActiveTab', activeTab); }, [activeTab]);
   useEffect(() => { sessionStorage.setItem('eventsDesktopView', desktopView); }, [desktopView]);
 

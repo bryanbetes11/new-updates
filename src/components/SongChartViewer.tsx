@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useCallback, useLayoutEffect, useRef } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -439,7 +439,7 @@ function buildSectionOrderLookups(sections: ChartSection[]) {
 
 function parseSectionOrderInput(input: string) {
   return input
-    .split(/[\s,>|\-]+/)
+    .split(/[\s,>|-]+/)
     .map(token => token.trim().toUpperCase())
     .filter(Boolean);
 }
@@ -596,21 +596,21 @@ export function SongChartViewer({
   const sectionBadgeFontSize = normalizeFontSize(displaySettings.sectionBadgeFontSize, DEFAULT_CHART_SETTINGS.sectionBadgeFontSize);
   const autoScrollSpeed = normalizeAutoScrollSpeed(displaySettings.autoScrollSpeed);
   const arrangementOpen = controlledArrangementOpen ?? internalArrangementOpen;
-  const setArrangementOpen = (next: boolean | ((current: boolean) => boolean)) => {
+  const setArrangementOpen = useCallback((next: boolean | ((current: boolean) => boolean)) => {
     const nextValue = typeof next === 'function' ? next(arrangementOpen) : next;
     if (controlledArrangementOpen === undefined) {
       setInternalArrangementOpen(nextValue);
     }
     onArrangementOpenChange?.(nextValue);
-  };
+  }, [arrangementOpen, controlledArrangementOpen, onArrangementOpenChange]);
   const autoScrollEnabled = controlledAutoScrollEnabled ?? internalAutoScrollEnabled;
-  const setAutoScrollEnabled = (next: boolean | ((current: boolean) => boolean)) => {
+  const setAutoScrollEnabled = useCallback((next: boolean | ((current: boolean) => boolean)) => {
     const nextValue = typeof next === 'function' ? next(autoScrollEnabled) : next;
     if (controlledAutoScrollEnabled === undefined) {
       setInternalAutoScrollEnabled(nextValue);
     }
     onAutoScrollEnabledChange?.(nextValue);
-  };
+  }, [autoScrollEnabled, controlledAutoScrollEnabled, onAutoScrollEnabledChange]);
 
   useEffect(() => {
     if (mountedSongIdRef.current !== songId) {
@@ -646,7 +646,7 @@ export function SongChartViewer({
       setAssignedSongKey(songKey || detectedKey || '');
       setChartSaveError(null);
     }
-  }, [assignedTranspose, chordproText, detectedKey, draftStorageId, hasDraftChanges, isEditing, savedPlainDraft, savedPlainDraftFromProps, songId, songKey]);
+  }, [assignedTranspose, chordproText, detectedKey, draftStorageId, hasDraftChanges, isEditing, savedPlainDraft, savedPlainDraftFromProps, setAutoScrollEnabled, songId, songKey]);
 
   useLayoutEffect(() => {
     if (!isEditing || sectionEditorEnabled) return;
@@ -703,7 +703,7 @@ export function SongChartViewer({
     onEditingChange?.(isEditing);
     if (isEditing) setSettingsOpen(false);
     if (isEditing) setAutoScrollEnabled(false);
-  }, [isEditing, onEditingChange]);
+  }, [isEditing, onEditingChange, setAutoScrollEnabled]);
 
   useEffect(() => {
     if (!isEditing) {
@@ -751,7 +751,10 @@ export function SongChartViewer({
     () => chartSections.map(section => sectionOrderLookups.codesByKey.get(section.key)).filter((code): code is string => Boolean(code)),
     [chartSections, sectionOrderLookups]
   );
-  const effectiveSectionOrder = sectionOrder?.length ? sectionOrder.map(token => token.toUpperCase()) : defaultSectionOrder;
+  const effectiveSectionOrder = useMemo(
+    () => sectionOrder?.length ? sectionOrder.map(token => token.toUpperCase()) : defaultSectionOrder,
+    [defaultSectionOrder, sectionOrder]
+  );
   const arrangedChartSections = useMemo(() => {
     if (!sectionOrder?.length) return chartSections;
     const arranged = sectionOrder
@@ -778,7 +781,7 @@ export function SongChartViewer({
 
   useEffect(() => {
     setArrangementInput(effectiveSectionOrder.join(' '));
-  }, [effectiveSectionOrder.join(' ')]);
+  }, [effectiveSectionOrder]);
 
   useEffect(() => {
     if (!arrangementSaveMessage) return;
@@ -819,7 +822,7 @@ export function SongChartViewer({
     animationFrame = window.requestAnimationFrame(tick);
 
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [autoScrollEnabled, autoScrollSpeed, isEditing, renderedText]);
+  }, [autoScrollEnabled, autoScrollSpeed, isEditing, renderedText, setAutoScrollEnabled]);
 
   useEffect(() => {
     if (!controlsVisible) {
@@ -834,7 +837,7 @@ export function SongChartViewer({
     setKeyPickerOpen(false);
     setArrangementOpen(false);
     setSettingsOpen(false);
-  }, [isEditing]);
+  }, [isEditing, setArrangementOpen]);
 
   useEffect(() => {
     previousChartAnimationIdentityRef.current = chartAnimationIdentity;

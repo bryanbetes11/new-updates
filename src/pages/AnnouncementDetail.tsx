@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import {
   ArrowLeft, Eye, MessageCircle, Send,
   AlertTriangle, AlertCircle, Image, Pencil, Trash2, MoreVertical, Lock,
@@ -326,11 +326,11 @@ const blurUp = (delay = 0) => ({
   transition: { duration: 0.85, delay, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] },
 });
 
-const blockList = {
+const blockList: Variants = {
   hidden: {},
   visible: { transition: { staggerChildren: 0.15, delayChildren: 0.48 } },
 };
-const blockItem = {
+const blockItem: Variants = {
   hidden: { opacity: 0, y: 14, filter: 'blur(5px)' },
   visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.65, ease: [0.16, 1, 0.3, 1] } },
 };
@@ -367,24 +367,26 @@ export function AnnouncementDetail() {
   const menuRef = useRef<HTMLDivElement>(null);
   const commentInputRef = useRef<HTMLTextAreaElement>(null);
 
-  const loadAnnouncement = async () => {
+  const loadAnnouncement = useCallback(async () => {
+    if (!id) return;
     const { data } = await supabase
       .from('announcements')
       .select('*, profiles!announcements_created_by_fkey(first_name, last_name, avatar_url), announcement_views(user_id, viewed_at, profiles!announcement_views_user_id_fkey(first_name, last_name, avatar_url))')
-      .eq('id', id!)
+      .eq('id', id)
       .maybeSingle();
     setAnnouncement(data);
     setViews((data?.announcement_views || []) as AnnouncementView[]);
-  };
+  }, [id]);
 
-  const loadComments = async () => {
+  const loadComments = useCallback(async () => {
+    if (!id) return;
     const { data } = await supabase
       .from('announcement_comments')
       .select('*, profiles!announcement_comments_user_id_fkey(first_name, last_name, avatar_url), reply_comment:reply_to(id, content, user_id, profiles!announcement_comments_user_id_fkey(first_name, last_name, avatar_url))')
-      .eq('announcement_id', id!)
+      .eq('announcement_id', id)
       .order('created_at');
     setComments((data || []) as AnnouncementComment[]);
-  };
+  }, [id]);
 
   useEffect(() => {
     if (!id) return;
@@ -405,7 +407,7 @@ export function AnnouncementDetail() {
       }
     };
     init();
-  }, [id, user]);
+  }, [id, user, loadAnnouncement]);
 
   useEffect(() => {
     if (!id) return;
@@ -426,7 +428,7 @@ export function AnnouncementDetail() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [id]);
+  }, [id, loadComments]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

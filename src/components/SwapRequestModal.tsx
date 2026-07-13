@@ -24,6 +24,27 @@ interface SubmissionResult {
   notificationWarning: boolean;
 }
 
+type MemberProfile = Pick<Profile, 'id' | 'first_name' | 'last_name' | 'nickname' | 'avatar_url'>;
+
+interface EligibleSwapMemberRow {
+  user_id: string;
+  profiles: MemberProfile | MemberProfile[] | null;
+  events: { event_date: string } | { event_date: string }[] | null;
+}
+
+interface EventAssigneeRow {
+  user_id: string;
+  roles: { name: string } | { name: string }[] | null;
+}
+
+interface EligibleRoleMemberRow {
+  profiles: MemberProfile | MemberProfile[] | null;
+}
+
+function singleRelation<T>(value: T | T[] | null | undefined): T | null {
+  return Array.isArray(value) ? value[0] ?? null : value ?? null;
+}
+
 const stepVariants = {
   enter: (dir: number) => ({ x: dir * 28, opacity: 0 }),
   center: { x: 0, opacity: 1 },
@@ -65,14 +86,14 @@ export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
     setStep(s);
   };
 
-  const [members, setMembers] = useState<Profile[]>([]);
+  const [members, setMembers] = useState<MemberProfile[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [memberSearch, setMemberSearch] = useState('');
   // For sub mode: track who's already on this event
   const [assignedToEvent, setAssignedToEvent] = useState<Set<string>>(new Set());
   const [assignedRoleNames, setAssignedRoleNames] = useState<Record<string, string>>({});
 
-  const [selectedMember, setSelectedMember] = useState<Profile | null>(null);
+  const [selectedMember, setSelectedMember] = useState<MemberProfile | null>(null);
   // Swap-only: pick target's assignment
   const [targetAssignments, setTargetAssignments] = useState<EventAssignment[]>([]);
   const [loadingAssignments, setLoadingAssignments] = useState(false);
@@ -82,10 +103,11 @@ export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submissionResult, setSubmissionResult] = useState<SubmissionResult | null>(null);
+  const assignmentEventId = myAssignment?.event_id || myAssignment?.events?.id;
 
   // Load eligible members
   useEffect(() => {
-    if (!open || !user || !myAssignment) return;
+    if (!open || !user || !assignmentEventId) return;
     setLoadingMembers(true);
     setMembers([]);
     setAssignedToEvent(new Set());
@@ -110,12 +132,14 @@ export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
             .gte('events.event_date', today)
             .then(({ data }) => {
               const seen = new Set<string>();
-              const eligible: Profile[] = [];
-              for (const a of (data || []) as any[]) {
-                if (!a.events || !a.profiles) continue;
+              const eligible: MemberProfile[] = [];
+              for (const a of (data || []) as EligibleSwapMemberRow[]) {
+                const event = singleRelation(a.events);
+                const member = singleRelation(a.profiles);
+                if (!event || !member) continue;
                 if (seen.has(a.user_id)) continue;
                 seen.add(a.user_id);
-                eligible.push(a.profiles as Profile);
+                eligible.push(member);
               }
               eligible.sort((a, b) => (a.first_name || '').localeCompare(b.first_name || ''));
               setMembers(eligible);
@@ -133,7 +157,7 @@ export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
         .then(async ({ data: roleData }) => {
           if (!roleData) { setLoadingMembers(false); return; }
 
-          const eventId = myAssignment.event_id || (myAssignment as any).events?.id;
+          const eventId = assignmentEventId;
           if (!eventId) {
             setLoadingMembers(false);
             return;
@@ -152,25 +176,28 @@ export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
               .neq('status', 'declined'),
           ]);
 
-          const assignedIds = new Set<string>((evtData || []).map((a: any) => a.user_id as string));
+          const assignees = (evtData || []) as EventAssigneeRow[];
+          const assignedIds = new Set<string>(assignees.map(assignment => assignment.user_id));
           const roleMap: Record<string, string> = {};
-          for (const a of (evtData || []) as any[]) {
-            roleMap[a.user_id] = a.roles?.name || 'another role';
+          for (const assignment of assignees) {
+            roleMap[assignment.user_id] = singleRelation(assignment.roles)?.name || 'another role';
           }
           setAssignedToEvent(assignedIds);
           setAssignedRoleNames(roleMap);
 
-          const eligible = ((urData || []) as any[]).map(ur => ur.profiles).filter(Boolean) as Profile[];
+          const eligible = ((urData || []) as EligibleRoleMemberRow[])
+            .map(userRole => singleRelation(userRole.profiles))
+            .filter((member): member is MemberProfile => member !== null);
           eligible.sort((a, b) => (a.first_name || '').localeCompare(b.first_name || ''));
           setMembers(eligible);
           setLoadingMembers(false);
         });
     }
-  }, [open, user, myAssignment]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [assignmentEventId, isSub, myRoleName, open, user]);
 
   // Swap mode only: load target member's upcoming assignments for the same role
   useEffect(() => {
-    if (isSub || !selectedMember || !myAssignment) return;
+    if (isSub || !selectedMember || !assignmentEventId) return;
     setLoadingAssignments(true);
     setTargetAssignments([]);
     supabase
@@ -182,7 +209,7 @@ export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
         const upcoming = ((data || []) as EventAssignment[])
           .filter(a =>
             a.events &&
-            a.event_id !== myAssignment.event_id &&
+            a.event_id !== assignmentEventId &&
             isAfter(parseISO(a.events.event_date), startOfToday()) &&
             a.roles?.name === myRoleName
           )
@@ -190,7 +217,7 @@ export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
         setTargetAssignments(upcoming);
         setLoadingAssignments(false);
       });
-  }, [selectedMember, myRoleName, isSub]);
+  }, [assignmentEventId, selectedMember, myRoleName, isSub]);
 
   const reset = () => {
     setDirection(1);

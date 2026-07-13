@@ -2184,6 +2184,36 @@ type EventDiscussionDetails = {
   songs: Array<{ id: string; title: string; artist: string | null; performed_key: string | null; song_key: string | null }>;
 };
 
+type EventSetlistSongRow = {
+  id: string;
+  position: number | null;
+  performed_key: string | null;
+  songs: {
+    id: string;
+    title: string;
+    artist: string | null;
+    song_key: string | null;
+  } | null;
+};
+
+type EventSetlistRow = {
+  id: string;
+  setlist_songs: EventSetlistSongRow[] | null;
+};
+
+function mapEventSongs(setlist: unknown, fallbackTitle: string): EventDiscussionDetails['songs'] {
+  const setlistRow = setlist as EventSetlistRow | null;
+  return [...(setlistRow?.setlist_songs ?? [])]
+    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+    .map(item => ({
+      id: item.songs?.id ?? item.id,
+      title: item.songs?.title ?? fallbackTitle,
+      artist: item.songs?.artist ?? null,
+      performed_key: item.performed_key ?? null,
+      song_key: item.songs?.song_key ?? null,
+    }));
+}
+
 function EventDiscussionCard({ eventId, onOpen }: { eventId: string; onOpen: () => void }) {
   const [details, setDetails] = useState<EventDiscussionDetails | null>(null);
 
@@ -2201,15 +2231,7 @@ function EventDiscussionCard({ eventId, onOpen }: { eventId: string; onOpen: () 
         .eq('event_id', eventId)
         .maybeSingle();
       if (cancelled || !event) return;
-      const songs = ((setlist as any)?.setlist_songs || [])
-        .sort((a: any, b: any) => (a.position || 0) - (b.position || 0))
-        .map((item: any) => ({
-          id: item.songs?.id || item.id,
-          title: item.songs?.title || 'Untitled song',
-          artist: item.songs?.artist || null,
-          performed_key: item.performed_key || null,
-          song_key: item.songs?.song_key || null,
-        }));
+      const songs = mapEventSongs(setlist, 'Untitled song');
       setDetails({ ...(event as EventDiscussionDetails), songs });
     };
     load();
@@ -2278,16 +2300,8 @@ function EventDetailPanel({ eventId, onClose, onViewFullEvent }: {
         supabase.from('setlists').select('id, setlist_songs(id, position, performed_key, songs(id, title, artist, song_key))').eq('event_id', eventId).maybeSingle(),
       ]);
       if (cancelled || !event) return;
-      const songs = ((setlist as any)?.setlist_songs || [])
-        .sort((a: any, b: any) => (a.position || 0) - (b.position || 0))
-        .map((item: any) => ({
-          id: item.songs?.id || item.id,
-          title: item.songs?.title || 'Untitled',
-          artist: item.songs?.artist || null,
-          performed_key: item.performed_key || null,
-          song_key: item.songs?.song_key || null,
-        }));
-      setData({ ...(event as any), songs });
+      const songs = mapEventSongs(setlist, 'Untitled');
+      setData({ ...(event as Omit<EventPanelData, 'songs'>), songs });
     };
     load();
     return () => { cancelled = true; };

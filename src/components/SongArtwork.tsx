@@ -121,7 +121,9 @@ export function SongArtwork({ song, youtubeUrl, className = 'h-10 w-10 rounded-l
   const title = normalizedSong?.title?.trim() || '';
   const artist = normalizedSong?.artist?.trim() || '';
   const searchArtworkUrl = useMemo(() => getPublicSearchArtworkUrl(title, artist), [artist, title]);
-  const artworkUrl = [publicArtworkUrl, videoArtworkUrl, searchArtworkUrl].find((url): url is string => Boolean(url) && !failedUrls.has(url)) || null;
+  const artworkUrl = [publicArtworkUrl, videoArtworkUrl, searchArtworkUrl].find(
+    (url): url is string => typeof url === 'string' && !failedUrls.has(url)
+  ) || null;
 
   useEffect(() => {
     let cancelled = false;

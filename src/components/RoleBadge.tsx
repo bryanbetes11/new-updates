@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- This small UI module intentionally exports its role-sorting helper beside the badge. */
 import { Crown } from 'lucide-react';
 import type { Role } from '../types';
 

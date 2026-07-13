@@ -4,7 +4,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { format, parseISO, differenceInDays, startOfDay, subWeeks, previousSunday, addDays, subDays } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { animate, motion, useMotionValue, AnimatePresence, type PanInfo } from 'framer-motion';
-import { ArrowLeft, Calendar, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, ListOrdered, Pause, Play, Settings2, MoreHorizontal, Upload } from 'lucide-react';
+import { ArrowLeft, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, ListOrdered, Pause, Play, Settings2, MoreHorizontal, Upload } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -109,6 +109,12 @@ function toBase64Url(value: string) {
 }
 
 type SongUsageAge = { lastDate: string; days: number };
+
+type ApprovedSetlistUsage = {
+  event_id: string;
+  events: { event_date: string } | Array<{ event_date: string }> | null;
+  setlist_songs: Array<{ song_id: string }>;
+};
 
 function getSongReadinessBadge(usage?: SongUsageAge) {
   if (!usage) {
@@ -472,7 +478,7 @@ export function EventDetail() {
         supabase.from('events').select('*').eq('event_type', 'Sunday Service').gte('event_date', new Date().toISOString().split('T')[0]).order('event_date'),
         supabase.from('conversations').select('id').eq('event_id', id).eq('type', 'event').maybeSingle(),
       ]);
-      setEventConversationId((convRes.data as any)?.id ?? null);
+      setEventConversationId(convRes.data?.id ?? null);
       setEvent(eventRes.data);
       setAssignments(assignRes.data || []);
       setMembers(membersRes.data || []);
@@ -539,11 +545,11 @@ export function EventDetail() {
       setSundayServices(sundayServicesRes.data || []);
 
       const usage: Record<string, SongUsageAge> = {};
-      (allSetlistsRes.data || []).forEach((sl: any) => {
+      ((allSetlistsRes.data || []) as ApprovedSetlistUsage[]).forEach(sl => {
         if (sl.event_id === id) return;
-        const eventDate = sl.events?.event_date;
+        const eventDate = Array.isArray(sl.events) ? undefined : sl.events?.event_date;
         if (!eventDate) return;
-        (sl.setlist_songs || []).forEach((ss: any) => {
+        (sl.setlist_songs || []).forEach(ss => {
           if (!usage[ss.song_id] || eventDate > usage[ss.song_id].lastDate) {
             usage[ss.song_id] = { lastDate: eventDate, days: differenceInDays(new Date(), parseISO(eventDate)) };
           }
@@ -604,7 +610,10 @@ export function EventDetail() {
           const updated = payload.new as Partial<SetlistSong> & { id?: string };
           setSetlistSongs(prev => prev.map(mergeSetlistSongUpdate(updated)));
           setLinkedSetlistSongs(prev => prev.map(mergeSetlistSongUpdate(updated)));
-          setChartModalSong(prev => prev?.id === updated.id ? { ...prev, ...updated, songs: prev.songs } : prev);
+          setChartModalSong(prev => {
+            if (!prev || prev.id !== updated.id) return prev;
+            return { ...prev, ...updated, songs: prev.songs };
+          });
         }
       );
     });
@@ -621,12 +630,11 @@ export function EventDetail() {
         if (!updated.id) return;
         setSongs(prev => prev.map(song => song.id === updated.id ? { ...song, ...updated } : song));
         setSetlistSongs(prev => prev.map(mergeSongUpdate(updated)));
-        setLinkedSetlistSongs(prev => prev.map(mergeSongUpdate(updated)));
-        setChartModalSong(prev => (
-          prev?.song_id === updated.id && prev.songs
-            ? { ...prev, songs: { ...prev.songs, ...updated } }
-            : prev
-        ));
+          setLinkedSetlistSongs(prev => prev.map(mergeSongUpdate(updated)));
+          setChartModalSong(prev => {
+            if (!prev || prev.song_id !== updated.id || !prev.songs) return prev;
+            return { ...prev, songs: { ...prev.songs, ...updated } };
+          });
       }
     );
 
@@ -1632,11 +1640,6 @@ const openLyricsModal = (ss: SetlistSong) => {
       ? members.find(m => m.id === event.song_leader_id)!.first_name
       : '';
   const songLeaderName = directSongLeaderName || linkedSongLeaderName;
-  const songLeaderDetail = songLeaderAssignment?.status
-    ? songLeaderAssignment.status === 'confirmed' ? 'Confirmed assignment' : `${songLeaderAssignment.status} assignment`
-    : linkedSongLeaderName
-      ? 'Linked service leader'
-      : 'No song leader assignment';
   const eventDisplayTitle = directSongLeaderName || shortenPrefixedTitle(event.title);
   const isSongLeader = assignments.some(a => a.user_id === user?.id && a.roles?.name === 'Song Leader');
   const userIsSongLeaderRole = userRoles.some(ur => ur.roles?.name === 'Song Leader');
@@ -2134,7 +2137,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] font-medium text-white/60">
                   <span className="badge-blue text-[10px]">{event.event_type}</span>
                   {songLeaderName && <span>{songLeaderName}</span>}
-                  {compactEventFacts.map((fact, index) => (
+                  {compactEventFacts.map(fact => (
                     <span key={fact} className="flex items-center gap-2">
                       <span className="h-1 w-1 rounded-full bg-white/35" />
                       {fact}
@@ -4351,7 +4354,7 @@ const openLyricsModal = (ss: SetlistSong) => {
               {editForm.event_date && ['Sunday Service', 'LGTF (Midweek)', 'Prayer Meeting', 'Youth Recharge'].includes(editForm.event_type) && (
                 <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
                   <p className="text-xs text-blue-700 dark:text-blue-300">
-                    <strong>Proposal Due Date:</strong> {formatInTimeZone(parseISO(calculateProposalDueDate(editForm.event_date, editForm.event_type) || ''), 'Asia/Manila', "MMMM d, yyyy \'at\' h:mm a")}
+                    <strong>Proposal Due Date:</strong> {formatInTimeZone(parseISO(calculateProposalDueDate(editForm.event_date, editForm.event_type) || ''), 'Asia/Manila', "MMMM d, yyyy 'at' h:mm a")}
                   </p>
                 </div>
               )}

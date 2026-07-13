@@ -132,14 +132,28 @@ export function PlatformActivityLog() {
     else setLoading(true);
 
     try {
+      const request = supabase
+        .from('activity_logs')
+        .select('*')
+        .eq('org_id', churchId)
+        .order('created_at', { ascending: false })
+        .limit(300);
+      const timeoutResponse: Awaited<typeof request> = {
+        data: null,
+        error: {
+          name: 'PostgrestError',
+          message: 'Activity log took too long to load. Please refresh and try again.',
+          details: '',
+          hint: '',
+          code: 'REQUEST_TIMEOUT',
+        },
+        count: null,
+        status: 408,
+        statusText: 'Request Timeout',
+      };
       const { data, error } = await withRequestTimeout(
-        supabase
-          .from('activity_logs')
-          .select('*')
-          .eq('org_id', churchId)
-          .order('created_at', { ascending: false })
-          .limit(300),
-        { data: [], error: { message: 'Activity log took too long to load. Please refresh and try again.' } } as any,
+        request,
+        timeoutResponse,
         'Platform activity log',
       );
 

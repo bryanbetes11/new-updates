@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { differenceInCalendarDays, format, parseISO } from 'date-fns';
 import { AlertCircle, Building2, CheckCircle2, Clock3, Copy, CreditCard, Loader2, Smartphone } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
@@ -120,7 +120,7 @@ export function OrganizationBilling() {
     return differenceInCalendarDays(parseISO(organization.trial_ends_at), new Date());
   }, [organization?.trial_ends_at]);
 
-  const fetchHistory = async () => {
+  const fetchHistory = useCallback(async () => {
     if (!organization?.id) {
       setHistory([]);
       return;
@@ -139,7 +139,7 @@ export function OrganizationBilling() {
     }
 
     setHistory((data || []) as OrganizationPaymentSubmission[]);
-  };
+  }, [organization?.id, toast]);
 
   useEffect(() => {
     if (!organization) {
@@ -151,12 +151,12 @@ export function OrganizationBilling() {
     setPaymentChannel(organization.payment_method === 'manual_bank_transfer' ? 'bank_transfer' : 'gcash');
     setBillingReference(generateBillingReference(organization.slug, organization.billing_plan || 'starter_monthly'));
     fetchHistory().finally(() => setLoading(false));
-  }, [organization?.id]);
+  }, [fetchHistory, organization]);
 
   useEffect(() => {
     if (!organization) return;
     setBillingReference(generateBillingReference(organization.slug, selectedPlanCode));
-  }, [organization?.slug, selectedPlanCode]);
+  }, [organization, selectedPlanCode]);
 
   const latestSubmission = history[0];
   const orgStatus = organization?.billing_status || organization?.subscription_status;

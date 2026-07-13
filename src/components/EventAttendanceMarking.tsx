@@ -57,7 +57,7 @@ export function EventAttendanceMarking({ event }: Props) {
       setRoster((data || []) as RosterMember[]);
     }
     setLoading(false);
-  }, [event.id]);
+  }, [event.id, toast]);
 
   useEffect(() => {
     fetchRoster();

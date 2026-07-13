@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
@@ -25,6 +25,23 @@ const desktopSizes = {
 
 const MODAL_LOCK_ATTR = 'data-modal-lock-count';
 const MODAL_LOCK_PREVIOUS_STYLES_ATTR = 'data-modal-lock-previous-styles';
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'area[href]',
+  'button:not([disabled])',
+  'input:not([disabled]):not([type="hidden"])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  'iframe',
+  'object',
+  'embed',
+  'audio[controls]',
+  'video[controls]',
+  'summary',
+  '[contenteditable="true"]',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+const modalStack: HTMLElement[] = [];
 
 interface ScrollLockSnapshot {
   htmlOverflow: string;
@@ -88,6 +105,48 @@ function lockBodyScroll() {
   };
 }
 
+function isAvailableForFocus(element: HTMLElement) {
+  if (element.matches(':disabled') || element.closest('[hidden], [inert], [aria-hidden="true"]')) {
+    return false;
+  }
+
+  const style = window.getComputedStyle(element);
+  return style.display !== 'none' && style.visibility !== 'hidden';
+}
+
+function getFocusableElements(dialog: HTMLElement) {
+  return Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+    element => element.tabIndex >= 0 && isAvailableForFocus(element),
+  );
+}
+
+function focusElement(element: HTMLElement) {
+  try {
+    element.focus({ preventScroll: true });
+  } catch {
+    element.focus();
+  }
+}
+
+function focusInitialElement(dialog: HTMLElement) {
+  const activeElement = document.activeElement;
+  if (activeElement instanceof HTMLElement && dialog.contains(activeElement)) return;
+
+  const preferredElement = dialog.querySelector<HTMLElement>(
+    '[data-modal-initial-focus], [data-autofocus], [autofocus]',
+  );
+  const firstFocusableElement = getFocusableElements(dialog)[0];
+  const target = preferredElement && isAvailableForFocus(preferredElement)
+    ? preferredElement
+    : firstFocusableElement || dialog;
+
+  focusElement(target);
+}
+
+function isTopmostModal(dialog: HTMLElement) {
+  return modalStack[modalStack.length - 1] === dialog;
+}
+
 export function Modal({
   open,
   onClose,
@@ -104,6 +163,9 @@ export function Modal({
 }: ModalProps) {
   const [visible, setVisible] = useState(false);
   const [closing, setClosing] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const titleId = useId();
 
   const requestClose = useCallback(() => {
     if (closing) return;
@@ -112,6 +174,11 @@ export function Modal({
 
   useEffect(() => {
     if (open) {
+      if (!visible) {
+        restoreFocusRef.current = document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+      }
       setClosing(false);
       setVisible(true);
     } else if (visible) {
@@ -131,12 +198,78 @@ export function Modal({
 
   useEffect(() => {
     if (!visible) return;
-    const handleEsc = (e: KeyboardEvent) => {
-      if (closeOnEscape && e.key === 'Escape') requestClose();
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    const previouslyFocused = restoreFocusRef.current;
+    modalStack.push(dialog);
+
+    const animationFrame = window.requestAnimationFrame(() => {
+      if (isTopmostModal(dialog)) focusInitialElement(dialog);
+    });
+
+    const handleFocusIn = (event: FocusEvent) => {
+      if (!isTopmostModal(dialog)) return;
+      if (event.target instanceof Node && !dialog.contains(event.target)) {
+        focusInitialElement(dialog);
+      }
     };
-    window.addEventListener('keydown', handleEsc);
-    return () => window.removeEventListener('keydown', handleEsc);
-  }, [visible, closeOnEscape, closing]);
+
+    document.addEventListener('focusin', handleFocusIn);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      document.removeEventListener('focusin', handleFocusIn);
+
+      const shouldRestoreFocus = isTopmostModal(dialog);
+      const stackIndex = modalStack.lastIndexOf(dialog);
+      if (stackIndex !== -1) modalStack.splice(stackIndex, 1);
+
+      if (shouldRestoreFocus && previouslyFocused?.isConnected) {
+        focusElement(previouslyFocused);
+      }
+      if (restoreFocusRef.current === previouslyFocused) restoreFocusRef.current = null;
+    };
+  }, [visible]);
+
+  useEffect(() => {
+    if (!visible) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const dialog = dialogRef.current;
+      if (!dialog || !isTopmostModal(dialog)) return;
+
+      if (event.key === 'Escape') {
+        if (closeOnEscape) requestClose();
+        return;
+      }
+
+      if (event.key !== 'Tab') return;
+
+      const focusableElements = getFocusableElements(dialog);
+      if (focusableElements.length === 0) {
+        event.preventDefault();
+        focusElement(dialog);
+        return;
+      }
+
+      const firstFocusableElement = focusableElements[0];
+      const lastFocusableElement = focusableElements[focusableElements.length - 1];
+      const activeElement = document.activeElement;
+      const focusIsOutsideDialog = !(activeElement instanceof Node) || !dialog.contains(activeElement);
+
+      if (event.shiftKey && (activeElement === firstFocusableElement || activeElement === dialog || focusIsOutsideDialog)) {
+        event.preventDefault();
+        focusElement(lastFocusableElement);
+      } else if (!event.shiftKey && (activeElement === lastFocusableElement || activeElement === dialog || focusIsOutsideDialog)) {
+        event.preventDefault();
+        focusElement(firstFocusableElement);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [visible, closeOnEscape, requestClose]);
 
   if (!visible) return null;
 
@@ -154,6 +287,7 @@ export function Modal({
     >
       <div className={`fixed inset-0 bg-black/50 backdrop-blur-sm ${backdropClass}`} />
       <div
+        ref={dialogRef}
         className={`relative w-full ${desktopSizes[size]} ${isMobilePage ? 'h-[100dvh] rounded-none sm:h-auto sm:rounded-2xl' : 'rounded-t-[28px] sm:rounded-2xl'} bg-white dark:bg-[#1c1b1e] ring-1 ring-black/[0.06] dark:ring-white/[0.08] ${sheetClass} ${isMobilePage ? 'max-h-[100dvh] sm:max-h-[85vh]' : 'max-h-[92dvh] sm:max-h-[85vh]'} flex flex-col overflow-hidden ${isMobilePage ? '' : 'sm:mx-4'}`}
         style={{
           boxShadow: '0 24px 64px -16px rgba(0,0,0,0.3), 0 8px 24px -8px rgba(0,0,0,0.15)',
@@ -161,7 +295,9 @@ export function Modal({
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label={title || 'Dialog'}
+        aria-labelledby={!hideHeader && title ? titleId : undefined}
+        aria-label={hideHeader || !title ? title || 'Dialog' : undefined}
+        tabIndex={-1}
         data-modal-sheet
       >
         {!hideHeader && (
@@ -173,6 +309,7 @@ export function Modal({
               <div className="absolute top-3 left-1/2 -translate-x-1/2 w-8 h-1 rounded-full bg-gray-200 dark:bg-gray-700 sm:hidden" />
             )}
             <h2
+              id={titleId}
               className={`text-[15px] font-bold text-gray-900 dark:text-white ${titleAlign === 'center' ? 'absolute left-1/2 -translate-x-1/2 text-center' : ''}`}
               style={{ letterSpacing: '-0.02em' }}
             >

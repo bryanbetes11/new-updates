@@ -24,6 +24,10 @@ type AnnouncementWithBlocks = Announcement & {
   announcement_pins?: AnnouncementPin[];
 };
 
+function emptyListResponse() {
+  return { data: [], error: null, count: null, status: 200, statusText: 'OK' };
+}
+
 const QUICK_EMOJIS = ['👍', '❤️', '🙏', '🔥', '😂', '✅'];
 type NewsFilter = 'all' | 'unread' | 'pinned' | 'urgent';
 
@@ -108,8 +112,6 @@ export function Announcements() {
   };
 
   const fetchAnnouncements = useCallback(async () => {
-    const emptyList = { data: [], error: null };
-
     try {
       const [announcementsRes, pinsRes] = await Promise.all([
         withRequestTimeout(
@@ -117,14 +119,14 @@ export function Announcements() {
             .from('announcements')
             .select(`*, profiles!announcements_created_by_fkey(first_name, last_name, avatar_url), announcement_views(user_id), announcement_comments(id), announcement_reactions(id, user_id, emoji)`)
             .order('created_at', { ascending: false }),
-          emptyList,
+          emptyListResponse(),
           'Announcements list',
         ),
         withRequestTimeout(
           supabase
             .from('announcement_pins')
             .select('id, announcement_id, pinned_by, pinned_at'),
-          emptyList,
+          emptyListResponse(),
           'Announcement pins',
         ),
       ]);
@@ -314,7 +316,7 @@ export function Announcements() {
           >
             {sortedFiltered.map((a) => {
               const viewCount = a.announcement_views?.length || 0;
-              const commentCount = (a as any).announcement_comments?.length || 0;
+              const commentCount = a.announcement_comments?.length || 0;
               const thumbnail = firstImageUrl(a);
               const isUnread = user && !a.announcement_views?.some(v => v.user_id === user.id);
               const isPinned = (a.announcement_pins?.length || 0) > 0;

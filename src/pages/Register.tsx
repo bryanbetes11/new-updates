@@ -183,7 +183,7 @@ export function Register() {
                         type="email"
                         value={email}
                         onChange={e => setEmail(e.target.value)}
-                        className={`${inputClass} ${Boolean(inviteEmail) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                        className={`${inputClass} ${inviteEmail ? 'opacity-60 cursor-not-allowed' : ''}`}
                         placeholder="you@example.com"
                         autoComplete="email"
                         required

@@ -4,9 +4,9 @@ import webpush from "npm:web-push@3.6.7";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers":
-    "Content-Type, Authorization, X-Client-Info, Apikey",
+    "Content-Type, X-Internal-Secret",
 };
 
 interface PushPayload {
@@ -27,14 +27,23 @@ type PushSubscriptionRow = {
   auth_key: string;
 };
 
-const VAPID_PUBLIC_KEY = "BFYGuTCBpjfMJWQrMBpZmTvPBD5Qc-0oVoWjle5UI4PKwY3iTUYdmJMi1J2VpoVV4Dfzg_XizPv80Zg5NGTS6rI";
-const VAPID_PRIVATE_KEY = "adWKInw27LTgLyKiRz4vOmZ78cJ6AyQ7XtOS6RGZrLo";
+const VAPID_PUBLIC_KEY = Deno.env.get("VAPID_PUBLIC_KEY") ||
+  "BFYGuTCBpjfMJWQrMBpZmTvPBD5Qc-0oVoWjle5UI4PKwY3iTUYdmJMi1J2VpoVV4Dfzg_XizPv80Zg5NGTS6rI";
 
-webpush.setVapidDetails(
-  "mailto:admin@worshipportal.com",
-  VAPID_PUBLIC_KEY,
-  VAPID_PRIVATE_KEY
-);
+type PushRuntimeConfig = {
+  webhook_secret: string | null;
+  vapid_private_key: string | null;
+};
+
+function secretsMatch(received: string | null, expected: string | null): boolean {
+  if (!received || !expected || received.length !== expected.length) return false;
+
+  let mismatch = 0;
+  for (let index = 0; index < received.length; index += 1) {
+    mismatch |= received.charCodeAt(index) ^ expected.charCodeAt(index);
+  }
+  return mismatch === 0;
+}
 
 function normalizeOrganizationName(row: OrgLookupRow | null): string | null {
   const orgData = row?.organizations;
@@ -109,18 +118,65 @@ Deno.serve(async (req: Request) => {
     });
   }
 
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    const { data: runtimeConfig, error: configError } = await supabase
+      .rpc("get_push_runtime_config");
+    if (configError) {
+      console.error("[Push] Runtime configuration unavailable:", configError.message);
+      return new Response(JSON.stringify({ error: "Push service is not configured" }), {
+        status: 503,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const config = runtimeConfig as PushRuntimeConfig;
+    if (!secretsMatch(req.headers.get("x-internal-secret"), config.webhook_secret)) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY") || config.vapid_private_key;
+    if (!vapidPrivateKey) {
+      console.error("[Push] VAPID private key is not configured");
+      return new Response(JSON.stringify({ error: "Push service is not configured" }), {
+        status: 503,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    webpush.setVapidDetails(
+      Deno.env.get("VAPID_SUBJECT") || "mailto:admin@worshipportal.com",
+      VAPID_PUBLIC_KEY,
+      vapidPrivateKey,
+    );
+
     const { user_id, title, body, data }: PushPayload = await req.json();
     console.log(`[Push] Received request for user ${user_id}: ${title}`);
 
-    if (!user_id || !title) {
+    if (
+      !user_id ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(user_id) ||
+      typeof title !== "string" ||
+      typeof body !== "string" ||
+      title.trim().length === 0 ||
+      title.length > 160 ||
+      body.length > 1000
+    ) {
       console.error("[Push] Missing required fields");
       return new Response(
-        JSON.stringify({ error: "user_id and title are required" }),
+        JSON.stringify({ error: "Invalid push payload" }),
         {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },

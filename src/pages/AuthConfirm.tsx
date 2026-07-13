@@ -74,6 +74,8 @@ export function AuthConfirm() {
     return () => {
       cancelled = true;
     };
+    // Confirmation should run once per callback URL; refreshProfile is recreated with auth context updates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search]);
 
   const nextPath = new URLSearchParams(location.search).get('next') || '/profile?email_updated=1';

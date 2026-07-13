@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import {
-  Activity, Users, Bell, LogOut, Shield, BookOpen, Video, Calendar, ChevronRight, ListChecks, RefreshCw, Plus, Trash2, Eye, EyeOff, UserPlus, Sparkles, Layers3, CheckCircle2, ArrowLeftRight, AlertTriangle,
+  Activity, Users, LogOut, Shield, BookOpen, Video, Calendar, ChevronRight, ListChecks, RefreshCw, Plus, Trash2, Eye, EyeOff, UserPlus, Sparkles, Layers3, CheckCircle2, ArrowLeftRight, AlertTriangle,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -161,9 +161,9 @@ export function More() {
   ].filter(item => item.show);
 
   const leadershipItems: MoreMenuItem[] = [
-    { icon: ListChecks, label: 'Approve Setlist', desc: 'Review submitted setlists', path: '/leadership/setlists', show: isLeader, action: null, badge: unread.pendingSetlists, color: '#16a34a', badgeVariant: 'red' },
-    { icon: Calendar, label: 'Approve Leave', desc: 'Review leave requests', path: '/leadership/leave', show: !!canApproveLeave, action: null, badge: unread.pendingLeave, color: '#f59e0b', badgeVariant: 'red' },
-    { icon: ArrowLeftRight, label: 'Approve Swaps', desc: 'Review swap requests', path: '/leadership/swaps', show: isLeader, action: null, badge: unread.pendingSwaps, color: '#0ea5e9', badgeVariant: 'red' },
+    { icon: ListChecks, label: 'Approve Setlist', desc: 'Review submitted setlists', path: '/leadership/setlists', show: isLeader, action: null, badge: unread.pendingSetlists, color: '#16a34a', badgeVariant: 'red' as const },
+    { icon: Calendar, label: 'Approve Leave', desc: 'Review leave requests', path: '/leadership/leave', show: !!canApproveLeave, action: null, badge: unread.pendingLeave, color: '#f59e0b', badgeVariant: 'red' as const },
+    { icon: ArrowLeftRight, label: 'Approve Swaps', desc: 'Review swap requests', path: '/leadership/swaps', show: isLeader, action: null, badge: unread.pendingSwaps, color: '#0ea5e9', badgeVariant: 'red' as const },
     { icon: AlertTriangle, label: 'Conduct', desc: 'Discipline and records', path: '/leadership/discipline', show: isLeader || !!canManageDiscipline, action: null, badge: 0, color: '#f97316' },
     { icon: Users, label: 'Team', desc: 'Manage team members', path: '/leadership/team', show: isLeader || isOrgAdmin, action: null, badge: 0, color: '#8b5cf6' },
   ].filter(item => item.show);

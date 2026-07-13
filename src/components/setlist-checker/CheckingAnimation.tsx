@@ -29,8 +29,6 @@ const STEPS = [
   { icon: Sparkles,  label: 'Preparing your report',          duration: 800  },
 ];
 
-const MIN_ANIMATION_MS = STEPS.reduce((s, step) => s + step.duration, 0);
-
 export function CheckingAnimation({ songs, theme, language, onComplete }: CheckingAnimationProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);

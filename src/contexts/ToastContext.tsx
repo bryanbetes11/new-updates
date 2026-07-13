@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- The provider and its companion hook intentionally share this context module. */
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
 import { CheckCircle, AlertTriangle, Info, X, XCircle } from 'lucide-react';
 import { createStableId } from '../lib/createStableId';

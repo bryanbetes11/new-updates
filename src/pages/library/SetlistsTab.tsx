@@ -1,11 +1,11 @@
 import { useEffect, useState, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { format, parseISO, differenceInDays } from 'date-fns';
-import { motion } from 'framer-motion';
+import { motion, type Variants } from 'framer-motion';
 import {
   Music, Upload, CheckCircle, AlertTriangle, Calendar, Search,
   ChevronDown, Trash2, Square, CheckSquare, X,
-  Clock, Music2, ArrowUpDown, FileMusic,
+  Clock, Music2, ArrowUpDown,
   ExternalLink, Globe2, ClipboardPaste, Pencil,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -42,7 +42,24 @@ interface ImportRow {
   song_leader: string;
 }
 
+interface SongLeaderProfile {
+  first_name: string;
+  last_name: string;
+  nickname?: string | null;
+  gender?: string | null;
+  avatar_url: string | null;
+}
+
+interface SongLeaderAssignmentRow {
+  event_id: string;
+  profiles?: SongLeaderProfile | SongLeaderProfile[] | null;
+}
+
+type XLSXModule = typeof import('xlsx');
+type WindowWithXLSX = Window & { XLSX?: XLSXModule };
+
 const RULE_DAYS = 90;
+const SONG_PAGE_SIZE = 40;
 const SONG_CHART_OPEN_STORAGE_PREFIX = 'servesync:songs:open-chart-id';
 
 const getErrorMessage = (error: unknown, fallback: string): string => {
@@ -98,14 +115,14 @@ async function normalizeChartInput(text: string, options?: NormalizeChartInputOp
   return normalizeImportedChordSheet(text, options);
 }
 
-const containerVariants = {
+const containerVariants: Variants = {
   hidden: {},
   show: { transition: { staggerChildren: 0.04 } },
 };
 
-const itemVariants = {
+const itemVariants: Variants = {
   hidden: { opacity: 0, y: 10, filter: 'blur(4px)' },
-  show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] } },
+  show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] } },
 };
 
 function getDaysBg(days: number | null) {
@@ -138,7 +155,6 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   const [songLeaderMap, setSongLeaderMap] = useState<Record<string, string>>({});
   const [songLeaderAvatarMap, setSongLeaderAvatarMap] = useState<Record<string, { avatarUrl: string | null; firstName: string; lastName: string }>>({});
   const isSongsOnly = fixedView === 'songs';
-  const isSetlistsOnly = fixedView === 'setlists';
   const [showSongResults, setShowSongResults] = useState((fixedView || initialView) === 'songs');
   const [selectedSetlists, setSelectedSetlists] = useState<Set<string>>(new Set());
   const [selectedSongs, setSelectedSongs] = useState<Set<string>>(new Set());
@@ -148,6 +164,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   const [selectMode, setSelectMode] = useState(false);
   const [selectModeSongs, setSelectModeSongs] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'all' | 'safe' | 'not_ready' | 'never_used'>('all');
+  const [songPage, setSongPage] = useState({ resultKey: '', limit: SONG_PAGE_SIZE });
   const [selectedChartSong, setSelectedChartSong] = useState<SongUsage | null>(null);
   const [editingLibrarySong, setEditingLibrarySong] = useState<SongUsage | null>(null);
   const [editLibrarySongForm, setEditLibrarySongForm] = useState({
@@ -158,7 +175,6 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   });
   const [chartSaving, setChartSaving] = useState(false);
   const [songDetailsSaving, setSongDetailsSaving] = useState(false);
-  const [chartImporting, setChartImporting] = useState(false);
   const [showWebImport, setShowWebImport] = useState(false);
   const [webImportSaving, setWebImportSaving] = useState(false);
   const [webImportQuery, setWebImportQuery] = useState('');
@@ -190,14 +206,15 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
 
     const slMap: Record<string, string> = {};
     const slAvatarMap: Record<string, { avatarUrl: string | null; firstName: string; lastName: string }> = {};
-    (songLeadersRes.data || []).forEach((a: any) => {
-      if (a.profiles) {
-        const prefix = a.profiles.gender === 'male' ? 'Bro.' : a.profiles.gender === 'female' ? 'Sis.' : '';
-        slMap[a.event_id] = prefix ? `${prefix} ${a.profiles.first_name}` : `${a.profiles.first_name} ${a.profiles.last_name}`;
+    ((songLeadersRes.data || []) as SongLeaderAssignmentRow[]).forEach((a) => {
+      const leaderProfile = Array.isArray(a.profiles) ? a.profiles[0] : a.profiles;
+      if (leaderProfile) {
+        const prefix = leaderProfile.gender === 'male' ? 'Bro.' : leaderProfile.gender === 'female' ? 'Sis.' : '';
+        slMap[a.event_id] = prefix ? `${prefix} ${leaderProfile.first_name}` : `${leaderProfile.first_name} ${leaderProfile.last_name}`;
         slAvatarMap[a.event_id] = {
-          avatarUrl: a.profiles.avatar_url,
-          firstName: a.profiles.first_name,
-          lastName: a.profiles.last_name,
+          avatarUrl: leaderProfile.avatar_url,
+          firstName: leaderProfile.first_name,
+          lastName: leaderProfile.last_name,
         };
       }
     });
@@ -365,18 +382,6 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
     }
   };
 
-  const openWebImport = () => {
-    const query = search.trim();
-    setWebImportQuery(query);
-    setWebImportForm({
-      title: query,
-      artist: '',
-      song_key: '',
-      chordpro_text: '',
-    });
-    setShowWebImport(true);
-  };
-
   const closeWebImport = () => {
     if (webImportSaving) return;
     setShowWebImport(false);
@@ -491,13 +496,16 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
     }
   };
 
-  const loadXLSX = (): Promise<any> => {
-    const w = window as any;
-    if (w.XLSX) return Promise.resolve(w.XLSX);
+  const loadXLSX = (): Promise<XLSXModule> => {
+    const xlsxWindow = window as WindowWithXLSX;
+    if (xlsxWindow.XLSX) return Promise.resolve(xlsxWindow.XLSX);
     return new Promise((resolve, reject) => {
       const script = document.createElement('script');
       script.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
-      script.onload = () => resolve(w.XLSX);
+      script.onload = () => {
+        if (xlsxWindow.XLSX) resolve(xlsxWindow.XLSX);
+        else reject(new Error('Spreadsheet library did not initialize'));
+      };
       script.onerror = () => reject(new Error('Failed to load spreadsheet library'));
       document.head.appendChild(script);
     });
@@ -506,7 +514,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const file = files[0];
-    let XLSX: any;
+    let XLSX: XLSXModule;
     try { XLSX = await loadXLSX(); } catch { toast('error', 'Failed to load spreadsheet library'); return; }
 
     const reader = new FileReader();
@@ -516,9 +524,10 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
         const workbook = XLSX.read(data, { type: 'array' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
 
-        const parseDateValue = (val: any): string => {
+        const parseDateValue = (val: unknown): string => {
           if (typeof val === 'number') {
             const d = XLSX.SSF.parse_date_code(val);
+            if (!d) return '';
             return `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
           }
           const s = String(val || '').trim();
@@ -537,12 +546,12 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
           return { title, key };
         };
 
-        const colRows = XLSX.utils.sheet_to_json(sheet, { header: 'A', defval: '' }) as Record<string, any>[];
+        const colRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { header: 'A', defval: '' });
         let headerRowIdx = -1;
         let isWorshipFormat = false;
 
         for (let i = 0; i < Math.min(colRows.length, 5); i++) {
-          const vals = Object.values(colRows[i]).map((c: any) => String(c).toLowerCase().trim());
+          const vals = Object.values(colRows[i]).map((c) => String(c).toLowerCase().trim());
           if (vals.includes('opening') || vals.includes('praise') || vals.includes('worship')) {
             headerRowIdx = i; isWorshipFormat = true; break;
           }
@@ -567,7 +576,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
 
           for (let i = headerRowIdx + 1; i < colRows.length; i++) {
             const row = colRows[i];
-            const allEmpty = Object.values(row).every((c: any) => !String(c).trim());
+            const allEmpty = Object.values(row).every((c) => !String(c).trim());
             if (allEmpty) continue;
             const dateVal = dateCol ? parseDateValue(row[dateCol]) : '';
             const eventType = typeCol ? String(row[typeCol] || 'Sunday Service').trim() : 'Sunday Service';
@@ -584,15 +593,23 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
             }
           }
         } else {
-          const json = XLSX.utils.sheet_to_json(sheet) as Record<string, any>[];
-          rows = json.map((row: Record<string, any>) => {
+          const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+          rows = json.map((row) => {
             const dateVal = row['Date'] || row['Event Date'] || row['date'] || row['event_date'] || '';
             const nameVal = row['Event'] || row['Event Name'] || row['event'] || row['event_name'] || 'Imported Event';
             const titleVal = row['Song Title'] || row['Song'] || row['Title'] || row['song_title'] || row['title'] || '';
             const artistVal = row['Artist'] || row['artist'] || '';
             const keyVal = row['Key'] || row['Song Key'] || row['key'] || row['song_key'] || '';
             const leaderVal = row['Song Leader'] || row['song_leader'] || row['Leader'] || '';
-            return { event_date: parseDateValue(dateVal), event_name: nameVal, song_title: titleVal, artist: artistVal, song_key: keyVal, song_category: '', song_leader: String(leaderVal).trim() };
+            return {
+              event_date: parseDateValue(dateVal),
+              event_name: String(nameVal),
+              song_title: String(titleVal),
+              artist: String(artistVal),
+              song_key: String(keyVal),
+              song_category: '',
+              song_leader: String(leaderVal).trim(),
+            };
           }).filter(r => r.song_title.trim());
         }
 
@@ -613,8 +630,6 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
 
   const handleChartUpload = async (files: FileList | null) => {
     if (!files || files.length === 0 || !user) return;
-    setChartImporting(true);
-
     try {
       const chartFiles: Array<{ name: string; text: string }> = [];
 
@@ -684,7 +699,6 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
       console.error('Failed to import song charts:', error);
       toast('error', getErrorMessage(error, 'Failed to import song charts'));
     } finally {
-      setChartImporting(false);
       if (chartFileRef.current) chartFileRef.current.value = '';
     }
   };
@@ -820,7 +834,12 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   };
 
   const toggleSetlist = (id: string) => {
-    setSelectedSetlists(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
+    setSelectedSetlists(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   const toggleAllSetlists = () => {
@@ -829,7 +848,12 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   };
 
   const toggleSong = (id: string) => {
-    setSelectedSongs(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
+    setSelectedSongs(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   const toggleAllSongs = () => {
@@ -888,6 +912,21 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
     if (activeFilter === 'never_used') return s.days_since === null;
     return true;
   });
+
+  const songResultKey = JSON.stringify([activeFilter, search]);
+  const visibleSongLimit = songPage.resultKey === songResultKey ? songPage.limit : SONG_PAGE_SIZE;
+  const visibleSongs = filteredSongs.slice(0, visibleSongLimit);
+  const remainingSongCount = filteredSongs.length - visibleSongs.length;
+
+  const showMoreSongs = () => {
+    setSongPage(current => {
+      const currentLimit = current.resultKey === songResultKey ? current.limit : SONG_PAGE_SIZE;
+      return {
+        resultKey: songResultKey,
+        limit: Math.min(filteredSongs.length, currentLimit + SONG_PAGE_SIZE),
+      };
+    });
+  };
 
   const visibleSetlists = showMyCreatedSets && user?.id
     ? setlists.filter(setlist => setlist.created_by === user.id)
@@ -1478,7 +1517,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
           <p className="rounded-[0.75rem] bg-[#181818] px-5 py-12 text-center text-sm text-gray-400 dark:text-white/30">No songs found</p>
         ) : (
           <>
-            {filteredSongs.map(song => {
+            {visibleSongs.map(song => {
               const latestUsage = !song.is_safe ? song.latest_usage : null;
               return (
                 <div
@@ -1582,6 +1621,22 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
           </>
         )}
       </motion.div>
+
+      {remainingSongCount > 0 && (
+        <div className="flex flex-col items-center gap-2 pt-1">
+          <span className="text-[11px] font-mono text-gray-400 dark:text-white/30" aria-live="polite">
+            Showing {visibleSongs.length} of {filteredSongs.length} songs
+          </span>
+          <button
+            type="button"
+            onClick={showMoreSongs}
+            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.06] px-5 text-[12px] font-black text-white transition-colors hover:bg-white/[0.10] active:scale-[0.98] sm:w-auto sm:min-w-52"
+          >
+            <ChevronDown className="h-4 w-4" />
+            Show {Math.min(SONG_PAGE_SIZE, remainingSongCount)} more
+          </button>
+        </div>
+      )}
 
       {/* ── Legend ── */}
       <div className="flex items-center gap-4 px-1 text-[11px] font-mono text-gray-400 dark:text-white/30 flex-wrap tracking-wide">

@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- The provider and its companion hook intentionally share this context module. */
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { createTransientSupabaseClient, supabase } from '../lib/supabase';
@@ -279,6 +280,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => subscription.unsubscribe();
+    // The Supabase auth listener is registered once; recreating it on context updates can duplicate auth events.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const roleNames = userRoles.map(ur => ur.roles?.name || '');

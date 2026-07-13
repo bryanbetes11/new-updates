@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { Building2, Copy, Loader2, Mail, Plus, Shield, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -36,7 +36,7 @@ export function OrganizationSettings() {
 
   const roleOptions = useMemo(() => sortRolesLeadershipFirst(roles), [roles]);
 
-  const fetchInvitations = async () => {
+  const fetchInvitations = useCallback(async () => {
     if (!organization?.id) {
       setInvitations([]);
       return;
@@ -55,7 +55,7 @@ export function OrganizationSettings() {
     }
 
     setInvitations((data || []) as OrganizationInvitation[]);
-  };
+  }, [organization?.id, toast]);
 
   useEffect(() => {
     if (!organization) {
@@ -69,7 +69,7 @@ export function OrganizationSettings() {
     });
 
     fetchInvitations().finally(() => setLoading(false));
-  }, [organization?.id]);
+  }, [fetchInvitations, organization]);
 
   const handleSaveOrganization = async () => {
     if (!organization?.id) return;

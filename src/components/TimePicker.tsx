@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Clock } from 'lucide-react';
 
@@ -34,7 +34,10 @@ export function TimePicker({ value, onChange, placeholder = 'Select time', requi
   const panelRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ top: 0, left: 0 });
 
-  const parsed = value ? { h24: parseInt(value.split(':')[0]), m: parseInt(value.split(':')[1]) } : null;
+  const parsed = useMemo(
+    () => value ? { h24: parseInt(value.split(':')[0]), m: parseInt(value.split(':')[1]) } : null,
+    [value]
+  );
   const display12 = parsed ? to12(parsed.h24) : null;
 
   const [selHour, setSelHour] = useState(display12?.h ?? 12);
@@ -48,7 +51,7 @@ export function TimePicker({ value, onChange, placeholder = 'Select time', requi
       setSelMinute(parsed.m);
       setSelPeriod(d.period);
     }
-  }, [value]);
+  }, [parsed]);
 
   const updatePosition = useCallback(() => {
     if (!triggerRef.current) return;

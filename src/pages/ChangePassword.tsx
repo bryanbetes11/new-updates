@@ -55,8 +55,8 @@ export function ChangePassword() {
       setSuccess(true);
       toast('success', 'Password updated successfully.');
       setTimeout(() => navigate('/profile'), 2000);
-    } catch (err: any) {
-      toast('error', err.message || 'Failed to update password.');
+    } catch (err: unknown) {
+      toast('error', err instanceof Error ? err.message : 'Failed to update password.');
     } finally {
       setLoading(false);
     }

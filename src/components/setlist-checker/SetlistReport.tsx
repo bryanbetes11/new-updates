@@ -182,7 +182,6 @@ function Card({ children, className = '' }: { children: React.ReactNode; classNa
 export function SetlistReport({
   report,
   onBack,
-  onRecheck,
   onSubmitProposal,
   canSubmit,
   setlistStatus,

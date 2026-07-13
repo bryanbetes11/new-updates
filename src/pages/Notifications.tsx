@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import {
@@ -75,6 +75,10 @@ const typeTones: Record<string, string> = {
   sub_declined: 'from-red-500/85 via-rose-900 to-black',
 };
 
+function emptyListResponse() {
+  return { data: [], error: null, count: null, status: 200, statusText: 'OK' };
+}
+
 export function Notifications() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -82,7 +86,7 @@ export function Notifications() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     if (!user) {
       setNotifications([]);
       setLoading(false);
@@ -98,14 +102,14 @@ export function Notifications() {
           .neq('type', 'message')
           .order('created_at', { ascending: false })
           .limit(50),
-        { data: [], error: null },
+        emptyListResponse(),
         'Notifications list',
       );
       setNotifications(data || []);
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
     fetchNotifications();
@@ -122,7 +126,7 @@ export function Notifications() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [user]);
+  }, [fetchNotifications, user]);
 
   const markRead = async (id: string) => {
     await supabase.from('notifications').update({ is_read: true }).eq('id', id);

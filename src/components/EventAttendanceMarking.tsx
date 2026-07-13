@@ -42,6 +42,7 @@ export function EventAttendanceMarking({ event }: Props) {
   const { toast } = useToast();
   const [roster, setRoster] = useState<RosterMember[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [excuseModal, setExcuseModal] = useState<{ userId: string; name: string } | null>(null);
@@ -50,8 +51,10 @@ export function EventAttendanceMarking({ event }: Props) {
 
   const fetchRoster = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     const { data, error } = await supabase.rpc('get_event_attendance_roster', { p_event_id: event.id });
     if (error) {
+      setLoadError('Attendance could not be loaded. Check your connection and try again.');
       toast('error', 'Failed to load attendance roster');
     } else {
       setRoster((data || []) as RosterMember[]);
@@ -141,8 +144,20 @@ export function EventAttendanceMarking({ event }: Props) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-10">
+      <div className="flex items-center justify-center py-10" role="status" aria-live="polite">
         <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+        <span className="sr-only">Loading attendance roster</span>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="rounded-lg border border-red-500/20 bg-red-500/[0.08] px-5 py-6 text-center" role="alert">
+        <AlertTriangle className="mx-auto h-7 w-7 text-red-400" />
+        <p className="mt-3 text-sm font-semibold text-gray-900 dark:text-white">Could not load attendance</p>
+        <p className="mx-auto mt-1 max-w-sm text-xs leading-relaxed text-gray-500 dark:text-white/50">{loadError}</p>
+        <button type="button" onClick={fetchRoster} className="btn-secondary mt-4 min-h-11">Try again</button>
       </div>
     );
   }
@@ -158,7 +173,7 @@ export function EventAttendanceMarking({ event }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+      <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
         {[
           { label: 'Total', value: summary.total, color: 'text-gray-700 dark:text-gray-300' },
           { label: 'Present', value: summary.present, color: 'text-green-600 dark:text-green-400' },
@@ -166,15 +181,15 @@ export function EventAttendanceMarking({ event }: Props) {
           { label: 'Absent', value: summary.absent, color: 'text-red-600 dark:text-red-400' },
           { label: 'Excused', value: summary.excused, color: 'text-blue-600 dark:text-blue-400' },
         ].map(s => (
-          <div key={s.label} className="card p-3 text-center">
-            <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
-            <p className="text-[10px] text-gray-500 dark:text-gray-400">{s.label}</p>
+          <div key={s.label} className="card min-w-0 px-1 py-2.5 text-center sm:p-3">
+            <p className={`text-lg font-bold sm:text-xl ${s.color}`}>{s.value}</p>
+            <p className="truncate text-[9px] text-gray-500 dark:text-gray-400 sm:text-[10px]">{s.label}</p>
           </div>
         ))}
       </div>
 
       {summary.unmarked > 0 && (
-        <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+        <div className="flex flex-col items-stretch gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 sm:flex-row sm:items-center dark:border-amber-800 dark:bg-amber-900/20">
           <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
           <p className="text-sm text-amber-700 dark:text-amber-300 flex-1">
             {summary.unmarked} member{summary.unmarked !== 1 ? 's' : ''} not yet marked
@@ -182,7 +197,7 @@ export function EventAttendanceMarking({ event }: Props) {
           <button
             onClick={handleMarkAllPresent}
             disabled={savingAll}
-            className="text-xs font-medium text-amber-700 dark:text-amber-300 hover:underline shrink-0"
+            className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-md px-3 text-xs font-bold text-amber-700 transition-colors hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:text-amber-300 dark:hover:bg-amber-800/30"
           >
             {savingAll ? 'Marking...' : 'Mark all present'}
           </button>
@@ -206,11 +221,11 @@ export function EventAttendanceMarking({ event }: Props) {
           const isSaving = saving === member.user_id;
 
           return (
-            <div key={member.user_id} className="card p-4">
+            <div key={member.user_id} className="card p-3 sm:p-4">
               <div className="flex items-center gap-3">
                 <Avatar src={member.avatar_url} firstName={member.first_name} lastName={member.last_name} size="sm" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">
+                  <p className="truncate text-sm font-medium text-gray-900 dark:text-white">
                     {member.first_name} {member.last_name}
                     {member.nickname && <span className="text-gray-400 font-normal text-xs"> ({member.nickname})</span>}
                   </p>
@@ -231,6 +246,12 @@ export function EventAttendanceMarking({ event }: Props) {
             </div>
           );
         })}
+        {filtered.length === 0 && (
+          <div className="rounded-lg border border-dashed border-gray-200 px-4 py-8 text-center dark:border-white/[0.1]">
+            <Search className="mx-auto h-6 w-6 text-gray-300 dark:text-white/25" />
+            <p className="mt-2 text-sm font-medium text-gray-500 dark:text-white/50">No members match your search</p>
+          </div>
+        )}
       </div>
 
       <Modal open={!!excuseModal} onClose={() => setExcuseModal(null)} title="Mark as Excused" size="sm">
@@ -249,9 +270,9 @@ export function EventAttendanceMarking({ event }: Props) {
               autoFocus
             />
           </div>
-          <div className="flex justify-end gap-3">
-            <button onClick={() => setExcuseModal(null)} className="btn-secondary">Cancel</button>
-            <button onClick={handleExcuseSubmit} className="btn-primary">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
+            <button onClick={() => setExcuseModal(null)} className="btn-secondary min-h-11">Cancel</button>
+            <button onClick={handleExcuseSubmit} className="btn-primary min-h-11">
               <Save className="h-4 w-4" /> Confirm Excused
             </button>
           </div>
@@ -272,11 +293,24 @@ function AttendanceStatusPicker({ currentStatus, onSelect }: AttendanceStatusPic
 
   const current = currentStatus ? statusConfig[currentStatus] : null;
 
+  useEffect(() => {
+    if (!open) return undefined;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [open]);
+
   return (
     <div className="relative shrink-0">
       <button
+        type="button"
         onClick={() => setOpen(!open)}
-        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ring-1 transition-all ${
+        aria-label={current ? `Attendance status: ${current.label}` : 'Mark attendance status'}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={`flex min-h-11 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium ring-1 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
           current
             ? `${current.color} ${current.ring}`
             : 'bg-gray-50 dark:bg-gray-800 ring-gray-200 dark:ring-gray-700 text-gray-500 dark:text-gray-400'
@@ -296,14 +330,17 @@ function AttendanceStatusPicker({ currentStatus, onSelect }: AttendanceStatusPic
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-gray-800 rounded-xl shadow-lg ring-1 ring-gray-200 dark:ring-gray-700 py-1 min-w-[130px]">
+          <div className="absolute right-0 top-full z-20 mt-1 min-w-[150px] rounded-lg bg-white py-1 shadow-lg ring-1 ring-gray-200 dark:bg-gray-800 dark:ring-gray-700" role="menu" aria-label="Attendance status">
             {statuses.map(s => {
               const cfg = statusConfig[s];
               return (
                 <button
+                  type="button"
                   key={s}
                   onClick={() => { onSelect(s); setOpen(false); }}
-                  className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
+                  role="menuitemradio"
+                  aria-checked={currentStatus === s}
+                  className={`flex min-h-11 w-full items-center gap-2 px-3 py-2 text-xs font-medium transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500 dark:hover:bg-gray-700 ${
                     currentStatus === s ? 'opacity-50' : ''
                   }`}
                 >

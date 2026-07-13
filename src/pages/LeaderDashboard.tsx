@@ -201,7 +201,7 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
             index={index}
             action={
               linkLabel && onLink ? (
-                <button onClick={onLink} className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400/80 hover:text-emerald-500 dark:hover:text-emerald-300 flex items-center gap-1 transition-colors">
+                <button onClick={onLink} className="-mr-2 inline-flex min-h-11 items-center gap-1 px-2 text-[11px] font-semibold text-emerald-600 transition-colors hover:text-emerald-500 dark:text-emerald-400/80 dark:hover:text-emerald-300">
                   {linkLabel} <ChevronRight className="h-3 w-3" />
                 </button>
               ) : undefined

@@ -60,6 +60,7 @@ type WindowWithXLSX = Window & { XLSX?: XLSXModule };
 
 const RULE_DAYS = 90;
 const SONG_PAGE_SIZE = 40;
+const SETLIST_PAGE_SIZE = 30;
 const SONG_CHART_OPEN_STORAGE_PREFIX = 'servesync:songs:open-chart-id';
 
 const getErrorMessage = (error: unknown, fallback: string): string => {
@@ -165,6 +166,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   const [selectModeSongs, setSelectModeSongs] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'all' | 'safe' | 'not_ready' | 'never_used'>('all');
   const [songPage, setSongPage] = useState({ resultKey: '', limit: SONG_PAGE_SIZE });
+  const [setlistPage, setSetlistPage] = useState({ resultKey: '', limit: SETLIST_PAGE_SIZE });
   const [selectedChartSong, setSelectedChartSong] = useState<SongUsage | null>(null);
   const [editingLibrarySong, setEditingLibrarySong] = useState<SongUsage | null>(null);
   const [editLibrarySongForm, setEditLibrarySongForm] = useState({
@@ -940,6 +942,23 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
     return (b.events?.event_date ?? '').localeCompare(a.events?.event_date ?? '');
   });
 
+  const setlistResultKey = JSON.stringify([search, sortKey, showMyCreatedSets, sortedSetlists.length]);
+  const visibleSetlistLimit = setlistPage.resultKey === setlistResultKey
+    ? setlistPage.limit
+    : SETLIST_PAGE_SIZE;
+  const paginatedSetlists = sortedSetlists.slice(0, visibleSetlistLimit);
+  const remainingSetlistCount = sortedSetlists.length - paginatedSetlists.length;
+
+  const showMoreSetlists = () => {
+    setSetlistPage(current => {
+      const currentLimit = current.resultKey === setlistResultKey ? current.limit : SETLIST_PAGE_SIZE;
+      return {
+        resultKey: setlistResultKey,
+        limit: Math.min(sortedSetlists.length, currentLimit + SETLIST_PAGE_SIZE),
+      };
+    });
+  };
+
   const safeCount = songUsages.filter(s => s.is_safe).length;
   const notReadyCount = songUsages.filter(s => !s.is_safe && s.days_since !== null).length;
   const neverUsed = songUsages.filter(s => s.days_since === null).length;
@@ -947,7 +966,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   if (loading) {
     return (
       <div className="space-y-4 pt-1">
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[1, 2, 3, 4].map(i => <div key={i} className="skeleton h-[78px] rounded-2xl" />)}
         </div>
         {[1, 2, 3].map(i => (
@@ -980,7 +999,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
             icon={<Music className="h-8 w-8" />}
             title="No approved sets"
             description="Approved sets from events will appear here. You can also import past sets from Excel."
-            action={<button onClick={() => fileRef.current?.click()} className="btn-primary"><Upload className="h-4 w-4" /> Import Excel</button>}
+            action={<button onClick={() => fileRef.current?.click()} className="btn-primary min-h-11"><Upload className="h-4 w-4" /> Import Excel</button>}
           />
         ) : (
           <>
@@ -999,6 +1018,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                     setSearch(e.target.value);
                     setSelectedSetlists(new Set());
                   }}
+                  aria-label="Search approved sets"
                   placeholder={showMyCreatedSets ? 'Search my sets by song, event, artist…' : 'Search sets by song, leader, event, artist…'}
                   className="w-full h-12 pl-10 pr-9 rounded-full text-[13px] bg-white/[0.055] border border-white/[0.08] text-white placeholder-white/30 outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/50 transition-all"
                 />
@@ -1008,7 +1028,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                       setSearch('');
                       setSelectedSetlists(new Set());
                     }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                  className="absolute right-1.5 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-white/[0.06] hover:text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70"
                     aria-label="Clear set search"
                   >
                     <X className="h-4 w-4" />
@@ -1071,16 +1091,17 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                   <div className="flex-1" />
                   <button
                     onClick={() => setSelectMode(true)}
-                    className="inline-flex items-center gap-1.5 px-3 h-8 text-[11px] font-semibold text-white/55 rounded-full bg-white/[0.055] border border-white/[0.07] backdrop-blur-md hover:bg-white/[0.09] transition-colors active:scale-[0.97]"
+                    className="inline-flex h-10 items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.055] px-3 text-[11px] font-semibold text-white/55 backdrop-blur-md transition-colors hover:bg-white/[0.09] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 active:scale-[0.97]"
                   >
                     <CheckSquare className="h-3.5 w-3.5" />
                     Select
                   </button>
-                  <div className="inline-flex items-center gap-1.5 pl-3 pr-2 h-8 rounded-full bg-white/[0.055] border border-white/[0.07] backdrop-blur-md">
+                  <div className="inline-flex h-10 items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.055] pl-3 pr-2 backdrop-blur-md focus-within:ring-2 focus-within:ring-emerald-400/70">
                     <ArrowUpDown className="h-3 w-3 text-gray-400 dark:text-white/35" />
                     <select
                       value={sortKey}
                       onChange={e => setSortKey(e.target.value as SortKey)}
+                      aria-label="Sort approved sets"
                       className="text-[11px] font-semibold text-white/60 bg-transparent border-none outline-none cursor-pointer pr-1"
                     >
                       <option value="date_desc">Newest first</option>
@@ -1111,7 +1132,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                       : 'Try another song title, artist, event, or song leader.'}
                   </p>
                 </div>
-              ) : sortedSetlists.map(sl => {
+              ) : paginatedSetlists.map(sl => {
                 const isExpanded = expandedSetlist === sl.id;
                 const eventDate = sl.events?.event_date;
                 const daysSinceEvent = eventDate ? differenceInDays(new Date(), parseISO(eventDate)) : null;
@@ -1149,7 +1170,9 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                       )}
                       <button
                         onClick={() => setExpandedSetlist(isExpanded ? null : sl.id)}
-                        className="flex-1 flex items-center gap-3.5 pl-4 pr-4 py-4 text-left"
+                        className="flex min-h-20 flex-1 items-center gap-3.5 py-3.5 pl-3 pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-400/70 sm:py-4 sm:pl-4 sm:pr-4"
+                        aria-expanded={isExpanded}
+                        aria-controls={`setlist-songs-${sl.id}`}
                       >
                         <div className="grid h-16 w-16 shrink-0 grid-cols-2 overflow-hidden rounded-md bg-white/[0.055] ring-1 ring-white/[0.08] sm:h-20 sm:w-20">
                           {Array.from({ length: 4 }).map((_, index) => {
@@ -1216,7 +1239,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                     </div>
 
                     {isExpanded && sl.setlist_songs && (
-                      <div className="border-t border-white/[0.055] bg-black/10">
+                      <div id={`setlist-songs-${sl.id}`} className="border-t border-white/[0.055] bg-black/10">
                         <div className="px-4 pt-3 pb-1 flex items-center gap-2">
                           <Music2 className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
                           <span className="text-[10px] font-black text-gray-500 dark:text-white/45 uppercase tracking-[0.14em]">Songs in order</span>
@@ -1272,6 +1295,22 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                 );
               })}
             </motion.div>
+
+            {remainingSetlistCount > 0 && (
+              <div className="flex flex-col items-center gap-2 pt-1">
+                <span className="text-[11px] font-mono text-white/30" aria-live="polite">
+                  Showing {paginatedSetlists.length} of {sortedSetlists.length} sets
+                </span>
+                <button
+                  type="button"
+                  onClick={showMoreSetlists}
+                  className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.06] px-5 text-[12px] font-black text-white transition-colors hover:bg-white/[0.10] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 active:scale-[0.98] sm:w-auto sm:min-w-52"
+                >
+                  <ChevronDown className="h-4 w-4" />
+                  Show {Math.min(SETLIST_PAGE_SIZE, remainingSetlistCount)} more
+                </button>
+              </div>
+            )}
           </>
         )}
 
@@ -1375,7 +1414,9 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-        className="flex gap-2 overflow-x-auto pb-1 no-scrollbar"
+        className="grid grid-cols-2 gap-2 sm:flex"
+        role="group"
+        aria-label="Song availability filters"
       >
         {[
           { id: 'all' as const, label: 'All', count: songUsages.length },
@@ -1389,7 +1430,8 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
               key={filter.id}
               type="button"
               onClick={() => setActiveFilter(prev => (prev === filter.id && filter.id !== 'all' ? 'all' : filter.id))}
-              className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-full px-4 text-[12px] font-black transition-colors ${
+              aria-pressed={active}
+              className={`inline-flex h-11 w-full items-center justify-center gap-2 rounded-full px-4 text-[12px] font-black transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 sm:w-auto sm:shrink-0 ${
                 active
                   ? 'bg-[#22c55e] text-black'
                   : 'bg-white/[0.10] text-white hover:bg-white/[0.16]'
@@ -1441,10 +1483,11 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search songs by title or artist…"
-            className="w-full h-10 pl-10 pr-9 rounded-2xl text-[13px] bg-white dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.08] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/30 outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 dark:focus:border-emerald-500/50 transition-all"
+            aria-label="Search songs"
+            className="h-11 w-full rounded-2xl border border-gray-200 bg-white pl-10 pr-11 text-[13px] text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/30 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:placeholder-white/30 dark:focus:border-emerald-500/50"
           />
           {search && (
-            <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+            <button type="button" onClick={() => setSearch('')} aria-label="Clear song search" className="absolute right-0.5 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-black/[0.04] hover:text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 dark:hover:bg-white/[0.06] dark:hover:text-gray-300">
               <X className="h-4 w-4" />
             </button>
           )}
@@ -1460,7 +1503,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
             }
           }}
           aria-label={selectModeSongs ? 'Exit selection mode' : 'Select songs'}
-          className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border transition-colors active:scale-[0.97] ${
+          className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 active:scale-[0.97] ${
             selectModeSongs
               ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/25 dark:bg-emerald-500/[0.12] dark:text-emerald-300'
               : 'border-black/[0.06] bg-white/70 text-gray-600 hover:bg-white dark:border-white/[0.07] dark:bg-white/[0.04] dark:text-white/55 dark:hover:bg-white/[0.07]'
@@ -1529,7 +1572,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                   }`}
                 >
                   {selectModeSongs && (
-                    <button onClick={() => toggleSong(song.id)} className="mt-5 shrink-0">
+                    <button onClick={() => toggleSong(song.id)} aria-label={`${selectedSongs.has(song.id) ? 'Deselect' : 'Select'} ${song.title}`} className="mt-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 sm:mt-1.5">
                       {selectedSongs.has(song.id)
                         ? <CheckSquare className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                         : <Square className="h-4 w-4 text-gray-300 dark:text-white/20 hover:text-gray-400 dark:hover:text-white/35 transition-colors" />}
@@ -1581,7 +1624,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                       type="button"
                       onClick={() => openEditLibrarySong(song)}
                       aria-label={`Edit ${song.title}`}
-                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.035] text-white/45 transition-colors hover:border-emerald-400/40 hover:bg-emerald-500/[0.12] hover:text-emerald-300 active:scale-[0.96]"
+                      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.035] text-white/45 transition-colors hover:border-emerald-400/40 hover:bg-emerald-500/[0.12] hover:text-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 active:scale-[0.96] sm:h-9 sm:w-9"
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
@@ -1589,7 +1632,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                       type="button"
                       onClick={() => requestDeleteSong(song.id)}
                       aria-label={`Delete ${song.title}`}
-                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-red-500/15 bg-red-500/[0.08] text-red-300 transition-colors hover:border-red-400/45 hover:bg-red-500/[0.16] hover:text-red-200 active:scale-[0.96]"
+                      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-red-500/15 bg-red-500/[0.08] text-red-300 transition-colors hover:border-red-400/45 hover:bg-red-500/[0.16] hover:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/70 active:scale-[0.96] sm:h-9 sm:w-9"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>

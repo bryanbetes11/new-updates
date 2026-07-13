@@ -179,7 +179,7 @@ export function Notifications() {
         <div className="animate-fade-in border-b border-white/[0.08] pb-5">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <h1 className="text-[2.15rem] font-black leading-none text-white sm:text-[3rem]" style={{ letterSpacing: '-0.06em' }}>
+              <h1 className="text-[2.15rem] font-black leading-none text-white sm:text-[3rem]">
                 Notifications
               </h1>
               <p className="mt-2 text-[13px] font-semibold text-white/45">
@@ -189,14 +189,16 @@ export function Notifications() {
           {notifications.length > 0 && (
             <div className="flex shrink-0 items-center gap-2">
               <button
+                type="button"
                 onClick={markAllRead}
-                className="inline-flex h-9 items-center gap-1.5 rounded-full bg-white/[0.075] px-3 text-[11px] font-black text-white/70 transition-colors hover:bg-white/[0.11] hover:text-white"
+                className="inline-flex h-11 items-center gap-1.5 rounded-full bg-white/[0.075] px-3.5 text-[11px] font-black text-white/70 transition-colors hover:bg-white/[0.11] hover:text-white"
               >
                 <CheckCheck className="h-3.5 w-3.5" /> Read
               </button>
               <button
+                type="button"
                 onClick={clearAll}
-                className="inline-flex h-9 items-center gap-1.5 rounded-full bg-white/[0.075] px-3 text-[11px] font-black text-white/70 transition-colors hover:bg-red-500/15 hover:text-red-300"
+                className="inline-flex h-11 items-center gap-1.5 rounded-full bg-white/[0.075] px-3.5 text-[11px] font-black text-white/70 transition-colors hover:bg-red-500/15 hover:text-red-300"
               >
                 <Trash2 className="h-3.5 w-3.5" /> Clear
               </button>
@@ -222,40 +224,47 @@ export function Notifications() {
               const Icon = typeIcons[n.type] || Bell;
               const tone = typeTones[n.type] || 'from-zinc-300/75 via-zinc-700 to-black';
               return (
-                <button
+                <div
                   key={n.id}
-                  onClick={() => handleClick(n)}
                   style={{ animationDelay: `${i * 20}ms` }}
-                  className={`group flex w-full items-start gap-3 border-b border-white/[0.075] px-0 py-3.5 text-left transition-colors last:border-b-0 hover:bg-white/[0.035] animate-notif-slide ${
+                  className={`group flex w-full items-stretch border-b border-white/[0.075] transition-colors last:border-b-0 hover:bg-white/[0.035] animate-notif-slide ${
                     !n.is_read ? 'bg-[#22c55e]/[0.035]' : ''
                   }`}
                 >
-                  <div className={`relative ml-0.5 flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[0.6rem] bg-gradient-to-br ${tone} shadow-[inset_0_1px_0_rgba(255,255,255,0.16)]`}>
-                    <span className="absolute inset-0 bg-[radial-gradient(circle_at_28%_22%,rgba(255,255,255,0.34),transparent_32%)]" />
-                    <Icon className="relative h-5 w-5 text-white/90" strokeWidth={2.3} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start gap-2">
-                      <p className="min-w-0 flex-1 text-[14px] font-black leading-snug text-white">
-                        {n.title}
-                      </p>
-                      {!n.is_read && <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#22c55e] shadow-[0_0_12px_rgba(34,197,94,0.8)]" />}
+                  <button
+                    type="button"
+                    onClick={() => handleClick(n)}
+                    className="flex min-w-0 flex-1 items-start gap-3 px-0 py-3.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-400"
+                    aria-label={`${n.is_read ? '' : 'Unread: '}${n.title}`}
+                  >
+                    <div className={`relative ml-0.5 flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[0.6rem] bg-gradient-to-br ${tone} shadow-[inset_0_1px_0_rgba(255,255,255,0.16)]`}>
+                      <span className="absolute inset-0 bg-[radial-gradient(circle_at_28%_22%,rgba(255,255,255,0.34),transparent_32%)]" />
+                      <Icon className="relative h-5 w-5 text-white/90" strokeWidth={2.3} />
                     </div>
-                    <p className="mt-1 line-clamp-2 text-[13px] font-semibold leading-5 text-white/45">{n.body}</p>
-                    <p className="mt-1.5 text-[11px] font-mono text-white/28">
-                      {format(parseISO(n.created_at), 'MMM d, yyyy · h:mm a')}
-                    </p>
-                  </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start gap-2">
+                        <p className="min-w-0 flex-1 text-[14px] font-black leading-snug text-white">
+                          {n.title}
+                        </p>
+                        {!n.is_read && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#22c55e] shadow-[0_0_12px_rgba(34,197,94,0.8)]" aria-hidden="true" />}
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-[13px] font-semibold leading-5 text-white/45">{n.body}</p>
+                      <p className="mt-1.5 font-mono text-[11px] text-white/28">
+                        {format(parseISO(n.created_at), 'MMM d, yyyy · h:mm a')}
+                      </p>
+                    </div>
+                  </button>
                   {!n.is_read && (
                     <button
-                      onClick={e => { e.stopPropagation(); markRead(n.id); }}
-                      className="mr-0.5 mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/35 transition-colors hover:bg-white/[0.08] hover:text-white"
-                      aria-label="Mark notification as read"
+                      type="button"
+                      onClick={() => markRead(n.id)}
+                      className="mr-0.5 mt-2.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/35 transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+                      aria-label={`Mark ${n.title} as read`}
                     >
                       <Check className="h-4 w-4" />
                     </button>
                   )}
-                </button>
+                </div>
               );
             })}
           </div>

@@ -4,7 +4,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { format, parseISO, differenceInDays, startOfDay, subWeeks, previousSunday, addDays, subDays } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { animate, motion, useMotionValue, AnimatePresence, type PanInfo } from 'framer-motion';
-import { ArrowLeft, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, ListOrdered, Pause, Play, Settings2, MoreHorizontal, Upload } from 'lucide-react';
+import { ArrowLeft, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, ListOrdered, Pause, Play, Settings2, MoreHorizontal, Upload, Calendar } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -1618,7 +1618,18 @@ const openLyricsModal = (ss: SetlistSong) => {
   };
 
   if (loading) return <PageLoader />;
-  if (!event) return <div className="page-container p-8 text-center text-gray-500">Event not found</div>;
+  if (!event) return (
+    <div className="page-container page-bottom-pad flex min-h-[60vh] items-center justify-center bg-[#050505] px-5 text-center text-white">
+      <div className="max-w-sm">
+        <Calendar className="mx-auto h-9 w-9 text-white/35" />
+        <h1 className="mt-4 text-xl font-black">Event not found</h1>
+        <p className="mt-2 text-sm leading-relaxed text-white/50">This event may have been removed, or you may no longer have access to it.</p>
+        <button type="button" onClick={() => navigate('/events')} className="mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-white/[0.1] px-5 text-sm font-bold text-white transition-colors hover:bg-white/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e]">
+          <ArrowLeft className="h-4 w-4" /> Back to events
+        </button>
+      </div>
+    </div>
+  );
 
   const myAssignment = assignments.find(a => a.user_id === user?.id);
   const confirmedCount = assignments.filter(a => a.status === 'confirmed').length;
@@ -1996,12 +2007,12 @@ const openLyricsModal = (ss: SetlistSong) => {
       <motion.div
         animate={isLeaving ? { opacity: 0, y: -12, filter: 'blur(8px)' } : { opacity: 1, y: 0, filter: 'blur(0px)' }}
         transition={{ duration: 0.28, ease: [0.4, 0, 1, 1] }}
-        className="relative z-10 max-w-2xl lg:max-w-6xl xl:max-w-[1560px] mx-auto px-4 sm:px-6 lg:px-8 pt-0 sm:pt-5 space-y-4"
+        className="relative z-10 mx-auto max-w-2xl space-y-4 px-4 pt-0 sm:px-6 sm:pt-5 md:max-w-[860px] md:px-8 lg:max-w-6xl xl:max-w-[1560px]"
       >
         {/* ── Event Summary ────────────────────────────── */}
         <motion.div
           {...blurUp(0.08)}
-          className="relative isolate z-10 -mx-4 overflow-visible px-4 pb-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] sm:-mx-6 sm:px-6 sm:pb-5 sm:pt-3 lg:-mx-8 lg:mt-0 lg:px-8"
+          className="relative isolate z-10 -mx-4 overflow-visible px-4 pb-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] sm:-mx-6 sm:px-6 sm:pb-5 sm:pt-3 md:-mx-8 md:px-8 lg:mt-0"
           style={{
             opacity: heroIsPast ? 0.85 : 1,
           }}
@@ -2021,8 +2032,9 @@ const openLyricsModal = (ss: SetlistSong) => {
           <div className="relative">
             <button
               onClick={goBack}
-              className="absolute left-0 top-1 z-20 inline-flex h-9 w-9 items-center justify-center rounded-full bg-black/20 text-white/75 backdrop-blur-md transition-colors hover:bg-black/30 hover:text-white active:scale-95"
+              className="absolute left-0 top-1 z-20 inline-flex h-11 w-11 items-center justify-center rounded-full bg-black/20 text-white/75 backdrop-blur-md transition-colors hover:bg-black/30 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:scale-95"
               title="Back to events"
+              aria-label="Back to events"
             >
               <ArrowLeft className="h-4 w-4" />
             </button>
@@ -2038,15 +2050,15 @@ const openLyricsModal = (ss: SetlistSong) => {
                 <p className={`mb-1 text-[10px] font-mono font-medium uppercase tracking-[0.22em] ${heroEyebrow}`}>
                   {heroIsPast ? 'Past event' : heroIsOverdue ? 'Setlist overdue' : heroIsDueSoon ? `Due in ${heroDaysUntilDue}d` : heroHasApprovedSetlist ? 'Setlist approved' : 'Schedule'}
                 </p>
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-3 max-[380px]:flex-col">
                   <h1 className="min-w-0 flex-1 text-[1.75rem] font-black leading-[1.04] text-white sm:text-[2.5rem] lg:text-[4.5rem] xl:text-[5.5rem]" style={{ letterSpacing: '-0.04em' }}>
                     {eventDisplayTitle}
                   </h1>
-                  <div className="flex shrink-0 items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-2 max-[380px]:self-end">
                       <button
                         onClick={handleShareEvent}
                         disabled={sharingEvent}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white active:scale-95 disabled:cursor-wait disabled:opacity-60"
+                        className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:scale-95 disabled:cursor-wait disabled:opacity-60"
                         title="Share event"
                         aria-label="Share event"
                       >
@@ -2055,8 +2067,9 @@ const openLyricsModal = (ss: SetlistSong) => {
                       {myAssignment && myAssignment.status !== 'declined' && (
                         <button
                           onClick={() => setShowSwapModal(true)}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white active:scale-95"
+                          className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:scale-95"
                           title={myAssignment.roles?.name === 'Song Leader' ? 'Request schedule swap' : 'Find a sub for your spot'}
+                          aria-label={myAssignment.roles?.name === 'Song Leader' ? 'Request schedule swap' : 'Find a sub for your spot'}
                         >
                           <ArrowLeftRight className="h-4 w-4" />
                         </button>
@@ -2065,16 +2078,18 @@ const openLyricsModal = (ss: SetlistSong) => {
                         eventConversationId ? (
                           <button
                             onClick={() => navigate(`/messages/${eventConversationId}`)}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white active:scale-95"
+                            className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:scale-95"
                             title="Open group chat"
+                            aria-label="Open group chat"
                           >
                             <MessageCircle className="h-4 w-4" />
                           </button>
                         ) : (
                           <button
                             onClick={() => setShowCreateChatModal(true)}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white active:scale-95"
+                            className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:scale-95"
                             title="Create group chat for this event"
+                            aria-label="Create group chat for this event"
                           >
                             <MessageCircle className="h-4 w-4" />
                           </button>
@@ -2084,8 +2099,9 @@ const openLyricsModal = (ss: SetlistSong) => {
                         <div className="relative shrink-0">
                           <button
                             onClick={() => setShowEventActionsMenu((open) => !open)}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white active:scale-95"
+                            className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:scale-95"
                             title="Event actions"
+                            aria-label="Event actions"
                             aria-haspopup="menu"
                             aria-expanded={showEventActionsMenu}
                           >
@@ -2098,7 +2114,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                 animate={{ opacity: 1, y: 0, scale: 1 }}
                                 exit={{ opacity: 0, y: -4, scale: 0.98 }}
                                 transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
-                                className="absolute right-0 top-11 z-[70] w-44 overflow-hidden rounded-2xl border border-white/[0.1] bg-[#181818]/95 p-1.5 shadow-2xl shadow-black/50 backdrop-blur-xl"
+                                className="absolute right-0 top-12 z-[70] w-44 overflow-hidden rounded-lg border border-white/[0.1] bg-[#181818]/95 p-1.5 shadow-2xl shadow-black/50 backdrop-blur-xl"
                                 role="menu"
                               >
                                 {canEditEvent && (
@@ -2107,7 +2123,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                       setShowEventActionsMenu(false);
                                       openEditEvent();
                                     }}
-                                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[13px] font-semibold text-white/80 transition-colors hover:bg-white/[0.08] hover:text-white"
+                                    className="flex min-h-11 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[13px] font-semibold text-white/80 transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e]"
                                     role="menuitem"
                                   >
                                     <Edit className="h-3.5 w-3.5" />
@@ -2120,7 +2136,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                       setShowEventActionsMenu(false);
                                       setShowDeleteEvent(true);
                                     }}
-                                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[13px] font-semibold text-red-300 transition-colors hover:bg-red-500/[0.12]"
+                                    className="flex min-h-11 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[13px] font-semibold text-red-300 transition-colors hover:bg-red-500/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300"
                                     role="menuitem"
                                   >
                                     <Trash2 className="h-3.5 w-3.5" />
@@ -2146,7 +2162,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                 </div>
 
                 {event.description && (
-                  <p className="mt-4 max-w-3xl border-t border-white/[0.08] pt-3 text-[12px] leading-relaxed text-white/55">{event.description}</p>
+                  <p className="mt-4 max-w-3xl break-words border-t border-white/[0.08] pt-3 text-[12px] leading-relaxed text-white/55">{event.description}</p>
                 )}
               </div>
             </div>
@@ -2187,14 +2203,14 @@ const openLyricsModal = (ss: SetlistSong) => {
                 <div className="flex items-center gap-2 mt-3">
                   <button
                     onClick={() => handleConfirm(myAssignment.id)}
-                    className="inline-flex items-center gap-1.5 px-3.5 h-8 rounded-full text-[12px] font-semibold text-white transition-all active:scale-[0.97]"
+                    className="inline-flex h-11 items-center gap-1.5 rounded-full px-4 text-[12px] font-semibold text-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 active:scale-[0.97]"
                     style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', boxShadow: '0 3px 10px rgba(22,163,74,0.3)' }}
                   >
                     <Check className="h-3.5 w-3.5" /> Confirm
                   </button>
                   <button
                     onClick={() => setShowDecline(myAssignment.id)}
-                    className="inline-flex items-center gap-1.5 px-3.5 h-8 rounded-full text-[12px] font-semibold text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-500/[0.12] border border-red-200 dark:border-red-500/25 hover:bg-red-100 dark:hover:bg-red-500/[0.18] active:scale-[0.97] transition-colors"
+                    className="inline-flex h-11 items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-4 text-[12px] font-semibold text-red-700 transition-colors hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 active:scale-[0.97] dark:border-red-500/25 dark:bg-red-500/[0.12] dark:text-red-300 dark:hover:bg-red-500/[0.18]"
                   >
                     <X className="h-3.5 w-3.5" /> Decline
                   </button>
@@ -2325,21 +2341,21 @@ const openLyricsModal = (ss: SetlistSong) => {
                       <button
                         onClick={() => handleMarkAttendance('present')}
                         disabled={attendanceLoading}
-                        className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-emerald-500 text-[13px] font-bold text-black shadow-[0_10px_24px_-18px_rgba(34,197,94,0.95)] transition-colors hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-50"
+                        className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-emerald-500 text-[13px] font-bold text-black shadow-[0_10px_24px_-18px_rgba(34,197,94,0.95)] transition-colors hover:bg-emerald-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 active:scale-[0.98] disabled:opacity-50"
                       >
                         <Check className="h-4 w-4" /> Present
                       </button>
                       <button
                         onClick={() => handleMarkAttendance('absent')}
                         disabled={attendanceLoading}
-                        className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-white/[0.08] text-[13px] font-bold text-white/85 ring-1 ring-white/[0.08] transition-colors hover:bg-white/[0.12] active:scale-[0.98] disabled:opacity-50"
+                        className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-white/[0.08] text-[13px] font-bold text-white/85 ring-1 ring-white/[0.08] transition-colors hover:bg-white/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 active:scale-[0.98] disabled:opacity-50"
                       >
                         <X className="h-4 w-4" /> Absent
                       </button>
                     </div>
                     <div className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-amber-300/75">
                       <AlertTriangle className="h-3 w-3 shrink-0" />
-                      <span className="truncate">Mark attendance only when you are already at church.</span>
+                      <span className="leading-relaxed">Mark attendance only when you are already at church.</span>
                     </div>
                   </div>
                 )}
@@ -2430,7 +2446,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                   )}
                   <button
                     onClick={() => navigate(`/events/${event.linked_event_id}`)}
-                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-white/70 ring-1 ring-white/[0.08] transition hover:bg-white/[0.13] hover:text-white active:scale-[0.97]"
+                    className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-white/70 ring-1 ring-white/[0.08] transition hover:bg-white/[0.13] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] active:scale-[0.97]"
                     title="Open linked event"
                     aria-label="Open linked event"
                   >
@@ -3037,17 +3053,17 @@ const openLyricsModal = (ss: SetlistSong) => {
 
         <div className="animate-slide-up border-t border-gray-200/70 pt-4 dark:border-white/[0.08]" style={{ animationDelay: '150ms' }}>
           <div>
-            <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <h2 className="flex min-w-0 items-center gap-2 text-lg font-black text-gray-900 dark:text-white">
                 <Users className="h-4 w-4 shrink-0 text-brand-600 dark:text-brand-400" />
                 <span className="truncate">Team Members</span>
               </h2>
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="ml-auto flex shrink-0 items-center gap-2">
                 <span className="text-xs font-medium text-gray-500 dark:text-white/45">{confirmedCount}/{assignments.length} confirmed</span>
                 {isLeader && (
                   <button
                     onClick={() => setShowAssign(true)}
-                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full bg-white/[0.08] px-3 text-[11px] font-bold text-white/85 ring-1 ring-white/[0.08] transition-colors hover:bg-white/[0.13] active:scale-[0.97]"
+                    className="inline-flex h-11 items-center justify-center gap-1.5 rounded-full bg-white/[0.08] px-4 text-[11px] font-bold text-white/85 ring-1 ring-white/[0.08] transition-colors hover:bg-white/[0.13] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] active:scale-[0.97]"
                   >
                     <Plus className="h-3.5 w-3.5" /> Assign
                   </button>
@@ -3113,7 +3129,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                             <button
                               onClick={() => handleRemoveAssignment(a.id)}
                               disabled={removingAssignmentId !== null}
-                              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/30 transition-colors hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
+                              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/30 transition-colors hover:bg-red-500/10 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 disabled:cursor-not-allowed disabled:opacity-40"
                               title={`Remove ${a.profiles?.first_name || 'team member'} from this event`}
                               aria-label={`Remove ${a.profiles?.first_name || 'team member'} from this event`}
                             >

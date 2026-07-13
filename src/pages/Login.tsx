@@ -165,7 +165,7 @@ export function Login() {
           <span className="text-[26px] font-black tracking-[-0.055em] text-white">ServeSync</span>
         </div>
 
-        <div className="flex flex-1 items-center justify-center overflow-hidden px-6 py-10 sm:px-10 lg:px-16">
+        <div className="flex flex-1 items-start justify-center px-6 py-6 sm:items-center sm:px-10 sm:py-10 lg:px-16">
           <div className="w-full max-w-[430px]">
             <div className="relative overflow-hidden rounded-[2rem] border border-white/[0.08] bg-white/[0.035] p-7 shadow-[0_30px_90px_-60px_rgba(34,197,94,0.7)] backdrop-blur-xl transition-colors duration-300 sm:p-8">
               <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-emerald-300/35 to-transparent" />
@@ -210,7 +210,7 @@ export function Login() {
                                   <RefreshCw className={`h-3.5 w-3.5 shrink-0 text-emerald-300 ${isSwitching ? 'animate-spin' : ''}`} />
                                 </button>
 
-                                <button type="button" onClick={() => forgetSavedAccount(account.userId)} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-white/30 transition-colors hover:text-red-300" title="Forget saved account">
+                                <button type="button" onClick={() => forgetSavedAccount(account.userId)} className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white/30 transition-colors hover:bg-red-500/10 hover:text-red-300" title="Forget saved account" aria-label={`Forget ${account.displayName || account.email}`}>
                                   <Trash2 className="h-3.5 w-3.5" />
                                 </button>
                               </div>
@@ -222,20 +222,20 @@ export function Login() {
 
                     <form onSubmit={handleSubmit} className="space-y-4">
                       <div>
-                        <label className="mb-2 block text-[11px] font-black uppercase tracking-[0.16em] text-white/34">Email address</label>
-                        <input type="email" value={email} onChange={e => setEmail(e.target.value)} className={inputClass} placeholder="you@example.com" autoComplete="email" required />
+                        <label htmlFor="login-email" className="mb-2 block text-[11px] font-black uppercase tracking-[0.16em] text-white/34">Email address</label>
+                        <input id="login-email" type="email" value={email} onChange={e => setEmail(e.target.value)} className={inputClass} placeholder="you@example.com" autoComplete="email" required />
                       </div>
 
                       <div>
                         <div className="mb-2 flex items-center justify-between">
-                          <label className="block text-[11px] font-black uppercase tracking-[0.16em] text-white/34">Password</label>
+                          <label htmlFor="login-password" className="block text-[11px] font-black uppercase tracking-[0.16em] text-white/34">Password</label>
                           <button type="button" onClick={openAccountUpdate} className="text-[11px] font-bold text-emerald-300 transition-colors hover:text-emerald-200">
                             Update my account
                           </button>
                         </div>
                         <div className="relative">
-                          <input type={showPw ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} className={`${inputClass} pr-12`} placeholder="Your password" autoComplete="current-password" required />
-                          <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3.5 top-1/2 -translate-y-1/2 rounded-lg p-1 text-white/30 transition-colors hover:text-white/60">
+                          <input id="login-password" type={showPw ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} className={`${inputClass} pr-12`} placeholder="Your password" autoComplete="current-password" required />
+                          <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-0 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-xl text-white/30 transition-colors hover:text-white/60" aria-label={showPw ? 'Hide password' : 'Show password'}>
                             {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                           </button>
                         </div>
@@ -275,7 +275,7 @@ export function Login() {
                     transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
                     className="relative"
                   >
-                    <button type="button" onClick={() => { setView('login'); setForgotSent(false); }} className="mb-8 flex items-center gap-1 text-[13px] font-bold text-white/38 transition-colors hover:text-white/70">
+                    <button type="button" onClick={() => { setView('login'); setForgotSent(false); }} className="mb-6 flex min-h-11 items-center gap-1 text-[13px] font-bold text-white/38 transition-colors hover:text-white/70">
                       <ChevronLeft className="h-4 w-4" /> Back to sign in
                     </button>
 
@@ -325,8 +325,8 @@ export function Login() {
                         {accountUpdateMode === 'password' ? (
                           <form onSubmit={handleForgot} className="space-y-4">
                             <div>
-                              <label className="mb-2 block text-[11px] font-black uppercase tracking-[0.16em] text-white/34">Email address</label>
-                              <input type="email" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} className={inputClass} placeholder="you@example.com" autoComplete="email" required />
+                              <label htmlFor="account-update-email" className="mb-2 block text-[11px] font-black uppercase tracking-[0.16em] text-white/34">Email address</label>
+                              <input id="account-update-email" type="email" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} className={inputClass} placeholder="you@example.com" autoComplete="email" required />
                             </div>
                             <button type="submit" disabled={forgotLoading || !forgotEmail} className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-emerald-500 text-[14px] font-black text-black transition hover:bg-emerald-400 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40">
                               {forgotLoading ? <><span className="h-4 w-4 rounded-full border-2 border-black/30 border-t-black animate-spin" />Sending...</> : <>Send Password Email <ArrowRight className="h-4 w-4" /></>}
@@ -338,7 +338,7 @@ export function Login() {
                             <p className="mt-1 text-[12px] leading-5 text-white/36">
                               This protects the account from someone changing the login email without already being signed in.
                             </p>
-                            <button type="button" onClick={() => { setView('login'); setForgotSent(false); }} className="mt-4 inline-flex h-10 items-center justify-center rounded-full bg-white px-4 text-[13px] font-black text-black transition hover:bg-white/90">
+                            <button type="button" onClick={() => { setView('login'); setForgotSent(false); }} className="mt-4 inline-flex h-11 items-center justify-center rounded-full bg-white px-4 text-[13px] font-black text-black transition hover:bg-white/90">
                               Back to sign in
                             </button>
                           </div>

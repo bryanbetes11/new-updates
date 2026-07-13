@@ -36,15 +36,21 @@ export function RequestLeave() {
   const [showModal, setShowModal] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{ id: string; type: 'delete' | 'withdraw'; displayDate: string } | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const fetchAvailability = useCallback(async () => {
     if (!user) return;
-    const { data } = await supabase
+    setLoadError(null);
+    const { data, error } = await supabase
       .from('user_availability')
       .select('*')
       .eq('user_id', user.id)
       .order('unavailable_date', { ascending: false });
-    setAvailability(data || []);
+    if (error) {
+      setLoadError('We could not load your leave requests. Check your connection and try again.');
+    } else {
+      setAvailability(data || []);
+    }
     setLoading(false);
   }, [user]);
 
@@ -108,7 +114,6 @@ export function RequestLeave() {
               </div>
               <h1
                 className="mt-3 text-[2.35rem] font-black leading-none text-gray-950 dark:text-white sm:text-[3.15rem] lg:text-[3.65rem]"
-                style={{ letterSpacing: '-0.065em' }}
               >
                 Leave.
               </h1>
@@ -154,8 +159,9 @@ export function RequestLeave() {
               )}
             </div>
             <button
+              type="button"
               onClick={() => setShowModal(true)}
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full px-5 text-[12px] font-black text-white shadow-[0_12px_28px_-16px_rgba(180,83,9,0.9)] transition-all active:scale-[0.97]"
+              className="inline-flex h-11 items-center justify-center gap-1.5 rounded-full px-5 text-[12px] font-black text-white shadow-[0_12px_28px_-16px_rgba(180,83,9,0.9)] transition-all active:scale-[0.97]"
               style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}
             >
               <Plus className="h-3.5 w-3.5" /> New request
@@ -164,7 +170,20 @@ export function RequestLeave() {
         </motion.section>
 
         {/* ── List ────────────────────────────────── */}
-        {availability.length === 0 ? (
+        {loadError ? (
+          <div className="relative overflow-hidden rounded-[2rem] border border-red-200/70 bg-white/90 px-5 py-6 shadow-[0_18px_44px_-34px_rgba(15,23,42,0.32)] dark:border-red-500/20 dark:bg-white/[0.035] sm:px-6" role="alert">
+            <EmptyState
+              icon={<Calendar className="h-8 w-8" />}
+              title="Unable to load leave requests"
+              description={loadError}
+              action={
+                <button type="button" onClick={() => { setLoading(true); fetchAvailability(); }} className="btn-primary min-h-11">
+                  Try again
+                </button>
+              }
+            />
+          </div>
+        ) : availability.length === 0 ? (
           <div className="relative overflow-hidden rounded-[2rem] border border-black/[0.05] bg-white/90 px-5 py-6 shadow-[0_18px_44px_-34px_rgba(15,23,42,0.32)] dark:border-white/[0.07] dark:bg-white/[0.035] sm:px-6">
             <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] to-transparent dark:via-white/[0.1]" />
             <div className="flex items-center gap-3 text-[11px] font-mono font-black uppercase tracking-[0.28em] text-gray-400 dark:text-white/35">
@@ -178,7 +197,7 @@ export function RequestLeave() {
                 title="No leave requests"
                 description="Submit a leave request to let leaders know when you're unavailable."
                 action={
-                  <button onClick={() => setShowModal(true)} className="btn-primary">
+                  <button type="button" onClick={() => setShowModal(true)} className="btn-primary min-h-11">
                     <Plus className="h-4 w-4" /> Request Leave
                   </button>
                 }
@@ -234,7 +253,7 @@ export function RequestLeave() {
                         <span className={`text-[9px] font-black uppercase tracking-widest leading-none ${dimChip ? 'text-gray-400 dark:text-white/25' : 'text-white/65'}`}>
                           {format(parseISO(dateForIcon), 'MMM')}
                         </span>
-                        <span className={`text-[22px] font-black leading-none mt-0.5 ${dimChip ? 'text-gray-500 dark:text-white/35' : 'text-white'}`} style={{ letterSpacing: '-0.04em' }}>
+                        <span className={`text-[22px] font-black leading-none mt-0.5 ${dimChip ? 'text-gray-500 dark:text-white/35' : 'text-white'}`}>
                           {format(parseISO(dateForIcon), 'd')}
                         </span>
                         <span className={`text-[8px] font-bold leading-none mt-0.5 ${dimChip ? 'text-gray-400 dark:text-white/20' : 'text-white/50'}`}>
@@ -247,7 +266,7 @@ export function RequestLeave() {
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-[14px] font-bold text-gray-900 dark:text-white leading-snug" style={{ letterSpacing: '-0.015em' }}>{displayDate}</p>
+                        <p className="text-[14px] font-bold text-gray-900 dark:text-white leading-snug">{displayDate}</p>
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${tone.cls}`}>{tone.label}</span>
                         {isRange && (
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-white/45">Range</span>
@@ -262,27 +281,33 @@ export function RequestLeave() {
                       <div className="flex items-center gap-1 shrink-0">
                         {a.status === 'pending' && (
                           <button
+                            type="button"
                             onClick={() => setShowModal(true)}
-                            className="h-8 w-8 rounded-xl flex items-center justify-center text-gray-400 dark:text-white/30 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/[0.12] transition-colors"
+                            className="h-11 w-11 rounded-xl flex items-center justify-center text-gray-400 dark:text-white/30 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/[0.12] transition-colors"
                             title="Edit request"
+                            aria-label={`Edit leave request for ${displayDate}`}
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </button>
                         )}
                         {a.status === 'pending' && (
                           <button
+                            type="button"
                             onClick={() => setConfirmAction({ id: a.id, type: 'delete', displayDate })}
-                            className="h-8 w-8 rounded-xl flex items-center justify-center text-gray-400 dark:text-white/30 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/[0.12] transition-colors"
+                            className="h-11 w-11 rounded-xl flex items-center justify-center text-gray-400 dark:text-white/30 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/[0.12] transition-colors"
                             title="Withdraw request"
+                            aria-label={`Withdraw leave request for ${displayDate}`}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         )}
                         {a.status === 'approved' && (
                           <button
+                            type="button"
                             onClick={() => setConfirmAction({ id: a.id, type: 'withdraw', displayDate })}
-                            className="h-8 w-8 rounded-xl flex items-center justify-center text-gray-400 dark:text-white/30 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/[0.12] transition-colors"
+                            className="h-11 w-11 rounded-xl flex items-center justify-center text-gray-400 dark:text-white/30 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/[0.12] transition-colors"
                             title="Cancel approved request"
+                            aria-label={`Cancel approved leave request for ${displayDate}`}
                           >
                             <RotateCcw className="h-3.5 w-3.5" />
                           </button>
@@ -314,6 +339,7 @@ export function RequestLeave() {
             </p>
             <div className="grid grid-cols-2 gap-3">
               <button
+                type="button"
                 onClick={() => setConfirmAction(null)}
                 disabled={actionLoading}
                 className="btn-secondary min-h-[3.75rem] w-full justify-center whitespace-nowrap px-4 text-center"
@@ -321,6 +347,7 @@ export function RequestLeave() {
                 Keep it
               </button>
               <button
+                type="button"
                 onClick={handleConfirmAction}
                 disabled={actionLoading}
                 className={`btn-primary min-h-[3.75rem] w-full justify-center whitespace-nowrap px-4 text-center ${confirmAction.type === 'delete' ? 'bg-red-600 hover:bg-red-700 ring-red-300' : 'bg-amber-600 hover:bg-amber-700 ring-amber-300'}`}

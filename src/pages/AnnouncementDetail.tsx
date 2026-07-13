@@ -168,7 +168,7 @@ function CommentItem({
                     <button
                       type="button"
                       onClick={() => onReply(comment)}
-                      className="text-[11px] text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 flex items-center gap-1 transition-colors"
+                      className="flex min-h-11 items-center gap-1 rounded-xl px-2 text-[11px] text-gray-400 transition-colors hover:bg-black/[0.035] hover:text-brand-600 dark:hover:bg-white/[0.04] dark:hover:text-brand-400"
                     >
                       <CornerDownRight className="h-3 w-3" /> Reply
                     </button>
@@ -178,14 +178,14 @@ function CommentItem({
                       <button
                         type="button"
                         onClick={() => onEdit(comment.id, comment.content)}
-                        className="hidden sm:flex text-[11px] text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 items-center gap-1 transition-colors"
+                        className="hidden min-h-11 items-center gap-1 rounded-xl px-2 text-[11px] text-gray-400 transition-colors hover:bg-black/[0.035] hover:text-brand-600 dark:hover:bg-white/[0.04] dark:hover:text-brand-400 sm:flex"
                       >
                         <Pencil className="h-3 w-3" /> Edit
                       </button>
                       <button
                         type="button"
                         onClick={() => onDelete(comment.id)}
-                        className="hidden sm:flex text-[11px] text-gray-400 hover:text-red-500 dark:hover:text-red-400 items-center gap-1 transition-colors"
+                        className="hidden min-h-11 items-center gap-1 rounded-xl px-2 text-[11px] text-gray-400 transition-colors hover:bg-red-500/[0.08] hover:text-red-500 dark:hover:text-red-400 sm:flex"
                       >
                         <Trash2 className="h-3 w-3" /> Delete
                       </button>
@@ -569,7 +569,22 @@ export function AnnouncementDetail() {
   const isCreator = user?.id === announcement?.created_by;
 
   if (loading) return <PageLoader />;
-  if (!announcement) return <div className="page-container p-8 text-center text-gray-500">Announcement not found</div>;
+  if (!announcement) {
+    return (
+      <div className="page-container page-bottom-pad px-4 py-12 text-center">
+        <div className="mx-auto max-w-md rounded-2xl border border-gray-200 bg-white p-6 dark:border-white/[0.08] dark:bg-white/[0.035]">
+          <Megaphone className="mx-auto h-8 w-8 text-gray-400" />
+          <h1 className="mt-4 text-xl font-black text-gray-900 dark:text-white">Announcement unavailable</h1>
+          <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">
+            This update may have been removed, or it could not be loaded.
+          </p>
+          <button type="button" onClick={smartBack} className="btn-primary mt-5 min-h-11">
+            Back to News
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const blocks = announcement.content_blocks;
   const viewCount = views.length;
@@ -592,11 +607,12 @@ export function AnnouncementDetail() {
 
         {/* ── Back ─────────────────────────────────────── */}
         <motion.button
+          type="button"
           initial={{ opacity: 0, x: -12 }}
           animate={isLeaving ? { opacity: 0, x: -12 } : { opacity: 1, x: 0 }}
           transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
           onClick={goBack}
-          className="inline-flex items-center gap-1.5 pl-2 pr-3.5 h-8 rounded-full text-[12px] font-semibold text-gray-600 dark:text-white/55 bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] backdrop-blur-md hover:bg-white dark:hover:bg-white/[0.07] active:scale-[0.97] transition-colors"
+          className="inline-flex h-11 items-center gap-1.5 rounded-full border border-black/[0.06] bg-white/70 pl-3 pr-4 text-[12px] font-semibold text-gray-600 backdrop-blur-md transition-colors hover:bg-white active:scale-[0.97] dark:border-white/[0.07] dark:bg-white/[0.04] dark:text-white/55 dark:hover:bg-white/[0.07]"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Announcements
@@ -642,7 +658,7 @@ export function AnnouncementDetail() {
                 <div className="flex items-start gap-2 flex-wrap">
                   {PriorityIcon && <PriorityIcon className={`h-5 w-5 shrink-0 mt-1 ${pConfig.iconColor}`} />}
                   {announcement.is_leaders_only && <Lock className="h-4 w-4 text-amber-500 shrink-0 mt-1.5" />}
-                  <h1 className="text-[1.6rem] sm:text-[1.9rem] font-black text-gray-900 dark:text-white leading-[1.1]" style={{ letterSpacing: '-0.03em' }}>
+                  <h1 className="text-[1.6rem] font-black leading-[1.1] text-gray-900 dark:text-white sm:text-[1.9rem]">
                     {announcement.title}
                   </h1>
                   {announcement.priority !== 'normal' && (
@@ -669,7 +685,8 @@ export function AnnouncementDetail() {
                     <button
                       type="button"
                       onClick={() => setShowViewers(true)}
-                      className="inline-flex items-center gap-1 px-2.5 h-7 rounded-full text-[11px] font-semibold text-gray-500 dark:text-white/45 bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
+                      className="inline-flex h-11 items-center gap-1 rounded-full border border-black/[0.06] bg-white/70 px-3 text-[11px] font-semibold text-gray-500 transition-colors hover:text-amber-600 dark:border-white/[0.07] dark:bg-white/[0.04] dark:text-white/45 dark:hover:text-amber-400"
+                      aria-label={`View ${viewCount} readers`}
                     >
                       <Eye className="h-3 w-3" />{viewCount}
                     </button>
@@ -686,23 +703,28 @@ export function AnnouncementDetail() {
                         <button
                           type="button"
                           onClick={() => setShowMenu(!showMenu)}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-full text-gray-400 dark:text-white/40 bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] hover:bg-white dark:hover:bg-white/[0.07] transition-colors"
+                          className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-black/[0.06] bg-white/70 text-gray-400 transition-colors hover:bg-white dark:border-white/[0.07] dark:bg-white/[0.04] dark:text-white/40 dark:hover:bg-white/[0.07]"
+                          aria-label="Announcement actions"
+                          aria-expanded={showMenu}
+                          aria-haspopup="menu"
                         >
                           <MoreVertical className="h-4 w-4" />
                         </button>
                         {showMenu && (
-                          <div className="absolute right-0 mt-1 w-40 bg-white dark:bg-[#232325] rounded-2xl shadow-xl ring-1 ring-black/[0.07] dark:ring-white/[0.08] py-1 z-10">
+                          <div className="absolute right-0 z-10 mt-1 w-40 rounded-2xl bg-white py-1 shadow-xl ring-1 ring-black/[0.07] dark:bg-[#232325] dark:ring-white/[0.08]" role="menu">
                             <button
                               type="button"
                               onClick={handleEdit}
-                              className="w-full px-3.5 py-2.5 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/[0.05] flex items-center gap-2.5 transition-colors"
+                              className="flex min-h-11 w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-white/[0.05]"
+                              role="menuitem"
                             >
                               <Pencil className="h-3.5 w-3.5 text-gray-400" /> Edit
                             </button>
                             <button
                               type="button"
                               onClick={() => { setShowMenu(false); setShowDeleteConfirm(true); }}
-                              className="w-full px-3.5 py-2.5 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2.5 transition-colors"
+                              className="flex min-h-11 w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+                              role="menuitem"
                             >
                               <Trash2 className="h-3.5 w-3.5" /> Delete
                             </button>
@@ -722,19 +744,19 @@ export function AnnouncementDetail() {
               <motion.div className="space-y-5" variants={blockList} initial="hidden" animate="visible">
                 {blocks.map((block, i) =>
                   block.type === 'text' ? (
-                    <motion.div key={i} variants={blockItem} className="text-[15px] sm:text-[16px] leading-[1.8] text-gray-700 dark:text-white/70 whitespace-pre-wrap" style={{ letterSpacing: '-0.005em' }}>
+                    <motion.div key={i} variants={blockItem} className="whitespace-pre-wrap text-[15px] leading-[1.8] text-gray-700 dark:text-white/70 sm:text-[16px]">
                       <FormattedText text={block.content} />
                     </motion.div>
                   ) : (
                     <motion.div key={i} variants={blockItem} className="rounded-2xl overflow-hidden border border-black/[0.06] dark:border-white/[0.07] bg-gray-50 dark:bg-white/[0.03]">
-                      <img src={block.content} alt="" className="w-full object-contain" />
+                      <img src={block.content} alt={`Announcement attachment ${i + 1}`} className="w-full object-contain" />
                     </motion.div>
                   )
                 )}
               </motion.div>
             ) : (
               <motion.div variants={blockList} initial="hidden" animate="visible">
-                <motion.div variants={blockItem} className="text-[15px] sm:text-[16px] leading-[1.8] text-gray-700 dark:text-white/70 whitespace-pre-wrap" style={{ letterSpacing: '-0.005em' }}>
+                <motion.div variants={blockItem} className="whitespace-pre-wrap text-[15px] leading-[1.8] text-gray-700 dark:text-white/70 sm:text-[16px]">
                   <FormattedText text={announcement.content} />
                 </motion.div>
               </motion.div>
@@ -802,7 +824,12 @@ export function AnnouncementDetail() {
                 <p className="text-[12px] text-amber-700 dark:text-amber-300 flex-1 truncate">
                   Replying to <span className="font-bold">{replyingTo.profiles?.first_name}</span>: {replyingTo.content.slice(0, 60)}{replyingTo.content.length > 60 ? '…' : ''}
                 </p>
-                <button type="button" onClick={() => { setReplyingTo(null); setNewComment(''); }} className="shrink-0 text-amber-400 hover:text-amber-600 transition-colors">
+                <button
+                  type="button"
+                  onClick={() => { setReplyingTo(null); setNewComment(''); }}
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-amber-400 transition-colors hover:bg-amber-500/[0.08] hover:text-amber-600"
+                  aria-label="Cancel reply"
+                >
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -831,10 +858,12 @@ export function AnnouncementDetail() {
                 />
               </div>
               <button
+                type="button"
                 onClick={handleComment}
                 disabled={!newComment.trim() || submitting}
-                className="inline-flex items-center justify-center h-10 w-10 rounded-2xl shrink-0 text-white disabled:opacity-40 transition-all active:scale-[0.95] mt-0.5"
+                className="mt-0.5 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white transition-all active:scale-[0.95] disabled:opacity-40"
                 style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)', boxShadow: '0 3px 10px rgba(245,158,11,0.35)' }}
+                aria-label={replyingTo ? 'Post reply' : 'Post comment'}
               >
                 <Send className="h-4 w-4" />
               </button>

@@ -973,7 +973,7 @@ export function Dashboard() {
         variants={container}
         initial="initial"
         animate="animate"
-        className="relative mx-auto w-full max-w-2xl space-y-5 px-4 pt-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:px-6 sm:pt-5 sm:space-y-6 lg:max-w-6xl lg:px-8 lg:pb-24 xl:max-w-[1560px]"
+        className="relative mx-auto w-full max-w-2xl space-y-5 px-4 pt-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:px-6 sm:pt-5 sm:space-y-6 md:max-w-[860px] md:px-8 lg:max-w-6xl lg:pb-24 xl:max-w-[1560px]"
       >
 
         <motion.section variants={item} className="space-y-4">
@@ -986,7 +986,7 @@ export function Dashboard() {
               </button>
             </div>
 
-            <div className="flex gap-2 overflow-x-auto no-scrollbar lg:mt-5">
+            <div className="flex gap-2 overflow-x-auto no-scrollbar lg:mt-5" role="group" aria-label="Dashboard filters">
             {hubFilters.map((chip) => {
               const active = activeHubFilter === chip.id;
               return (
@@ -995,7 +995,7 @@ export function Dashboard() {
                 type="button"
                 onClick={() => setActiveHubFilter(chip.id)}
                 aria-pressed={active}
-                className={`h-9 shrink-0 rounded-full px-4 text-[12px] font-black transition-colors ${
+                className={`h-11 shrink-0 rounded-full px-4 text-[12px] font-black transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] focus-visible:ring-offset-2 focus-visible:ring-offset-[#050505] ${
                   active
                     ? 'bg-[#22c55e] text-black'
                     : 'bg-[#2a2a2a] text-white hover:bg-[#353535]'
@@ -1007,14 +1007,14 @@ export function Dashboard() {
             })}
             </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-3 xl:grid-cols-6">
+            <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-3 2xl:grid-cols-6">
             {quickTiles.map(tile => (
               <button
                 key={tile.title}
                 onClick={() => navigate(tile.path)}
-                className="group flex h-[68px] min-w-0 items-center overflow-hidden rounded-[0.5rem] border border-white/[0.08] bg-[#2a2a2a] text-left shadow-[0_18px_46px_-34px_rgba(0,0,0,0.9)] transition-all hover:-translate-y-0.5 hover:bg-[#343434] lg:h-[88px]"
+                className="group flex h-[68px] min-w-0 items-center overflow-hidden rounded-[0.5rem] border border-white/[0.08] bg-[#2a2a2a] text-left shadow-[0_18px_46px_-34px_rgba(0,0,0,0.9)] transition-all hover:-translate-y-0.5 hover:bg-[#343434] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] lg:h-[88px]"
               >
-                <div className={`relative flex h-full w-[68px] shrink-0 items-center justify-center bg-gradient-to-br ${tile.tone} lg:w-[86px]`}>
+                <div className={`relative flex h-full w-[68px] shrink-0 items-center justify-center bg-gradient-to-br ${tile.tone} lg:w-[72px]`}>
                   <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_25%,rgba(255,255,255,0.24),transparent_28%)]" />
                   {'icon' in tile && tile.icon ? (
                     <span className="relative flex h-10 w-10 items-center justify-center rounded-full border border-white/60 bg-black/50 text-white shadow-[0_10px_24px_-14px_rgba(0,0,0,0.95),0_0_0_3px_rgba(255,255,255,0.10),inset_0_1px_0_rgba(255,255,255,0.26)] ring-1 ring-black/40 backdrop-blur-sm">
@@ -1023,7 +1023,7 @@ export function Dashboard() {
                   ) : null}
                 </div>
                 <div className="min-w-0 flex-1 px-3">
-                  <p className="line-clamp-2 text-[13px] font-black leading-tight text-white">{tile.title}</p>
+                  <p className="line-clamp-2 text-[11px] font-black leading-tight text-white sm:text-[13px] xl:text-[12px]">{tile.title}</p>
                   <p className="mt-0.5 truncate text-[10px] font-semibold text-white/45">{tile.subtitle}</p>
                 </div>
               </button>
@@ -1316,10 +1316,14 @@ export function Dashboard() {
               <section className="min-w-0 self-start lg:flex lg:flex-col lg:rounded-[0.75rem] lg:border lg:border-white/[0.08] lg:bg-[#181818] lg:p-4 lg:shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)]">
                 <div className="mb-3 flex items-center justify-between">
                   <h2 className="text-[18px] font-black text-white">Upcoming events</h2>
-                  <button onClick={() => navigate('/events')} className="text-[12px] font-bold text-[#22c55e]">See all</button>
+                  <button onClick={() => navigate('/events')} className="-mr-2 inline-flex min-h-11 items-center px-2 text-[12px] font-bold text-[#22c55e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e]">See all</button>
                 </div>
                 <div className="flex snap-x gap-3 overflow-x-auto pb-1 no-scrollbar lg:hidden" style={{ WebkitOverflowScrolling: 'touch' }}>
-                  {filteredDisplayEvents.map((event) => {
+                  {filteredDisplayEvents.length === 0 ? (
+                    <p className="w-full rounded-[0.55rem] bg-white/[0.045] px-3 py-6 text-center text-[12px] font-semibold text-white/45">
+                      No events match this filter.
+                    </p>
+                  ) : filteredDisplayEvents.map((event) => {
                     const eventTitle = eventLeaderMap[event.id] || event.title;
                     const artworkUrls = eventArtworkMap[event.id] || [];
                     const artworkSongs = eventArtworkSongsMap[event.id] || [];
@@ -1394,7 +1398,7 @@ export function Dashboard() {
               <section className={`${reviewSets.length === 0 ? 'hidden lg:block' : ''} w-full min-w-0 max-w-full overflow-hidden rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-3 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)] sm:p-4`}>
                 <div className="mb-3 flex items-center justify-between">
                   <h2 className="min-w-0 truncate text-[18px] font-black text-white">Setlists awaiting approval</h2>
-                  <button onClick={() => navigate(isLeader ? '/leadership/setlists' : '/events')} className="ml-3 shrink-0 text-[12px] font-bold text-[#22c55e]">
+                  <button onClick={() => navigate(isLeader ? '/leadership/setlists' : '/events')} className="-mr-2 ml-1 inline-flex min-h-11 shrink-0 items-center px-2 text-[12px] font-bold text-[#22c55e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] sm:ml-3">
                     {isLeader ? 'Review queue' : 'See events'}
                   </button>
                 </div>
@@ -1547,10 +1551,14 @@ export function Dashboard() {
         <motion.section variants={item} className="lg:hidden">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-[18px] font-black text-white">Songs this week</h2>
-            <button onClick={() => navigate('/songs')} className="text-[12px] font-bold text-[#22c55e]">See all</button>
+            <button onClick={() => navigate('/songs')} className="-mr-2 inline-flex min-h-11 items-center px-2 text-[12px] font-bold text-[#22c55e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e]">See all</button>
           </div>
           <div className="flex snap-x gap-3 overflow-x-auto pb-1 no-scrollbar" style={{ WebkitOverflowScrolling: 'touch' }}>
-            {weekSongs.map((song) => (
+            {weekSongs.length === 0 ? (
+              <p className="w-full rounded-[0.55rem] bg-white/[0.045] px-3 py-6 text-center text-[12px] font-semibold text-white/45">
+                No songs are scheduled for this filter.
+              </p>
+            ) : weekSongs.map((song) => (
               <a
                 key={song.key}
                 href={getSongListenUrl(song.song)}
@@ -1570,10 +1578,12 @@ export function Dashboard() {
           <motion.section variants={item} className="min-w-0 overflow-hidden rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-3 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)] sm:p-4 lg:rounded-[1rem]">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-[18px] font-black text-white">Recent announcements</h2>
-              <button onClick={() => navigate('/announcements')} className="text-[12px] font-bold text-[#22c55e]">See all</button>
+              <button onClick={() => navigate('/announcements')} className="-mr-2 inline-flex min-h-11 items-center px-2 text-[12px] font-bold text-[#22c55e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e]">See all</button>
             </div>
             <div className="divide-y divide-white/[0.07]">
-              {announcementRows.map((a, index) => (
+              {announcementRows.length === 0 ? (
+                <p className="py-8 text-center text-[12px] font-semibold text-white/45">No announcements match this filter.</p>
+              ) : announcementRows.map((a, index) => (
                 <button
                   key={a.id}
                   onClick={() => navigate(a.id?.startsWith?.('sample') ? '/announcements' : `/announcements/${a.id}`)}

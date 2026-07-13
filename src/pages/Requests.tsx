@@ -135,6 +135,7 @@ export function Requests({ embedded }: RequestsProps = {}) {
                 onClick={fetchRequests}
                 className="inline-flex items-center justify-center h-11 w-11 rounded-full text-gray-600 dark:text-white/55 bg-white/78 dark:bg-white/[0.05] border border-black/[0.06] dark:border-white/[0.08] hover:bg-white dark:hover:bg-white/[0.08] active:scale-[0.95] transition-colors shrink-0"
                 title="Refresh"
+                aria-label="Refresh leave requests"
               >
                 <RefreshCw className="h-4 w-4" />
               </button>
@@ -156,8 +157,9 @@ export function Requests({ embedded }: RequestsProps = {}) {
             </div>
             <button
               onClick={fetchRequests}
-              className="inline-flex items-center justify-center h-8 w-8 rounded-full text-gray-500 dark:text-white/45 bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] hover:bg-white dark:hover:bg-white/[0.07] active:scale-[0.95] transition-colors"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-black/[0.06] bg-white/70 text-gray-500 transition-colors hover:bg-white active:scale-[0.95] dark:border-white/[0.07] dark:bg-white/[0.04] dark:text-white/45 dark:hover:bg-white/[0.07]"
               title="Refresh"
+              aria-label="Refresh leave requests"
             >
               <RefreshCw className="h-3 w-3" />
             </button>
@@ -241,13 +243,13 @@ export function Requests({ embedded }: RequestsProps = {}) {
                 <div className="relative flex items-center gap-2 px-5 pb-4">
                   <button
                     onClick={() => openApprovalModal(request, false)}
-                    className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-full text-[12px] font-semibold text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-500/[0.12] border border-red-200 dark:border-red-500/25 hover:bg-red-100 dark:hover:bg-red-500/[0.18] active:scale-[0.97] transition-colors"
+                    className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-full border border-red-200 bg-red-50 text-[12px] font-semibold text-red-700 transition-colors hover:bg-red-100 active:scale-[0.97] dark:border-red-500/25 dark:bg-red-500/[0.12] dark:text-red-300 dark:hover:bg-red-500/[0.18]"
                   >
                     <X className="h-3.5 w-3.5" /> Deny
                   </button>
                   <button
                     onClick={() => openApprovalModal(request, true)}
-                    className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-full text-[12px] font-semibold text-white transition-all active:scale-[0.97]"
+                    className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-full text-[12px] font-semibold text-white transition-all active:scale-[0.97]"
                     style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', boxShadow: '0 3px 10px rgba(22,163,74,0.3)' }}
                   >
                     <Check className="h-3.5 w-3.5" /> Approve
@@ -295,12 +297,12 @@ export function Requests({ embedded }: RequestsProps = {}) {
                 autoFocus
               />
             </div>
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setApprovalModal(null)} className="btn-secondary">Cancel</button>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
+              <button onClick={() => setApprovalModal(null)} className="btn-secondary min-h-11 justify-center">Cancel</button>
               <button
                 onClick={handleApproval}
                 disabled={saving}
-                className={`btn-primary ${approvalModal.approved ? '' : 'bg-red-600 hover:bg-red-700 ring-red-300'}`}
+                className={`btn-primary min-h-11 justify-center ${approvalModal.approved ? '' : 'bg-red-600 hover:bg-red-700 ring-red-300'}`}
               >
                 {saving ? 'Saving...' : approvalModal.approved ? 'Approve' : 'Deny'}
               </button>

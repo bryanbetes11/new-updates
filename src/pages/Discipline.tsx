@@ -227,7 +227,7 @@ export function Discipline({ embedded }: DisciplineProps = {}) {
             {canManageDiscipline && (
               <button
                 onClick={openCreate}
-                className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-semibold text-white shrink-0 transition-all active:scale-[0.97]"
+                className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full px-3 text-[11px] font-semibold text-white transition-all active:scale-[0.97]"
                 style={{ background: 'linear-gradient(135deg, #ef4444, #b91c1c)', boxShadow: '0 3px 10px rgba(239,68,68,0.3)' }}
               >
                 <Plus className="h-3.5 w-3.5" /> New Record
@@ -268,14 +268,16 @@ export function Discipline({ embedded }: DisciplineProps = {}) {
             <div className="relative flex-1">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               <input
+                id="discipline-search"
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search by member or title…"
-                className="w-full h-10 pl-10 pr-9 rounded-2xl text-[13px] bg-white dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.08] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/30 outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-400 dark:focus:border-red-500/50 transition-all"
+                aria-label="Search discipline records"
+                className="h-11 w-full rounded-2xl border border-gray-200 bg-white pl-10 pr-12 text-[13px] text-gray-900 outline-none transition-all placeholder-gray-400 focus:border-red-400 focus:ring-2 focus:ring-red-500/30 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:placeholder-white/30 dark:focus:border-red-500/50"
               />
               {search && (
-                <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+                <button type="button" onClick={() => setSearch('')} className="absolute right-0 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-xl text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-gray-300" aria-label="Clear discipline search">
                   <X className="h-4 w-4" />
                 </button>
               )}
@@ -470,7 +472,7 @@ export function Discipline({ embedded }: DisciplineProps = {}) {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Source</label>
               <Select
@@ -499,7 +501,7 @@ export function Discipline({ embedded }: DisciplineProps = {}) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Quarter</label>
               <div className="grid grid-cols-2 gap-2">
@@ -568,12 +570,12 @@ export function Discipline({ embedded }: DisciplineProps = {}) {
             </div>
           )}
 
-          <div className="flex justify-end gap-3 pt-2">
-            <button onClick={() => setShowCreateModal(false)} className="btn-secondary">Cancel</button>
+          <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end sm:gap-3">
+            <button onClick={() => setShowCreateModal(false)} className="btn-secondary min-h-11 justify-center">Cancel</button>
             <button
               onClick={handleSave}
               disabled={saving || !formData.title}
-              className="btn-primary"
+              className="btn-primary min-h-11 justify-center"
             >
               {saving ? 'Saving...' : editingRecord ? 'Update Record' : 'Create Record'}
             </button>

@@ -21,7 +21,7 @@ export function AnnouncementCreate() {
           <button
             type="button"
             onClick={smartBack}
-            className="inline-flex h-9 items-center gap-2 rounded-full bg-white/[0.075] px-3 text-[11px] font-black uppercase tracking-[0.13em] text-white/70 transition-colors hover:bg-white/[0.11] hover:text-white"
+            className="inline-flex h-11 items-center gap-2 rounded-full bg-white/[0.075] px-4 text-[11px] font-black uppercase tracking-[0.13em] text-white/70 transition-colors hover:bg-white/[0.11] hover:text-white"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             Back
@@ -34,7 +34,6 @@ export function AnnouncementCreate() {
             <div className="min-w-0">
               <h1
                 className="text-[2.15rem] font-black leading-none text-white sm:text-[3rem]"
-                style={{ letterSpacing: '-0.06em' }}
               >
                 New update
               </h1>

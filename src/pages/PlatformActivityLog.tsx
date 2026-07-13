@@ -286,6 +286,7 @@ export function PlatformActivityLog() {
           <div className="relative max-w-sm">
             <SlidersHorizontal className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-white/35" />
             <select
+              aria-label="Activity category"
               value={activeCategory}
               onChange={event => setActiveCategory(event.target.value)}
               className="h-12 w-full appearance-none rounded-2xl border border-gray-200 bg-white pl-11 pr-4 text-sm font-bold text-gray-800 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-500/10 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-white"

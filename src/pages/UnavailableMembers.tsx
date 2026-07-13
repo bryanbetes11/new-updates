@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { format, parseISO, startOfToday, isBefore } from 'date-fns';
-import { UserX, ChevronRight, Trash2, Calendar } from 'lucide-react';
+import { AlertTriangle, UserX, ChevronRight, Trash2, Calendar } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { PageLoader } from '../components/LoadingSpinner';
 import { Modal } from '../components/Modal';
 import { Avatar } from '../components/Avatar';
+import { EmptyState } from '../components/EmptyState';
 import type { UserAvailability } from '../types';
 
 export function UnavailableMembers() {
@@ -17,14 +18,20 @@ export function UnavailableMembers() {
   const [selectedUnavailability, setSelectedUnavailability] = useState<UserAvailability | null>(null);
   const [showDelete, setShowDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadUnavailableMembers = async () => {
-    const { data } = await supabase
+    setLoadError(null);
+    const { data, error } = await supabase
       .from('user_availability')
       .select('*, profiles!user_availability_user_id_fkey(first_name, last_name, nickname, avatar_url)')
       .eq('status', 'approved')
       .order('created_at', { ascending: true });
-    setUnavailableMembers((data || []) as UserAvailability[]);
+    if (error) {
+      setLoadError('We could not load team availability. Check your connection and try again.');
+    } else {
+      setUnavailableMembers((data || []) as UserAvailability[]);
+    }
     setLoading(false);
   };
 
@@ -137,7 +144,6 @@ export function UnavailableMembers() {
           </p>
           <h1
             className="text-[2rem] font-black text-gray-900 dark:text-white leading-[1.05]"
-            style={{ letterSpacing: '-0.035em' }}
           >
             Unavailable Members
           </h1>
@@ -154,10 +160,7 @@ export function UnavailableMembers() {
             <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-orange-100 dark:bg-orange-500/15 shrink-0">
               <UserX className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />
             </div>
-            <span
-              className="text-[13px] font-bold text-gray-900 dark:text-white flex-1"
-              style={{ letterSpacing: '-0.015em' }}
-            >
+            <span className="text-[13px] font-bold text-gray-900 dark:text-white flex-1">
               Upcoming
             </span>
             <span className="badge-orange">
@@ -165,7 +168,20 @@ export function UnavailableMembers() {
             </span>
           </div>
 
-          {upcoming.length === 0 ? (
+          {loadError ? (
+            <div role="alert" className="px-5 py-8">
+              <EmptyState
+                icon={<AlertTriangle className="h-7 w-7" />}
+                title="Unable to load availability"
+                description={loadError}
+                action={
+                  <button type="button" onClick={() => { setLoading(true); loadUnavailableMembers(); }} className="btn-primary min-h-11">
+                    Try again
+                  </button>
+                }
+              />
+            </div>
+          ) : upcoming.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
               <div className="flex items-center justify-center h-14 w-14 rounded-2xl bg-gray-100 dark:bg-white/[0.06] mb-3">
                 <UserX className="h-6 w-6 text-gray-400 dark:text-gray-500" />
@@ -179,7 +195,7 @@ export function UnavailableMembers() {
           )}
         </div>
 
-        {past.length > 0 && (
+        {!loadError && past.length > 0 && (
           <div
             className="card overflow-hidden animate-slide-up"
             style={{ animationDelay: '120ms', animationFillMode: 'both' }}
@@ -188,10 +204,7 @@ export function UnavailableMembers() {
               <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-gray-100 dark:bg-white/[0.07] shrink-0">
                 <Calendar className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500" />
               </div>
-              <span
-                className="text-[13px] font-bold text-gray-900 dark:text-white flex-1"
-                style={{ letterSpacing: '-0.015em' }}
-              >
+              <span className="text-[13px] font-bold text-gray-900 dark:text-white flex-1">
                 Past
               </span>
               <span className="badge-gray">{past.length}</span>
@@ -227,7 +240,7 @@ export function UnavailableMembers() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1.5">Date</label>
+                <p className="block text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1.5">Date</p>
                 <p className="text-sm font-medium text-gray-900 dark:text-white">
                   {selectedUnavailability.leave_type === 'range' && selectedUnavailability.start_date && selectedUnavailability.end_date
                     ? `${format(parseISO(selectedUnavailability.start_date), 'MMM d')} – ${format(parseISO(selectedUnavailability.end_date), 'MMMM d, yyyy')}`
@@ -238,14 +251,14 @@ export function UnavailableMembers() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1.5">Reason</label>
+                <p className="block text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1.5">Reason</p>
                 <p className="text-sm text-gray-700 dark:text-gray-300">
                   {selectedUnavailability.reason || 'No reason provided'}
                 </p>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1.5">Status</label>
+                <p className="block text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1.5">Status</p>
                 <span className="badge-green">{selectedUnavailability.status}</span>
               </div>
             </div>
@@ -253,14 +266,14 @@ export function UnavailableMembers() {
             <div className="mt-6 flex gap-3 justify-end">
               {isProductionDirector ? (
                 <>
-                  <button onClick={() => setSelectedUnavailability(null)} className="btn-secondary">Close</button>
-                  <button onClick={() => setShowDelete(true)} className="btn-danger flex items-center gap-2">
+                  <button type="button" onClick={() => setSelectedUnavailability(null)} className="btn-secondary min-h-11">Close</button>
+                  <button type="button" onClick={() => setShowDelete(true)} className="btn-danger min-h-11 flex items-center gap-2">
                     <Trash2 className="h-4 w-4" />
                     Delete
                   </button>
                 </>
               ) : (
-                <button onClick={() => setSelectedUnavailability(null)} className="btn-secondary">Close</button>
+                <button type="button" onClick={() => setSelectedUnavailability(null)} className="btn-secondary min-h-11">Close</button>
               )}
             </div>
           </>
@@ -281,8 +294,8 @@ export function UnavailableMembers() {
           This action cannot be undone.
         </p>
         <div className="mt-6 flex gap-3 justify-end">
-          <button onClick={() => setShowDelete(false)} className="btn-secondary">Cancel</button>
-          <button onClick={handleDelete} disabled={deleting} className="btn-danger">
+          <button type="button" onClick={() => setShowDelete(false)} className="btn-secondary min-h-11">Cancel</button>
+          <button type="button" onClick={handleDelete} disabled={deleting} className="btn-danger min-h-11">
             {deleting ? 'Deleting...' : 'Delete'}
           </button>
         </div>

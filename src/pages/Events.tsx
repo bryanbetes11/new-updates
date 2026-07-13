@@ -340,7 +340,7 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
   return (
     <button
       onClick={() => onEventClick(event.id)}
-      className="touch-action-pan-y group relative flex w-full items-center gap-3 bg-transparent px-0 py-3 text-left transition-colors hover:bg-white/[0.03]"
+      className="touch-action-pan-y group relative flex min-h-[5.5rem] w-full items-center gap-3 bg-transparent px-0 py-3 text-left transition-colors hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#22c55e]"
       style={{ opacity: isPast ? 0.62 : 1 }}
     >
       {setlistInfo?.songCount ? (
@@ -358,7 +358,7 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
       {/* Body */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
-          <p className="text-[14px] font-black leading-snug text-white" style={{ letterSpacing: '-0.015em' }}>
+          <p className="line-clamp-2 break-words text-[14px] font-black leading-snug text-white" style={{ letterSpacing: '-0.015em' }}>
             {songLeader || event.title}
           </p>
           <EventTypeBadge type={event.event_type} />
@@ -390,7 +390,7 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
 
         <div className="flex items-center gap-1.5 mt-1">
           <Clock className="h-3 w-3 shrink-0 text-white/28" />
-          <span className="text-[12px] font-semibold text-white/45">
+          <span className="text-[12px] font-semibold leading-snug text-white/45">
             {formatTime12Hour(event.start_time || '')}{event.end_time && ` – ${formatTime12Hour(event.end_time)}`}
           </span>
         </div>
@@ -1103,14 +1103,14 @@ export function Events() {
       <div
         className="pointer-events-none fixed inset-0 -z-10 bg-[#050505]"
       />
-      <div className="relative max-w-2xl lg:max-w-6xl xl:max-w-[1560px] mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-5 pb-6 space-y-5 sm:space-y-6">
+      <div className="relative mx-auto max-w-2xl space-y-5 px-4 pb-6 pt-4 sm:space-y-6 sm:px-6 sm:pt-5 md:max-w-[860px] md:px-8 lg:max-w-6xl xl:max-w-[1560px]">
 
         {/* ── Toolbar ── */}
         <motion.div
           {...fadeUp(0)}
           className="relative z-20 flex flex-col gap-3"
         >
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar" role="group" aria-label="Event timeframe">
             {(['upcoming', 'past'] as const).map(tab => {
               const active = activeTab === tab;
               const count = tab === 'upcoming' ? upcomingEvents.length : pastEvents.length;
@@ -1119,7 +1119,8 @@ export function Events() {
                   type="button"
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`relative z-10 inline-flex h-9 shrink-0 touch-manipulation items-center justify-center gap-2 rounded-full px-4 text-[12px] font-black transition-colors ${
+                  aria-pressed={active}
+                  className={`relative z-10 inline-flex h-11 shrink-0 touch-manipulation items-center justify-center gap-2 rounded-full px-4 text-[12px] font-black transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] focus-visible:ring-offset-2 focus-visible:ring-offset-[#050505] ${
                     desktopView === 'calendar' ? 'lg:hidden' : ''
                   } ${
                     active
@@ -1139,7 +1140,7 @@ export function Events() {
               );
             })}
             <span
-              className={`hidden h-9 shrink-0 items-center justify-center gap-2 rounded-full bg-[#22c55e] px-4 text-[12px] font-black text-black ${
+              className={`hidden h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-[#22c55e] px-4 text-[12px] font-black text-black ${
                 desktopView === 'calendar' ? 'lg:inline-flex' : ''
               }`}
             >
@@ -1149,14 +1150,14 @@ export function Events() {
             {isLeader && (
               <button
                 onClick={() => openCreateEvent()}
-                className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white/[0.10] px-4 text-[12px] font-black text-white transition-colors hover:bg-white/[0.16] active:scale-[0.97]"
+                className="inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white/[0.10] px-4 text-[12px] font-black text-white transition-colors hover:bg-white/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] active:scale-[0.97]"
               >
                 <Plus className="h-3.5 w-3.5" /> New event
               </button>
             )}
           </div>
 
-          <div className="hidden sm:flex items-center gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <div className="relative flex-1">
               <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-500/80 pointer-events-none" />
               <input
@@ -1164,10 +1165,11 @@ export function Events() {
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search events..."
+                aria-label="Search events"
                 className="h-11 w-full rounded-[0.7rem] border border-white/[0.08] bg-[#101010] pl-10 pr-10 text-[13px] font-semibold text-white outline-none transition-all placeholder:text-white/32 focus:border-[#22c55e]/50 focus:bg-[#151515] focus:ring-4 focus:ring-emerald-500/10"
               />
               {search && (
-                <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-gray-400 transition-colors hover:bg-black/[0.04] hover:text-gray-600 dark:hover:bg-white/[0.06] dark:hover:text-gray-300">
+                <button onClick={() => setSearch('')} aria-label="Clear event search" className="absolute right-1 top-1/2 inline-flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-black/[0.04] hover:text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] dark:hover:bg-white/[0.06] dark:hover:text-gray-300">
                   <X className="h-4 w-4" />
                 </button>
               )}
@@ -1177,7 +1179,7 @@ export function Events() {
               onChange={setTypeFilter}
               options={[{ value: '', label: 'All Types' }, ...eventTypes.map(t => ({ value: t, label: t }))]}
               placeholder="All Types"
-              className="sm:w-48"
+              className="w-full sm:w-48"
               icon={<Filter className="h-4 w-4" />}
             />
             <div className="hidden shrink-0 items-center gap-1 rounded-[0.7rem] bg-white/[0.07] p-1 lg:flex">
@@ -1190,8 +1192,9 @@ export function Events() {
                 return (
                   <button
                     key={option.value}
-                    type="button"
-                    onClick={() => setDesktopView(option.value)}
+                  type="button"
+                  onClick={() => setDesktopView(option.value)}
+                  aria-pressed={active}
                     className={`inline-flex h-9 items-center gap-2 rounded-[0.55rem] px-3 text-[12px] font-black transition-colors ${
                       active
                         ? 'bg-[#22c55e] text-black'

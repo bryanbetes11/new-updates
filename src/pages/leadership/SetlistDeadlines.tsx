@@ -132,7 +132,12 @@ function EditDueDatePopover({ event, onSave, onClose, saving }: EditDueDatePopov
           <CalendarDays className="h-3.5 w-3.5 text-gray-400" />
           Override Due Date
         </p>
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+        <button
+          type="button"
+          onClick={onClose}
+          className="-mr-2 inline-flex h-11 w-11 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-white/[0.06] dark:hover:text-gray-300"
+          aria-label="Close due date editor"
+        >
           <X className="h-4 w-4" />
         </button>
       </div>
@@ -140,26 +145,27 @@ function EditDueDatePopover({ event, onSave, onClose, saving }: EditDueDatePopov
         This changes the deadline for <span className="font-semibold text-gray-700 dark:text-gray-300">{event.title}</span> only.
       </p>
       <div>
-        <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">New due date &amp; time</label>
+        <label htmlFor={`deadline-${event.id}`} className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">New due date &amp; time</label>
         <input
+          id={`deadline-${event.id}`}
           type="datetime-local"
           value={dateValue}
           onChange={e => setDateValue(e.target.value)}
-          className="w-full text-xs px-2.5 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/[0.04] text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+          className="min-h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-2 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500/40 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
         />
       </div>
       <div className="flex gap-2 pt-0.5">
         <button
           onClick={onClose}
           disabled={saving}
-          className="flex-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 dark:bg-white/[0.06] text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"
+          className="min-h-11 flex-1 rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-200 dark:bg-white/[0.06] dark:text-gray-300 dark:hover:bg-white/10"
         >
           Cancel
         </button>
         <button
           onClick={() => onSave(event.id, dateValue)}
           disabled={saving || !dateValue}
-          className="flex-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5"
+          className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
         >
           {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
           {saving ? 'Saving...' : 'Save'}
@@ -460,11 +466,7 @@ export function SetlistDeadlines() {
             return (
               <div
                 key={event.id}
-                onClick={() => navigate(`/events/${event.id}`)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/events/${event.id}`); } }}
-                className={`touch-action-pan-y relative rounded-3xl overflow-hidden bg-white dark:bg-white/[0.025] border p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 cursor-pointer transition-all duration-200 hover:-translate-y-0.5 ${
+                className={`touch-action-pan-y relative rounded-3xl overflow-hidden bg-white dark:bg-white/[0.025] border p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 transition-all duration-200 hover:-translate-y-0.5 ${
                   isOverdueEvent ? 'border-red-200 dark:border-red-500/25' : isDueTodayEvent ? 'border-amber-200 dark:border-amber-500/25' : 'border-gray-200/80 dark:border-white/[0.06]'
                 }`}
                 style={{
@@ -476,7 +478,12 @@ export function SetlistDeadlines() {
                     : undefined,
                 }}
               >
-                <div className="flex items-start gap-3 flex-1 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => navigate(`/events/${event.id}`)}
+                  className="flex min-w-0 flex-1 items-start gap-3 rounded-2xl text-left outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
+                  aria-label={`Open ${event.title} event`}
+                >
                   <div className="shrink-0 mt-0.5">
                     {event.song_leader ? (
                       <Avatar
@@ -548,7 +555,7 @@ export function SetlistDeadlines() {
                       </span>
                     </div>
                   </div>
-                </div>
+                </button>
 
                 <div className="flex items-center justify-between sm:justify-end gap-2 sm:shrink-0 relative">
                   {event.reminder_count > 0 && (
@@ -561,18 +568,21 @@ export function SetlistDeadlines() {
                   )}
 
                   <button
-                    onClick={(e) => { e.stopPropagation(); setEditingId(isEditOpen ? null : event.id); }}
-                    className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors"
+                    type="button"
+                    onClick={() => setEditingId(isEditOpen ? null : event.id)}
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/[0.06] dark:hover:text-gray-200"
                     title="Override due date"
+                    aria-label={`Override due date for ${event.title}`}
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
 
                   {canSendReminder && (
                     <button
-                      onClick={(e) => { e.stopPropagation(); handleSendReminder(event); }}
+                      type="button"
+                      onClick={() => handleSendReminder(event)}
                       disabled={isSending || recentlySent || !event.song_leader}
-                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      className={`inline-flex min-h-11 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all ${
                         recentlySent
                           ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 cursor-not-allowed'
                           : 'bg-brand-600 hover:bg-brand-700 text-white active:scale-95'
@@ -589,7 +599,7 @@ export function SetlistDeadlines() {
                   )}
 
                   {isEditOpen && (
-                    <div onClick={(e) => e.stopPropagation()}>
+                    <div>
                       <EditDueDatePopover
                         event={event}
                         onSave={handleSaveDueDate}

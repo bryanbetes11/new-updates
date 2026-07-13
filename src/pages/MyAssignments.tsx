@@ -29,42 +29,52 @@ export function MyAssignments() {
   const [swapModalAssignment, setSwapModalAssignment] = useState<EventAssignment | null>(null);
   const [sentSwapRequests, setSentSwapRequests] = useState<SwapRequest[]>([]);
   const [cancellingSwap, setCancellingSwap] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!user) return;
     const load = async () => {
-      const today = startOfToday().toISOString().split('T')[0];
-      const { data } = await supabase
-        .from('event_assignments')
-        .select('*, events(*), roles(*)')
-        .eq('user_id', user.id)
-        .gte('events.event_date', today)
-        .order('created_at', { ascending: false });
+      setLoadError(null);
+      setLoading(true);
+      try {
+        const today = startOfToday().toISOString().split('T')[0];
+        const { data, error } = await supabase
+          .from('event_assignments')
+          .select('*, events(*), roles(*)')
+          .eq('user_id', user.id)
+          .gte('events.event_date', today)
+          .order('created_at', { ascending: false });
+        if (error) throw error;
 
-      const list = ((data || []) as EventAssignment[])
-        .filter(a => a.events && isAfter(parseISO(a.events.event_date), startOfToday()))
-        .sort((a, b) => parseISO(a.events!.event_date).getTime() - parseISO(b.events!.event_date).getTime());
+        const list = ((data || []) as EventAssignment[])
+          .filter(a => a.events && isAfter(parseISO(a.events.event_date), startOfToday()))
+          .sort((a, b) => parseISO(a.events!.event_date).getTime() - parseISO(b.events!.event_date).getTime());
 
-      setAssignments(list);
+        setAssignments(list);
 
-      const { data: swapData } = await supabase
-        .from('user_availability')
-        .select(`
-          *,
-          target:target_id(id, first_name, last_name, nickname, avatar_url),
-          requester_assignment:requester_assignment_id(*, events(*), roles(*)),
-          target_assignment:target_assignment_id(*, events(*), roles(*))
-        `)
-        .eq('user_id', user.id)
-        .neq('request_type', 'leave')
-        .not('status', 'in', '("approved","withdrawn")')
-        .order('created_at', { ascending: false });
-      setSentSwapRequests((swapData || []) as SwapRequest[]);
-
-      setLoading(false);
+        const { data: swapData, error: swapError } = await supabase
+          .from('user_availability')
+          .select(`
+            *,
+            target:target_id(id, first_name, last_name, nickname, avatar_url),
+            requester_assignment:requester_assignment_id(*, events(*), roles(*)),
+            target_assignment:target_assignment_id(*, events(*), roles(*))
+          `)
+          .eq('user_id', user.id)
+          .neq('request_type', 'leave')
+          .not('status', 'in', '("approved","withdrawn")')
+          .order('created_at', { ascending: false });
+        if (swapError) throw swapError;
+        setSentSwapRequests((swapData || []) as SwapRequest[]);
+      } catch {
+        setLoadError('We could not load your assignments. Check your connection and try again.');
+      } finally {
+        setLoading(false);
+      }
     };
     load();
-  }, [user]);
+  }, [user, reloadKey]);
 
   useEffect(() => {
     const status = searchParams.get('status') as Filter;
@@ -120,8 +130,7 @@ export function MyAssignments() {
             My Schedule
           </p>
           <h1
-            className="text-[2rem] sm:text-[2.6rem] font-black leading-[0.96] tracking-tighter text-gray-900 dark:text-white"
-            style={{ letterSpacing: '-0.04em' }}
+            className="text-[2rem] sm:text-[2.6rem] font-black leading-[0.96] text-gray-900 dark:text-white"
           >
             My Assignments
           </h1>
@@ -134,9 +143,10 @@ export function MyAssignments() {
         <div className="flex flex-wrap gap-2 animate-fade-in">
           {filterTabs.map(t => (
             <button
+              type="button"
               key={t.key}
               onClick={() => handleFilter(t.key)}
-              className={`flex items-center gap-1.5 h-9 px-4 rounded-full text-[12px] font-semibold transition-all duration-200 border ${
+              className={`flex items-center gap-1.5 h-11 px-4 rounded-full text-[12px] font-semibold transition-all duration-200 border ${
                 filter === t.key
                   ? 'bg-brand-600 dark:bg-brand-500 text-white border-brand-600 dark:border-brand-500 shadow-sm'
                   : 'bg-white dark:bg-white/[0.04] text-gray-500 dark:text-white/40 border-gray-200/80 dark:border-white/[0.07] hover:text-gray-700 dark:hover:text-white/70 hover:border-gray-300 dark:hover:border-white/[0.12]'
@@ -171,8 +181,17 @@ export function MyAssignments() {
             </span>
           </div>
 
-          {/* Empty state */}
-          {filtered.length === 0 ? (
+          {/* Error and empty states */}
+          {loadError ? (
+            <div className="bg-white px-5 py-14 text-center dark:bg-white/[0.025]" role="alert">
+              <AlertCircle className="mx-auto h-7 w-7 text-red-500" />
+              <p className="mt-3 text-sm font-semibold text-gray-900 dark:text-white">Unable to load assignments</p>
+              <p className="mx-auto mt-1 max-w-sm text-xs leading-relaxed text-gray-500 dark:text-white/45">{loadError}</p>
+              <button type="button" onClick={() => setReloadKey(value => value + 1)} className="btn-primary mt-4 min-h-11">
+                Try again
+              </button>
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="bg-white dark:bg-white/[0.025] px-5 py-16 text-center">
               <div className="h-12 w-12 rounded-2xl bg-gray-100 dark:bg-white/[0.06] flex items-center justify-center mx-auto mb-4">
                 <Calendar className="h-6 w-6 text-gray-400 dark:text-white/30" />
@@ -191,15 +210,20 @@ export function MyAssignments() {
                 return (
                   <div
                     key={a.id}
-                    className="group flex items-center gap-4 px-5 py-4 w-full hover:bg-gray-50 dark:hover:bg-white/[0.03] transition-colors duration-150 cursor-pointer"
-                    onClick={() => navigate(`/events/${a.event_id}`)}
+                    className="group flex w-full items-stretch transition-colors duration-150 hover:bg-gray-50 dark:hover:bg-white/[0.03]"
                   >
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/events/${a.event_id}`)}
+                      className="flex min-w-0 flex-1 items-center gap-4 py-4 pl-5 text-left"
+                      aria-label={`Open ${a.events?.title || 'event'} assignment`}
+                    >
                     {/* Date tile */}
                     <div className="flex flex-col items-center justify-center h-12 w-12 rounded-xl bg-brand-50 dark:bg-brand-900/25 text-brand-700 dark:text-brand-300 shrink-0">
                       <span className="font-mono text-[9px] font-semibold uppercase leading-none">
                         {a.events?.event_date && format(parseISO(a.events.event_date), 'MMM')}
                       </span>
-                      <span className="font-mono text-[20px] font-bold leading-none mt-0.5" style={{ letterSpacing: '-0.03em' }}>
+                      <span className="font-mono text-[20px] font-bold leading-none mt-0.5">
                         {a.events?.event_date && format(parseISO(a.events.event_date), 'd')}
                       </span>
                     </div>
@@ -236,7 +260,7 @@ export function MyAssignments() {
                       )}
                     </div>
 
-                    {/* Status + swap + chevron */}
+                    {/* Status + chevron */}
                     <div className="flex items-center gap-2 shrink-0">
                       {cfg && (
                         <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold ring-1 ${cfg.bg} ${cfg.text} ${cfg.ring}`}>
@@ -244,17 +268,20 @@ export function MyAssignments() {
                           {cfg.label}
                         </span>
                       )}
-                      {a.status !== 'declined' && (
-                        <button
-                          title={a.roles?.name === 'Song Leader' ? 'Request Schedule Swap' : 'Find a Sub'}
-                          onClick={e => { e.stopPropagation(); setSwapModalAssignment(a); }}
-                          className="h-7 w-7 rounded-lg flex items-center justify-center text-gray-400 dark:text-white/30 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition-colors"
-                        >
-                          <ArrowLeftRight className="h-3.5 w-3.5" />
-                        </button>
-                      )}
                       <ChevronRight className="h-4 w-4 text-gray-300 dark:text-white/20 group-hover:text-gray-500 dark:group-hover:text-white/40 transition-colors" />
                     </div>
+                    </button>
+                    {a.status !== 'declined' && (
+                      <button
+                        type="button"
+                        title={a.roles?.name === 'Song Leader' ? 'Request Schedule Swap' : 'Find a Sub'}
+                        aria-label={a.roles?.name === 'Song Leader' ? `Request a schedule swap for ${a.events?.title || 'this event'}` : `Find a substitute for ${a.events?.title || 'this event'}`}
+                        onClick={() => setSwapModalAssignment(a)}
+                        className="mr-2 flex h-11 w-11 shrink-0 self-center items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-brand-50 hover:text-brand-600 dark:text-white/30 dark:hover:bg-brand-900/20 dark:hover:text-brand-400"
+                      >
+                        <ArrowLeftRight className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -297,7 +324,7 @@ export function MyAssignments() {
 
                       {/* Details */}
                       <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-semibold text-gray-900 dark:text-white truncate leading-tight" style={{ letterSpacing: '-0.01em' }}>
+                        <p className="text-[13px] font-semibold text-gray-900 dark:text-white truncate leading-tight">
                           {isSub ? `Sub request to ${targetName}` : `Swap with ${targetName}`}
                         </p>
                         <p className="text-[11px] text-gray-500 dark:text-white/40 font-mono mt-0.5 truncate">
@@ -324,9 +351,10 @@ export function MyAssignments() {
                         )}
                         {canCancel && (
                           <button
+                            type="button"
                             onClick={() => handleCancelSwap(req.id)}
                             disabled={cancellingSwap === req.id}
-                            className="text-[10px] font-semibold text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors disabled:opacity-50"
+                            className="min-h-11 rounded-xl px-3 text-[10px] font-semibold text-red-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-500/[0.1] dark:hover:text-red-300"
                           >
                             {cancellingSwap === req.id ? 'Cancelling…' : 'Cancel'}
                           </button>

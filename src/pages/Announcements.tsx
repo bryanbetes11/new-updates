@@ -84,6 +84,7 @@ export function Announcements() {
   const navigate = useNavigate();
   const [announcements, setAnnouncements] = useState<AnnouncementWithBlocks[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [isDesktop, setIsDesktop] = useState(() => typeof window === 'undefined' ? true : window.matchMedia('(min-width: 1024px)').matches);
   const [emojiPickerId, setEmojiPickerId] = useState<string | null>(null);
@@ -112,6 +113,7 @@ export function Announcements() {
   };
 
   const fetchAnnouncements = useCallback(async () => {
+    setLoadError(null);
     try {
       const [announcementsRes, pinsRes] = await Promise.all([
         withRequestTimeout(
@@ -131,7 +133,10 @@ export function Announcements() {
         ),
       ]);
 
-      if (announcementsRes.error) console.error('Fetch announcements error:', announcementsRes.error);
+      if (announcementsRes.error) {
+        console.error('Fetch announcements error:', announcementsRes.error);
+        setLoadError('Announcements could not be loaded. Check your connection and try again.');
+      }
       if (pinsRes.error) console.error('Fetch announcement pins error:', pinsRes.error);
 
       const pinsByAnnouncement = new Map<string, AnnouncementPin[]>();
@@ -150,6 +155,7 @@ export function Announcements() {
     } catch (error) {
       console.error('Fetch announcements error:', error);
       setAnnouncements([]);
+      setLoadError('Announcements could not be loaded. Check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -291,6 +297,7 @@ export function Announcements() {
 
           {isLeader && (
             <button
+              type="button"
               onClick={openCreateAnnouncement}
               className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-white/[0.095] px-5 text-[13px] font-black text-white transition-all hover:bg-[#1ed760] hover:text-black active:scale-[0.97]"
             >
@@ -300,12 +307,23 @@ export function Announcements() {
         </motion.div>
 
         {/* ── List ─────────────────────────────────────── */}
-        {sortedFiltered.length === 0 ? (
+        {loadError && announcements.length === 0 ? (
+          <EmptyState
+            icon={<AlertTriangle className="h-8 w-8" />}
+            title="News is unavailable"
+            description={loadError}
+            action={
+              <button type="button" onClick={fetchAnnouncements} className="btn-primary min-h-11">
+                Try again
+              </button>
+            }
+          />
+        ) : sortedFiltered.length === 0 ? (
           <EmptyState
             icon={<Megaphone className="h-8 w-8" />}
             title="No announcements"
             description="Be the first to share something with the team."
-            action={isLeader ? <button onClick={openCreateAnnouncement} className="btn-primary"><Plus className="h-4 w-4" /> Post Announcement</button> : undefined}
+            action={isLeader ? <button type="button" onClick={openCreateAnnouncement} className="btn-primary min-h-11"><Plus className="h-4 w-4" /> Post Announcement</button> : undefined}
           />
         ) : (
           <motion.div
@@ -340,7 +358,7 @@ export function Announcements() {
 
                   <div className="relative">
                     {/* Main clickable body */}
-                    <button className="w-full text-left" onClick={() => navigate(`/announcements/${a.id}`)}>
+                    <button type="button" className="w-full text-left" onClick={() => navigate(`/announcements/${a.id}`)}>
                       <div className="grid gap-3 px-4 py-4 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-5 sm:px-5 lg:px-6">
                         <div className="flex items-start gap-3 sm:contents">
                           <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md bg-[linear-gradient(135deg,rgba(30,215,96,0.36),rgba(245,158,11,0.24)),#181818] ring-1 ring-white/[0.08] sm:h-20 sm:w-20">
@@ -416,12 +434,15 @@ export function Announcements() {
                       {reactionGroups.map(r => (
                         <button
                           key={r.emoji}
+                          type="button"
                           onClick={e => handleReact(e, a.id, r.emoji)}
-                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold transition-all active:scale-[0.95] ${
+                          className={`inline-flex min-h-11 items-center gap-1 rounded-full px-3 text-xs font-bold transition-all active:scale-[0.95] ${
                             r.users.includes(user?.id || '')
                               ? 'bg-[#1ed760]/20 text-[#7cffaa] ring-1 ring-[#1ed760]/30'
                               : 'bg-white/[0.055] text-white/52 ring-1 ring-white/[0.05] hover:bg-white/[0.09]'
                           }`}
+                          aria-label={`${r.users.includes(user?.id || '') ? 'Remove' : 'Add'} ${r.emoji} reaction. ${r.count} total`}
+                          aria-pressed={r.users.includes(user?.id || '')}
                         >
                           {r.emoji} <span>{r.count}</span>
                         </button>
@@ -429,8 +450,12 @@ export function Announcements() {
 
                       <div className="relative">
                         <button
+                          type="button"
                           onClick={e => { e.stopPropagation(); setEmojiPickerId(emojiPickerId === a.id ? null : a.id); }}
-                          className="inline-flex items-center gap-1 rounded-full bg-white/[0.055] px-2.5 py-1 text-xs text-white/35 ring-1 ring-white/[0.05] transition-colors hover:bg-white/[0.09]"
+                          className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/[0.055] text-xs text-white/35 ring-1 ring-white/[0.05] transition-colors hover:bg-white/[0.09]"
+                          aria-label="Add a reaction"
+                          aria-expanded={emojiPickerId === a.id}
+                          aria-haspopup="menu"
                         >
                           <Smile className="h-3.5 w-3.5" />
                         </button>
@@ -442,9 +467,19 @@ export function Announcements() {
                               exit={{ opacity: 0, scale: 0.9, y: 4 }}
                               transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
                               className="absolute bottom-full left-0 z-20 mb-1.5 flex items-center gap-1 rounded-2xl bg-[#232325] p-2 shadow-xl ring-1 ring-white/[0.08]"
+                              role="menu"
                             >
                               {QUICK_EMOJIS.map(e => (
-                                <button key={e} onClick={ev => handleReact(ev, a.id, e)} className="text-lg hover:scale-125 transition-transform px-0.5">{e}</button>
+                                <button
+                                  key={e}
+                                  type="button"
+                                  onClick={ev => handleReact(ev, a.id, e)}
+                                  className="flex h-11 w-11 items-center justify-center rounded-xl text-lg transition-transform hover:scale-110 hover:bg-white/[0.08]"
+                                  aria-label={`React with ${e}`}
+                                  role="menuitem"
+                                >
+                                  {e}
+                                </button>
                               ))}
                             </motion.div>
                           )}
@@ -453,12 +488,15 @@ export function Announcements() {
 
                       {isLeader && (
                         <button
+                          type="button"
                           onClick={e => handlePin(e, a)}
-                          className={`ml-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-black transition-all ${
+                          className={`ml-auto inline-flex h-11 items-center gap-1.5 rounded-full px-3.5 text-[11px] font-black transition-all ${
                             isPinned
                               ? 'bg-[#1ed760]/20 text-[#7cffaa]'
                               : 'bg-white/[0.055] text-white/42 ring-1 ring-white/[0.05] hover:bg-white/[0.09] hover:text-white/70'
                           }`}
+                          aria-pressed={isPinned}
+                          aria-label={`${isPinned ? 'Unpin' : 'Pin'} ${a.title}`}
                         >
                           <Pin className={`h-3.5 w-3.5 ${isPinned ? 'fill-[#1ed760]' : ''}`} />
                           {isPinned ? 'Pinned' : 'Pin'}

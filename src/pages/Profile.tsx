@@ -287,7 +287,7 @@ export function Profile() {
               <div className="hidden shrink-0 items-center gap-1.5 sm:flex">
                 <button
                   onClick={() => setEditing(!editing)}
-                  className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[11px] font-black transition-all active:scale-[0.97] ${
+                  className={`inline-flex h-11 items-center gap-1.5 rounded-full px-3.5 text-[11px] font-black transition-all active:scale-[0.97] ${
                     editing
                       ? 'border border-black/[0.08] bg-white text-gray-600 shadow-sm dark:border-white/[0.1] dark:bg-white/[0.08] dark:text-white/65'
                       : 'border border-white bg-white text-gray-700 shadow-sm hover:-translate-y-0.5 dark:border-white/[0.08] dark:bg-white/[0.055] dark:text-white/70'
@@ -297,19 +297,19 @@ export function Profile() {
                 </button>
                 <button
                   onClick={() => navigate('/change-password')}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-white bg-white px-3 text-[11px] font-black text-gray-700 shadow-sm transition-all hover:-translate-y-0.5 active:scale-[0.97] dark:border-white/[0.08] dark:bg-white/[0.055] dark:text-white/70"
+                  className="inline-flex h-11 items-center gap-1.5 rounded-full border border-white bg-white px-3.5 text-[11px] font-black text-gray-700 shadow-sm transition-all hover:-translate-y-0.5 active:scale-[0.97] dark:border-white/[0.08] dark:bg-white/[0.055] dark:text-white/70"
                 >
                   <KeyRound className="h-3.5 w-3.5" /> Password
                 </button>
                 <button
                   onClick={() => setEmailPanelOpen(open => !open)}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-white bg-white px-3 text-[11px] font-black text-gray-700 shadow-sm transition-all hover:-translate-y-0.5 active:scale-[0.97] dark:border-white/[0.08] dark:bg-white/[0.055] dark:text-white/70"
+                  className="inline-flex h-11 items-center gap-1.5 rounded-full border border-white bg-white px-3.5 text-[11px] font-black text-gray-700 shadow-sm transition-all hover:-translate-y-0.5 active:scale-[0.97] dark:border-white/[0.08] dark:bg-white/[0.055] dark:text-white/70"
                 >
                   <Mail className="h-3.5 w-3.5" /> Email
                 </button>
                 <button
                   onClick={handleSignOut}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3 text-[11px] font-black text-red-600 transition-all hover:-translate-y-0.5 hover:bg-red-100 active:scale-[0.97] dark:border-red-500/25 dark:bg-red-500/[0.1] dark:text-red-400"
+                  className="inline-flex h-11 items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3.5 text-[11px] font-black text-red-600 transition-all hover:-translate-y-0.5 hover:bg-red-100 active:scale-[0.97] dark:border-red-500/25 dark:bg-red-500/[0.1] dark:text-red-400"
                 >
                   <LogOut className="h-3.5 w-3.5" /> Sign out
                 </button>
@@ -332,14 +332,19 @@ export function Profile() {
                   ) : (
                     <div
                       className="relative flex h-16 w-16 items-center justify-center rounded-[1.15rem] text-xl font-black text-white ring-4 ring-white sm:h-[104px] sm:w-[104px] sm:rounded-[1.35rem] sm:text-[2.4rem] dark:ring-[#0d0d0f]"
-                      style={{ background: 'linear-gradient(145deg, #16a34a, #15803d)', letterSpacing: '-0.02em' }}
+                      style={{ background: 'linear-gradient(145deg, #16a34a, #15803d)' }}
                     >
                       {profile.first_name[0]}{profile.last_name?.[0] || ''}
                     </div>
                   )}
-                  <label className="absolute inset-0 flex cursor-pointer items-center justify-center rounded-[1.15rem] bg-black/55 opacity-0 transition-opacity group-hover:opacity-100 sm:rounded-[1.35rem]">
+                  <label
+                    htmlFor="profile-avatar-upload"
+                    className="absolute inset-0 flex cursor-pointer items-center justify-center rounded-[1.15rem] bg-black/55 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 sm:rounded-[1.35rem]"
+                    aria-label="Upload a new profile photo"
+                    title="Upload a new profile photo"
+                  >
                     {avatarUploading ? <Loader2 className="h-5 w-5 animate-spin text-white" /> : <Camera className="h-5 w-5 text-white" />}
-                    <input type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" disabled={avatarUploading} />
+                    <input id="profile-avatar-upload" type="file" accept="image/*" onChange={handleAvatarUpload} className="sr-only" disabled={avatarUploading} />
                   </label>
                 </div>
 
@@ -347,7 +352,6 @@ export function Profile() {
                   <p className="truncate text-xs font-semibold text-gray-500 dark:text-white/45 sm:text-sm">{primaryRoleLabel}</p>
                   <h1
                     className="mt-1 text-[1.85rem] font-black leading-none text-gray-950 dark:text-white sm:text-[3.15rem] lg:text-[3.65rem]"
-                    style={{ letterSpacing: '-0.065em' }}
                   >
                     {fullName}
                   </h1>
@@ -411,7 +415,7 @@ export function Profile() {
             <div className="mt-4 grid grid-cols-2 gap-1.5 sm:hidden">
               <button
                 onClick={() => setEditing(!editing)}
-                className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-full text-[12px] font-black transition-all active:scale-[0.97] ${
+                className={`inline-flex h-11 items-center justify-center gap-1.5 rounded-full text-[12px] font-black transition-all active:scale-[0.97] ${
                   editing
                     ? 'border border-black/[0.08] bg-white text-gray-600 shadow-sm dark:border-white/[0.1] dark:bg-white/[0.08] dark:text-white/65'
                     : 'border border-white bg-white text-gray-700 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.055] dark:text-white/70'
@@ -421,19 +425,19 @@ export function Profile() {
               </button>
               <button
                 onClick={() => navigate('/change-password')}
-                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full border border-white bg-white text-[12px] font-black text-gray-700 shadow-sm active:scale-[0.97] dark:border-white/[0.08] dark:bg-white/[0.055] dark:text-white/70"
+                className="inline-flex h-11 items-center justify-center gap-1.5 rounded-full border border-white bg-white text-[12px] font-black text-gray-700 shadow-sm active:scale-[0.97] dark:border-white/[0.08] dark:bg-white/[0.055] dark:text-white/70"
               >
                 <KeyRound className="h-3.5 w-3.5" /> Password
               </button>
               <button
                 onClick={() => setEmailPanelOpen(open => !open)}
-                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full border border-white bg-white text-[12px] font-black text-gray-700 shadow-sm active:scale-[0.97] dark:border-white/[0.08] dark:bg-white/[0.055] dark:text-white/70"
+                className="inline-flex h-11 items-center justify-center gap-1.5 rounded-full border border-white bg-white text-[12px] font-black text-gray-700 shadow-sm active:scale-[0.97] dark:border-white/[0.08] dark:bg-white/[0.055] dark:text-white/70"
               >
                 <Mail className="h-3.5 w-3.5" /> Email
               </button>
               <button
                 onClick={handleSignOut}
-                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full border border-red-200 bg-red-50 text-[12px] font-black text-red-600 active:scale-[0.97] dark:border-red-500/25 dark:bg-red-500/[0.1] dark:text-red-400"
+                className="inline-flex h-11 items-center justify-center gap-1.5 rounded-full border border-red-200 bg-red-50 text-[12px] font-black text-red-600 active:scale-[0.97] dark:border-red-500/25 dark:bg-red-500/[0.1] dark:text-red-400"
               >
                 <LogOut className="h-3.5 w-3.5" /> Sign out
               </button>
@@ -459,10 +463,11 @@ export function Profile() {
                         <p className="text-xs text-gray-500 dark:text-white/40">We will send a confirmation email to the new address.</p>
                       </div>
                     </div>
-                    <label className="mt-4 block text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-white/35 mb-2">
+                    <label htmlFor="profile-email" className="mt-4 block text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-white/35 mb-2">
                       New email address
                     </label>
                     <input
+                      id="profile-email"
                       type="email"
                       value={newEmail}
                       onChange={e => setNewEmail(e.target.value)}
@@ -498,15 +503,15 @@ export function Profile() {
               className="mt-7"
             >
               <PremiumCard className="p-5 sm:p-6 space-y-4">
-                <div>
-                  <label className="block text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-white/35 mb-2">Gender</label>
+                <fieldset>
+                  <legend className="mb-2 block text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-white/35">Gender</legend>
                   <div className="flex gap-2">
                     {(['male', 'female'] as const).map(g => (
                       <button
                         key={g}
                         type="button"
                         onClick={() => setForm({ ...form, gender: g })}
-                        className={`flex-1 h-10 rounded-2xl text-[13px] font-bold transition-all border ${
+                        className={`h-11 flex-1 rounded-2xl border text-[13px] font-bold transition-all ${
                           form.gender === g
                             ? 'text-white border-transparent'
                             : 'bg-white/70 dark:bg-white/[0.04] border-black/[0.07] dark:border-white/[0.08] text-gray-600 dark:text-white/55 hover:bg-white dark:hover:bg-white/[0.07]'
@@ -517,27 +522,28 @@ export function Profile() {
                       </button>
                     ))}
                   </div>
+                </fieldset>
+                <div className="grid grid-cols-1 gap-3 min-[390px]:grid-cols-2">
+                  <div><label htmlFor="profile-first-name" className="mb-1.5 block text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35">First Name</label><input id="profile-first-name" type="text" value={form.first_name} onChange={e => setForm({ ...form, first_name: e.target.value })} className="input-field text-sm" autoComplete="given-name" /></div>
+                  <div><label htmlFor="profile-second-name" className="mb-1.5 block text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35">Second Name</label><input id="profile-second-name" type="text" value={form.second_name} onChange={e => setForm({ ...form, second_name: e.target.value })} className="input-field text-sm" placeholder="Optional" /></div>
+                  <div><label htmlFor="profile-middle-name" className="mb-1.5 block text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35">Middle Name</label><input id="profile-middle-name" type="text" value={form.middle_name} onChange={e => setForm({ ...form, middle_name: e.target.value })} className="input-field text-sm" placeholder="Optional" autoComplete="additional-name" /></div>
+                  <div><label htmlFor="profile-last-name" className="mb-1.5 block text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35">Last Name</label><input id="profile-last-name" type="text" value={form.last_name} onChange={e => setForm({ ...form, last_name: e.target.value })} className="input-field text-sm" autoComplete="family-name" /></div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div><label className="block text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">First Name</label><input type="text" value={form.first_name} onChange={e => setForm({ ...form, first_name: e.target.value })} className="input-field text-sm" /></div>
-                  <div><label className="block text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Second Name</label><input type="text" value={form.second_name} onChange={e => setForm({ ...form, second_name: e.target.value })} className="input-field text-sm" placeholder="Optional" /></div>
-                  <div><label className="block text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Middle Name</label><input type="text" value={form.middle_name} onChange={e => setForm({ ...form, middle_name: e.target.value })} className="input-field text-sm" placeholder="Optional" /></div>
-                  <div><label className="block text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Last Name</label><input type="text" value={form.last_name} onChange={e => setForm({ ...form, last_name: e.target.value })} className="input-field text-sm" /></div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div><label className="block text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Nickname</label><input type="text" value={form.nickname} onChange={e => setForm({ ...form, nickname: e.target.value })} className="input-field text-sm" /></div>
-                  <div><label className="block text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Phone</label><input type="tel" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className="input-field text-sm" /></div>
+                <div className="grid grid-cols-1 gap-3 min-[390px]:grid-cols-2">
+                  <div><label htmlFor="profile-nickname" className="mb-1.5 block text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35">Nickname</label><input id="profile-nickname" type="text" value={form.nickname} onChange={e => setForm({ ...form, nickname: e.target.value })} className="input-field text-sm" /></div>
+                  <div><label htmlFor="profile-phone" className="mb-1.5 block text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35">Phone</label><input id="profile-phone" type="tel" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className="input-field text-sm" autoComplete="tel" /></div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div><label className="block text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Birthday</label><DatePicker value={form.birthday} onChange={v => setForm({ ...form, birthday: v })} placeholder="Select birthday" /></div>
                   <div><label className="block text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Official Join Date</label><DatePicker value={form.official_join_date} onChange={v => setForm({ ...form, official_join_date: v })} placeholder="Select join date" /></div>
                 </div>
                 <div className="flex justify-end gap-2 pt-1">
-                  <button onClick={() => setEditing(false)} className="btn-secondary text-sm">Cancel</button>
+                  <button type="button" onClick={() => setEditing(false)} className="btn-secondary min-h-11 text-sm">Cancel</button>
                   <button
+                    type="button"
                     onClick={handleSave}
                     disabled={loading}
-                    className="inline-flex items-center gap-2 px-5 h-10 rounded-full text-[13px] font-semibold text-white transition-all active:scale-[0.97]"
+                    className="inline-flex h-11 items-center gap-2 rounded-full px-5 text-[13px] font-semibold text-white transition-all active:scale-[0.97]"
                     style={{ background: 'linear-gradient(135deg, #16a34a, #15803d)', boxShadow: '0 4px 14px rgba(22,163,74,0.35)' }}
                   >
                     <Save className="h-4 w-4" /> {loading ? 'Saving…' : 'Save Changes'}
@@ -557,16 +563,17 @@ export function Profile() {
           <SectionLabel
             action={
               !editingRoles ? (
-                <button onClick={startEditingRoles} className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400/80 hover:text-emerald-500 dark:hover:text-emerald-300 transition-colors">
+                <button type="button" onClick={startEditingRoles} className="inline-flex min-h-11 items-center gap-1 rounded-xl px-2 text-[11px] font-semibold text-emerald-600 transition-colors hover:bg-emerald-500/[0.08] hover:text-emerald-500 dark:text-emerald-400/80 dark:hover:text-emerald-300">
                   <Pencil className="h-3 w-3" /> Edit
                 </button>
               ) : (
                 <div className="flex items-center gap-2">
-                  <button onClick={() => setEditingRoles(false)} className="text-[11px] font-semibold text-gray-400 dark:text-white/40 hover:text-gray-600 dark:hover:text-white/60 transition-colors">Cancel</button>
+                  <button type="button" onClick={() => setEditingRoles(false)} className="min-h-11 rounded-xl px-2 text-[11px] font-semibold text-gray-400 transition-colors hover:bg-black/[0.035] hover:text-gray-600 dark:text-white/40 dark:hover:bg-white/[0.04] dark:hover:text-white/60">Cancel</button>
                   <button
+                    type="button"
                     onClick={saveRoles}
                     disabled={loading}
-                    className="inline-flex items-center gap-1 px-2.5 h-7 rounded-full text-[11px] font-semibold text-white"
+                    className="inline-flex h-11 items-center gap-1 rounded-full px-3 text-[11px] font-semibold text-white"
                     style={{ background: 'linear-gradient(135deg, #16a34a, #15803d)', boxShadow: '0 3px 10px rgba(22,163,74,0.3)' }}
                   >
                     <Save className="h-3 w-3" /> {loading ? 'Saving…' : 'Save'}
@@ -588,7 +595,7 @@ export function Profile() {
                       key={role.id}
                       type="button"
                       onClick={() => toggleRoleSelection(role.id)}
-                      className={`inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[12px] font-bold transition-all border ${
+                      className={`inline-flex h-11 items-center gap-1.5 rounded-full border px-3 text-[12px] font-bold transition-all ${
                         selected
                           ? role.is_leadership
                             ? 'bg-amber-50 dark:bg-amber-500/[0.18] border-amber-300 dark:border-amber-500/35 text-amber-700 dark:text-amber-300'
@@ -643,7 +650,7 @@ export function Profile() {
                   { label: 'Approved Leaves', value: accountabilitySummary.approved_leave_count, color: accountabilitySummary.approved_leave_count > 0 ? 'text-sky-600 dark:text-sky-400' : 'text-gray-900 dark:text-white' },
                 ].map((item) => (
                   <div key={item.label} className="rounded-2xl border border-gray-200/80 dark:border-white/[0.06] bg-gray-50/80 dark:bg-white/[0.03] px-3 py-3">
-                    <p className={`text-xl font-black leading-none ${item.color}`} style={{ letterSpacing: '-0.04em' }}>{item.value}</p>
+                    <p className={`text-xl font-black leading-none ${item.color}`}>{item.value}</p>
                     <p className="mt-1 text-[11px] text-gray-500 dark:text-white/40">{item.label}</p>
                   </div>
                 ))}
@@ -692,7 +699,7 @@ export function Profile() {
                   >
                     <CheckCircle className="h-5 w-5 text-white" />
                   </div>
-                  <p className="text-[14px] font-bold text-gray-900 dark:text-white" style={{ letterSpacing: '-0.02em' }}>Clean record</p>
+                  <p className="text-[14px] font-bold text-gray-900 dark:text-white">Clean record</p>
                   <p className="text-[12px] text-gray-400 dark:text-white/30 mt-1">Keep up the great work!</p>
                 </div>
               ) : (
@@ -711,7 +718,7 @@ export function Profile() {
                         <div key={record.id}>
                           <button onClick={() => setDisciplineExpanded(isExp ? null : record.id)} className="w-full flex items-center gap-3 px-5 py-3.5 text-left hover:bg-gray-50/60 dark:hover:bg-white/[0.02] transition-colors">
                             <div className="flex-1 min-w-0">
-                              <p className="text-[14px] font-bold text-gray-900 dark:text-white truncate" style={{ letterSpacing: '-0.015em' }}>{record.title}</p>
+                              <p className="truncate text-[14px] font-bold text-gray-900 dark:text-white">{record.title}</p>
                               <p className="text-[11px] font-mono text-gray-400 dark:text-white/30 mt-0.5 tracking-wide">{format(parseISO(record.created_at), 'MMM d, yyyy')}</p>
                             </div>
                             <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md font-bold shrink-0 ${sCfg.color}`}>

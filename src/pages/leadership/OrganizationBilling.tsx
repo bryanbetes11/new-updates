@@ -452,7 +452,12 @@ export function OrganizationBilling() {
                     <code className="rounded-xl bg-white dark:bg-[#171719] px-3 py-2 text-xs font-semibold text-gray-900 dark:text-white ring-1 ring-black/[0.06] dark:ring-white/[0.08]">
                       {billingReference}
                     </code>
-                    <button type="button" onClick={handleCopyReference} className="p-2 rounded-xl text-gray-500 hover:bg-white dark:hover:bg-white/[0.06]">
+                    <button
+                      type="button"
+                      onClick={handleCopyReference}
+                      className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-gray-500 hover:bg-white dark:hover:bg-white/[0.06]"
+                      aria-label="Copy billing reference"
+                    >
                       <Copy className="h-4 w-4" />
                     </button>
                   </div>
@@ -484,30 +489,33 @@ export function OrganizationBilling() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-[11px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Reference Number</label>
+                <label htmlFor="billing-reference-number" className="block text-[11px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Reference Number</label>
                 <input
+                  id="billing-reference-number"
                   type="text"
                   value={referenceNumber}
                   onChange={e => setReferenceNumber(e.target.value)}
-                  className="input-field text-sm"
+                  className="input-field min-h-11 text-sm"
                   placeholder="Enter the transaction or reference number"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Payer Name <span className="font-normal text-gray-400">(optional)</span></label>
+                <label htmlFor="billing-payer-name" className="block text-[11px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Payer Name <span className="font-normal text-gray-400">(optional)</span></label>
                 <input
+                  id="billing-payer-name"
                   type="text"
                   value={payerName}
                   onChange={e => setPayerName(e.target.value)}
-                  className="input-field text-sm"
+                  className="input-field min-h-11 text-sm"
                   placeholder="Name shown in the payment app"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Note <span className="font-normal text-gray-400">(optional)</span></label>
+                <label htmlFor="billing-note" className="block text-[11px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Note <span className="font-normal text-gray-400">(optional)</span></label>
                 <textarea
+                  id="billing-note"
                   value={note}
                   onChange={e => setNote(e.target.value)}
                   className="input-field text-sm min-h-[96px]"
@@ -515,7 +523,7 @@ export function OrganizationBilling() {
                 />
               </div>
 
-              <button onClick={handleSubmitPayment} disabled={submitting || !referenceNumber.trim() || organization.is_billing_exempt} className="btn-primary w-full justify-center text-sm">
+              <button onClick={handleSubmitPayment} disabled={submitting || !referenceNumber.trim() || organization.is_billing_exempt} className="btn-primary min-h-11 w-full justify-center text-sm">
                 {submitting ? <><Loader2 className="h-4 w-4 animate-spin" /> Submitting...</> : 'I’ve Sent Payment'}
               </button>
 

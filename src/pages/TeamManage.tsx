@@ -367,6 +367,8 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
         className="flex gap-1 p-1 rounded-2xl"
+        role="tablist"
+        aria-label="Team management views"
         style={{ background: 'rgba(0,0,0,0.04)', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.06)' }}
       >
         {(['members', 'attendance'] as const).map(tab => {
@@ -376,8 +378,18 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
           return (
             <button
               key={tab}
+              type="button"
               onClick={() => setActiveTab(tab)}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl transition-all duration-200 ${
+              onKeyDown={(event) => {
+                if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+                  event.preventDefault();
+                  setActiveTab(tab === 'members' ? 'attendance' : 'members');
+                }
+              }}
+              role="tab"
+              aria-selected={isActive}
+              tabIndex={isActive ? 0 : -1}
+              className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl py-2.5 transition-all duration-200 ${
                 isActive
                   ? 'bg-white dark:bg-white/[0.06] shadow-sm ring-1 ring-black/[0.06] dark:ring-white/[0.09]'
                   : 'hover:bg-white/50 dark:hover:bg-white/[0.04]'
@@ -433,15 +445,17 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
             className="relative"
           >
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+            <label htmlFor="team-member-search" className="sr-only">Search team members</label>
             <input
+              id="team-member-search"
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search members by name or email…"
-              className="w-full h-10 pl-10 pr-9 rounded-2xl text-[13px] bg-white dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.08] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/30 outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 dark:focus:border-emerald-500/50 transition-all"
+              className="h-11 w-full rounded-2xl border border-gray-200 bg-white pl-10 pr-12 text-[13px] text-gray-900 outline-none transition-all placeholder-gray-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/30 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:placeholder-white/30 dark:focus:border-emerald-500/50"
             />
             {search && (
-              <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+              <button type="button" onClick={() => setSearch('')} className="absolute right-0 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-xl text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-gray-300" aria-label="Clear member search">
                 <X className="h-4 w-4" />
               </button>
             )}
@@ -556,7 +570,7 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                                 size="lg"
                                 className="rounded-2xl"
                               />
-                              <label className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                              <label className="absolute inset-0 flex cursor-pointer items-center justify-center rounded-2xl bg-black/50 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
                                 {avatarUploading
                                   ? <Loader2 className="h-4 w-4 text-white animate-spin" />
                                   : <Camera className="h-4 w-4 text-white" />
@@ -564,7 +578,7 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                                 <input type="file" accept="image/*" onChange={e => handleMemberAvatarUpload(member.id, e)} className="hidden" disabled={avatarUploading} />
                               </label>
                             </div>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">Hover photo to change</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">Select the photo to change it</p>
                           </div>
 
                           <div>
@@ -575,7 +589,7 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                                   key={g}
                                   type="button"
                                   onClick={() => setEditForm({ ...editForm, gender: g })}
-                                  className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ring-1 ${
+                                  className={`min-h-11 flex-1 rounded-xl py-2 text-sm font-bold transition-all ring-1 ${
                                     editForm.gender === g
                                       ? 'bg-brand-50 dark:bg-brand-900/20 ring-brand-300 dark:ring-brand-700 text-brand-700 dark:text-brand-300'
                                       : 'bg-white dark:bg-gray-800 ring-gray-200 dark:ring-gray-700 text-gray-500 dark:text-gray-400 hover:ring-gray-300'
@@ -587,7 +601,7 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                             <div>
                               <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5 uppercase tracking-wide">First Name</label>
                               <input type="text" value={editForm.first_name} onChange={e => setEditForm({ ...editForm, first_name: e.target.value })} className="input-field" />
@@ -649,9 +663,9 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                             />
                           </div>
 
-                          <div className="flex justify-end gap-2 pt-1">
-                            <button onClick={() => setEditingMember(null)} className="btn-secondary text-xs">Cancel</button>
-                            <button onClick={() => saveMemberEdit(member.id)} disabled={saving} className="btn-primary text-xs">
+                          <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
+                            <button onClick={() => setEditingMember(null)} className="btn-secondary min-h-11 justify-center text-xs">Cancel</button>
+                            <button onClick={() => saveMemberEdit(member.id)} disabled={saving} className="btn-primary min-h-11 justify-center text-xs">
                               <Save className="h-3.5 w-3.5" /> {saving ? 'Saving...' : 'Save Changes'}
                             </button>
                           </div>
@@ -659,7 +673,7 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                       ) : (
                         <>
                           <div className="space-y-3 mb-4">
-                            <div className="flex items-start justify-between gap-2">
+                            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 flex-1">
                                 {[
                                   { label: 'Email', value: member.email || '--' },
@@ -684,22 +698,22 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                                 ))}
                               </div>
                               {canManageChurchMembers && (
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  <button onClick={() => startEditing(member)} className="btn-ghost text-xs">
+                                <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-1.5 lg:shrink-0">
+                                  <button onClick={() => startEditing(member)} className="btn-ghost min-h-11 justify-center text-xs">
                                     <Edit3 className="h-3.5 w-3.5" /> Edit
                                   </button>
                                   <button
                                     onClick={() => setResetConfirmMember(member)}
                                     disabled={resetDisabled}
                                     title={resetDisabled ? 'Password reset only works after an Auth account exists' : 'Send password reset email'}
-                                    className="btn-ghost text-xs disabled:opacity-40 disabled:cursor-not-allowed"
+                                    className="btn-ghost min-h-11 justify-center text-xs disabled:cursor-not-allowed disabled:opacity-40"
                                   >
                                     <KeyRound className="h-3.5 w-3.5" /> Reset
                                   </button>
                                   {member.id !== user?.id && (
                                     <button
                                       onClick={() => setRemoveConfirmMember(member)}
-                                      className="btn-ghost text-xs text-red-600 dark:text-red-400"
+                                      className="btn-ghost col-span-2 min-h-11 justify-center text-xs text-red-600 dark:text-red-400 sm:col-span-1"
                                     >
                                       <X className="h-3.5 w-3.5" /> Remove
                                     </button>
@@ -750,7 +764,7 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                             {hasStats && attendanceRate !== null && (
                               <div className="rounded-xl bg-gray-50 dark:bg-white/[0.03] ring-1 ring-black/[0.04] dark:ring-white/[0.05] p-3">
                                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-wide mb-2.5">Attendance This Quarter</p>
-                                <div className="grid grid-cols-5 gap-2">
+                                <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
                                   {[
                                     { label: 'Assigned', value: mStats!.events_assigned, color: 'text-gray-700 dark:text-gray-300' },
                                     { label: 'Present', value: mStats!.present_count, color: 'text-emerald-600 dark:text-emerald-400' },
@@ -819,7 +833,7 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                               {canManageChurchMembers && (
                                 <button
                                   onClick={() => { setShowRoleModal(member.id); setSelectedRole(''); }}
-                                  className="btn-ghost text-xs py-1"
+                                  className="btn-ghost min-h-11 text-xs"
                                 >
                                   <Plus className="h-3 w-3" /> Add
                                 </button>
@@ -870,9 +884,9 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 The user will receive an email with a link to set a new password.
               </p>
-              <div className="flex justify-end gap-3">
-                <button onClick={() => setResetConfirmMember(null)} disabled={sendingReset} className="btn-secondary">Cancel</button>
-                <button onClick={sendPasswordReset} disabled={sendingReset} className="btn-primary">
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
+                <button onClick={() => setResetConfirmMember(null)} disabled={sendingReset} className="btn-secondary min-h-11 justify-center">Cancel</button>
+                <button onClick={sendPasswordReset} disabled={sendingReset} className="btn-primary min-h-11 justify-center">
                   {sendingReset ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
                   {sendingReset ? 'Sending...' : 'Send Reset Email'}
                 </button>
@@ -891,12 +905,12 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                   placeholder="Select a role"
                 />
               </div>
-              <div className="flex justify-end gap-3">
-                <button onClick={() => setShowRoleModal(null)} className="btn-secondary">Cancel</button>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
+                <button onClick={() => setShowRoleModal(null)} className="btn-secondary min-h-11 justify-center">Cancel</button>
                 <button
                   onClick={() => { if (showRoleModal && selectedRole) { addRole(showRoleModal, selectedRole); setShowRoleModal(null); } }}
                   disabled={!selectedRole}
-                  className="btn-primary"
+                  className="btn-primary min-h-11 justify-center"
                 >
                   <Check className="h-4 w-4" /> Add Role
                 </button>
@@ -918,9 +932,9 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
               <p className="text-xs text-red-500 dark:text-red-300">
                 This does not delete the account permanently. It only detaches the member from your church.
               </p>
-              <div className="flex justify-end gap-3">
-                <button onClick={() => setRemoveConfirmMember(null)} disabled={removingMember} className="btn-secondary">Cancel</button>
-                <button onClick={removeMemberFromChurch} disabled={removingMember} className="btn-primary bg-red-600 hover:bg-red-500">
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
+                <button onClick={() => setRemoveConfirmMember(null)} disabled={removingMember} className="btn-secondary min-h-11 justify-center">Cancel</button>
+                <button onClick={removeMemberFromChurch} disabled={removingMember} className="btn-primary min-h-11 justify-center bg-red-600 hover:bg-red-500">
                   {removingMember ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
                   {removingMember ? 'Removing...' : 'Remove Member'}
                 </button>

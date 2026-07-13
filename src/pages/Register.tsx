@@ -81,10 +81,10 @@ export function Register() {
     <div className="min-h-screen bg-[#f5f5f7] dark:bg-[#0d0d0f] transition-colors duration-300">
 
       {/* Back button — fixed top-left */}
-      <div className="fixed top-4 left-4 z-30">
+      <div className="fixed left-4 top-[max(1rem,env(safe-area-inset-top))] z-30">
         <button
           onClick={smartBack}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium text-gray-500 dark:text-white/40 bg-white/90 dark:bg-white/[0.07] backdrop-blur-md border border-gray-200/70 dark:border-white/[0.09] shadow-sm hover:text-gray-800 dark:hover:text-white/70 transition-all duration-200"
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-gray-200/70 bg-white/90 px-3 py-2 text-[13px] font-medium text-gray-500 shadow-sm backdrop-blur-md transition-all duration-200 hover:text-gray-800 dark:border-white/[0.09] dark:bg-white/[0.07] dark:text-white/40 dark:hover:text-white/70"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back
@@ -161,10 +161,11 @@ export function Register() {
 
                   <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
-                      <label className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
+                      <label htmlFor="register-first-name" className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
                         First Name
                       </label>
                       <input
+                        id="register-first-name"
                         type="text"
                         value={firstName}
                         onChange={e => setFirstName(e.target.value)}
@@ -176,10 +177,11 @@ export function Register() {
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
+                      <label htmlFor="register-email" className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
                         Email address
                       </label>
                       <input
+                        id="register-email"
                         type="email"
                         value={email}
                         onChange={e => setEmail(e.target.value)}
@@ -192,11 +194,12 @@ export function Register() {
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
+                      <label htmlFor="register-password" className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
                         Password
                       </label>
                       <div className="relative">
                         <input
+                          id="register-password"
                           type={showPw ? 'text' : 'password'}
                           value={password}
                           onChange={e => setPassword(e.target.value)}
@@ -209,7 +212,8 @@ export function Register() {
                         <button
                           type="button"
                           onClick={() => setShowPw(!showPw)}
-                          className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 rounded-lg text-gray-400 dark:text-white/25 hover:text-gray-600 dark:hover:text-white/50 transition-colors"
+                          className="absolute right-0 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-xl text-gray-400 transition-colors hover:text-gray-600 dark:text-white/25 dark:hover:text-white/50"
+                          aria-label={showPw ? 'Hide password' : 'Show password'}
                         >
                           {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>

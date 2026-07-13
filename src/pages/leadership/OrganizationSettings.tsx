@@ -218,49 +218,53 @@ export function OrganizationSettings() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-[11px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Church Name</label>
+            <label htmlFor="church-name" className="block text-[11px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Church Name</label>
             <input
+              id="church-name"
               type="text"
               value={orgForm.name}
               onChange={e => setOrgForm(prev => ({ ...prev, name: e.target.value }))}
-              className="input-field text-sm"
+              className="input-field min-h-11 text-sm"
               placeholder="Church name"
               disabled={billingRestricted}
             />
           </div>
           <div>
-            <label className="block text-[11px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Logo URL</label>
+            <label htmlFor="church-logo-url" className="block text-[11px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Logo URL</label>
             <input
+              id="church-logo-url"
               type="url"
               value={orgForm.logo_url}
               onChange={e => setOrgForm(prev => ({ ...prev, logo_url: e.target.value }))}
-              className="input-field text-sm"
+              className="input-field min-h-11 text-sm"
               placeholder="https://..."
               disabled={billingRestricted}
             />
           </div>
           <div>
-            <label className="block text-[11px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Slug</label>
+            <label htmlFor="church-slug" className="block text-[11px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Slug</label>
             <input
+              id="church-slug"
               type="text"
               value={organization.slug}
-              className="input-field text-sm bg-gray-50 dark:bg-gray-800"
+              className="input-field min-h-11 text-sm bg-gray-50 dark:bg-gray-800"
               disabled
             />
           </div>
           <div>
-            <label className="block text-[11px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Subscription</label>
+            <label htmlFor="church-subscription" className="block text-[11px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Subscription</label>
             <input
+              id="church-subscription"
               type="text"
               value={formatStatus(organization.subscription_status)}
-              className="input-field text-sm bg-gray-50 dark:bg-gray-800"
+              className="input-field min-h-11 text-sm bg-gray-50 dark:bg-gray-800"
               disabled
             />
           </div>
         </div>
 
-        <div className="mt-4 flex items-center gap-3">
-          <button onClick={handleSaveOrganization} disabled={savingOrg || billingRestricted} className="btn-primary text-sm">
+        <div className="mt-4 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-3">
+          <button onClick={handleSaveOrganization} disabled={savingOrg || billingRestricted} className="btn-primary min-h-11 justify-center text-sm sm:justify-start">
             {savingOrg ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</> : 'Save Church Settings'}
           </button>
           <p className="text-xs text-gray-400 dark:text-white/35">MCJC remains exempt from billing during rollout.</p>
@@ -282,12 +286,13 @@ export function OrganizationSettings() {
         <div className="grid grid-cols-1 lg:grid-cols-[1.2fr,0.8fr] gap-5">
           <div className="space-y-4">
             <div>
-              <label className="block text-[11px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Invite Email</label>
+              <label htmlFor="invite-email" className="block text-[11px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1.5">Invite Email</label>
               <input
+                id="invite-email"
                 type="email"
                 value={inviteForm.email}
                 onChange={e => setInviteForm(prev => ({ ...prev, email: e.target.value }))}
-                className="input-field text-sm"
+                className="input-field min-h-11 text-sm"
                 placeholder="member@example.com"
                 disabled={billingRestricted}
               />
@@ -304,7 +309,7 @@ export function OrganizationSettings() {
                       type="button"
                       onClick={() => handleToggleInviteRole(role.id)}
                       disabled={billingRestricted}
-                      className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ring-1 ${
+                      className={`inline-flex min-h-11 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-all ring-1 ${
                         selected
                           ? role.is_leadership
                             ? 'bg-amber-50 dark:bg-amber-900/20 ring-amber-300 dark:ring-amber-700 text-amber-700 dark:text-amber-300'
@@ -319,7 +324,7 @@ export function OrganizationSettings() {
               </div>
             </div>
 
-            <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+            <label className="inline-flex min-h-11 items-center gap-2 rounded-xl text-sm text-gray-700 dark:text-gray-300">
               <input
                 type="checkbox"
                 checked={inviteForm.is_admin}
@@ -330,7 +335,7 @@ export function OrganizationSettings() {
               Grant church-admin access
             </label>
 
-            <button onClick={handleCreateInvite} disabled={creatingInvite || billingRestricted} className="btn-primary text-sm">
+            <button onClick={handleCreateInvite} disabled={creatingInvite || billingRestricted} className="btn-primary min-h-11 justify-center text-sm sm:justify-start">
               {creatingInvite ? <><Loader2 className="h-4 w-4 animate-spin" /> Creating...</> : <><Plus className="h-4 w-4" /> Create Invite</>}
             </button>
           </div>
@@ -380,14 +385,14 @@ export function OrganizationSettings() {
                       </div>
                     )}
 
-                    <div className="flex items-center gap-2 pt-1">
-                      <button onClick={() => handleCopyInvite(invite.token)} disabled={billingRestricted} className="btn-secondary text-xs py-1.5 px-2.5 disabled:opacity-50">
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <button onClick={() => handleCopyInvite(invite.token)} disabled={billingRestricted} className="btn-secondary min-h-11 justify-center px-2.5 py-1.5 text-xs disabled:opacity-50">
                         <Copy className="h-3.5 w-3.5" /> Copy Link
                       </button>
                       <button
                         onClick={() => handleDeleteInvite(invite.id)}
                         disabled={deletingInviteId === invite.id || billingRestricted}
-                        className="btn-secondary text-xs py-1.5 px-2.5 text-red-600 hover:text-red-700 disabled:opacity-50"
+                        className="btn-secondary min-h-11 justify-center px-2.5 py-1.5 text-xs text-red-600 hover:text-red-700 disabled:opacity-50"
                       >
                         {deletingInviteId === invite.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                         Revoke

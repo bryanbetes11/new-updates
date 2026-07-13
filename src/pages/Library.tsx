@@ -40,8 +40,8 @@ export function Library() {
   };
 
   return (
-    <div className="page-container page-bottom-pad overflow-hidden">
-      <div className="max-w-2xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 space-y-5 sm:space-y-6">
+    <div className="page-container page-bottom-pad overflow-x-clip">
+      <div className="mx-auto max-w-2xl space-y-5 px-4 pt-4 sm:max-w-3xl sm:px-6 sm:pt-6 lg:max-w-5xl lg:px-8 xl:max-w-7xl 2xl:max-w-[1680px]">
         <h1 className="sr-only">Library</h1>
 
         {/* ── Toolbar ────────────────────────────────── */}
@@ -72,7 +72,7 @@ export function Library() {
                   tabIndex={active ? 0 : -1}
                   onClick={() => setTab(t.id)}
                   onKeyDown={event => handleTabKeyDown(event, t.id)}
-                  className={`relative flex-1 flex items-center justify-center gap-2 py-2.5 rounded-2xl transition-all duration-200 ${
+                  className={`relative flex min-h-11 flex-1 items-center justify-center gap-2 rounded-2xl px-3 py-2.5 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 ${
                     active
                       ? 'bg-white text-gray-950 shadow-sm ring-1 ring-black/[0.04] dark:bg-white/[0.09] dark:text-white dark:ring-white/[0.08]'
                       : 'text-gray-400 hover:bg-white/55 hover:text-gray-700 dark:text-white/35 dark:hover:bg-white/[0.045] dark:hover:text-white/70'

@@ -172,7 +172,7 @@ export function SwapRequests({ embedded }: Props) {
                   style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 28px -16px rgba(15,23,42,0.12)' }}
                 >
                   {/* Header */}
-                  <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-100 dark:border-white/[0.06] bg-amber-50/60 dark:bg-amber-500/[0.06]">
+                  <div className="flex flex-wrap items-center gap-3 border-b border-gray-100 bg-amber-50/60 px-5 py-3.5 dark:border-white/[0.06] dark:bg-amber-500/[0.06]">
                     <ArrowLeftRight className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-[13px] font-bold text-gray-900 dark:text-white">
@@ -182,13 +182,13 @@ export function SwapRequests({ embedded }: Props) {
                         Requested {format(parseISO(req.created_at), 'MMM d, yyyy')} · Both parties agreed
                       </p>
                     </div>
-                    <span className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-full bg-amber-100 dark:bg-amber-500/[0.15] text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/25 shrink-0">
+                    <span className="shrink-0 rounded-full border border-amber-200 bg-amber-100 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-amber-700 dark:border-amber-500/25 dark:bg-amber-500/[0.15] dark:text-amber-300 max-sm:ml-7">
                       Awaiting Approval
                     </span>
                   </div>
 
                   {/* Assignments grid */}
-                  <div className="grid grid-cols-2 divide-x divide-gray-100 dark:divide-white/[0.06]">
+                  <div className="grid grid-cols-1 divide-y divide-gray-100 dark:divide-white/[0.06] sm:grid-cols-2 sm:divide-x sm:divide-y-0">
                     {[
                       { person: req.requester, assignment: req.requester_assignment, label: requesterName, caption: isSub ? 'Needs cover for' : 'Gives up' },
                       { person: req.target, assignment: targetDisplayAssignment, label: targetName, caption: isSub ? 'Will cover' : 'Gives up' },
@@ -233,13 +233,13 @@ export function SwapRequests({ embedded }: Props) {
                   <div className="flex gap-2 px-5 py-3.5 border-t border-gray-100 dark:border-white/[0.06]">
                     <button
                       onClick={() => { setReviewModal({ request: req, approved: false }); setReviewNote(''); }}
-                      className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-[12px] font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/[0.10] border border-red-200 dark:border-red-500/20 hover:bg-red-100 dark:hover:bg-red-500/[0.16] transition-colors"
+                      className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-red-200 bg-red-50 text-[12px] font-bold text-red-600 transition-colors hover:bg-red-100 dark:border-red-500/20 dark:bg-red-500/[0.10] dark:text-red-400 dark:hover:bg-red-500/[0.16]"
                     >
                       <X className="h-3.5 w-3.5" /> Decline
                     </button>
                     <button
                       onClick={() => { setReviewModal({ request: req, approved: true }); setReviewNote(''); }}
-                      className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-[12px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-500/[0.10] border border-emerald-200 dark:border-emerald-500/20 hover:bg-emerald-100 dark:hover:bg-emerald-500/[0.16] transition-colors"
+                      className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 text-[12px] font-bold text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-500/20 dark:bg-emerald-500/[0.10] dark:text-emerald-300 dark:hover:bg-emerald-500/[0.16]"
                     >
                       <Check className="h-3.5 w-3.5" /> Approve {isSub ? 'Sub' : 'Swap'}
                     </button>
@@ -279,12 +279,12 @@ export function SwapRequests({ embedded }: Props) {
                 className="w-full px-3 py-2.5 rounded-xl text-[13px] bg-gray-50 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.08] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/25 outline-none focus:border-brand-400 dark:focus:border-brand-500 resize-none transition-colors"
               />
             </div>
-            <div className="flex gap-2">
-              <button onClick={() => setReviewModal(null)} className="flex-1 btn-secondary" disabled={saving}>Cancel</button>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row">
+              <button onClick={() => setReviewModal(null)} className="btn-secondary min-h-11 flex-1 justify-center" disabled={saving}>Cancel</button>
               <button
                 onClick={handleReview}
                 disabled={saving}
-                className={`flex-1 font-bold py-2 rounded-xl text-[13px] transition-colors disabled:opacity-50 ${
+                className={`min-h-11 flex-1 rounded-xl py-2 text-[13px] font-bold transition-colors disabled:opacity-50 ${
                   reviewModal.approved
                     ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
                     : 'bg-red-600 hover:bg-red-700 text-white'

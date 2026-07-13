@@ -132,7 +132,7 @@ export function ResetPassword() {
   if (status === 'checking') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#070709]">
-        <div className="flex flex-col items-center gap-4">
+        <div className="flex flex-col items-center gap-4" role="status" aria-live="polite">
           <div className="h-6 w-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
           <p className="text-[13px] text-white/30">Verifying reset link…</p>
         </div>
@@ -234,9 +234,10 @@ export function ResetPassword() {
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div>
-                    <label className="block text-[11px] font-bold text-white/30 uppercase tracking-[0.12em] mb-2">New Password</label>
+                    <label htmlFor="new-password" className="block text-[11px] font-bold text-white/30 uppercase tracking-[0.12em] mb-2">New Password</label>
                     <div className="relative">
                       <input
+                        id="new-password"
                         type={showPassword ? 'text' : 'password'}
                         value={password}
                         onChange={e => setPassword(e.target.value)}
@@ -246,7 +247,8 @@ export function ResetPassword() {
                         required
                       />
                       <button type="button" onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 text-white/25 hover:text-white/50 transition-colors">
+                        className="absolute right-0 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-xl text-white/25 transition-colors hover:text-white/50"
+                        aria-label={showPassword ? 'Hide new password' : 'Show new password'}>
                         {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
                     </div>
@@ -270,9 +272,10 @@ export function ResetPassword() {
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-bold text-white/30 uppercase tracking-[0.12em] mb-2">Confirm Password</label>
+                    <label htmlFor="confirm-password" className="block text-[11px] font-bold text-white/30 uppercase tracking-[0.12em] mb-2">Confirm Password</label>
                     <div className="relative">
                       <input
+                        id="confirm-password"
                         type={showConfirm ? 'text' : 'password'}
                         value={confirm}
                         onChange={e => setConfirm(e.target.value)}
@@ -286,7 +289,8 @@ export function ResetPassword() {
                         required
                       />
                       <button type="button" onClick={() => setShowConfirm(!showConfirm)}
-                        className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 text-white/25 hover:text-white/50 transition-colors">
+                        className="absolute right-0 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-xl text-white/25 transition-colors hover:text-white/50"
+                        aria-label={showConfirm ? 'Hide confirmation password' : 'Show confirmation password'}>
                         {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
                     </div>

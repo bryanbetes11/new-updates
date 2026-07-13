@@ -67,6 +67,7 @@ export function AttendanceMonitoring() {
   const { toast } = useToast();
   const [stats, setStats] = useState<MemberStats[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [offenseFilter, setOffenseFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -92,12 +93,14 @@ export function AttendanceMonitoring() {
 
   const fetchStats = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     const { data, error } = await supabase.rpc('get_all_members_attendance_stats', {
       p_year: selectedYear,
       p_quarter: selectedQuarter,
     });
 
     if (error) {
+      setLoadError('Attendance records could not be loaded. Check your connection and try again.');
       toast('error', 'Failed to load attendance data');
       setLoading(false);
       return;
@@ -223,35 +226,47 @@ export function AttendanceMonitoring() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
+      <div className="flex items-center justify-center py-12" role="status" aria-live="polite">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600"></div>
+        <span className="sr-only">Loading attendance report</span>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="rounded-lg border border-red-500/20 bg-red-500/[0.08] px-5 py-8 text-center" role="alert">
+        <AlertTriangle className="mx-auto h-8 w-8 text-red-500 dark:text-red-400" />
+        <p className="mt-3 text-sm font-semibold text-gray-900 dark:text-white">Could not load attendance</p>
+        <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-gray-500 dark:text-gray-400">{loadError}</p>
+        <button type="button" onClick={fetchStats} className="btn-secondary mt-4 min-h-11">Try again</button>
       </div>
     );
   }
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <div className="flex gap-2">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex w-full gap-2 sm:w-auto">
           <Select
             value={selectedYear.toString()}
             onChange={v => setSelectedYear(parseInt(v))}
             options={years.map(y => ({ value: y.toString(), label: y.toString() }))}
-            className="w-24"
+            className="w-24 shrink-0"
           />
           <Select
             value={selectedQuarter.toString()}
             onChange={v => setSelectedQuarter(parseInt(v))}
             options={quarters.map(q => ({ value: q.value.toString(), label: q.label }))}
-            className="w-40"
+            className="min-w-0 flex-1 sm:w-40 sm:flex-none"
           />
         </div>
-        <div className="flex gap-2">
-          <button onClick={handleExport} className="btn-secondary text-xs">
+        <div className="flex w-full gap-2 sm:w-auto">
+          <button onClick={handleExport} className="btn-secondary min-h-11 flex-1 text-xs sm:flex-none">
             <Download className="h-3.5 w-3.5" /> Export
           </button>
           {canManageDiscipline && (
-            <button onClick={() => setShowResetModal(true)} className="btn-ghost text-xs text-amber-600 hover:text-amber-700">
+            <button onClick={() => setShowResetModal(true)} className="btn-ghost min-h-11 flex-1 text-xs text-amber-600 hover:text-amber-700 sm:flex-none">
               <RotateCcw className="h-3.5 w-3.5" /> Reset
             </button>
           )}
@@ -281,7 +296,7 @@ export function AttendanceMonitoring() {
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="flex flex-col gap-3 md:flex-row">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
@@ -289,6 +304,7 @@ export function AttendanceMonitoring() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search members..."
+            aria-label="Search attendance members"
             className="input-field pl-10"
           />
         </div>
@@ -304,7 +320,7 @@ export function AttendanceMonitoring() {
             { value: '4', label: '4th Offense' },
           ]}
           placeholder="Filter offense"
-          className="sm:w-40"
+          className="md:w-40"
           icon={<Filter className="h-4 w-4" />}
         />
         <Select
@@ -317,36 +333,36 @@ export function AttendanceMonitoring() {
             { value: 'suspended', label: 'Suspended' },
           ]}
           placeholder="Filter status"
-          className="sm:w-36"
+          className="md:w-36"
         />
       </div>
 
-      <div className="hidden sm:block">
-        <div className="card overflow-hidden">
+      <div className="hidden xl:block">
+        <div className="card overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-100 dark:border-gray-800">
                 <th className="text-left px-4 py-3">
-                  <button onClick={() => handleSort('name')} className="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700">
+                  <button onClick={() => handleSort('name')} className="flex min-h-11 items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:text-gray-400">
                     Member {sortBy === 'name' && (sortOrder === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
                   </button>
                 </th>
                 <th className="text-center px-3 py-3 text-xs font-medium text-gray-500 dark:text-gray-400">Events</th>
                 <th className="text-center px-3 py-3 text-xs font-medium text-gray-500 dark:text-gray-400">Present</th>
                 <th className="text-center px-3 py-3">
-                  <button onClick={() => handleSort('late')} className="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 mx-auto">
+                  <button onClick={() => handleSort('late')} className="mx-auto flex min-h-11 items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:text-gray-400">
                     Late {sortBy === 'late' && (sortOrder === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
                   </button>
                 </th>
                 <th className="text-center px-3 py-3">
-                  <button onClick={() => handleSort('absent')} className="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 mx-auto">
+                  <button onClick={() => handleSort('absent')} className="mx-auto flex min-h-11 items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:text-gray-400">
                     Absent {sortBy === 'absent' && (sortOrder === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
                   </button>
                 </th>
                 <th className="text-center px-3 py-3 text-xs font-medium text-gray-500 dark:text-gray-400">Excused</th>
                 <th className="text-center px-3 py-3 text-xs font-medium text-gray-500 dark:text-gray-400">Rate</th>
                 <th className="text-center px-3 py-3">
-                  <button onClick={() => handleSort('offense')} className="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 mx-auto">
+                  <button onClick={() => handleSort('offense')} className="mx-auto flex min-h-11 items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:text-gray-400">
                     Status {sortBy === 'offense' && (sortOrder === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
                   </button>
                 </th>
@@ -394,8 +410,9 @@ export function AttendanceMonitoring() {
                     <td className="px-3 py-3 text-center">
                       <button
                         onClick={() => openHistory(m)}
-                        className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                        className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:hover:bg-gray-700 dark:hover:text-gray-300"
                         title="View history"
+                        aria-label={`View attendance history for ${m.first_name} ${m.last_name}`}
                       >
                         <History className="h-3.5 w-3.5" />
                       </button>
@@ -411,7 +428,7 @@ export function AttendanceMonitoring() {
         </div>
       </div>
 
-      <div className="sm:hidden space-y-2">
+      <div className="space-y-2 xl:hidden">
         {filteredAndSorted.map(m => {
           const info = offenseLevelInfo[m.offense_level] || offenseLevelInfo[0];
           const isExpanded = expandedMember === m.user_id;
@@ -422,7 +439,8 @@ export function AttendanceMonitoring() {
             <div key={m.user_id} className="card">
               <button
                 onClick={() => setExpandedMember(isExpanded ? null : m.user_id)}
-                className="w-full flex items-center gap-3 p-4 text-left"
+                className="flex min-h-16 w-full items-center gap-3 p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500"
+                aria-expanded={isExpanded}
               >
                 <Avatar src={m.avatar_url} firstName={m.first_name} lastName={m.last_name} size="sm" />
                 <div className="flex-1 min-w-0">
@@ -468,7 +486,7 @@ export function AttendanceMonitoring() {
                   )}
                   <button
                     onClick={() => openHistory(m)}
-                    className="w-full flex items-center justify-center gap-2 py-2 text-xs font-medium text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded-lg transition-colors"
+                    className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-medium text-brand-600 transition-colors hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:text-brand-400 dark:hover:bg-brand-900/20"
                   >
                     <History className="h-3.5 w-3.5" /> View Full History
                   </button>
@@ -478,7 +496,10 @@ export function AttendanceMonitoring() {
           );
         })}
         {filteredAndSorted.length === 0 && (
-          <div className="py-8 text-center text-sm text-gray-400">No members found</div>
+          <div className="rounded-lg border border-dashed border-gray-200 py-8 text-center dark:border-gray-800">
+            <Search className="mx-auto h-6 w-6 text-gray-300 dark:text-gray-600" />
+            <p className="mt-2 text-sm text-gray-400">No members match these filters</p>
+          </div>
         )}
       </div>
 
@@ -488,8 +509,8 @@ export function AttendanceMonitoring() {
             This will reset the offense notification tracking for Q{selectedQuarter} {selectedYear}. Leadership will be notified again if members reach offense thresholds. Attendance records will not be affected.
           </p>
           <div className="flex justify-end gap-3">
-            <button onClick={() => setShowResetModal(false)} className="btn-secondary">Cancel</button>
-            <button onClick={handleReset} disabled={resetting} className="btn-primary bg-amber-600 hover:bg-amber-700">
+            <button onClick={() => setShowResetModal(false)} className="btn-secondary min-h-11">Cancel</button>
+            <button onClick={handleReset} disabled={resetting} className="btn-primary min-h-11 bg-amber-600 hover:bg-amber-700">
               {resetting ? 'Resetting...' : 'Reset Notifications'}
             </button>
           </div>
@@ -499,12 +520,12 @@ export function AttendanceMonitoring() {
       <Modal
         open={!!historyMember}
         onClose={() => setHistoryMember(null)}
-        title={historyMember ? `${historyMember.first_name} ${historyMember.last_name} — Attendance History` : ''}
+        title={historyMember ? `${historyMember.first_name} ${historyMember.last_name} - Attendance History` : ''}
         size="lg"
       >
         {historyMember && (
           <div className="space-y-4">
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
               {[
                 { label: 'Present', value: historyMember.present_count, color: 'text-green-600' },
                 { label: 'Late', value: historyMember.late_count, color: 'text-amber-600' },
@@ -554,7 +575,7 @@ export function AttendanceMonitoring() {
             )}
 
             <div className="flex justify-end">
-              <button onClick={() => setHistoryMember(null)} className="btn-secondary">Close</button>
+              <button onClick={() => setHistoryMember(null)} className="btn-secondary min-h-11">Close</button>
             </div>
           </div>
         )}

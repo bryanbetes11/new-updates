@@ -219,8 +219,10 @@ function EmojiPicker({ onPick }: { onPick: (e: string) => void }) {
       {QUICK_EMOJIS.map(e => (
         <button
           key={e}
+          type="button"
           onClick={() => onPick(e)}
-          className="w-9 h-9 flex items-center justify-center text-[18px] rounded-xl hover:bg-gray-100 dark:hover:bg-white/[0.08] transition-colors active:scale-95"
+          aria-label={`React with ${e}`}
+          className="flex h-10 w-10 items-center justify-center rounded-xl text-[18px] transition-colors hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 active:scale-95 dark:hover:bg-white/[0.08]"
         >
           {e}
         </button>
@@ -241,8 +243,10 @@ function ConvItem({ conv, selected, myUserId, onSelect }: {
 
   return (
     <button
+      type="button"
       onClick={onSelect}
-      className={`w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-left transition-all duration-150 ${
+      aria-pressed={selected}
+      className={`flex min-h-16 w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-400/70 ${
         selected
           ? 'bg-emerald-50 dark:bg-emerald-500/[0.1]'
           : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.04]'
@@ -304,6 +308,7 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [people, setPeople] = useState<Array<{ id: string; first_name: string | null; last_name: string | null; nickname: string | null; avatar_url: string | null }>>([]);
   const [events, setEvents] = useState<EventChoice[]>([]);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -319,6 +324,45 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
       setEvents(eventsRes.data || []);
     });
   }, [currentUserId, open]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const dialog = dialogRef.current;
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusableSelector = '[data-autofocus="true"], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const focusFrame = window.requestAnimationFrame(() => {
+      dialog?.querySelector<HTMLElement>(focusableSelector)?.focus();
+    });
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== 'Tab' || !dialog) return;
+
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector));
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener('keydown', handleKeyDown);
+      previouslyFocused?.focus();
+    };
+  }, [onClose, open]);
 
   const filtered = people.filter(p => {
     const name = `${p.nickname || ''} ${p.first_name || ''} ${p.last_name || ''}`.toLowerCase();
@@ -372,16 +416,23 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-            className="fixed inset-x-4 top-[15%] z-50 max-w-sm mx-auto bg-white dark:bg-[#1c1c1e] rounded-3xl border border-gray-100 dark:border-white/[0.08] shadow-2xl overflow-hidden"
+            ref={dialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="new-message-title"
+            className="fixed inset-x-4 top-4 z-50 mx-auto flex max-h-[calc(100dvh-2rem)] max-w-sm flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#1c1c1e] sm:top-[15%] sm:max-h-[70dvh]"
           >
+            <h2 id="new-message-title" className="sr-only">New message</h2>
             <div className="px-4 pt-4 pb-3 border-b border-gray-100 dark:border-white/[0.06]">
               <div className="flex items-center gap-2 mb-3">
-                <div className="grid grid-cols-3 gap-1 flex-1 rounded-2xl bg-gray-100 dark:bg-white/[0.06] p-1">
+                <div className="grid flex-1 grid-cols-3 gap-1 rounded-2xl bg-gray-100 p-1 dark:bg-white/[0.06]" role="group" aria-label="Message type">
                   {(['direct', 'group', 'event'] as const).map(option => (
                     <button
                       key={option}
+                      type="button"
                       onClick={() => setMode(option)}
-                      className={`h-8 rounded-xl text-[12px] font-bold transition-colors ${
+                      aria-pressed={mode === option}
+                      className={`h-10 rounded-xl text-[12px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 ${
                         mode === option
                           ? 'bg-white dark:bg-white/[0.12] text-gray-900 dark:text-white shadow-sm'
                           : 'text-gray-500 dark:text-white/45'
@@ -391,7 +442,7 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
                     </button>
                   ))}
                 </div>
-                <button onClick={onClose} className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-white/60 transition-colors">
+                <button type="button" onClick={onClose} aria-label="Close new message" className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 dark:hover:bg-white/[0.06] dark:hover:text-white/60">
                   <X className="h-4 w-4" />
                 </button>
               </div>
@@ -402,6 +453,7 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
                     autoFocus
                     value={groupName}
                     onChange={e => setGroupName(e.target.value)}
+                    aria-label="Group name"
                     placeholder="e.g. Worship Team May 13"
                     className="w-full h-10 px-3 rounded-xl bg-gray-100 dark:bg-white/[0.06] text-[13px] font-medium text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/25 outline-none"
                   />
@@ -413,6 +465,8 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
                 autoFocus={mode !== 'group'}
                 value={query}
                 onChange={e => setQuery(e.target.value)}
+                data-autofocus="true"
+                aria-label={mode === 'event' ? 'Search events' : mode === 'direct' ? 'Search people' : 'Search members'}
                 placeholder={mode === 'event' ? 'Search events...' : mode === 'direct' ? 'Search people...' : 'Search members...'}
                 className="flex-1 text-[14px] bg-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/25 outline-none"
               />
@@ -431,7 +485,7 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
                 </button>
               </div>
             )}
-            <div className="overflow-y-auto max-h-72 p-2">
+            <div className="min-h-0 flex-1 overflow-y-auto p-2">
               {mode === 'event' ? (
                 <>
                   {filteredEvents.length === 0 && (
@@ -444,7 +498,7 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
                         onCreateEventChat(event.id);
                         onClose();
                       }}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-white/[0.05] transition-colors"
+                      className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-400/70 dark:hover:bg-white/[0.05]"
                     >
                       <span className="shrink-0 h-9 w-9 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 flex items-center justify-center">
                         <CalendarDays className="h-4 w-4" />
@@ -478,7 +532,7 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
                       onSelect(p.id);
                       onClose();
                     }}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-white/[0.05] transition-colors"
+                    className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-400/70 dark:hover:bg-white/[0.05]"
                   >
                     <Avatar src={p.avatar_url ?? undefined} firstName={p.first_name || name.charAt(0)} lastName={p.last_name ?? undefined} size="sm" />
                     <span className="flex-1 text-left text-[13px] font-medium text-gray-900 dark:text-white">{name}</span>
@@ -505,7 +559,7 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
                 <button
                   onClick={submitGroup}
                   disabled={selectedCount === 0 || !groupName.trim()}
-                  className="w-full h-10 rounded-xl bg-emerald-500 text-white text-[13px] font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="h-11 w-full rounded-xl bg-emerald-500 text-[13px] font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Create Group{selectedCount > 0 ? ` (${selectedCount})` : ''}
                 </button>
@@ -957,10 +1011,13 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
         {/* + attach button */}
         <div className="relative shrink-0">
           <button
+            type="button"
             onMouseDown={e => e.preventDefault()}
             onClick={() => setShowAttachMenu(v => !v)}
             disabled={uploading}
-            className="h-9 w-9 flex items-center justify-center rounded-full text-gray-400 dark:text-white/30 hover:text-emerald-500 dark:hover:text-emerald-400 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-all disabled:opacity-40"
+            aria-label={showAttachMenu ? 'Close attachment menu' : 'Add an attachment'}
+            aria-expanded={showAttachMenu}
+            className="flex h-10 w-10 items-center justify-center rounded-full text-gray-400 transition-all hover:bg-gray-100 hover:text-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 disabled:opacity-40 dark:text-white/30 dark:hover:bg-white/[0.06] dark:hover:text-emerald-400"
           >
             <Plus className="h-5 w-5" />
           </button>
@@ -1044,7 +1101,8 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
                 onMouseDown={e => e.preventDefault()}
                 onClick={handleSend}
                 disabled={uploading}
-                className="h-9 w-9 flex items-center justify-center rounded-full bg-emerald-500 hover:bg-emerald-600 text-white shadow-md shadow-emerald-500/25 transition-colors active:scale-95 disabled:opacity-40"
+                aria-label="Send message"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500 text-white shadow-md shadow-emerald-500/25 transition-colors hover:bg-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 active:scale-95 disabled:opacity-40"
               >
                 <Send className="h-4 w-4" style={{ marginLeft: '1px' }} />
               </motion.button>
@@ -1061,7 +1119,8 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
                 onPointerLeave={handleQuickPointerUp}
                 onContextMenu={e => e.preventDefault()}
                 disabled={uploading}
-                className="h-9 w-9 flex items-center justify-center rounded-full bg-gray-100 dark:bg-white/[0.06] text-[22px] leading-none transition-all active:scale-90 disabled:opacity-40 select-none"
+                aria-label={`Send ${quickEmoji}; press and hold for more reactions`}
+                className="flex h-10 w-10 select-none items-center justify-center rounded-full bg-gray-100 text-[22px] leading-none transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 active:scale-90 disabled:opacity-40 dark:bg-white/[0.06]"
               >
                 {quickEmoji}
               </motion.button>
@@ -3795,8 +3854,6 @@ export function Messages() {
     <div className="relative flex h-full min-h-0 w-full overflow-hidden bg-white dark:bg-[#111013] lg:bg-[#f5f5f7] lg:dark:bg-[#0d0d0f] lg:p-4">
       <div className="contents lg:relative lg:flex lg:h-full lg:flex-1 lg:min-h-0 lg:overflow-hidden lg:rounded-[2rem] lg:border lg:border-black/[0.06] lg:bg-white lg:shadow-[0_24px_80px_-52px_rgba(15,23,42,0.85)] lg:ring-1 lg:ring-white/70 dark:lg:border-white/[0.07] dark:lg:bg-[#111013] dark:lg:ring-white/[0.04]">
         <div className="pointer-events-none absolute inset-x-10 top-0 z-10 hidden h-px bg-gradient-to-r from-transparent via-white/90 to-transparent dark:via-white/[0.12] lg:block" />
-        <div className="pointer-events-none absolute -left-24 -top-24 hidden h-64 w-64 rounded-full bg-emerald-200/20 blur-3xl dark:bg-emerald-500/10 lg:block" />
-        <div className="pointer-events-none absolute -right-24 -bottom-24 hidden h-72 w-72 rounded-full bg-lime-200/18 blur-3xl dark:bg-emerald-500/5 lg:block" />
 
       {/* ── Left: Conversation list ── */}
       <AnimatePresence initial={false}>
@@ -3819,8 +3876,10 @@ export function Messages() {
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-[20px] font-bold text-gray-900 dark:text-white tracking-[-0.02em]">Messages</h1>
             <button
+              type="button"
               onClick={() => setNewMsgOpen(true)}
-              className="h-8 w-8 flex items-center justify-center rounded-full bg-emerald-500 hover:bg-emerald-600 text-white shadow-md shadow-emerald-500/25 transition-all active:scale-95"
+              aria-label="Start a new message"
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500 text-white shadow-md shadow-emerald-500/25 transition-all hover:bg-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 active:scale-95"
             >
               <Plus className="h-4 w-4" />
             </button>
@@ -3830,6 +3889,7 @@ export function Messages() {
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
+              aria-label="Search conversations"
               placeholder="Search conversations…"
               className="flex-1 text-[13px] bg-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/25 outline-none"
             />
@@ -3839,7 +3899,7 @@ export function Messages() {
         {/* Conversations */}
         <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain bg-white px-2 space-y-0.5 dark:bg-[#111013]" style={{ paddingBottom: 'calc(64px + env(safe-area-inset-bottom) + 1rem)' }}>
           {convsLoading && (
-            <div className="flex justify-center py-8">
+            <div className="flex justify-center py-8" role="status" aria-label="Loading conversations">
               <span className="h-5 w-5 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
             </div>
           )}
@@ -3925,6 +3985,8 @@ export function Messages() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="flex items-center justify-center h-full"
+              role="status"
+              aria-label="Loading conversation"
             >
               <span className="h-6 w-6 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
             </motion.div>

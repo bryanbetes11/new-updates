@@ -177,54 +177,61 @@ export function More() {
       <div className="max-w-lg mx-auto px-1 sm:px-2 pt-6 sm:pt-8 space-y-4 sm:space-y-5">
 
         {/* ── Profile Hero Card ─────────────────────────── */}
-        <motion.button
+        <motion.div
           initial={{ opacity: 0, y: 14, filter: 'blur(6px)' }}
           animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          onClick={() => navigate('/profile')}
-          className="relative w-full rounded-3xl p-4 bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] overflow-hidden text-left hover:bg-gray-50 dark:hover:bg-white/[0.04] active:scale-[0.99] transition-all duration-150 group"
+          className="relative w-full overflow-hidden rounded-3xl border border-gray-200/80 bg-white p-2 dark:border-white/[0.06] dark:bg-white/[0.025]"
           style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 28px -16px rgba(15,23,42,0.12)' }}
         >
           <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.12] to-transparent" />
 
-          <div className="flex items-center gap-3">
-            <div className="relative shrink-0">
-              <Avatar
-                src={profile?.avatar_url}
-                firstName={profile?.first_name || '?'}
-                lastName={profile?.last_name}
-                size="md"
-                className="rounded-2xl ring-2 ring-black/[0.06] dark:ring-white/[0.08]"
-              />
-              {isLeader && (
-                <div className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full flex items-center justify-center bg-emerald-500 ring-2 ring-white dark:ring-[#0d0d0f]">
-                  <Shield className="h-2 w-2 text-white" />
-                </div>
-              )}
-            </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => navigate('/profile')}
+              className="group flex min-w-0 flex-1 items-center gap-3 rounded-2xl p-2 text-left transition-all hover:bg-gray-50 active:scale-[0.99] dark:hover:bg-white/[0.04]"
+              aria-label={`Open ${displayName}'s profile`}
+            >
+              <div className="relative shrink-0">
+                <Avatar
+                  src={profile?.avatar_url}
+                  firstName={profile?.first_name || '?'}
+                  lastName={profile?.last_name}
+                  size="md"
+                  className="rounded-2xl ring-2 ring-black/[0.06] dark:ring-white/[0.08]"
+                />
+                {isLeader && (
+                  <div className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#0d0d0f]">
+                    <Shield className="h-2 w-2 text-white" />
+                  </div>
+                )}
+              </div>
 
-            <div className="flex-1 min-w-0">
-              <p className="text-[10px] font-mono font-medium uppercase tracking-[0.18em] text-gray-400 dark:text-gray-400">
-                {isLeader ? 'Leader' : 'Member'}
-              </p>
-              <h2 className="text-[15px] font-black text-gray-900 dark:text-white truncate leading-tight" style={{ letterSpacing: '-0.02em' }}>
-                {displayName}
-              </h2>
-              <p className="text-[11px] text-gray-500 dark:text-gray-300 truncate font-mono">{profile?.email}</p>
-            </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-gray-400 dark:text-gray-400">
+                  {isLeader ? 'Leader' : 'Member'}
+                </p>
+                <h2 className="truncate text-[15px] font-black leading-tight text-gray-900 dark:text-white">
+                  {displayName}
+                </h2>
+                <p className="truncate font-mono text-[11px] text-gray-500 dark:text-gray-300">{profile?.email}</p>
+              </div>
 
-            <div className="flex items-center gap-2 shrink-0">
-              <ChevronRight className="h-4 w-4 text-gray-300 dark:text-gray-500 group-hover:text-gray-500 dark:group-hover:text-gray-300 transition-colors" />
-              <button
-                onClick={e => { e.stopPropagation(); handleSignOut(); }}
-                className="h-8 w-8 rounded-xl flex items-center justify-center text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-500/[0.1] border border-red-200 dark:border-red-500/20 hover:bg-red-100 dark:hover:bg-red-500/[0.16] active:scale-95 transition-all"
-                title="Sign Out"
-              >
-                <LogOut className="h-3.5 w-3.5" />
-              </button>
-            </div>
+              <ChevronRight className="h-4 w-4 shrink-0 text-gray-300 transition-colors group-hover:text-gray-500 dark:text-gray-500 dark:group-hover:text-gray-300" />
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-red-200 bg-red-50 text-red-500 transition-all hover:bg-red-100 active:scale-95 dark:border-red-500/20 dark:bg-red-500/[0.1] dark:text-red-400 dark:hover:bg-red-500/[0.16]"
+              aria-label="Sign out"
+              title="Sign out"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
           </div>
-        </motion.button>
+        </motion.div>
 
         {/* ── Menu Grid 3×N ────────────────────────────── */}
         <motion.div
@@ -235,6 +242,7 @@ export function More() {
         >
           {menuItems.map((item, index) => (
             <motion.button
+              type="button"
               key={item.path || index}
               variants={itemVariants}
               onClick={() => item.action ? item.action() : navigate(item.path!)}
@@ -256,7 +264,7 @@ export function More() {
                   </span>
                 )}
               </div>
-              <p className="text-[11px] font-semibold text-gray-700 dark:text-gray-100 text-center leading-tight" style={{ letterSpacing: '-0.01em' }}>
+              <p className="text-[11px] font-semibold text-gray-700 dark:text-gray-100 text-center leading-tight">
                 {item.label}
               </p>
             </motion.button>
@@ -275,12 +283,13 @@ export function More() {
             <div className="space-y-3.5">
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Leadership</p>
-                <h3 className="text-[16px] font-black text-gray-900 dark:text-white mt-1" style={{ letterSpacing: '-0.025em' }}>Open each leadership page directly.</h3>
+                <h3 className="text-[16px] font-black text-gray-900 dark:text-white mt-1">Open each leadership page directly.</h3>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 {leadershipItems.map((item) => (
                   <button
+                    type="button"
                     key={item.path || item.label}
                     onClick={() => item.action ? item.action() : navigate(item.path!)}
                     className="relative group flex items-center gap-3 rounded-2xl px-3.5 py-3.5 text-left bg-gray-50/80 dark:bg-white/[0.03] border border-gray-200/80 dark:border-white/[0.06] hover:bg-gray-100/90 dark:hover:bg-white/[0.05] hover:border-gray-300 dark:hover:border-white/[0.1] active:scale-[0.98] transition-all duration-150"
@@ -319,7 +328,7 @@ export function More() {
           <div className="space-y-3.5">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Mobile Navigation</p>
-              <h3 className="text-[16px] font-black text-gray-900 dark:text-white mt-1" style={{ letterSpacing: '-0.025em' }}>Choose your mobile nav look.</h3>
+              <h3 className="text-[16px] font-black text-gray-900 dark:text-white mt-1">Choose your mobile nav look.</h3>
               <p className="text-[12px] text-gray-500 dark:text-gray-300 mt-1.5 leading-snug">
                 Floating works like iOS. Docked sits flush at the bottom like Android.
               </p>
@@ -333,6 +342,7 @@ export function More() {
                 const active = mobileNavStyle === option.id;
                 return (
                   <button
+                    type="button"
                     key={option.id}
                     onClick={() => handleMobileNavStyleChange(option.id)}
                     disabled={savingNavStyle}
@@ -373,7 +383,7 @@ export function More() {
           <div className="space-y-3.5">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Account Switcher</p>
-              <h3 className="text-[16px] font-black text-gray-900 dark:text-white mt-1" style={{ letterSpacing: '-0.025em' }}>Jump between saved accounts.</h3>
+              <h3 className="text-[16px] font-black text-gray-900 dark:text-white mt-1">Jump between saved accounts.</h3>
               <p className="text-[12px] text-gray-500 dark:text-gray-300 mt-1.5 leading-snug">
                 Sign into each account on this device once. After that, you can switch here without typing the password again.
               </p>
@@ -407,9 +417,10 @@ export function More() {
                       </span>
                     ) : (
                       <button
+                        type="button"
                         onClick={() => handleSwitchAccount(account.userId)}
                         disabled={isSwitching}
-                        className="shrink-0 inline-flex h-8 items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-[11px] font-bold text-emerald-700 transition-all hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-emerald-500/20 dark:bg-emerald-500/[0.12] dark:text-emerald-300 dark:hover:bg-emerald-500/[0.18]"
+                        className="shrink-0 inline-flex h-11 items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-[11px] font-bold text-emerald-700 transition-all hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-emerald-500/20 dark:bg-emerald-500/[0.12] dark:text-emerald-300 dark:hover:bg-emerald-500/[0.18]"
                       >
                         <RefreshCw className={`h-3.5 w-3.5 ${isSwitching ? 'animate-spin' : ''}`} />
                         Switch
@@ -417,9 +428,11 @@ export function More() {
                     )}
 
                     <button
+                      type="button"
                       onClick={() => forgetSavedAccount(account.userId)}
-                      className="shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-400 transition-colors hover:text-red-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-gray-400 dark:hover:text-red-400"
+                      className="shrink-0 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-400 transition-colors hover:text-red-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-gray-400 dark:hover:text-red-400"
                       title="Forget saved account"
+                      aria-label={`Forget ${account.displayName || account.email}`}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -429,6 +442,7 @@ export function More() {
             </div>
 
             <button
+              type="button"
               onClick={handleAddAnotherAccount}
               className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-gray-200/80 bg-white text-[12px] font-bold text-gray-700 transition-all hover:bg-gray-50 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-gray-100 dark:hover:bg-white/[0.05]"
             >
@@ -450,7 +464,7 @@ export function More() {
           <div className="space-y-3">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">App Version</p>
-              <h3 className="mt-1 text-[16px] font-black text-gray-900 dark:text-white" style={{ letterSpacing: '-0.025em' }}>
+              <h3 className="mt-1 text-[16px] font-black text-gray-900 dark:text-white">
                 {APP_VERSION_LABEL}
               </h3>
               <p className="mt-1.5 text-[12px] leading-snug text-gray-500 dark:text-gray-300">
@@ -481,7 +495,7 @@ export function More() {
       >
         <div className="space-y-5">
           <div>
-            <h3 className="text-[24px] font-black tracking-[-0.03em] text-gray-900 dark:text-white">Add another login without leaving More.</h3>
+            <h3 className="text-[24px] font-black text-gray-900 dark:text-white">Add another login without leaving More.</h3>
             <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-gray-500 dark:text-gray-300">
               Enter the second account once. It will be saved on this device so you can switch back here anytime.
             </p>
@@ -503,10 +517,11 @@ export function More() {
             </div>
 
             <div>
-              <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">
+              <label htmlFor="saved-account-email" className="mb-2 block text-[11px] font-bold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">
                 Email address
               </label>
               <input
+                id="saved-account-email"
                 type="email"
                 value={addAccountEmail}
                 onChange={e => setAddAccountEmail(e.target.value)}
@@ -518,11 +533,12 @@ export function More() {
             </div>
 
             <div>
-              <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">
+              <label htmlFor="saved-account-password" className="mb-2 block text-[11px] font-bold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">
                 Password
               </label>
               <div className="relative">
                 <input
+                  id="saved-account-password"
                   type={showAddPassword ? 'text' : 'password'}
                   value={addAccountPassword}
                   onChange={e => setAddAccountPassword(e.target.value)}
@@ -534,7 +550,8 @@ export function More() {
                 <button
                   type="button"
                   onClick={() => setShowAddPassword(value => !value)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-xl p-1.5 text-gray-400 transition-colors hover:text-gray-600 dark:text-gray-400 dark:hover:text-white"
+                  className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-xl text-gray-400 transition-colors hover:text-gray-600 dark:text-gray-400 dark:hover:text-white"
+                  aria-label={showAddPassword ? 'Hide password' : 'Show password'}
                 >
                   {showAddPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -626,7 +643,7 @@ export function More() {
               <p className="mt-5 text-[10px] font-black uppercase tracking-[0.28em] text-emerald-700 dark:text-emerald-300">
                 Switching Account
               </p>
-              <h2 className="mt-2 text-3xl font-black tracking-[-0.05em] text-gray-950 dark:text-white">
+              <h2 className="mt-2 text-3xl font-black text-gray-950 dark:text-white">
                 Moving into {switchingAccountMeta.name}.
               </h2>
               <p className="mx-auto mt-3 max-w-[18rem] text-sm font-semibold leading-relaxed text-gray-500 dark:text-gray-300">

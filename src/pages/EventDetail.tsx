@@ -4,7 +4,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { format, parseISO, differenceInDays, startOfDay, subWeeks, previousSunday, addDays, subDays } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { animate, motion, useMotionValue, AnimatePresence, type PanInfo } from 'framer-motion';
-import { ArrowLeft, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, ListOrdered, Pause, Play, Settings2, MoreHorizontal, Upload, Calendar } from 'lucide-react';
+import { ArrowLeft, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, ListOrdered, Pause, Play, Settings2, MoreHorizontal, Upload, Calendar, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -168,6 +168,7 @@ export function EventDetail() {
   const [memberRoles, setMemberRoles] = useState<{ user_id: string; role_id: string }[]>([]);
   const [setlist, setSetlist] = useState<Setlist | null>(null);
   const [setlistSongs, setSetlistSongs] = useState<SetlistSong[]>([]);
+  const [creatingSetlist, setCreatingSetlist] = useState(false);
   const [linkedSetlist, setLinkedSetlist] = useState<Setlist | null>(null);
   const [linkedSetlistSongs, setLinkedSetlistSongs] = useState<SetlistSong[]>([]);
   const [linkedServiceEvent, setLinkedServiceEvent] = useState<Event | null>(null);
@@ -473,7 +474,13 @@ export function EventDetail() {
         supabase.from('event_assignments').select('*, events(*), profiles(first_name, last_name, gender, avatar_url), roles(name)').eq('event_id', id),
         supabase.from('profiles').select('id, first_name, last_name'),
         supabase.from('user_roles').select('user_id, role_id'),
-        supabase.from('setlists').select('*, setlist_songs(*, songs(*))').eq('event_id', id).maybeSingle(),
+        supabase
+          .from('setlists')
+          .select('*, setlist_songs(*, songs(*))')
+          .eq('event_id', id)
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle(),
         supabase.from('songs').select('*').order('title'),
         supabase.from('setlists').select('id, status, event_id, events(event_date), setlist_songs(song_id)').eq('status', 'approved'),
         supabase.from('events').select('*').eq('event_type', 'Sunday Service').gte('event_date', new Date().toISOString().split('T')[0]).order('event_date'),
@@ -891,12 +898,58 @@ export function EventDetail() {
   };
 
   const handleCreateSetlist = async () => {
-    if (!id || !user) return;
-    const fmt = serviceFormat || (event ? inferServiceFormat(event.event_type) : 'custom');
-    const { error } = await supabase.from('setlists').insert({ event_id: id, created_by: user.id, service_format: fmt });
-    if (error) { toast('error', error.message); return; }
-    toast('success', 'Setlist created');
-    fetchAll();
+    if (!id || !user || creatingSetlist) return;
+    setCreatingSetlist(true);
+    try {
+      const fmt = serviceFormat || (event ? inferServiceFormat(event.event_type) : 'custom');
+
+      // Setlists predate a database uniqueness constraint on event_id. Reuse
+      // an existing row so retries and older duplicate taps remain idempotent.
+      const { data: existing, error: existingError } = await supabase
+        .from('setlists')
+        .select('*, setlist_songs(*, songs(*))')
+        .eq('event_id', id)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingError) {
+        toast('error', existingError.message);
+        return;
+      }
+
+      if (existing) {
+        setSetlist(existing as Setlist);
+        setSetlistSongs((existing.setlist_songs || []) as SetlistSong[]);
+        if (existing.service_format) setServiceFormat(existing.service_format as ServiceFormat);
+        toast('success', 'Setlist ready');
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('setlists')
+        .insert({ event_id: id, created_by: user.id, service_format: fmt })
+        .select('*')
+        .single();
+
+      if (error) {
+        toast('error', error.message);
+        return;
+      }
+
+      // Render the newly-created setlist immediately instead of waiting for a
+      // second round-trip that can briefly return the pre-insert empty state.
+      setSetlist(data as Setlist);
+      setSetlistSongs([]);
+      setServiceFormat(fmt);
+      toast('success', 'Setlist created');
+      void fetchAll();
+    } catch (error) {
+      console.error('Failed to create setlist:', error);
+      toast('error', getErrorMessage(error, 'Could not create the setlist'));
+    } finally {
+      setCreatingSetlist(false);
+    }
   };
 
   const handleServiceFormatChange = async (fmt: ServiceFormat) => {
@@ -2046,7 +2099,7 @@ const openLyricsModal = (ss: SetlistSong) => {
       <motion.div
         animate={isLeaving ? { opacity: 0, y: -12, filter: 'blur(8px)' } : { opacity: 1, y: 0, filter: 'blur(0px)' }}
         transition={{ duration: 0.28, ease: [0.4, 0, 1, 1] }}
-        className="relative z-10 mx-auto max-w-2xl space-y-4 px-4 pt-0 sm:px-6 sm:pt-5 md:max-w-[860px] md:px-8 lg:max-w-6xl xl:max-w-[1560px]"
+        className="relative z-10 mx-auto max-w-2xl space-y-4 px-4 pt-0 sm:px-6 sm:pt-5 md:max-w-[860px] md:px-8 lg:max-w-6xl lg:pt-12 xl:max-w-[1560px]"
       >
         {/* ── Event Summary ────────────────────────────── */}
         <motion.div
@@ -2071,7 +2124,7 @@ const openLyricsModal = (ss: SetlistSong) => {
           <div className="relative">
             <button
               onClick={goBack}
-              className="absolute left-0 top-1 z-20 inline-flex h-11 w-11 items-center justify-center rounded-full bg-black/20 text-white/75 backdrop-blur-md transition-colors hover:bg-black/30 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:scale-95"
+              className="absolute left-0 top-1 z-20 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-black/35 text-white/85 shadow-lg shadow-black/25 backdrop-blur-md transition-colors hover:bg-black/50 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:scale-95 lg:top-8"
               title="Back to events"
               aria-label="Back to events"
             >
@@ -2566,8 +2619,14 @@ const openLyricsModal = (ss: SetlistSong) => {
                       ))}
                     </select>
                   </div>
-                  <button onClick={handleCreateSetlist} className="btn-primary">
-                    <Plus className="h-4 w-4" /> Create Setlist
+                  <button
+                    type="button"
+                    onClick={handleCreateSetlist}
+                    disabled={creatingSetlist}
+                    className="btn-primary disabled:cursor-wait disabled:opacity-70"
+                  >
+                    {creatingSetlist ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                    {creatingSetlist ? 'Creating…' : 'Create Setlist'}
                   </button>
                 </div>
               )}

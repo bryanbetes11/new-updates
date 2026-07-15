@@ -89,6 +89,12 @@
     overscroll-behavior-y: auto;
   }
 
+  .event-detail-main {
+    overflow-x: clip;
+    overflow-y: visible;
+    touch-action: pan-y;
+  }
+
   html.dashboard-active,
   html.dashboard-active body,
   body.dashboard-active {
@@ -100,6 +106,10 @@
   body.event-detail-active {
     background-color: #6f6259 !important;
     background-image: none !important;
+    overflow-y: auto;
+    overscroll-behavior-y: auto;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
   }
 
   html.mobile-menu-active,

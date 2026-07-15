@@ -227,17 +227,21 @@ async function getEventSongArtworkUrls(setlistSongs?: EventSongArtwork[] | null)
   return artworkUrls.slice(0, 4);
 }
 
-function EventTypeBadge({ type }: { type: string }) {
+function EventTypeLabel({ type }: { type: string }) {
   const colors = EVENT_TYPE_COLORS[type];
   if (!colors) return (
-    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-white/[0.08] text-gray-500 dark:text-white/40">
-      {type}
+    <span className="inline-flex shrink-0 items-center gap-1.5 text-[10px] font-bold text-white/45">
+      <span className="h-1.5 w-1.5 rounded-full bg-current" /> {type}
     </span>
   );
   return (
     <>
-      <span className="dark:hidden text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: colors.lightBg, color: colors.lightText }}>{type}</span>
-      <span className="hidden dark:inline text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: colors.darkBg, color: colors.darkText }}>{type}</span>
+      <span className="inline-flex shrink-0 items-center gap-1.5 text-[10px] font-bold dark:hidden" style={{ color: colors.lightText }}>
+        <span className="h-1.5 w-1.5 rounded-full bg-current" /> {type}
+      </span>
+      <span className="hidden shrink-0 items-center gap-1.5 text-[10px] font-bold dark:inline-flex" style={{ color: colors.darkText }}>
+        <span className="h-1.5 w-1.5 rounded-full bg-current" /> {type}
+      </span>
     </>
   );
 }
@@ -364,12 +368,6 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
           <p className="line-clamp-2 break-words text-[14px] font-black leading-snug text-white" style={{ letterSpacing: '-0.015em' }}>
             {songLeader || event.title}
           </p>
-          <EventTypeBadge type={event.event_type} />
-          {setlistInfo?.songCount ? (
-            <span className="inline-flex items-center rounded-full bg-white/[0.08] px-2 py-0.5 text-[10px] font-black text-white/72">
-              {setlistInfo.songCount} {setlistInfo.songCount === 1 ? 'song' : 'songs'}
-            </span>
-          ) : null}
           {showOverdueStyle && (
             <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-lg bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400">
               <AlertCircle className="h-3 w-3" /> Overdue
@@ -391,21 +389,22 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 mt-1">
+        <div className="mt-1 flex min-w-0 items-center gap-1.5">
+          <EventTypeLabel type={event.event_type} />
+          <span className="h-0.5 w-0.5 shrink-0 rounded-full bg-white/25" />
           <Clock className="h-3 w-3 shrink-0 text-white/28" />
-          <span className="text-[12px] font-semibold leading-snug text-white/45">
+          <span className="truncate text-[12px] font-semibold leading-snug text-white/45">
             {formatTime12Hour(event.start_time || '')}{event.end_time && ` – ${formatTime12Hour(event.end_time)}`}
           </span>
         </div>
 
         {dayEntries.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-1.5">
-            {dayEntries.map((entry, i) => (
-              <span key={i} className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-orange-50 dark:bg-orange-500/[0.15] text-orange-600 dark:text-orange-300">
-                <CalendarOff className="h-3 w-3" />
-                {entry.name} out
-              </span>
-            ))}
+          <div
+            className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[10px] font-semibold text-amber-300/75"
+            title={`Out: ${dayEntries.map(entry => entry.name).join(', ')}`}
+          >
+            <CalendarOff className="h-3 w-3 shrink-0 text-amber-400/70" />
+            <span className="truncate">Out: {dayEntries.map(entry => entry.name).join(', ')}</span>
           </div>
         )}
       </div>

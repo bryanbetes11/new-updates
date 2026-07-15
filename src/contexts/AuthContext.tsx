@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components -- The provider and its companion hook intentionally share this context module. */
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { createTransientSupabaseClient, supabase } from '../lib/supabase';
 import { readSavedAccounts, removeSavedAccount, upsertSavedAccount, type SavedAccount } from '../lib/savedAccounts';
@@ -102,6 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [roles, setRoles] = useState<Role[]>([]);
   const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>(() => readSavedAccounts());
   const [loading, setLoading] = useState(true);
+  const activeUserIdRef = useRef<string | null>(null);
 
   const clearUserContext = () => {
     setSession(null);
@@ -231,6 +232,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setSession(s);
         setUser(s?.user ?? null);
+        activeUserIdRef.current = s?.user?.id ?? null;
         syncSavedAccount(s);
         if (s?.user) {
           hydrateUserContext(s.user.id, s).finally(() => setLoading(false));
@@ -260,13 +262,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (event === 'TOKEN_REFRESHED') {
         setSession(s);
         setUser(s?.user ?? null);
+        activeUserIdRef.current = s?.user?.id ?? null;
         syncSavedAccount(s, profile);
+        return;
+      }
+
+      if (event === 'SIGNED_IN') {
+        const nextUserId = s?.user?.id ?? null;
+        const isSameUser = Boolean(nextUserId && nextUserId === activeUserIdRef.current);
+
+        setSession(s);
+        setUser(s?.user ?? null);
+        activeUserIdRef.current = nextUserId;
+
+        // Supabase may emit SIGNED_IN again when an existing browser tab
+        // regains focus. Keep the current page mounted in that case.
+        if (isSameUser) return;
+
+        setLoading(true);
+        if (s?.user) {
+          hydrateUserContext(s.user.id, s).finally(() => setLoading(false));
+        } else {
+          clearUserContext();
+          fetchRoles().finally(() => setLoading(false));
+        }
+        return;
+      }
+
+      if (event === 'USER_UPDATED' || event === 'PASSWORD_RECOVERY') {
+        setSession(s);
+        setUser(s?.user ?? null);
+        activeUserIdRef.current = s?.user?.id ?? null;
+        if (event === 'USER_UPDATED' && s?.user) void hydrateUserContext(s.user.id, s);
         return;
       }
 
       setLoading(true);
       setSession(s);
       setUser(s?.user ?? null);
+      activeUserIdRef.current = s?.user?.id ?? null;
       if (s?.user) {
         (async () => {
           await hydrateUserContext(s.user.id, s);

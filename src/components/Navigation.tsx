@@ -8,7 +8,6 @@ import {
   BookOpen,
   Calendar,
   CheckCircle2,
-  Download,
   Eye,
   EyeOff,
   ListChecks,
@@ -971,10 +970,6 @@ export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false
         </form>
 
         <div className="ml-auto flex items-center gap-3">
-          <button className="hidden h-11 items-center gap-2 rounded-[0.65rem] bg-white/[0.08] px-4 text-[13px] font-black text-white transition-colors hover:bg-white/[0.13] xl:flex">
-            <Download className="h-4 w-4 text-[#22c55e]" />
-            Install App
-          </button>
           <NotificationBell />
           <button
             onClick={() => handleNav('/messages')}

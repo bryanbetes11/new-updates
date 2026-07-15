@@ -58,21 +58,6 @@
     overscroll-behavior-y: none;
   }
 
-  html::before {
-    content: '';
-    display: none;
-    position: fixed;
-    z-index: 20;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: env(safe-area-inset-top, 0px);
-    pointer-events: none;
-    background: #050505;
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-
   #root {
     width: 100%;
     max-width: 100%;

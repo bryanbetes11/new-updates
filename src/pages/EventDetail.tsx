@@ -2086,8 +2086,7 @@ const openLyricsModal = (ss: SetlistSong) => {
   return (
     <div className="page-container page-bottom-pad relative isolate overflow-visible bg-[#050505]">
       <div
-        className="pointer-events-none absolute inset-x-0 z-0 h-[calc(env(safe-area-inset-top)+22rem)] overflow-hidden bg-[#050505] lg:hidden"
-        style={{ top: 'calc(0px - env(safe-area-inset-top, 0px))' }}
+        className="pointer-events-none fixed inset-x-0 top-0 z-0 h-[calc(env(safe-area-inset-top)+22rem)] overflow-hidden bg-[#050505] lg:hidden"
         aria-hidden="true"
       >
         <div className="absolute inset-x-[-35%] top-[-11rem] flex justify-center">

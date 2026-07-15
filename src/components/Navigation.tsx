@@ -1239,7 +1239,7 @@ export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false
           paddingTop: 'env(safe-area-inset-top)',
           height: 'calc(3.5rem + env(safe-area-inset-top) + 1px)',
           transform: mobileHeaderTransform,
-          filter: mobileOpen ? 'blur(1.25px) brightness(0.78)' : 'blur(0px) brightness(1)',
+          filter: mobileOpen ? 'blur(1.25px) brightness(0.78)' : 'none',
           transition: 'transform 260ms cubic-bezier(0.22, 1, 0.36, 1), filter 260ms cubic-bezier(0.22, 1, 0.36, 1)',
           willChange: 'transform',
         }}
@@ -1525,16 +1525,14 @@ export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false
             paddingBottom: useDockedMobileNav ? '0px' : 'max(0px, calc(env(safe-area-inset-bottom) - 6px))',
             paddingTop: useDockedMobileNav ? '0px' : '6px',
             background: useDockedMobileNav ? 'rgba(5,5,5,0.96)' : 'transparent',
-            WebkitBackdropFilter: useDockedMobileNav ? 'blur(18px) saturate(160%) contrast(104%)' : undefined,
-            backdropFilter: useDockedMobileNav ? 'blur(18px) saturate(160%) contrast(104%)' : undefined,
             borderTop: useDockedMobileNav ? '1px solid rgba(255,255,255,0.08)' : undefined,
             boxShadow: useDockedMobileNav ? '0 -18px 42px -34px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.08)' : undefined,
             transform: mobileNavTransform,
-            filter: mobileOpen ? 'blur(1.25px) brightness(0.78)' : 'blur(0px) brightness(1)',
+            filter: mobileOpen ? 'blur(1.25px) brightness(0.78)' : 'none',
             opacity: hideBottomMobileNav ? 0 : 1,
             pointerEvents: hideMobileChrome ? 'none' : undefined,
             transition: 'transform 360ms cubic-bezier(0.16, 1, 0.3, 1), opacity 180ms cubic-bezier(0.4, 0, 0.2, 1), filter 260ms cubic-bezier(0.22, 1, 0.36, 1)',
-            willChange: 'transform, opacity',
+            willChange: mobileOpen || hideBottomMobileNav ? 'transform, opacity' : undefined,
           }}
         >
           <motion.div
@@ -1549,7 +1547,7 @@ export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false
               scale: { duration: 0.36, ease: [0.22, 1, 0.36, 1] },
               opacity: { duration: 0.2, ease: [0.4, 0, 0.2, 1] },
             }}
-            style={{ transformOrigin: 'center bottom', willChange: 'transform, opacity' }}
+            style={{ transformOrigin: 'center bottom' }}
             className={`relative flex ${useDockedMobileNav ? 'justify-stretch px-0' : 'justify-center px-8'}`}
           >
             <nav
@@ -1557,8 +1555,6 @@ export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false
               style={{
                 height: useDockedMobileNav ? 'calc(64px + env(safe-area-inset-bottom))' : undefined,
                 background: useDockedMobileNav ? 'transparent' : 'rgba(8,8,8,0.96)',
-                WebkitBackdropFilter: useDockedMobileNav ? undefined : 'blur(26px) saturate(190%) contrast(108%)',
-                backdropFilter: useDockedMobileNav ? undefined : 'blur(26px) saturate(190%) contrast(108%)',
                 border: useDockedMobileNav ? undefined : '1px solid rgba(255,255,255,0.18)',
                 boxShadow: useDockedMobileNav
                   ? 'none'

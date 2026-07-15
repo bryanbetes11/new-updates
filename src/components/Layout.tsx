@@ -260,7 +260,7 @@ export function Layout() {
           marginLeft: 0,
           width: '100%',
           x: shouldShiftForMobileMenu ? 'min(82vw, 340px)' : 0,
-          filter: shouldShiftForMobileMenu ? 'blur(1.25px) brightness(0.78)' : 'blur(0px) brightness(1)',
+          filter: shouldShiftForMobileMenu ? 'blur(1.25px) brightness(0.78)' : 'none',
         }}
         transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
         className={`desktop-sidebar-main ${isEventDetail ? 'event-detail-main' : 'overflow-x-hidden'} ${isMessagesPage ? 'box-border flex flex-col min-h-[100dvh] overflow-hidden bg-white dark:bg-[#111013] lg:fixed lg:inset-0 lg:h-[100dvh]' : ''}`}

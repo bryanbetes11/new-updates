@@ -1102,9 +1102,6 @@ export function Events() {
 
   return (
     <div className="page-container page-bottom-pad relative overflow-hidden bg-[#050505] text-white">
-      <div
-        className="pointer-events-none fixed inset-0 -z-10 bg-[#050505]"
-      />
       <div className="relative mx-auto max-w-2xl space-y-5 px-4 pb-6 pt-4 sm:space-y-6 sm:px-6 sm:pt-5 md:max-w-[860px] md:px-8 lg:max-w-6xl xl:max-w-[1560px]">
 
         {/* ── Toolbar ── */}

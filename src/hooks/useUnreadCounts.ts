@@ -110,10 +110,16 @@ export function useUnreadCounts() {
   }, [fetchCounts]);
 
   useEffect(() => {
-    fetchCounts();
-    const interval = setInterval(fetchCounts, 15000);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void fetchCounts();
+    };
+
+    refreshWhenVisible();
+    const interval = window.setInterval(refreshWhenVisible, 60_000);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
     return () => {
-      clearInterval(interval);
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [fetchCounts]);

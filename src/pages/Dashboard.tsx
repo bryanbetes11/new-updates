@@ -30,10 +30,10 @@ const container: Variants = {
   animate: { transition: { staggerChildren: 0.06, delayChildren: 0.05 } },
 };
 const item: Variants = {
-  initial: { opacity: 0, y: 18, filter: 'blur(6px)' },
+  initial: { opacity: 0, y: 12 },
   animate: {
-    opacity: 1, y: 0, filter: 'blur(0px)',
-    transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] },
+    opacity: 1, y: 0,
+    transition: { duration: 0.42, ease: [0.16, 1, 0.3, 1] },
   },
 };
 
@@ -86,6 +86,34 @@ type PendingReviewSetlist = Setlist & {
   events?: Pick<Event, 'id' | 'title' | 'event_date' | 'event_type'>;
   setlist_songs?: Array<DashboardSongArtwork>;
 };
+
+type DashboardSnapshot = {
+  cachedAt: number;
+  upcomingEvents: Event[];
+  eventLeaderMap: Record<string, string>;
+  eventArtworkMap: Record<string, string[]>;
+  eventArtworkSongsMap: Record<string, DashboardSongArtwork[]>;
+  myAssignments: EventAssignment[];
+  pendingSetlists: PendingReviewSetlist[];
+  recentAnnouncements: Announcement[];
+  unavailableMembers: UserAvailability[];
+  pendingLeaveCount: number;
+  stats: { total: number; confirmed: number; pending: number };
+};
+
+const DASHBOARD_CACHE_TTL_MS = 2 * 60_000;
+const dashboardSnapshotCache = new Map<string, DashboardSnapshot>();
+
+function getDashboardSnapshot(userId?: string) {
+  if (!userId) return null;
+  const snapshot = dashboardSnapshotCache.get(userId);
+  if (!snapshot) return null;
+  if (Date.now() - snapshot.cachedAt > DASHBOARD_CACHE_TTL_MS) {
+    dashboardSnapshotCache.delete(userId);
+    return null;
+  }
+  return snapshot;
+}
 
 function SwapOutcomeBoard({
   isSub,
@@ -300,17 +328,19 @@ export function Dashboard() {
   const { user, profile, isLeader, isOrgAdmin, isProductionDirector } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
-  const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([]);
-  const [eventLeaderMap, setEventLeaderMap] = useState<Record<string, string>>({});
-  const [eventArtworkMap, setEventArtworkMap] = useState<Record<string, string[]>>({});
-  const [eventArtworkSongsMap, setEventArtworkSongsMap] = useState<Record<string, DashboardSongArtwork[]>>({});
-  const [myAssignments, setMyAssignments] = useState<EventAssignment[]>([]);
-  const [pendingSetlists, setPendingSetlists] = useState<PendingReviewSetlist[]>([]);
-  const [recentAnnouncements, setRecentAnnouncements] = useState<Announcement[]>([]);
-  const [unavailableMembers, setUnavailableMembers] = useState<UserAvailability[]>([]);
-  const [pendingLeaveCount, setPendingLeaveCount] = useState(0);
-  const [stats, setStats] = useState({ total: 0, confirmed: 0, pending: 0 });
+  const cachedDashboard = getDashboardSnapshot(user?.id);
+  const hadCachedDashboardRef = useRef(Boolean(cachedDashboard));
+  const [loading, setLoading] = useState(!cachedDashboard);
+  const [upcomingEvents, setUpcomingEvents] = useState<Event[]>(() => cachedDashboard?.upcomingEvents || []);
+  const [eventLeaderMap, setEventLeaderMap] = useState<Record<string, string>>(() => cachedDashboard?.eventLeaderMap || {});
+  const [eventArtworkMap, setEventArtworkMap] = useState<Record<string, string[]>>(() => cachedDashboard?.eventArtworkMap || {});
+  const [eventArtworkSongsMap, setEventArtworkSongsMap] = useState<Record<string, DashboardSongArtwork[]>>(() => cachedDashboard?.eventArtworkSongsMap || {});
+  const [myAssignments, setMyAssignments] = useState<EventAssignment[]>(() => cachedDashboard?.myAssignments || []);
+  const [pendingSetlists, setPendingSetlists] = useState<PendingReviewSetlist[]>(() => cachedDashboard?.pendingSetlists || []);
+  const [recentAnnouncements, setRecentAnnouncements] = useState<Announcement[]>(() => cachedDashboard?.recentAnnouncements || []);
+  const [unavailableMembers, setUnavailableMembers] = useState<UserAvailability[]>(() => cachedDashboard?.unavailableMembers || []);
+  const [pendingLeaveCount, setPendingLeaveCount] = useState(() => cachedDashboard?.pendingLeaveCount || 0);
+  const [stats, setStats] = useState(() => cachedDashboard?.stats || { total: 0, confirmed: 0, pending: 0 });
   const [incomingSwapRequests, setIncomingSwapRequests] = useState<SwapRequest[]>([]);
   const [leadershipSwapRequests, setLeadershipSwapRequests] = useState<SwapRequest[]>([]);
   const [sentSwapRequests, setSentSwapRequests] = useState<SwapRequest[]>([]);
@@ -468,6 +498,64 @@ export function Dashboard() {
       const events = ((eventsRes.data || []) as Event[]).slice().sort(compareEventsByDateTime);
       setUpcomingEvents(events);
 
+      const leaderMap: Record<string, string> = {};
+      ((songLeadersRes.data || []) as DashboardSongLeaderAssignment[]).forEach((assignment) => {
+        const profile = Array.isArray(assignment.profiles) ? assignment.profiles[0] : assignment.profiles;
+        const name = profile ? formatDashboardLeaderName(profile) : '';
+        if (name) leaderMap[assignment.event_id] = name;
+      });
+
+      const memberNameById = new Map(
+        ((membersRes.data || []) as DashboardMemberSummary[])
+          .map(member => [member.id, formatDashboardLeaderName(member)])
+          .filter((entry): entry is [string, string] => Boolean(entry[1]))
+      );
+      events.forEach(event => {
+        if (!leaderMap[event.id] && event.song_leader_id) {
+          const directLeaderName = memberNameById.get(event.song_leader_id);
+          if (directLeaderName) leaderMap[event.id] = directLeaderName;
+        }
+      });
+      events.forEach(event => {
+        if (!leaderMap[event.id] && event.linked_event_id && leaderMap[event.linked_event_id]) {
+          leaderMap[event.id] = leaderMap[event.linked_event_id];
+        }
+      });
+      setEventLeaderMap(leaderMap);
+
+      const assignments = (assignRes.data || []) as EventAssignment[];
+      const nowForAssignments = new Date();
+      const upcomingAssignments = assignments.filter(a => a.events && getManilaEventDateTime(a.events.event_date, a.events.start_time) >= nowForAssignments);
+      upcomingAssignments.sort(compareAssignmentsByEventDateTime);
+      setMyAssignments(upcomingAssignments);
+      setPendingSetlists((setlistsRes.data || []) as PendingReviewSetlist[]);
+      setRecentAnnouncements((announcementsRes.data || []) as Announcement[]);
+      setUnavailableMembers((unavailableRes.data || []) as UserAvailability[]);
+      setPendingLeaveCount(pendingLeaveRes.count || 0);
+      setStats({ total: upcomingAssignments.length, confirmed: upcomingAssignments.filter(a => a.status === 'confirmed').length, pending: upcomingAssignments.filter(a => a.status === 'pending').length });
+
+      // Artwork is optional enrichment. Show the useful dashboard immediately,
+      // then let thumbnails resolve without holding the whole page skeleton open.
+      const previousSnapshot = dashboardSnapshotCache.get(user.id);
+      dashboardSnapshotCache.set(user.id, {
+        cachedAt: Date.now(),
+        upcomingEvents: events,
+        eventLeaderMap: leaderMap,
+        eventArtworkMap: previousSnapshot?.eventArtworkMap || {},
+        eventArtworkSongsMap: previousSnapshot?.eventArtworkSongsMap || {},
+        myAssignments: upcomingAssignments,
+        pendingSetlists: (setlistsRes.data || []) as PendingReviewSetlist[],
+        recentAnnouncements: (announcementsRes.data || []) as Announcement[],
+        unavailableMembers: (unavailableRes.data || []) as UserAvailability[],
+        pendingLeaveCount: pendingLeaveRes.count || 0,
+        stats: {
+          total: upcomingAssignments.length,
+          confirmed: upcomingAssignments.filter(a => a.status === 'confirmed').length,
+          pending: upcomingAssignments.filter(a => a.status === 'pending').length,
+        },
+      });
+      if (!silent) setLoading(false);
+
       const artworkEventIds = Array.from(new Set(
         events
           .flatMap(event => [event.id, event.linked_event_id])
@@ -540,42 +628,24 @@ export function Dashboard() {
       setEventArtworkMap(artworkByEventId);
       setEventArtworkSongsMap(artworkSongsByEventId);
 
-      const leaderMap: Record<string, string> = {};
-      ((songLeadersRes.data || []) as DashboardSongLeaderAssignment[]).forEach((assignment) => {
-        const profile = Array.isArray(assignment.profiles) ? assignment.profiles[0] : assignment.profiles;
-        const name = profile ? formatDashboardLeaderName(profile) : '';
-        if (name) leaderMap[assignment.event_id] = name;
+      dashboardSnapshotCache.set(user.id, {
+        cachedAt: Date.now(),
+        upcomingEvents: events,
+        eventLeaderMap: leaderMap,
+        eventArtworkMap: artworkByEventId,
+        eventArtworkSongsMap: artworkSongsByEventId,
+        myAssignments: upcomingAssignments,
+        pendingSetlists: (setlistsRes.data || []) as PendingReviewSetlist[],
+        recentAnnouncements: (announcementsRes.data || []) as Announcement[],
+        unavailableMembers: (unavailableRes.data || []) as UserAvailability[],
+        pendingLeaveCount: pendingLeaveRes.count || 0,
+        stats: {
+          total: upcomingAssignments.length,
+          confirmed: upcomingAssignments.filter(a => a.status === 'confirmed').length,
+          pending: upcomingAssignments.filter(a => a.status === 'pending').length,
+        },
       });
 
-      const memberNameById = new Map(
-        ((membersRes.data || []) as DashboardMemberSummary[])
-          .map(member => [member.id, formatDashboardLeaderName(member)])
-          .filter((entry): entry is [string, string] => Boolean(entry[1]))
-      );
-      events.forEach(event => {
-        if (!leaderMap[event.id] && event.song_leader_id) {
-          const directLeaderName = memberNameById.get(event.song_leader_id);
-          if (directLeaderName) leaderMap[event.id] = directLeaderName;
-        }
-      });
-      events.forEach(event => {
-        if (!leaderMap[event.id] && event.linked_event_id && leaderMap[event.linked_event_id]) {
-          leaderMap[event.id] = leaderMap[event.linked_event_id];
-        }
-      });
-      setEventLeaderMap(leaderMap);
-
-      const assignments = (assignRes.data || []) as EventAssignment[];
-      const nowForAssignments = new Date();
-      const upcomingAssignments = assignments.filter(a => a.events && getManilaEventDateTime(a.events.event_date, a.events.start_time) >= nowForAssignments);
-      upcomingAssignments.sort(compareAssignmentsByEventDateTime);
-      setMyAssignments(upcomingAssignments);
-      setPendingSetlists((setlistsRes.data || []) as PendingReviewSetlist[]);
-      setRecentAnnouncements((announcementsRes.data || []) as Announcement[]);
-      setUnavailableMembers((unavailableRes.data || []) as UserAvailability[]);
-      setPendingLeaveCount(pendingLeaveRes.count || 0);
-      const upcoming = assignments.filter(a => a.events && getManilaEventDateTime(a.events.event_date, a.events.start_time) >= nowForAssignments);
-      setStats({ total: upcoming.length, confirmed: upcoming.filter(a => a.status === 'confirmed').length, pending: upcoming.filter(a => a.status === 'pending').length });
     } finally {
       if (!silent) setLoading(false);
     }
@@ -606,7 +676,7 @@ export function Dashboard() {
 
   useEffect(() => {
     if (!user) return;
-    loadDashboardData();
+    loadDashboardData({ silent: hadCachedDashboardRef.current });
   }, [loadDashboardData, user]);
 
   useEffect(() => {

@@ -207,6 +207,13 @@ export function EventArtwork({ eventType, title, artworkUrls = [], songs = null,
       .filter((url): url is string => Boolean(url)),
     [firstSongs]
   );
+  const availableArtworkKey = [...artworkUrls, ...videoArtworkUrls, ...searchArtworkUrls]
+    .filter(Boolean)
+    .join('|');
+  const availableArtworkCount = useMemo(
+    () => new Set(availableArtworkKey.split('|').filter(Boolean)).size,
+    [availableArtworkKey]
+  );
   const visibleArtworkUrls = [...publicArtworkUrls, ...artworkUrls, ...videoArtworkUrls, ...searchArtworkUrls]
     .filter((url, index, urls): url is string => Boolean(url) && urls.indexOf(url) === index && !failedUrls.has(url))
     .slice(0, 4);
@@ -218,6 +225,11 @@ export function EventArtwork({ eventType, title, artworkUrls = [], songs = null,
 
     if (firstSongs.length === 0) return undefined;
 
+    // Prefer artwork already supplied by ServeSync or YouTube/search sources.
+    // Avoid repeating external catalogue lookups for cards that can already
+    // render a complete four-tile collage.
+    if (availableArtworkCount >= 4) return undefined;
+
     Promise.all(firstSongs.map(fetchPublicArtwork)).then((urls) => {
       if (cancelled) return;
       setPublicArtworkUrls(urls.filter((url, index, all): url is string => Boolean(url) && all.indexOf(url) === index));
@@ -226,7 +238,7 @@ export function EventArtwork({ eventType, title, artworkUrls = [], songs = null,
     return () => {
       cancelled = true;
     };
-  }, [firstSongs]);
+  }, [availableArtworkCount, firstSongs]);
 
   if (visibleArtworkUrls.length > 0) {
     return (

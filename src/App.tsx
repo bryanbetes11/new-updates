@@ -21,7 +21,6 @@ import { getActiveServiceMode, serviceModeResumePath } from './lib/serviceModeRe
 const Login = lazy(() => import('./pages/Login').then(({ Login }) => ({ default: Login })));
 const Register = lazy(() => import('./pages/Register').then(({ Register }) => ({ default: Register })));
 const InviteAccept = lazy(() => import('./pages/InviteAccept').then(({ InviteAccept }) => ({ default: InviteAccept })));
-const Landing = lazy(() => import('./pages/Landing').then(({ Landing }) => ({ default: Landing })));
 const PlatformActivityLog = lazy(() => import('./pages/PlatformActivityLog').then(({ PlatformActivityLog }) => ({ default: PlatformActivityLog })));
 const Onboarding = lazy(() => import('./pages/Onboarding').then(({ Onboarding }) => ({ default: Onboarding })));
 const Dashboard = lazy(() => import('./pages/Dashboard').then(({ Dashboard }) => ({ default: Dashboard })));
@@ -142,19 +141,12 @@ export default function App() {
               applying={applyingUpdate}
             />
             <Routes>
-              <Route
-                path="/"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <Landing />
-                  </Suspense>
-                }
-              />
+              <Route path="/" element={<Navigate to="/login" replace />} />
               <Route path="/platform" element={<Navigate to="/activity-log" replace />} />
               <Route path="/platform/activity" element={<Navigate to="/activity-log" replace />} />
               <Route element={<Layout />}>
                 <Route element={<RouteLoadingBoundary />}>
-                  <Route path="/landing" element={<Navigate to="/" replace />} />
+                  <Route path="/landing" element={<Navigate to="/login" replace />} />
                   <Route path="/login" element={<Login />} />
                   <Route path="/reset-password" element={<ResetPassword />} />
                   <Route path="/auth/confirm" element={<AuthConfirm />} />

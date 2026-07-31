@@ -46,6 +46,7 @@ import {
   type MobileNavStyle,
 } from '../lib/mobileNavPreference';
 import { supabase } from '../lib/supabase';
+import { preloadPrimaryRoutes, preloadRoute } from '../lib/routePreload';
 import {
   HomeIcon, CalendarIcon, NewsIcon,
   LeaveIcon, ShieldNavIcon, MessageIcon,
@@ -245,7 +246,22 @@ export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false
     if (!mobileOpen) setDrawerPanel('menu');
   }, [mobileOpen]);
 
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const preload = () => { void preloadPrimaryRoutes(); };
+    const requestIdle = window.requestIdleCallback?.bind(window);
+    if (requestIdle) {
+      const idleId = requestIdle(preload, { timeout: 1200 });
+      return () => window.cancelIdleCallback(idleId);
+    }
+
+    const timeoutId = setTimeout(preload, 350);
+    return () => clearTimeout(timeoutId);
+  }, [user?.id]);
+
   const handleNav = useCallback((path: string) => {
+    void preloadRoute(path);
     navigate(path);
     onMobileOpenChange(false);
     setDesktopProfileOpen(false);
@@ -669,6 +685,9 @@ export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false
         <Tooltip key={item.path} label={item.label}>
           <button
             onClick={() => handleNav(item.path)}
+            onPointerEnter={() => { void preloadRoute(item.path); }}
+            onFocus={() => { void preloadRoute(item.path); }}
+            onTouchStart={() => { void preloadRoute(item.path); }}
             className={`group relative flex h-11 w-full items-center justify-center rounded-[0.8rem] border transition-all duration-200 ${
               active
                 ? 'border-white/[0.10] bg-white/[0.10] text-white shadow-[0_14px_24px_-18px_rgba(0,0,0,0.85)]'
@@ -700,6 +719,9 @@ export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false
       <button
         key={item.path}
         onClick={() => handleNav(item.path)}
+        onPointerEnter={() => { void preloadRoute(item.path); }}
+        onFocus={() => { void preloadRoute(item.path); }}
+        onTouchStart={() => { void preloadRoute(item.path); }}
         className={`relative group flex h-12 w-full items-center gap-3 rounded-[0.8rem] border px-3.5 text-[13px] transition-all duration-200 ${
           active
             ? 'border-white/[0.10] bg-white/[0.10] font-bold text-white shadow-[0_16px_32px_-24px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.12)]'
@@ -1458,6 +1480,9 @@ export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false
                       <button
                         key={entry.title}
                         onClick={() => handleNav(entry.path)}
+                        onPointerEnter={() => { void preloadRoute(entry.path); }}
+                        onFocus={() => { void preloadRoute(entry.path); }}
+                        onTouchStart={() => { void preloadRoute(entry.path); }}
                         className="group flex w-full items-center gap-3 rounded-[0.7rem] px-2.5 py-1.5 text-left transition-colors hover:bg-white/[0.065]"
                       >
                         <span className={`relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-[0.35rem] bg-gradient-to-br ${entry.tone}`}>
@@ -1578,6 +1603,9 @@ export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false
                   <button
                     key={item.path}
                     onClick={() => navigate(item.path)}
+                    onPointerDown={() => { void preloadRoute(item.path); }}
+                    onPointerEnter={() => { void preloadRoute(item.path); }}
+                    onFocus={() => { void preloadRoute(item.path); }}
                     data-mobile-nav-item="true"
                     data-active={active ? 'true' : 'false'}
                     aria-current={active ? 'page' : undefined}

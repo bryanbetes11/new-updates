@@ -104,6 +104,16 @@ type DashboardSnapshot = {
 const DASHBOARD_CACHE_TTL_MS = 2 * 60_000;
 const dashboardSnapshotCache = new Map<string, DashboardSnapshot>();
 
+function readDismissedSwapIds(storageKey: string | null) {
+  if (!storageKey || typeof window === 'undefined') return new Set<string>();
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(storageKey) || '[]');
+    return new Set<string>(Array.isArray(stored) ? stored.filter((id): id is string => typeof id === 'string') : []);
+  } catch {
+    return new Set<string>();
+  }
+}
+
 function getDashboardSnapshot(userId?: string) {
   if (!userId) return null;
   const snapshot = dashboardSnapshotCache.get(userId);
@@ -344,7 +354,9 @@ export function Dashboard() {
   const [incomingSwapRequests, setIncomingSwapRequests] = useState<SwapRequest[]>([]);
   const [leadershipSwapRequests, setLeadershipSwapRequests] = useState<SwapRequest[]>([]);
   const [sentSwapRequests, setSentSwapRequests] = useState<SwapRequest[]>([]);
-  const [dismissedSwapIds, setDismissedSwapIds] = useState<Set<string>>(new Set());
+  const dismissedSwapStorageKey = user ? `servesync_dashboard_dismissed_swaps_${user.id}` : null;
+  const [dismissedSwapIds, setDismissedSwapIds] = useState<Set<string>>(() => readDismissedSwapIds(dismissedSwapStorageKey));
+  const dismissedSwapIdsRef = useRef(dismissedSwapIds);
   const [respondingSwap, setRespondingSwap] = useState<string | null>(null);
   const [remindingSwap, setRemindingSwap] = useState<string | null>(null);
   const [selectedUnavailability, setSelectedUnavailability] = useState<UserAvailability | null>(null);
@@ -357,25 +369,15 @@ export function Dashboard() {
   const refreshInFlightRef = useRef(false);
 
   const todayVerse = verses[new Date().getDay() % verses.length];
-  const dismissedSwapStorageKey = user ? `servesync_dashboard_dismissed_swaps_${user.id}` : null;
-
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(id);
   }, []);
 
   useEffect(() => {
-    if (!dismissedSwapStorageKey) {
-      setDismissedSwapIds(new Set());
-      return;
-    }
-
-    try {
-      const stored = JSON.parse(localStorage.getItem(dismissedSwapStorageKey) || '[]');
-      setDismissedSwapIds(new Set(Array.isArray(stored) ? stored : []));
-    } catch {
-      setDismissedSwapIds(new Set());
-    }
+    const next = readDismissedSwapIds(dismissedSwapStorageKey);
+    dismissedSwapIdsRef.current = next;
+    setDismissedSwapIds(next);
   }, [dismissedSwapStorageKey]);
 
   const fetchIncomingSwaps = useCallback(async () => {
@@ -428,8 +430,8 @@ export function Dashboard() {
     const [incomingRes, leadershipRes, sentRes] = await Promise.all([incomingPromise, leadershipPromise, sentPromise]);
     setIncomingSwapRequests((incomingRes.data || []) as SwapRequest[]);
     setLeadershipSwapRequests((leadershipRes.data || []) as SwapRequest[]);
-    setSentSwapRequests(((sentRes.data || []) as SwapRequest[]).filter(req => !dismissedSwapIds.has(req.id)));
-  }, [user, isLeader, isOrgAdmin, dismissedSwapIds]);
+    setSentSwapRequests(((sentRes.data || []) as SwapRequest[]).filter(req => !dismissedSwapIdsRef.current.has(req.id)));
+  }, [user, isLeader, isOrgAdmin]);
 
   const loadDashboardData = useCallback(async (options?: { silent?: boolean }) => {
     if (!user) return;
@@ -863,12 +865,15 @@ export function Dashboard() {
   };
 
   const dismissSentSwapRequest = (swapId: string) => {
-    const next = new Set(dismissedSwapIds);
-    next.add(swapId);
-    setDismissedSwapIds(next);
-    if (dismissedSwapStorageKey) {
-      localStorage.setItem(dismissedSwapStorageKey, JSON.stringify(Array.from(next)));
-    }
+    setDismissedSwapIds(current => {
+      const next = new Set(current);
+      next.add(swapId);
+      dismissedSwapIdsRef.current = next;
+      if (dismissedSwapStorageKey) {
+        localStorage.setItem(dismissedSwapStorageKey, JSON.stringify(Array.from(next)));
+      }
+      return next;
+    });
     setSentSwapRequests(prev => prev.filter(req => req.id !== swapId));
   };
 

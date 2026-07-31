@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { isPasswordRecoveryUrl, recoveryRedirectPath } from '../lib/authRedirect';
+import { isPasswordRecoveryUrl, passwordResetRedirectUrl, recoveryRedirectPath } from '../lib/authRedirect';
 
 type LoginView = 'login' | 'account';
 type AccountUpdateMode = 'password' | 'email';
@@ -96,7 +96,7 @@ export function Login() {
 
     setForgotLoading(true);
     const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail.trim().toLowerCase(), {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: passwordResetRedirectUrl,
     });
     setForgotLoading(false);
 

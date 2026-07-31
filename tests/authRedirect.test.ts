@@ -1,4 +1,4 @@
-import { isPasswordRecoveryUrl, recoveryRedirectPath } from '../src/lib/authRedirect';
+import { isPasswordRecoveryUrl, passwordResetRedirectUrl, recoveryRedirectPath } from '../src/lib/authRedirect';
 
 function expectEqual(actual: unknown, expected: unknown, message: string) {
   if (actual !== expected) {
@@ -30,4 +30,9 @@ expectEqual(
   recoveryRedirectPath('?type=recovery&code=abc', '#next'),
   '/reset-password?type=recovery&code=abc#next',
   'preserves recovery parameters through the redirect',
+);
+expectEqual(
+  passwordResetRedirectUrl,
+  'https://mcjcworship.netlify.app/reset-password',
+  'uses the Netlify app for password reset callbacks',
 );

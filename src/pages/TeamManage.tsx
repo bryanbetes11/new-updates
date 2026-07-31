@@ -3,6 +3,7 @@ import { format, parseISO } from 'date-fns';
 import { motion } from 'framer-motion';
 import { Users, Shield, Search, ChevronDown, ChevronUp, Plus, X, Check, BarChart3, Crown, CreditCard as Edit3, Save, Camera, Loader2, ClipboardCheck, AlertTriangle, FileText, KeyRound } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { passwordResetRedirectUrl } from '../lib/authRedirect';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { Modal } from '../components/Modal';
@@ -285,7 +286,7 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
     if (!resetConfirmMember?.email) return;
     setSendingReset(true);
     const { error } = await supabase.auth.resetPasswordForEmail(resetConfirmMember.email, {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: passwordResetRedirectUrl,
     });
     setSendingReset(false);
     setResetConfirmMember(null);

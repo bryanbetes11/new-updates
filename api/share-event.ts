@@ -1,4 +1,4 @@
-import shareEvent from '../netlify/functions/share-event';
+import shareEvent from '../netlify/functions/share-event.js';
 
 type VercelRequest = {
   headers: Record<string, string | string[] | undefined>;

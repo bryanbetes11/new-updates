@@ -5,11 +5,11 @@
   "rewrites": [
     {
       "source": "/share/events/:id/image",
-      "destination": "/api/share-event"
+      "destination": "/api/share-event?id=:id&mode=image"
     },
     {
       "source": "/share/events/:id",
-      "destination": "/api/share-event"
+      "destination": "/api/share-event?id=:id"
     },
     {
       "source": "/(.*)",

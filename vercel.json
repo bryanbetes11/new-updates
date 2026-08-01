@@ -1,0 +1,19 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm run validate",
+  "outputDirectory": "dist",
+  "rewrites": [
+    {
+      "source": "/share/events/:id/image",
+      "destination": "/api/share-event"
+    },
+    {
+      "source": "/share/events/:id",
+      "destination": "/api/share-event"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

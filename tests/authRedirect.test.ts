@@ -33,6 +33,6 @@ expectEqual(
 );
 expectEqual(
   passwordResetRedirectUrl,
-  'https://mcjcworship.netlify.app/reset-password',
-  'uses the Netlify app for password reset callbacks',
+  'https://wt.mcjcchurch.com/reset-password',
+  'uses the production site for password reset callbacks',
 );

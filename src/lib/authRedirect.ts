@@ -16,4 +16,4 @@ export function recoveryRedirectPath(search = window.location.search, hash = win
   return `/reset-password${search}${hash}`;
 }
 
-export const passwordResetRedirectUrl = 'https://mcjcworship.netlify.app/reset-password';
+export const passwordResetRedirectUrl = 'https://wt.mcjcchurch.com/reset-password';

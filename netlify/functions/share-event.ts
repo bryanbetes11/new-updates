@@ -4,6 +4,10 @@ declare const Netlify: {
   };
 };
 
+declare const process: {
+  env: Record<string, string | undefined>;
+};
+
 type Context = {
   params: {
     id: string;
@@ -93,7 +97,8 @@ function getSnapshotFromInlineToken(token: string) {
 }
 
 function getEnv(name: string) {
-  return Netlify.env.get(name);
+  if (typeof Netlify !== 'undefined') return Netlify.env.get(name);
+  return typeof process !== 'undefined' ? process.env[name] : undefined;
 }
 
 function getSupabaseConfig() {
@@ -383,7 +388,7 @@ async function renderPreviewImageSvg(preview: EventPreview | null, origin: strin
     <text x="46" y="545" fill="#ffffff" font-size="46" font-weight="950" font-family="Inter, Arial, sans-serif">${safeTitle}</text>
     <text x="46" y="587" fill="#48e6a0" font-size="25" font-weight="800" font-family="Inter, Arial, sans-serif">${safeDetailLine}</text>
     <text x="1010" y="545" text-anchor="end" fill="#63f2b3" font-size="23" font-weight="900" font-family="Inter, Arial, sans-serif">${safeSongCount}</text>
-    <text x="1010" y="587" text-anchor="end" fill="#6e7773" font-size="23" font-weight="700" font-family="Inter, Arial, sans-serif">mcjcworship.org</text>
+    <text x="1010" y="587" text-anchor="end" fill="#6e7773" font-size="23" font-weight="700" font-family="Inter, Arial, sans-serif">wt.mcjcchurch.com</text>
   </g>
 </svg>`;
 }

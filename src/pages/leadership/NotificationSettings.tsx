@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BellRing, ChevronDown, Loader2, Save, ShieldAlert } from 'lucide-react';
+import { BellRing, ChevronDown, Loader2, RotateCcw, Save, ShieldAlert } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
+import { getBuiltInNotificationCopy } from '../../lib/notificationCopy';
 
 type Priority = 'low' | 'normal' | 'high' | 'urgent';
 
@@ -158,15 +159,7 @@ export function NotificationSettings() {
                       </select>
                     </label>
                   </div>
-                  <div className="space-y-3">
-                    <label className="block text-xs font-bold uppercase tracking-wide text-gray-400 dark:text-white/35">Custom title
-                      <input value={rule.template_title || ''} onChange={event => patchRule(rule.id, { template_title: event.target.value })} placeholder="Use the built-in title" className="mt-1.5 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 dark:border-white/10 dark:bg-white/[0.05] dark:text-white" />
-                    </label>
-                    <label className="block text-xs font-bold uppercase tracking-wide text-gray-400 dark:text-white/35">Custom message
-                      <textarea value={rule.template_body || ''} onChange={event => patchRule(rule.id, { template_body: event.target.value })} placeholder="Use the built-in message" rows={3} className="mt-1.5 w-full resize-none rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 dark:border-white/10 dark:bg-white/[0.05] dark:text-white" />
-                    </label>
-                    <p className="text-[11px] leading-4 text-gray-400 dark:text-white/30">Audience: {rule.target_roles.join(', ') || 'Applicable members'}. Template fields such as {'{{event_title}}'} can be used when available.</p>
-                  </div>
+                  <NotificationCopyEditor rule={rule} patchRule={patchRule} />
                 </div>
               </details>
             ))}
@@ -177,6 +170,58 @@ export function NotificationSettings() {
       <button type="button" onClick={save} disabled={saving} className="sticky bottom-5 z-10 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3.5 text-sm font-black text-white shadow-xl shadow-emerald-700/20 transition hover:bg-emerald-700 disabled:opacity-60">
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save notification controls
       </button>
+    </div>
+  );
+}
+
+function NotificationCopyEditor({
+  rule,
+  patchRule,
+}: {
+  rule: Rule;
+  patchRule: (id: string, patch: Partial<Rule>) => void;
+}) {
+  const builtIn = getBuiltInNotificationCopy(rule.type, rule.label, rule.description);
+  const hasCustomTitle = rule.template_title !== null;
+  const hasCustomBody = rule.template_body !== null;
+
+  return (
+    <div className="space-y-3">
+      <label className="block text-xs font-bold uppercase tracking-wide text-gray-400 dark:text-white/35">
+        <span className="flex items-center justify-between gap-3">
+          <span>{hasCustomTitle ? 'Custom title' : 'Current built-in title'}</span>
+          {hasCustomTitle && (
+            <button type="button" onClick={() => patchRule(rule.id, { template_title: null })} className="inline-flex items-center gap-1 text-[10px] font-black text-emerald-600 hover:text-emerald-700 dark:text-emerald-300">
+              <RotateCcw className="h-3 w-3" /> Reset
+            </button>
+          )}
+        </span>
+        <input
+          value={rule.template_title ?? builtIn.title}
+          onChange={event => patchRule(rule.id, { template_title: event.target.value })}
+          className={`mt-1.5 w-full rounded-xl border px-3 py-2 text-sm text-gray-900 dark:text-white ${hasCustomTitle ? 'border-emerald-300 bg-emerald-50/50 dark:border-emerald-400/30 dark:bg-emerald-400/[0.06]' : 'border-gray-200 bg-white dark:border-white/10 dark:bg-white/[0.05]'}`}
+        />
+      </label>
+      <label className="block text-xs font-bold uppercase tracking-wide text-gray-400 dark:text-white/35">
+        <span className="flex items-center justify-between gap-3">
+          <span>{hasCustomBody ? 'Custom message' : 'Current built-in message'}</span>
+          {hasCustomBody && (
+            <button type="button" onClick={() => patchRule(rule.id, { template_body: null })} className="inline-flex items-center gap-1 text-[10px] font-black text-emerald-600 hover:text-emerald-700 dark:text-emerald-300">
+              <RotateCcw className="h-3 w-3" /> Reset
+            </button>
+          )}
+        </span>
+        <textarea
+          value={rule.template_body ?? builtIn.body}
+          onChange={event => patchRule(rule.id, { template_body: event.target.value })}
+          rows={3}
+          className={`mt-1.5 w-full resize-none rounded-xl border px-3 py-2 text-sm text-gray-900 dark:text-white ${hasCustomBody ? 'border-emerald-300 bg-emerald-50/50 dark:border-emerald-400/30 dark:bg-emerald-400/[0.06]' : 'border-gray-200 bg-white dark:border-white/10 dark:bg-white/[0.05]'}`}
+        />
+      </label>
+      <p className="text-[11px] leading-4 text-gray-400 dark:text-white/30">
+        {hasCustomTitle || hasCustomBody ? 'Custom wording will replace the built-in wording after you save. ' : 'This is the wording ServeSync currently builds automatically. '}
+        Values in brackets are filled from the event or member involved. Audience: {rule.target_roles.join(', ') || 'Applicable members'}.
+      </p>
     </div>
   );
 }

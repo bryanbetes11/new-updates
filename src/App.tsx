@@ -48,6 +48,7 @@ const SwapRequests = lazy(() => import('./pages/SwapRequests').then(({ SwapReque
 const SetlistDeadlines = lazy(() => import('./pages/leadership/SetlistDeadlines').then(({ SetlistDeadlines }) => ({ default: SetlistDeadlines })));
 const OrganizationSettings = lazy(() => import('./pages/leadership/OrganizationSettings').then(({ OrganizationSettings }) => ({ default: OrganizationSettings })));
 const OrganizationBilling = lazy(() => import('./pages/leadership/OrganizationBilling').then(({ OrganizationBilling }) => ({ default: OrganizationBilling })));
+const NotificationSettings = lazy(() => import('./pages/leadership/NotificationSettings').then(({ NotificationSettings }) => ({ default: NotificationSettings })));
 const ChangePassword = lazy(() => import('./pages/ChangePassword').then(({ ChangePassword }) => ({ default: ChangePassword })));
 const ResetPassword = lazy(() => import('./pages/ResetPassword').then(({ ResetPassword }) => ({ default: ResetPassword })));
 const AuthConfirm = lazy(() => import('./pages/AuthConfirm').then(({ AuthConfirm }) => ({ default: AuthConfirm })));
@@ -184,6 +185,7 @@ export default function App() {
                     <Route path="/leadership/team" element={<TeamManage />} />
                     <Route path="/leadership/church" element={<OrganizationSettings />} />
                     <Route path="/leadership/billing" element={<OrganizationBilling />} />
+                    <Route path="/leadership/notifications" element={<NotificationSettings />} />
 
                     <Route path="/leader" element={<Navigate to="/leadership/overview" replace />} />
                     <Route path="/manage" element={<Navigate to="/leadership/team" replace />} />

@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   ArrowLeftRight,
   BookOpen,
+  BellRing,
   Calendar,
   CheckCircle2,
   Eye,
@@ -82,6 +83,7 @@ const LibraryNavIcon: NavIcon = ({ className, style }) => <Layers3 className={cl
 const SwapsNavIcon: NavIcon = ({ className, style }) => <ArrowLeftRight className={className} style={style} />;
 const TeamNavIcon: NavIcon = ({ className, style }) => <Users className={className} style={style} />;
 const ConductNavIcon: NavIcon = ({ className, style }) => <AlertTriangle className={className} style={style} />;
+const NotificationNavIcon: NavIcon = ({ className, style }) => <BellRing className={className} style={style} />;
 const globalSearchTypeMeta: Record<GlobalSearchKind, { label: string; icon: LucideIcon; tone: string }> = {
   event: { label: 'Event', icon: Calendar, tone: 'text-emerald-300 bg-emerald-500/14' },
   song: { label: 'Song', icon: Music2, tone: 'text-sky-300 bg-sky-500/14' },
@@ -508,6 +510,9 @@ export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false
           { path: '/leadership/team', label: 'Team Roster', icon: TeamNavIcon, tone: 'from-fuchsia-500/80 via-slate-800 to-black' },
         ]
       : []),
+    ...(isOrgAdmin
+      ? [{ path: '/leadership/notifications', label: 'Notification Controls', icon: NotificationNavIcon, tone: 'from-emerald-500/85 via-teal-900 to-black' }]
+      : []),
     ...(isLeader || canManageDiscipline
       ? [{ path: '/leadership/discipline', label: 'Conduct', icon: ConductNavIcon, tone: 'from-red-500/85 via-rose-900 to-black' }]
       : []),
@@ -648,6 +653,7 @@ export function Navigation({ hideMobile, hideMobileAll, hideMobileHeader = false
     { icon: ArrowLeftRight, label: 'Approve Swaps', desc: 'Review swap requests', path: '/leadership/swaps', show: isLeader, badge: unread.pendingSwaps, color: '#0ea5e9' },
     { icon: AlertTriangle, label: 'Conduct', desc: 'Discipline and records', path: '/leadership/discipline', show: isLeader || !!canManageDiscipline, color: '#f97316' },
     { icon: Users, label: 'Team', desc: 'Manage team members', path: '/leadership/team', show: isLeader || isOrgAdmin, color: '#8b5cf6' },
+    { icon: BellRing, label: 'Notification Controls', desc: 'Manage organization alerts', path: '/leadership/notifications', show: isOrgAdmin, color: '#10b981' },
   ].filter(item => item.show);
 
   const settingsMenuItem: typeof baseProfileMenuItems[number] = {

@@ -1352,33 +1352,21 @@ export function EventDetail() {
     if (!id) return;
     setDeleting(true);
 
-    // Setlists + their songs and submissions
-    const { data: eventSetlists } = await supabase.from('setlists').select('id').eq('event_id', id);
-    if (eventSetlists && eventSetlists.length > 0) {
-      const setlistIds = eventSetlists.map(s => s.id);
-      await supabase.from('setlist_songs').delete().in('setlist_id', setlistIds);
-      await supabase.from('setlist_submissions').delete().in('setlist_id', setlistIds);
-      await supabase.from('setlists').delete().in('id', setlistIds);
-    }
-
-    // Assignments and attendance
-    await supabase.from('event_assignments').delete().eq('event_id', id);
-    await supabase.from('event_attendance').delete().eq('event_id', id);
-
-    // Group chat conversation (messages → members → conversation)
-    const { data: conv } = await supabase.from('conversations').select('id').eq('event_id', id).maybeSingle();
-    if (conv?.id) {
-      await supabase.from('messages').delete().eq('conversation_id', conv.id);
-      await supabase.from('conversation_members').delete().eq('conversation_id', conv.id);
-      await supabase.from('conversations').delete().eq('id', conv.id);
-    }
-
-    // Unlink any rehearsal events that point to this one
-    await supabase.from('events').update({ linked_event_id: null }).eq('linked_event_id', id);
-
-    const { error } = await supabase.from('events').delete().eq('id', id);
+    // Related event records use ON DELETE CASCADE/SET NULL constraints, so one
+    // database operation keeps the deletion atomic. Returning the row also lets
+    // us detect an RLS denial, which otherwise looks like a successful no-op.
+    const { data: deletedEvent, error } = await supabase
+      .from('events')
+      .delete()
+      .eq('id', id)
+      .select('id')
+      .maybeSingle();
     setDeleting(false);
-    if (error) { toast('error', 'Failed to delete event'); return; }
+    if (error || !deletedEvent) {
+      console.error('Failed to delete event:', error || 'The event was not deleted');
+      toast('error', 'Failed to delete event');
+      return;
+    }
     setShowDeleteEvent(false);
     toast('success', 'Event deleted');
     navigate('/events', {

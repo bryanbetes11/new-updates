@@ -16,9 +16,12 @@ interface PushPayload {
   data?: Record<string, unknown>;
 }
 
-type OrgLookupRow = {
+type ProfileOrgRow = {
   org_id: string | null;
-  organizations: { name: string | null } | { name: string | null }[] | null;
+};
+
+type OrganizationRow = {
+  name: string | null;
 };
 
 type PushSubscriptionRow = {
@@ -67,13 +70,6 @@ function secretsMatch(received: string | null, expected: string | null): boolean
     mismatch |= received.charCodeAt(index) ^ expected.charCodeAt(index);
   }
   return mismatch === 0;
-}
-
-function normalizeOrganizationName(row: OrgLookupRow | null): string | null {
-  const orgData = row?.organizations;
-  if (!orgData) return null;
-  if (Array.isArray(orgData)) return orgData[0]?.name?.trim() || null;
-  return orgData.name?.trim() || null;
 }
 
 function resolvePushTitle(title: string, organizationName: string | null, type: string): string {
@@ -200,12 +196,18 @@ Deno.serve(async (req: Request) => {
       if (notification_id) await supabase.from("notifications").update(values).eq("id", notification_id);
     };
 
-    const { data: profileOrgRow } = await supabase
+    const { data: profileOrgRow, error: profileOrgError } = await supabase
       .from("profiles")
-      .select("org_id, organizations(name)")
+      .select("org_id")
       .eq("id", user_id)
       .maybeSingle();
-    const profile = (profileOrgRow as OrgLookupRow | null) ?? null;
+    if (profileOrgError) {
+      console.error("Failed to look up push recipient", profileOrgError);
+      await updateStatus({ push_status: "failed" });
+      return json({ error: "Recipient lookup failed" }, 500);
+    }
+
+    const profile = (profileOrgRow as ProfileOrgRow | null) ?? null;
     if (!profile?.org_id) {
       await updateStatus({ push_status: "failed" });
       return json({ error: "Recipient organization not found" }, 404);
@@ -253,7 +255,15 @@ Deno.serve(async (req: Request) => {
       return json({ message: "Chat push skipped during quiet hours", sent: 0 });
     }
 
-    const organizationName = normalizeOrganizationName(profile);
+    const { data: organizationRow, error: organizationError } = await supabase
+      .from("organizations")
+      .select("name")
+      .eq("id", profile.org_id)
+      .maybeSingle();
+    if (organizationError) {
+      console.error("Failed to look up push organization name", organizationError);
+    }
+    const organizationName = (organizationRow as OrganizationRow | null)?.name?.trim() || null;
     const resolvedTitle = resolvePushTitle(title, organizationName, type);
     const { data: subscriptions } = await supabase
       .from("push_subscriptions")

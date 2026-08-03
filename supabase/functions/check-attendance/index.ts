@@ -220,10 +220,21 @@ Deno.serve(async (req: Request) => {
         eventsChecked: events?.length || 0,
         notificationsSent,
       };
-    } else if (action === "remind") {
-      const yesterday = new Date(manilaNow);
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split("T")[0];
+    } else if (["remind", "missed_evening", "missed_final"].includes(action)) {
+      const targetDate = new Date(manilaNow);
+      if (action !== "missed_evening") targetDate.setDate(targetDate.getDate() - 1);
+      const targetDateStr = targetDate.toISOString().split("T")[0];
+
+      const reminderType = action === "missed_evening"
+        ? "attendance_missed_evening_reminder"
+        : action === "missed_final"
+        ? "attendance_missed_final_reminder"
+        : "attendance_reminder";
+      const reminderTitle = action === "missed_evening"
+        ? "Attendance Still Missing"
+        : action === "missed_final"
+        ? "Attendance Not Submitted"
+        : "Attendance Reminder";
 
       const { data: events, error: eventsError } = await supabase
         .from("events")
@@ -231,7 +242,7 @@ Deno.serve(async (req: Request) => {
           id, title, event_date, event_type, linked_event_id,
           event_assignments(user_id, profiles(first_name, last_name))
         `)
-        .eq("event_date", yesterdayStr);
+        .eq("event_date", targetDateStr);
 
       if (eventsError) throw eventsError;
 
@@ -257,16 +268,20 @@ Deno.serve(async (req: Request) => {
             .from("notifications")
             .select("id")
             .eq("user_id", assignment.user_id)
-            .eq("type", "attendance_reminder")
+            .eq("type", reminderType)
             .eq("data->>event_id", event.id)
             .maybeSingle();
 
           if (!existingReminder.data) {
             notifications.push({
               user_id: assignment.user_id,
-              type: "attendance_reminder",
-              title: "Attendance Reminder",
-              body: `You haven't submitted your attendance for ${eventDisplay} on ${eventDateFormatted}. Submit today — submitting after the event date will be recorded as Late.`,
+              type: reminderType,
+              title: reminderTitle,
+              body: action === "missed_evening"
+                ? `Your attendance for ${eventDisplay} has not been submitted. Please update it in ServeSync.`
+                : action === "missed_final"
+                ? `Final reminder: your attendance for ${eventDisplay} on ${eventDateFormatted} is still missing. It will be recorded as absent if it is not submitted today.`
+                : `You haven't submitted your attendance for ${eventDisplay} on ${eventDateFormatted}. Submit today — submitting after the event date will be recorded as Late.`,
               data: {
                 event_id: event.id,
                 url: `/events/${event.id}`,
@@ -289,8 +304,8 @@ Deno.serve(async (req: Request) => {
       }
 
       result = {
-        action: "remind",
-        targetDate: yesterdayStr,
+        action,
+        targetDate: targetDateStr,
         eventsChecked: events?.length || 0,
         remindersSent,
       };

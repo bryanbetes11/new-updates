@@ -14,6 +14,7 @@ import { useToast } from '../contexts/ToastContext';
 import { DatePicker } from '../components/DatePicker';
 import { PageLoader } from '../components/LoadingSpinner';
 import { PushNotificationSetting } from '../components/PushNotificationSetting';
+import { NotificationPreferencesSetting } from '../components/NotificationPreferencesSetting';
 import { RoleBadge, sortRolesLeadershipFirst } from '../components/RoleBadge';
 import { phoneHref } from '../lib/phone';
 import type { DisciplineRecord } from '../types';
@@ -761,6 +762,14 @@ export function Profile() {
           transition={{ duration: 0.5, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
         >
           <PushNotificationSetting />
+        </motion.section>
+
+        <motion.section
+          initial={{ opacity: 0, y: 14, filter: 'blur(4px)' }}
+          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          transition={{ duration: 0.5, delay: 0.24, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <NotificationPreferencesSetting />
         </motion.section>
 
       </div>

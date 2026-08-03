@@ -26,6 +26,7 @@ export { default as CalendarCheck } from 'lucide-react/dist/esm/icons/calendar-c
 export { default as CalendarClock } from 'lucide-react/dist/esm/icons/calendar-clock.js';
 export { default as CalendarDays } from 'lucide-react/dist/esm/icons/calendar-days.js';
 export { default as CalendarOff } from 'lucide-react/dist/esm/icons/calendar-off.js';
+export { default as CalendarX } from 'lucide-react/dist/esm/icons/calendar-x.js';
 export { default as Camera } from 'lucide-react/dist/esm/icons/camera.js';
 export { default as Captions } from 'lucide-react/dist/esm/icons/captions.js';
 export { default as Check } from 'lucide-react/dist/esm/icons/check.js';
@@ -135,6 +136,7 @@ export { default as User } from 'lucide-react/dist/esm/icons/user.js';
 export { default as UserCheck } from 'lucide-react/dist/esm/icons/user-check.js';
 export { default as UserPlus } from 'lucide-react/dist/esm/icons/user-plus.js';
 export { default as Users } from 'lucide-react/dist/esm/icons/users.js';
+export { default as UserCog } from 'lucide-react/dist/esm/icons/user-cog.js';
 export { default as Users2 } from 'lucide-react/dist/esm/icons/users-2.js';
 export { default as UserX } from 'lucide-react/dist/esm/icons/user-x.js';
 export { default as Video } from 'lucide-react/dist/esm/icons/video.js';

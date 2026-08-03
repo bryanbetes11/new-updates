@@ -18,7 +18,9 @@ export function NotificationBell() {
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user.id)
         .eq('is_read', false)
-        .neq('type', 'message');
+        .neq('type', 'message')
+        .contains('delivery_channels', { in_app: true })
+        .is('dismissed_at', null);
       setCount(c || 0);
     };
 

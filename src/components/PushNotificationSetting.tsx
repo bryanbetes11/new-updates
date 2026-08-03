@@ -24,7 +24,7 @@ function urlBase64ToUint8Array(base64String: string) {
 }
 
 export function PushNotificationSetting({ surface = 'profile' }: PushNotificationSettingProps) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
@@ -42,6 +42,18 @@ export function PushNotificationSetting({ surface = 'profile' }: PushNotificatio
     if (error) throw error;
   }, [user]);
 
+  const savePushPreference = useCallback(async (enabled: boolean) => {
+    if (!user || !profile?.org_id) return;
+    const { error } = await supabase
+      .from('notification_preferences')
+      .upsert({
+        user_id: user.id,
+        org_id: profile.org_id,
+        push_enabled: enabled,
+      }, { onConflict: 'user_id' });
+    if (error) throw error;
+  }, [profile?.org_id, user]);
+
   useEffect(() => {
     if (!user || typeof window === 'undefined') return;
 
@@ -52,9 +64,17 @@ export function PushNotificationSetting({ surface = 'profile' }: PushNotificatio
       }
 
       try {
-        const reg = await navigator.serviceWorker.ready;
+        const [reg, preferenceResult] = await Promise.all([
+          navigator.serviceWorker.ready,
+          supabase
+            .from('notification_preferences')
+            .select('push_enabled')
+            .eq('user_id', user.id)
+            .maybeSingle(),
+        ]);
         const sub = await reg.pushManager.getSubscription();
-        setPushEnabled(!!sub && Notification.permission === 'granted');
+        const preferenceEnabled = preferenceResult.data?.push_enabled ?? true;
+        setPushEnabled(!!sub && Notification.permission === 'granted' && preferenceEnabled);
       } catch {
         setPushEnabled(false);
       }
@@ -125,6 +145,7 @@ export function PushNotificationSetting({ surface = 'profile' }: PushNotificatio
           });
 
         await savePushSubscription(sub);
+        await savePushPreference(true);
         setPushEnabled(true);
         toast('success', 'Push notifications enabled');
       } catch (err) {
@@ -148,6 +169,7 @@ export function PushNotificationSetting({ surface = 'profile' }: PushNotificatio
           .eq('endpoint', sub.endpoint);
       }
 
+      await savePushPreference(false);
       setPushEnabled(false);
       toast('info', 'Push notifications disabled');
     } catch {

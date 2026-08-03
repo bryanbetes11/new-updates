@@ -356,12 +356,65 @@ export interface Video {
 export interface Notification {
   id: string;
   user_id: string;
+  org_id: string;
   type: string;
   title: string;
   body: string;
   data: Record<string, string>;
   is_read: boolean;
+  category: string;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  required: boolean;
+  delivery_channels: { in_app: boolean; push: boolean };
+  scheduled_for: string;
+  dismissed_at: string | null;
+  push_status: 'legacy' | 'pending' | 'dispatching' | 'deferred' | 'sent' | 'partial' | 'failed' | 'no_subscription' | 'not_requested';
+  push_sent_at: string | null;
+  push_attempted_at: string | null;
+  dedupe_key: string | null;
   created_at: string;
+}
+
+export interface NotificationRule {
+  id: string;
+  org_id: string;
+  type: string;
+  label: string;
+  category: string;
+  description: string;
+  target_roles: string[];
+  enabled: boolean;
+  required: boolean;
+  in_app_enabled: boolean;
+  push_enabled: boolean;
+  priority: Notification['priority'];
+  reminder_offsets: number[];
+  template_title: string | null;
+  template_body: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NotificationPreference {
+  user_id: string;
+  org_id: string;
+  in_app_enabled: boolean;
+  push_enabled: boolean;
+  quiet_hours_enabled: boolean;
+  quiet_start: string;
+  quiet_end: string;
+  timezone: string;
+  muted_types: string[];
+  updated_at: string;
+}
+
+export interface NotificationSystemSettings {
+  org_id: string;
+  push_delivery_enabled: boolean;
+  default_timezone: string;
+  updated_by: string | null;
+  updated_at: string;
 }
 
 export interface PushSubscription {

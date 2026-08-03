@@ -4,7 +4,7 @@ import { format, parseISO } from 'date-fns';
 import {
   Bell, Check, CheckCheck, Trash2,
   Music, Megaphone, MessageCircle, PlayCircle, Users,
-  CalendarClock, ClipboardCheck, AlertTriangle, Clock, ArrowLeftRight
+  CalendarClock, ClipboardCheck, AlertTriangle, Clock, ArrowLeftRight, CalendarX, UserCog, ShieldAlert, Cake
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -16,6 +16,10 @@ import type { Notification } from '../types';
 const typeIcons: Record<string, typeof Bell> = {
   assignment: Users,
   assignment_response: CheckCheck,
+  assignment_removed: Users,
+  event_updated: CalendarClock,
+  event_created: CalendarClock,
+  event_cancelled: CalendarX,
   setlist_approved: Music,
   setlist_revision: Music,
   setlist_submitted: Music,
@@ -42,11 +46,20 @@ const typeIcons: Record<string, typeof Bell> = {
   sub_request: ArrowLeftRight,
   sub_approved: ArrowLeftRight,
   sub_declined: ArrowLeftRight,
+  role_changed: UserCog,
+  member_joined: Users,
+  birthday: Cake,
+  discipline_created: ShieldAlert,
+  discipline_updated: ShieldAlert,
 };
 
 const typeTones: Record<string, string> = {
   assignment: 'from-emerald-500/85 via-green-900 to-black',
   assignment_response: 'from-emerald-400 via-green-800 to-black',
+  assignment_removed: 'from-red-500/85 via-rose-900 to-black',
+  event_updated: 'from-sky-500/85 via-blue-900 to-black',
+  event_created: 'from-emerald-500/85 via-green-900 to-black',
+  event_cancelled: 'from-red-500/85 via-rose-900 to-black',
   setlist_approved: 'from-emerald-500/85 via-teal-900 to-black',
   setlist_revision: 'from-amber-500/85 via-yellow-900 to-black',
   setlist_submitted: 'from-emerald-500/85 via-teal-900 to-black',
@@ -73,6 +86,11 @@ const typeTones: Record<string, string> = {
   sub_request: 'from-violet-500/85 via-indigo-900 to-black',
   sub_approved: 'from-emerald-500/85 via-green-900 to-black',
   sub_declined: 'from-red-500/85 via-rose-900 to-black',
+  role_changed: 'from-violet-500/85 via-indigo-900 to-black',
+  member_joined: 'from-emerald-500/85 via-green-900 to-black',
+  birthday: 'from-pink-500/85 via-rose-900 to-black',
+  discipline_created: 'from-red-500/85 via-rose-950 to-black',
+  discipline_updated: 'from-amber-500/85 via-orange-900 to-black',
 };
 
 function emptyListResponse() {
@@ -100,6 +118,8 @@ export function Notifications() {
           .select('*')
           .eq('user_id', user.id)
           .neq('type', 'message')
+          .contains('delivery_channels', { in_app: true })
+          .is('dismissed_at', null)
           .order('created_at', { ascending: false })
           .limit(50),
         emptyListResponse(),

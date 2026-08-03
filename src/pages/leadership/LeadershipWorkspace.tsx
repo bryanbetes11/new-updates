@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Shield, LayoutDashboard, Users, CalendarCheck, AlertTriangle, ListMusic, Building2, CreditCard, ArrowLeftRight } from 'lucide-react';
+import { Shield, LayoutDashboard, Users, CalendarCheck, AlertTriangle, ListMusic, Building2, CreditCard, ArrowLeftRight, BellRing } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUnreadCounts } from '../../hooks/useUnreadCounts';
 import { LeaderDashboard } from '../LeaderDashboard';
@@ -12,8 +12,9 @@ import { SetlistDeadlines } from './SetlistDeadlines';
 import { OrganizationSettings } from './OrganizationSettings';
 import { OrganizationBilling } from './OrganizationBilling';
 import { SwapRequests } from '../SwapRequests';
+import { NotificationSettings } from './NotificationSettings';
 
-type Tab = 'overview' | 'team' | 'leave' | 'swaps' | 'discipline' | 'setlists' | 'church' | 'billing';
+type Tab = 'overview' | 'team' | 'leave' | 'swaps' | 'discipline' | 'setlists' | 'notifications' | 'church' | 'billing';
 
 const fadeUp = (delay = 0) => ({
   initial: { opacity: 0, y: 14 },
@@ -41,6 +42,7 @@ export function LeadershipWorkspace() {
     { id: 'swaps', label: 'Swaps', icon: ArrowLeftRight, show: isLeader },
     { id: 'discipline', label: 'Conduct', icon: AlertTriangle, show: isLeader || !!canManageDiscipline },
     { id: 'team', label: 'Team', icon: Users, show: isLeader || isOrgAdmin },
+    { id: 'notifications', label: 'Notifications', icon: BellRing, show: isOrgAdmin },
     { id: 'church', label: 'Church', icon: Building2, show: isOrgAdmin },
     { id: 'billing', label: 'Billing', icon: CreditCard, show: isOrgAdmin },
   ];
@@ -197,6 +199,7 @@ export function LeadershipWorkspace() {
             {activeTab === 'swaps' && <SwapRequests embedded />}
             {activeTab === 'discipline' && <DisciplineWrapper />}
             {activeTab === 'setlists' && <SetlistDeadlines />}
+            {activeTab === 'notifications' && <NotificationSettings />}
             {activeTab === 'church' && <OrganizationSettings />}
             {activeTab === 'billing' && <OrganizationBilling />}
           </motion.div>

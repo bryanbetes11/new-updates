@@ -23,6 +23,7 @@ import { clearActiveServiceMode, getActiveServiceMode, saveActiveServiceMode } f
 import { useSmartBack } from '../lib/navigationHistory';
 import { describeSetlistReviewAge, getSetlistPendingMessage } from '../lib/setlistReviewAge';
 import { getSingleLyricsAutofill, normalizeLyricsInputForSave, normalizeLyricsSearchResults, type LyricsSearchResult } from '../lib/lyricsSearch';
+import { getEventAssignmentKey, prepareEventAssignmentBatch, type EventAssignmentDraft } from '../lib/eventAssignmentBatch';
 
 import type { Event, EventAssignment, Setlist, SetlistSong, Song, ServiceFormat, SetlistCheckReport } from '../types';
 import { inferServiceFormat, SERVICE_FORMAT_LABELS } from '../lib/setlistCheckerEngine';
@@ -116,6 +117,15 @@ type ApprovedSetlistUsage = {
   setlist_songs: Array<{ song_id: string }>;
 };
 
+type AssignmentDraftRow = EventAssignmentDraft & { id: string };
+
+let assignmentDraftSequence = 0;
+const createAssignmentDraftRow = (): AssignmentDraftRow => ({
+  id: `assignment-draft-${++assignmentDraftSequence}`,
+  user_id: '',
+  role_id: '',
+});
+
 function getSongReadinessBadge(usage?: SongUsageAge) {
   if (!usage) {
     return {
@@ -184,7 +194,8 @@ export function EventDetail() {
   const [showSongConfig, setShowSongConfig] = useState(false);
   const [selectedSongForConfig, setSelectedSongForConfig] = useState<string | null>(null);
   const [songConfig, setSongConfig] = useState({ category: '', youtube_url: '', performed_key: '' });
-  const [assignForm, setAssignForm] = useState({ user_id: '', role_id: '' });
+  const [assignmentDrafts, setAssignmentDrafts] = useState<AssignmentDraftRow[]>(() => [createAssignmentDraftRow()]);
+  const [assigningBatch, setAssigningBatch] = useState(false);
   const [removingAssignmentId, setRemovingAssignmentId] = useState<string | null>(null);
   const [newSong, setNewSong] = useState({ title: '', artist: '', song_key: '', duration: '', youtube_url: '' });
   const [newSongError, setNewSongError] = useState('');
@@ -826,28 +837,99 @@ export function EventDetail() {
   };
 
 
+  const assignmentBatch = prepareEventAssignmentBatch(
+    assignmentDrafts,
+    assignments.map(assignment => ({ user_id: assignment.user_id, role_id: assignment.role_id })),
+  );
+
+  const openAssignModal = () => {
+    setAssignmentDrafts([createAssignmentDraftRow()]);
+    setShowAssign(true);
+  };
+
+  const closeAssignModal = () => {
+    if (assigningBatch) return;
+    setShowAssign(false);
+    setAssignmentDrafts([createAssignmentDraftRow()]);
+  };
+
+  const addAssignmentDraft = () => {
+    setAssignmentDrafts(current => [...current, createAssignmentDraftRow()]);
+  };
+
+  const updateAssignmentDraft = (rowId: string, field: 'role_id' | 'user_id', value: string) => {
+    setAssignmentDrafts(current => current.map(row => {
+      if (row.id !== rowId) return row;
+      if (field === 'role_id') return { ...row, role_id: value, user_id: '' };
+      return { ...row, user_id: value };
+    }));
+  };
+
+  const removeAssignmentDraft = (rowId: string) => {
+    setAssignmentDrafts(current => current.length === 1
+      ? [createAssignmentDraftRow()]
+      : current.filter(row => row.id !== rowId));
+  };
+
+  const getEligibleAssignmentMembers = (roleId: string, rowId: string) => {
+    if (!roleId) return [];
+
+    const unavailableKeys = new Set([
+      ...assignments.map(assignment => getEventAssignmentKey(assignment)),
+      ...assignmentDrafts
+        .filter(row => row.id !== rowId && row.user_id && row.role_id)
+        .map(getEventAssignmentKey),
+    ]);
+
+    return members.filter(member => (
+      memberRoles.some(memberRole => memberRole.user_id === member.id && memberRole.role_id === roleId) &&
+      !unavailableKeys.has(getEventAssignmentKey({ user_id: member.id, role_id: roleId }))
+    ));
+  };
+
   const handleAssign = async () => {
-    if (!id) return;
+    if (!id || assigningBatch) return;
 
-    const existingAssignment = assignments.find(
-      a => a.user_id === assignForm.user_id && a.role_id === assignForm.role_id
-    );
-
-    if (existingAssignment) {
-      toast('info', 'Member already assigned to this role');
-      setShowAssign(false);
-      setAssignForm({ user_id: '', role_id: '' });
+    if (assignmentBatch.incompleteCount > 0) {
+      toast('info', 'Complete or remove every assignment row');
       return;
     }
+    if (assignmentBatch.duplicateCount > 0) {
+      toast('info', 'Remove duplicate team assignments before continuing');
+      return;
+    }
+    if (assignmentBatch.assignments.length === 0) return;
 
-    const { error } = await supabase.from('event_assignments').insert({
-      event_id: id, user_id: assignForm.user_id, role_id: assignForm.role_id,
-    });
-    if (error) { toast('error', error.message); return; }
-    toast('success', 'Member assigned');
-    setShowAssign(false);
-    setAssignForm({ user_id: '', role_id: '' });
-    fetchAll();
+    setAssigningBatch(true);
+    try {
+      const { data, error } = await withSaveTimeout(
+        supabase
+          .from('event_assignments')
+          .insert(assignmentBatch.assignments.map(assignment => ({ event_id: id, ...assignment })))
+          .select('id')
+      );
+
+      if (error) {
+        toast('error', error.message);
+        return;
+      }
+      if ((data?.length || 0) !== assignmentBatch.assignments.length) {
+        toast('error', 'Some assignments could not be added. Please try again.');
+        return;
+      }
+
+      const count = assignmentBatch.assignments.length;
+      toast('success', count === 1 ? 'Member assigned' : `${count} team assignments added`);
+      setShowAssign(false);
+      setAssignmentDrafts([createAssignmentDraftRow()]);
+      dispatchBadgeCountsRefresh();
+      fetchAll();
+    } catch (error) {
+      console.error('Failed to assign event team:', error);
+      toast('error', getErrorMessage(error, 'Could not add these team assignments'));
+    } finally {
+      setAssigningBatch(false);
+    }
   };
 
   const handleConfirm = async (assignmentId: string) => {
@@ -3151,7 +3233,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                 <span className="text-xs font-medium text-gray-500 dark:text-white/45">{confirmedCount}/{assignments.length} confirmed</span>
                 {isLeader && (
                   <button
-                    onClick={() => setShowAssign(true)}
+                    onClick={openAssignModal}
                     className="inline-flex h-11 items-center justify-center gap-1.5 rounded-full bg-white/[0.08] px-4 text-[11px] font-bold text-white/85 ring-1 ring-white/[0.08] transition-colors hover:bg-white/[0.13] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] active:scale-[0.97]"
                   >
                     <Plus className="h-3.5 w-3.5" /> Assign
@@ -3250,42 +3332,107 @@ const openLyricsModal = (ss: SetlistSong) => {
           </div>
         </div>
 
-        <Modal open={showAssign} onClose={() => setShowAssign(false)} title="Assign Team Member">
+        <Modal
+          open={showAssign}
+          onClose={closeAssignModal}
+          title="Assign Team Members"
+          size="lg"
+          closeOnBackdrop={!assigningBatch}
+          closeOnEscape={!assigningBatch}
+        >
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Role</label>
-              <Select
-                value={assignForm.role_id}
-                onChange={v => setAssignForm({ role_id: v, user_id: '' })}
-                options={roles.filter(r => !r.is_leadership).map(r => ({ value: r.id, label: r.name }))}
-                placeholder="Select role"
-              />
+            <div className="flex items-start justify-between gap-3 rounded-2xl bg-gray-50 px-3.5 py-3 ring-1 ring-black/[0.04] dark:bg-white/[0.035] dark:ring-white/[0.06]">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-800 dark:text-white/90">Build the team in one batch</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-white/45">Add as many role and member pairs as you need, then assign everyone together.</p>
+              </div>
+              <span className="shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-500/15 dark:text-emerald-300">
+                {assignmentBatch.assignments.length} ready
+              </span>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Member</label>
-              <Select
-                value={assignForm.user_id}
-                onChange={v => setAssignForm({ ...assignForm, user_id: v })}
-                options={(() => {
-                  const eligible = assignForm.role_id
-                    ? members.filter(m => memberRoles.some(ur => ur.user_id === m.id && ur.role_id === assignForm.role_id))
-                    : members;
-                  return eligible
-                    .filter(m => !assignments.some(a => a.user_id === m.id && a.role_id === assignForm.role_id))
-                    .map(m => ({ value: m.id, label: `${m.first_name} ${m.last_name}` }));
-                })()}
-                placeholder={assignForm.role_id ? 'Select member' : 'Pick role first'}
-              />
-              {assignForm.role_id && (() => {
-                const eligible = members.filter(m => memberRoles.some(ur => ur.user_id === m.id && ur.role_id === assignForm.role_id));
-                return eligible.length === 0 ? (
-                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">No members have this role in their profile yet.</p>
-                ) : null;
-              })()}
+
+            <div className="max-h-[48dvh] space-y-3 overflow-y-auto pr-1 scrollbar-thin">
+              {assignmentDrafts.map((row, index) => {
+                const eligibleMembers = getEligibleAssignmentMembers(row.role_id, row.id);
+                return (
+                  <div
+                    key={row.id}
+                    className="rounded-2xl border border-gray-200/80 bg-white p-3.5 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.025] dark:shadow-none"
+                  >
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <p className="text-[11px] font-black uppercase tracking-[0.14em] text-gray-400 dark:text-white/35">
+                        Assignment {String(index + 1).padStart(2, '0')}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => removeAssignmentDraft(row.id)}
+                        disabled={assigningBatch}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-40 dark:text-white/30 dark:hover:bg-red-500/10 dark:hover:text-red-300"
+                        aria-label={`Remove assignment ${index + 1}`}
+                        title="Remove this assignment"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="min-w-0">
+                        <label className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-white/55">Role</label>
+                        <Select
+                          value={row.role_id}
+                          onChange={value => updateAssignmentDraft(row.id, 'role_id', value)}
+                          options={roles.filter(role => !role.is_leadership).map(role => ({ value: role.id, label: role.name }))}
+                          placeholder="Select role"
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <label className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-white/55">Member</label>
+                        <Select
+                          value={row.user_id}
+                          onChange={value => updateAssignmentDraft(row.id, 'user_id', value)}
+                          options={eligibleMembers.map(member => ({ value: member.id, label: `${member.first_name} ${member.last_name}` }))}
+                          placeholder={row.role_id ? 'Select member' : 'Pick role first'}
+                        />
+                      </div>
+                    </div>
+
+                    {row.role_id && eligibleMembers.length === 0 && !row.user_id && (
+                      <p className="mt-2 text-xs font-medium text-amber-600 dark:text-amber-300">Everyone with this role is already assigned, or no member has it yet.</p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-            <div className="flex justify-end gap-3 pt-2">
-              <button onClick={() => setShowAssign(false)} className="btn-secondary">Cancel</button>
-              <button onClick={handleAssign} disabled={!assignForm.user_id || !assignForm.role_id} className="btn-primary">Assign</button>
+
+            <button
+              type="button"
+              onClick={addAssignmentDraft}
+              disabled={assigningBatch}
+              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-gray-300 bg-gray-50/60 text-sm font-bold text-gray-600 transition-colors hover:border-emerald-400 hover:bg-emerald-50 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/[0.12] dark:bg-white/[0.025] dark:text-white/60 dark:hover:border-emerald-400/40 dark:hover:bg-emerald-500/[0.08] dark:hover:text-emerald-300"
+            >
+              <Plus className="h-4 w-4" /> Add another assignment
+            </button>
+
+            {(assignmentBatch.duplicateCount > 0 || assignmentBatch.incompleteCount > 0) && assignmentBatch.assignments.length > 0 && (
+              <p className="text-center text-xs text-gray-500 dark:text-white/40">
+                Complete every row and remove duplicates to assign the batch.
+              </p>
+            )}
+
+            <div className="flex justify-end gap-3 border-t border-gray-100 pt-4 dark:border-white/[0.06]">
+              <button type="button" onClick={closeAssignModal} disabled={assigningBatch} className="btn-secondary">Cancel</button>
+              <button
+                type="button"
+                onClick={handleAssign}
+                disabled={assigningBatch || assignmentBatch.assignments.length === 0 || assignmentBatch.incompleteCount > 0 || assignmentBatch.duplicateCount > 0}
+                className="btn-primary min-w-28"
+              >
+                {assigningBatch
+                  ? 'Assigning...'
+                  : assignmentBatch.assignments.length > 1
+                  ? `Assign all (${assignmentBatch.assignments.length})`
+                  : 'Assign member'}
+              </button>
             </div>
           </div>
         </Modal>

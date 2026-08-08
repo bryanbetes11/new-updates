@@ -242,6 +242,24 @@ export interface Event {
   profiles?: Profile;
 }
 
+export type PostEventObservationCategory = 'sound' | 'instruments' | 'lighting' | 'service_flow' | 'team' | 'other';
+export type PostEventObservationStatus = 'open' | 'monitoring' | 'resolved';
+
+export interface PostEventObservation {
+  id: string;
+  org_id: string;
+  event_id: string;
+  author_id: string;
+  category: PostEventObservationCategory;
+  observation: string;
+  status: PostEventObservationStatus;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  created_at: string;
+  updated_at: string;
+  profiles?: Pick<Profile, 'first_name' | 'last_name' | 'avatar_url'>;
+}
+
 export interface EventAssignment {
   id: string;
   event_id: string;

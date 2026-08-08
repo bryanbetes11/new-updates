@@ -25,7 +25,7 @@ import { describeSetlistReviewAge, getSetlistPendingMessage } from '../lib/setli
 import { getSingleLyricsAutofill, normalizeLyricsInputForSave, normalizeLyricsSearchResults, type LyricsSearchResult } from '../lib/lyricsSearch';
 import { getEventAssignmentKey, prepareEventAssignmentBatch, type EventAssignmentDraft } from '../lib/eventAssignmentBatch';
 
-import type { Event, EventAssignment, Setlist, SetlistSong, Song, ServiceFormat, SetlistCheckReport } from '../types';
+import type { Event, EventAssignment, Setlist, SetlistSong, Song, ServiceFormat, SetlistCheckReport, PostEventObservation, PostEventObservationCategory, PostEventObservationStatus } from '../types';
 import { inferServiceFormat, SERVICE_FORMAT_LABELS } from '../lib/setlistCheckerEngine';
 import { SetlistReport } from '../components/setlist-checker/SetlistReport';
 import { CheckingAnimation } from '../components/setlist-checker/CheckingAnimation';
@@ -62,6 +62,21 @@ const serviceSongPanelTransition = { type: 'spring' as const, stiffness: 380, da
 const serviceSwipeOffsets = [-1, 0, 1] as const;
 const EVENT_CHART_OPEN_STORAGE_PREFIX = 'servesync:event-chart:open-song-id';
 const SONG_READY_DAYS = 90;
+
+const POST_EVENT_CATEGORIES: Array<{ value: PostEventObservationCategory; label: string }> = [
+  { value: 'sound', label: 'Sound' },
+  { value: 'instruments', label: 'Instruments' },
+  { value: 'lighting', label: 'Lighting' },
+  { value: 'service_flow', label: 'Service flow' },
+  { value: 'team', label: 'Team' },
+  { value: 'other', label: 'Other' },
+];
+
+const POST_EVENT_STATUS_LABELS: Record<PostEventObservationStatus, string> = {
+  open: 'Needs action',
+  monitoring: 'Monitoring',
+  resolved: 'Resolved',
+};
 
 const getErrorMessage = (error: unknown, fallback: string): string => {
   if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
@@ -263,6 +278,12 @@ export function EventDetail() {
   const [showCreateChatModal, setShowCreateChatModal] = useState(false);
   const [creatingChat, setCreatingChat] = useState(false);
   const [showSwapModal, setShowSwapModal] = useState(false);
+  const [showPastEventDetails, setShowPastEventDetails] = useState(false);
+  const [postEventObservations, setPostEventObservations] = useState<PostEventObservation[]>([]);
+  const [observationCategory, setObservationCategory] = useState<PostEventObservationCategory>('sound');
+  const [observationText, setObservationText] = useState('');
+  const [submittingObservation, setSubmittingObservation] = useState(false);
+  const [updatingObservationId, setUpdatingObservationId] = useState<string | null>(null);
   const serviceSongStageRef = useRef<HTMLDivElement | null>(null);
   const serviceSwipeAnimating = useRef(false);
   const serviceTrackAnimation = useRef<{ stop: () => void } | null>(null);
@@ -297,6 +318,10 @@ export function EventDetail() {
   useLayoutEffect(() => {
     resetEventDetailScroll();
   }, [id, resetEventDetailScroll]);
+
+  useEffect(() => {
+    setShowPastEventDetails(false);
+  }, [id]);
 
   useEffect(() => {
     if (loading) return;
@@ -480,7 +505,7 @@ export function EventDetail() {
   const fetchAll = useCallback(async () => {
     if (!id) return;
     try {
-      const [eventRes, assignRes, membersRes, memberRolesRes, setlistRes, songsRes, allSetlistsRes, sundayServicesRes, convRes] = await Promise.all([
+      const [eventRes, assignRes, membersRes, memberRolesRes, setlistRes, songsRes, allSetlistsRes, sundayServicesRes, convRes, observationsRes] = await Promise.all([
         supabase.from('events').select('*').eq('id', id).maybeSingle(),
         supabase.from('event_assignments').select('*, events(*), profiles(first_name, last_name, gender, avatar_url), roles(name)').eq('event_id', id),
         supabase.from('profiles').select('id, first_name, last_name'),
@@ -496,12 +521,23 @@ export function EventDetail() {
         supabase.from('setlists').select('id, status, event_id, events(event_date), setlist_songs(song_id)').eq('status', 'approved'),
         supabase.from('events').select('*').eq('event_type', 'Sunday Service').gte('event_date', new Date().toISOString().split('T')[0]).order('event_date'),
         supabase.from('conversations').select('id').eq('event_id', id).eq('type', 'event').maybeSingle(),
+        supabase
+          .from('post_event_observations')
+          .select('*, profiles!post_event_observations_author_id_fkey(first_name, last_name, avatar_url)')
+          .eq('event_id', id)
+          .order('created_at', { ascending: false }),
       ]);
       setEventConversationId(convRes.data?.id ?? null);
       setEvent(eventRes.data);
       setAssignments(assignRes.data || []);
       setMembers(membersRes.data || []);
       setMemberRoles(memberRolesRes.data || []);
+      if (observationsRes.error) {
+        console.error('Failed to load post-event observations:', observationsRes.error);
+        setPostEventObservations([]);
+      } else {
+        setPostEventObservations((observationsRes.data || []) as PostEventObservation[]);
+      }
       if (setlistRes.data) {
         setSetlist(setlistRes.data);
         setSetlistSongs(setlistRes.data.setlist_songs || []);
@@ -1779,6 +1815,86 @@ const openLyricsModal = (ss: SetlistSong) => {
     }
   };
 
+  const refreshPostEventObservations = async () => {
+    if (!id) return;
+
+    const { data, error } = await supabase
+      .from('post_event_observations')
+      .select('*, profiles!post_event_observations_author_id_fkey(first_name, last_name, avatar_url)')
+      .eq('event_id', id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    setPostEventObservations((data || []) as PostEventObservation[]);
+  };
+
+  const handleAddPostEventObservation = async () => {
+    const trimmedObservation = observationText.trim();
+    if (!id || !user || !trimmedObservation || submittingObservation) return;
+
+    setSubmittingObservation(true);
+    try {
+      const { error } = await supabase.from('post_event_observations').insert({
+        event_id: id,
+        author_id: user.id,
+        category: observationCategory,
+        observation: trimmedObservation,
+      });
+
+      if (error) throw error;
+      setObservationText('');
+      await refreshPostEventObservations();
+      toast('success', 'Observation added');
+    } catch (error) {
+      toast('error', getErrorMessage(error, 'Failed to add observation'));
+    } finally {
+      setSubmittingObservation(false);
+    }
+  };
+
+  const handleUpdateObservationStatus = async (observationId: string, status: PostEventObservationStatus) => {
+    if (!user || updatingObservationId) return;
+
+    setUpdatingObservationId(observationId);
+    try {
+      const resolution = status === 'resolved'
+        ? { resolved_at: new Date().toISOString(), resolved_by: user.id }
+        : { resolved_at: null, resolved_by: null };
+      const { error } = await supabase
+        .from('post_event_observations')
+        .update({ status, ...resolution })
+        .eq('id', observationId);
+
+      if (error) throw error;
+      setPostEventObservations(current => current.map(observation => (
+        observation.id === observationId
+          ? { ...observation, status, ...resolution, updated_at: new Date().toISOString() }
+          : observation
+      )));
+      toast('success', `Marked as ${POST_EVENT_STATUS_LABELS[status].toLowerCase()}`);
+    } catch (error) {
+      toast('error', getErrorMessage(error, 'Failed to update observation'));
+    } finally {
+      setUpdatingObservationId(null);
+    }
+  };
+
+  const handleDeletePostEventObservation = async (observationId: string) => {
+    if (updatingObservationId || !window.confirm('Delete this observation?')) return;
+
+    setUpdatingObservationId(observationId);
+    try {
+      const { error } = await supabase.from('post_event_observations').delete().eq('id', observationId);
+      if (error) throw error;
+      setPostEventObservations(current => current.filter(observation => observation.id !== observationId));
+      toast('success', 'Observation deleted');
+    } catch (error) {
+      toast('error', getErrorMessage(error, 'Failed to delete observation'));
+    } finally {
+      setUpdatingObservationId(null);
+    }
+  };
+
   if (loading) return <PageLoader />;
   if (!event) return (
     <div className="page-container page-bottom-pad flex min-h-[60vh] items-center justify-center bg-[#050505] px-5 text-center text-white">
@@ -1854,6 +1970,12 @@ const openLyricsModal = (ss: SetlistSong) => {
 
   // Visual urgency state for hero card (mirrors Events list logic)
   const heroIsPast = parseISO(event.event_date) < startOfDay(new Date());
+  const postEventFeedbackOpen = heroIsPast || new Date() >= getManilaEventDateTime(
+    event.event_date,
+    event.end_time || event.start_time || '23:59',
+  );
+  const canManagePostEventObservations = isLeader || isProductionDirector;
+  const activePostEventObservationCount = postEventObservations.filter(observation => observation.status !== 'resolved').length;
   const heroProposalDue = event.proposal_due_date ? parseISO(event.proposal_due_date) : null;
   const heroDaysUntilDue = heroProposalDue ? differenceInDays(heroProposalDue, new Date()) : null;
   const heroHasApprovedSetlist = setlist?.status === 'approved';
@@ -2336,6 +2458,28 @@ const openLyricsModal = (ss: SetlistSong) => {
         </motion.div>
 
         {/* ── Pending Assignment Banner ────────────────── */}
+        {postEventFeedbackOpen && (
+          <button
+            type="button"
+            onClick={() => setShowPastEventDetails(current => !current)}
+            aria-expanded={showPastEventDetails}
+            aria-controls="past-event-details"
+            className="group flex min-h-14 w-full items-center justify-between gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.035] px-4 py-3 text-left transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e]"
+          >
+            <span className="min-w-0">
+              <span className="block text-sm font-bold text-white/85">
+                {showPastEventDetails ? 'Hide event details' : 'Show event details'}
+              </span>
+              <span className="mt-0.5 block text-[11px] leading-relaxed text-white/35">
+                Schedule, attendance, setlist, and team assignments
+              </span>
+            </span>
+            <ChevronDown className={`h-4 w-4 shrink-0 text-white/45 transition-transform duration-200 ${showPastEventDetails ? 'rotate-180' : ''}`} />
+          </button>
+        )}
+
+        {(!postEventFeedbackOpen || showPastEventDetails) && (
+          <div id="past-event-details" className="contents">
         {myAssignment && myAssignment.status === 'pending' && (
           <motion.div
             {...blurUp(0.2)}
@@ -3222,6 +3366,148 @@ const openLyricsModal = (ss: SetlistSong) => {
         </div>
         )}
 
+          </div>
+        )}
+
+        {(postEventFeedbackOpen || postEventObservations.length > 0) && (
+          <div className="animate-slide-up border-t border-gray-200/70 pt-4 dark:border-white/[0.08]" style={{ animationDelay: '145ms' }}>
+            <div>
+              <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="flex items-center gap-2 text-lg font-black text-gray-900 dark:text-white">
+                    <ClipboardCheck className="h-4 w-4 text-brand-600 dark:text-brand-400" />
+                    Past-event Observations
+                  </h2>
+                  <p className="mt-1 max-w-2xl text-xs leading-relaxed text-gray-500 dark:text-white/45">
+                    Record what worked, what needs attention, and what the team should keep monitoring.
+                  </p>
+                </div>
+                {postEventObservations.length > 0 && (
+                  <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${activePostEventObservationCount > 0 ? 'bg-amber-500/10 text-amber-300' : 'bg-emerald-500/10 text-emerald-300'}`}>
+                    {activePostEventObservationCount > 0 ? `${activePostEventObservationCount} active` : 'All resolved'}
+                  </span>
+                )}
+              </div>
+
+              {postEventFeedbackOpen && (
+                <div className="rounded-2xl border border-gray-200/80 bg-white/[0.025] p-3.5 dark:border-white/[0.08]">
+                  <div className="grid gap-3 sm:grid-cols-[11rem_minmax(0,1fr)]">
+                    <div>
+                      <label htmlFor="post-event-category" className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-white/55">Area</label>
+                      <select
+                        id="post-event-category"
+                        value={observationCategory}
+                        onChange={event => setObservationCategory(event.target.value as PostEventObservationCategory)}
+                        className="input-field min-h-11 text-sm"
+                      >
+                        {POST_EVENT_CATEGORIES.map(category => (
+                          <option key={category.value} value={category.value}>{category.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="post-event-observation" className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-white/55">Comment or observation</label>
+                      <textarea
+                        id="post-event-observation"
+                        value={observationText}
+                        onChange={event => setObservationText(event.target.value)}
+                        maxLength={2000}
+                        rows={3}
+                        placeholder="Example: The main microphone cut out twice. Check the cable and monitor it during the next service."
+                        className="input-field resize-y text-sm leading-relaxed"
+                      />
+                      <div className="mt-2 flex items-center justify-between gap-3">
+                        <span className="text-[11px] text-gray-400 dark:text-white/30">{observationText.length}/2000</span>
+                        <button
+                          type="button"
+                          onClick={handleAddPostEventObservation}
+                          disabled={!observationText.trim() || submittingObservation}
+                          className="btn-primary min-h-11 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {submittingObservation ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                          {submittingObservation ? 'Adding...' : 'Add observation'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {postEventObservations.length === 0 ? (
+                <div className="py-5 text-center">
+                  <CheckCircle className="mx-auto h-6 w-6 text-emerald-400/70" />
+                  <p className="mt-2 text-sm font-semibold text-gray-700 dark:text-white/70">No observations yet</p>
+                  <p className="mt-0.5 text-xs text-gray-400 dark:text-white/35">Add anything the team should improve, fix, or watch next time.</p>
+                </div>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  {postEventObservations.map(observation => {
+                    const categoryLabel = POST_EVENT_CATEGORIES.find(category => category.value === observation.category)?.label || 'Other';
+                    const authorName = `${observation.profiles?.first_name || ''} ${observation.profiles?.last_name || ''}`.trim() || 'Team member';
+                    const statusClass = observation.status === 'resolved'
+                      ? 'bg-emerald-500/10 text-emerald-300 ring-emerald-500/15'
+                      : observation.status === 'monitoring'
+                        ? 'bg-blue-500/10 text-blue-300 ring-blue-500/15'
+                        : 'bg-amber-500/10 text-amber-300 ring-amber-500/15';
+
+                    return (
+                      <div key={observation.id} className="rounded-2xl border border-gray-200/75 bg-white/[0.025] px-3.5 py-3.5 dark:border-white/[0.07]">
+                        <div className="flex items-start gap-3">
+                          <Avatar
+                            src={observation.profiles?.avatar_url}
+                            firstName={observation.profiles?.first_name || '?'}
+                            lastName={observation.profiles?.last_name}
+                            size="sm"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="rounded-full bg-white/[0.055] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-gray-500 dark:text-white/50">{categoryLabel}</span>
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ${statusClass}`}>{POST_EVENT_STATUS_LABELS[observation.status]}</span>
+                            </div>
+                            <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-700 dark:text-white/78">{observation.observation}</p>
+                            <p className="mt-2 text-[11px] text-gray-400 dark:text-white/30">
+                              {authorName} · {format(parseISO(observation.created_at), 'MMM d, h:mm a')}
+                            </p>
+                          </div>
+                        </div>
+
+                        {(canManagePostEventObservations || observation.author_id === user?.id) && (
+                          <div className="mt-3 flex items-center justify-end gap-2 border-t border-gray-200/60 pt-2.5 dark:border-white/[0.06]">
+                            {canManagePostEventObservations && (
+                              <select
+                                value={observation.status}
+                                onChange={event => handleUpdateObservationStatus(observation.id, event.target.value as PostEventObservationStatus)}
+                                disabled={updatingObservationId === observation.id}
+                                aria-label={`Update status for ${categoryLabel} observation`}
+                                className="min-h-10 rounded-full border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white/70"
+                              >
+                                <option value="open">Needs action</option>
+                                <option value="monitoring">Monitoring</option>
+                                <option value="resolved">Resolved</option>
+                              </select>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleDeletePostEventObservation(observation.id)}
+                              disabled={updatingObservationId === observation.id}
+                              className="inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-red-500/10 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-50 dark:text-white/30"
+                              title="Delete observation"
+                              aria-label="Delete observation"
+                            >
+                              {updatingObservationId === observation.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {(!postEventFeedbackOpen || showPastEventDetails) && (
         <div className="animate-slide-up border-t border-gray-200/70 pt-4 dark:border-white/[0.08]" style={{ animationDelay: '150ms' }}>
           <div>
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -3331,6 +3617,8 @@ const openLyricsModal = (ss: SetlistSong) => {
             )}
           </div>
         </div>
+
+        )}
 
         <Modal
           open={showAssign}

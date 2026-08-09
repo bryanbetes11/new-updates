@@ -100,6 +100,7 @@ Deno.serve(async (req: Request) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const url = new URL(req.url);
+    const dryRun = url.searchParams.get("dry_run") === "true";
     const debugNowParam = url.searchParams.get("debug_now");
     const cronKey = url.searchParams.get("cron_key");
     const authHeader = req.headers.get("Authorization") || "";
@@ -200,15 +201,19 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    if (notifications.length > 0) {
+    if (notifications.length > 0 && !dryRun) {
       const { error: insertError } = await supabase.from("notifications").insert(notifications);
       if (insertError) throw new Error(insertError.message);
     }
 
     return new Response(
       JSON.stringify({
-        message: `Sent ${notifications.length} leadership action reminders`,
-        notificationsSent: notifications.length,
+        message: dryRun
+          ? `Prepared ${notifications.length} leadership action reminders`
+          : `Sent ${notifications.length} leadership action reminders`,
+        notificationsSent: dryRun ? 0 : notifications.length,
+        notificationsPrepared: notifications.length,
+        dryRun,
         manilaNow: manilaNow.toISOString(),
         reminderKey,
       }),

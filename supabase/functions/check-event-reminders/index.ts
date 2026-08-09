@@ -7,6 +7,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+const CRON_SHARED_KEY = "event-reminders-cron-2026-05-04";
+
 interface Assignment {
   user_id: string;
   roles: { name: string } | null;
@@ -23,7 +25,12 @@ interface Event {
   linked_event_id: string | null;
   event_assignments: Assignment[];
   song_leader_profile?: { first_name: string; last_name: string; gender: string | null } | null;
-  linked_event?: { song_leader_id: string | null; song_leader_profile?: { first_name: string; last_name: string; gender: string | null } | null } | null;
+}
+
+interface LinkedEvent {
+  id: string;
+  song_leader_id: string | null;
+  song_leader_profile?: { first_name: string; last_name: string; gender: string | null } | null;
 }
 
 interface NotificationInsert {
@@ -66,6 +73,19 @@ Deno.serve(async (req: Request) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const url = new URL(req.url);
+    const dryRun = url.searchParams.get("dry_run") === "true";
+    const cronKey = url.searchParams.get("cron_key");
+    const authHeader = req.headers.get("Authorization") || "";
+    const isServiceRoleRequest = authHeader === `Bearer ${supabaseKey}`;
+    const isCronKeyRequest = cronKey === CRON_SHARED_KEY;
+
+    if (!isServiceRoleRequest && !isCronKeyRequest) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const reminderType = url.searchParams.get("type") || "day_before";
 
     const phNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
@@ -95,11 +115,7 @@ Deno.serve(async (req: Request) => {
       .select(`
         id, title, event_date, event_type, start_time, song_leader_id, linked_event_id,
         event_assignments(user_id, roles(name), profiles(first_name, last_name, gender)),
-        song_leader_profile:profiles!events_song_leader_id_fkey(first_name, last_name, gender),
-        linked_event:events!events_linked_event_id_fkey(
-          song_leader_id,
-          song_leader_profile:profiles!events_song_leader_id_fkey(first_name, last_name, gender)
-        )
+        song_leader_profile:profiles!events_song_leader_id_fkey(first_name, last_name, gender)
       `)
       .eq("event_date", targetDate);
 
@@ -107,18 +123,43 @@ Deno.serve(async (req: Request) => {
       throw eventsError;
     }
 
+    const linkedEventIds = [...new Set(
+      ((events || []) as Event[])
+        .map((event) => event.linked_event_id)
+        .filter((eventId): eventId is string => Boolean(eventId)),
+    )];
+    const linkedEventsById = new Map<string, LinkedEvent>();
+
+    if (linkedEventIds.length > 0) {
+      const { data: linkedEvents, error: linkedEventsError } = await supabase
+        .from("events")
+        .select(`
+          id, song_leader_id,
+          song_leader_profile:profiles!events_song_leader_id_fkey(first_name, last_name, gender)
+        `)
+        .in("id", linkedEventIds);
+
+      if (linkedEventsError) throw linkedEventsError;
+      for (const linkedEvent of (linkedEvents || []) as LinkedEvent[]) {
+        linkedEventsById.set(linkedEvent.id, linkedEvent);
+      }
+    }
+
     let notificationsSent = 0;
     const notifications: NotificationInsert[] = [];
 
     for (const event of (events || []) as Event[]) {
       let songLeaderName = "";
+      const linkedEvent = event.linked_event_id
+        ? linkedEventsById.get(event.linked_event_id)
+        : null;
 
       if (event.song_leader_profile) {
         const prefix = getNamePrefix(event.song_leader_profile.gender);
         songLeaderName = `${prefix}${event.song_leader_profile.first_name} ${event.song_leader_profile.last_name}`;
-      } else if (event.linked_event?.song_leader_profile) {
-        const prefix = getNamePrefix(event.linked_event.song_leader_profile.gender);
-        songLeaderName = `${prefix}${event.linked_event.song_leader_profile.first_name} ${event.linked_event.song_leader_profile.last_name}`;
+      } else if (linkedEvent?.song_leader_profile) {
+        const prefix = getNamePrefix(linkedEvent.song_leader_profile.gender);
+        songLeaderName = `${prefix}${linkedEvent.song_leader_profile.first_name} ${linkedEvent.song_leader_profile.last_name}`;
       }
 
       const eventTime = formatTime12Hour(event.start_time);
@@ -171,7 +212,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    if (notifications.length > 0) {
+    if (notifications.length > 0 && !dryRun) {
       const { error: insertError } = await supabase
         .from("notifications")
         .insert(notifications);
@@ -187,6 +228,8 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({
         message: `Checked ${events?.length || 0} events for ${targetDate}, sent ${notificationsSent} ${reminderType} reminders`,
         notificationsSent,
+        notificationsPrepared: notifications.length,
+        dryRun,
         targetDate,
         reminderType,
       }),

@@ -1157,18 +1157,6 @@ export function EventDetail() {
     }
 
     setSetlist(prev => prev ? { ...prev, status: 'pending_review' } : prev);
-    if (setlist.approved_by) {
-      const { error: notificationError } = await supabase.from('notifications').insert({
-        user_id: setlist.approved_by,
-        type: 'setlist_changed',
-        title: 'Setlist Updated — Re-approval Needed',
-        body: `The setlist for "${event.title}" was updated after approval and needs to be reviewed again.`,
-        data: { event_id: event.id, setlist_id: setlist.id },
-      });
-      if (notificationError) {
-        console.error('Failed to notify approver about setlist update:', notificationError);
-      }
-    }
     toast('info', 'Setlist updated — re-approval required');
     return true;
   };
@@ -1405,47 +1393,6 @@ export function EventDetail() {
     if (error) { toast('error', 'Failed to update setlist'); return; }
 
     setSetlist({ ...setlist, status: action, review_note: (isReviewDecision && notes) ? notes : setlist.review_note, approval_notes: action === 'revision_requested' && notes ? notes : setlist.approval_notes, approved_by: action === 'approved' && user ? user.id : setlist.approved_by } as Setlist);
-
-    if (action === 'approved' && event) {
-      const notifRecipients = assignments
-        .filter(a => a.user_id !== user?.id)
-        .map(a => ({
-          user_id: a.user_id,
-          type: 'setlist_approved',
-          title: 'Setlist Approved',
-          body: `The setlist for "${event.title}" has been approved.`,
-          data: { event_id: event.id, setlist_id: setlist.id },
-        }));
-      if (notifRecipients.length > 0) {
-        await supabase.from('notifications').insert(notifRecipients);
-      }
-    }
-
-    if (action === 'revision_requested') {
-      const songLeaderAssignment = assignments.find(a => a.roles?.name === 'Song Leader');
-      if (songLeaderAssignment && event) {
-        await supabase.from('notifications').insert({
-          user_id: songLeaderAssignment.user_id,
-          type: 'setlist_revision',
-          title: 'Setlist Revision Requested',
-          body: `The setlist for "${event.title}" needs revision. Reason: ${notes || 'No reason provided'}`,
-          data: { event_id: event.id, setlist_id: setlist.id },
-        });
-      }
-    }
-
-    if (action === 'rejected') {
-      const songLeaderAssignment = assignments.find(a => a.roles?.name === 'Song Leader');
-      if (songLeaderAssignment && event) {
-        await supabase.from('notifications').insert({
-          user_id: songLeaderAssignment.user_id,
-          type: 'setlist_rejected',
-          title: 'Setlist Rejected',
-          body: `The setlist for "${event.title}" was not approved. Reason: ${notes || 'No reason provided'}`,
-          data: { event_id: event.id, setlist_id: setlist.id },
-        });
-      }
-    }
 
     const label: Record<string, string> = {
       approved: 'Setlist approved',

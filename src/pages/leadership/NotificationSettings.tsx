@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BellRing, ChevronDown, Loader2, RotateCcw, Save, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, BellRing, CheckCircle2, ChevronDown, Loader2, RefreshCw, RotateCcw, Save, Send, ShieldAlert, Smartphone } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -29,6 +29,20 @@ type SystemSettings = {
   default_timezone: string;
 };
 
+type PushReadinessMember = {
+  user_id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  ministry_status: string;
+  is_onboarded: boolean;
+  subscription_count: number;
+  preference_enabled: boolean;
+  push_ready: boolean;
+  last_push_status: string | null;
+  last_push_sent_at: string | null;
+};
+
 const categoryLabels: Record<string, string> = {
   assignments: 'Assignments', events: 'Events', attendance: 'Attendance',
   deadlines: 'Deadlines', setlists: 'Setlists', communication: 'Communication',
@@ -42,20 +56,25 @@ export function NotificationSettings() {
   const [rules, setRules] = useState<Rule[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [pushReadiness, setPushReadiness] = useState<PushReadinessMember[]>([]);
+  const [refreshingReadiness, setRefreshingReadiness] = useState(false);
+  const [testingMemberId, setTestingMemberId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!profile?.org_id || !isOrgAdmin) return;
     let active = true;
     const load = async () => {
-      const [settingsResult, rulesResult] = await Promise.all([
+      const [settingsResult, rulesResult, readinessResult] = await Promise.all([
         supabase.from('notification_system_settings').select('push_delivery_enabled, default_timezone').eq('org_id', profile.org_id).maybeSingle(),
         supabase.from('notification_rules').select('*').eq('org_id', profile.org_id).order('category').order('label'),
+        supabase.rpc('get_org_push_readiness'),
       ]);
       if (!active) return;
       if (settingsResult.error || rulesResult.error) toast('error', 'Could not load notification controls');
       else {
         if (settingsResult.data) setSettings(settingsResult.data as SystemSettings);
         setRules((rulesResult.data || []) as Rule[]);
+        setPushReadiness((readinessResult.data || []) as PushReadinessMember[]);
       }
       setLoading(false);
     };
@@ -70,6 +89,26 @@ export function NotificationSettings() {
 
   const patchRule = (id: string, patch: Partial<Rule>) => {
     setRules(current => current.map(rule => rule.id === id ? { ...rule, ...patch } : rule));
+  };
+
+  const refreshPushReadiness = async () => {
+    setRefreshingReadiness(true);
+    const { data, error } = await supabase.rpc('get_org_push_readiness');
+    setRefreshingReadiness(false);
+    if (error) toast('error', 'Could not refresh push readiness');
+    else setPushReadiness((data || []) as PushReadinessMember[]);
+  };
+
+  const sendPushTest = async (member: PushReadinessMember) => {
+    setTestingMemberId(member.user_id);
+    const { error } = await supabase.rpc('send_push_readiness_test', { p_user_id: member.user_id });
+    setTestingMemberId(null);
+    if (error) {
+      toast('error', 'Could not send the notification test');
+      return;
+    }
+    toast('success', `Notification test sent to ${member.first_name}`);
+    window.setTimeout(refreshPushReadiness, 1200);
   };
 
   const save = async () => {
@@ -128,6 +167,14 @@ export function NotificationSettings() {
         </div>
       </section>
 
+      <PushReadinessPanel
+        members={pushReadiness}
+        refreshing={refreshingReadiness}
+        testingMemberId={testingMemberId}
+        onRefresh={refreshPushReadiness}
+        onTest={sendPushTest}
+      />
+
       {Object.entries(groupedRules).map(([category, categoryRules]) => (
         <section key={category} className="overflow-hidden rounded-[1.7rem] border border-gray-200/80 bg-white shadow-sm dark:border-white/[0.06] dark:bg-white/[0.025]">
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4 dark:border-white/[0.06]">
@@ -171,6 +218,87 @@ export function NotificationSettings() {
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save notification controls
       </button>
     </div>
+  );
+}
+
+function PushReadinessPanel({
+  members,
+  refreshing,
+  testingMemberId,
+  onRefresh,
+  onTest,
+}: {
+  members: PushReadinessMember[];
+  refreshing: boolean;
+  testingMemberId: string | null;
+  onRefresh: () => void;
+  onTest: (member: PushReadinessMember) => void;
+}) {
+  const onboarded = members.filter(member => member.is_onboarded && member.ministry_status === 'active');
+  const readyCount = onboarded.filter(member => member.push_ready).length;
+  const needsSetup = onboarded.filter(member => !member.push_ready);
+
+  return (
+    <section className="overflow-hidden rounded-[1.7rem] border border-gray-200/80 bg-white shadow-sm dark:border-white/[0.06] dark:bg-white/[0.025]">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-white/[0.06]">
+        <div className="flex items-center gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-600 dark:bg-sky-400/10 dark:text-sky-300">
+            <Smartphone className="h-5 w-5" />
+          </span>
+          <div>
+            <h3 className="text-sm font-black text-gray-950 dark:text-white">Push readiness</h3>
+            <p className="mt-0.5 text-xs text-gray-500 dark:text-white/40">{readyCount} of {onboarded.length} onboarded active members are ready</p>
+          </div>
+        </div>
+        <button type="button" onClick={onRefresh} disabled={refreshing} className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 px-3 py-2 text-xs font-black text-gray-600 transition hover:bg-gray-50 disabled:opacity-60 dark:border-white/10 dark:text-white/60 dark:hover:bg-white/[0.05]">
+          <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
+        </button>
+      </div>
+
+      <div className="grid gap-3 border-b border-gray-100 px-5 py-4 dark:border-white/[0.06] sm:grid-cols-2">
+        <div className="flex items-center gap-3 rounded-2xl bg-emerald-50 px-4 py-3 dark:bg-emerald-400/[0.07]">
+          <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-300" />
+          <div><p className="text-lg font-black text-emerald-800 dark:text-emerald-200">{readyCount}</p><p className="text-xs font-bold text-emerald-700/65 dark:text-emerald-200/55">Ready for push</p></div>
+        </div>
+        <div className="flex items-center gap-3 rounded-2xl bg-amber-50 px-4 py-3 dark:bg-amber-400/[0.07]">
+          <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-300" />
+          <div><p className="text-lg font-black text-amber-800 dark:text-amber-200">{needsSetup.length}</p><p className="text-xs font-bold text-amber-700/65 dark:text-amber-200/55">Needs setup</p></div>
+        </div>
+      </div>
+
+      <div className="divide-y divide-gray-100 dark:divide-white/[0.05]">
+        {onboarded.map(member => {
+          const name = `${member.first_name || ''} ${member.last_name || ''}`.trim() || member.email;
+          const lastSuccess = member.last_push_sent_at
+            ? new Date(member.last_push_sent_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
+            : 'No successful delivery yet';
+          const statusText = member.push_ready
+            ? member.last_push_status === 'failed'
+              ? 'Registered device · Latest delivery failed'
+              : `Ready · ${member.subscription_count} device${member.subscription_count === 1 ? '' : 's'}`
+            : member.preference_enabled ? 'No registered device' : 'Push preference disabled';
+          return (
+            <div key={member.user_id} className="flex flex-wrap items-center gap-3 px-5 py-3.5">
+              <span className={`h-2.5 w-2.5 rounded-full ${member.push_ready ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-black text-gray-950 dark:text-white">{name}</p>
+                <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-white/40">{statusText} · {lastSuccess}</p>
+                <p className="mt-0.5 truncate text-[11px] text-gray-400 dark:text-white/30">{member.email}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => onTest(member)}
+                disabled={testingMemberId === member.user_id}
+                className="inline-flex items-center gap-1.5 rounded-full bg-gray-950 px-3 py-2 text-[11px] font-black text-white transition hover:bg-gray-800 disabled:opacity-60 dark:bg-white dark:text-black dark:hover:bg-white/85"
+              >
+                {testingMemberId === member.user_id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                Test
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

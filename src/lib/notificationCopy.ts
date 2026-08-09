@@ -24,6 +24,10 @@ const copy: Record<string, NotificationCopy> = {
     title: 'New Event',
     body: '[Event] was added for [event date].',
   },
+  featured_event_created: {
+    title: '[Event type] Scheduled',
+    body: '[Event] was added for [event date].',
+  },
   event_updated: {
     title: 'Event Updated',
     body: '[Event] has updated schedule details for [event date].',
@@ -68,6 +72,10 @@ const copy: Record<string, NotificationCopy> = {
     title: 'Attendance Alert',
     body: '[Member] has reached [offense level] for [quarter]. Action required: [next action].',
   },
+  attendance_auto_absent: {
+    title: 'Attendance Recorded as Absent',
+    body: 'Your attendance for [event] was recorded as absent because no attendance was submitted.',
+  },
   proposal_reminder: {
     title: 'Setlist Proposal Reminder',
     body: 'Submit the proposal for [event] on [event date] before 11:59 PM.',
@@ -99,6 +107,14 @@ const copy: Record<string, NotificationCopy> = {
   setlist_changed: {
     title: 'Setlist Updated — Re-approval Needed',
     body: 'The setlist for [event] was updated after approval and needs to be reviewed again.',
+  },
+  post_event_observation_added: {
+    title: 'New Post-event Observation',
+    body: '[Member] added a [category] observation for [event].',
+  },
+  post_event_observation_status_changed: {
+    title: 'Observation Status Changed',
+    body: 'A [category] observation for [event] is now [status].',
   },
   announcement: {
     title: 'New Announcement: [announcement title]',

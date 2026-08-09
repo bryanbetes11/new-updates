@@ -147,6 +147,7 @@ export function PushNotificationSetting({ surface = 'profile' }: PushNotificatio
         await savePushSubscription(sub);
         await savePushPreference(true);
         setPushEnabled(true);
+        window.dispatchEvent(new CustomEvent('push-readiness-updated', { detail: { enabled: true } }));
         toast('success', 'Push notifications enabled');
       } catch (err) {
         toast('error', err instanceof Error ? err.message : 'Failed to enable');
@@ -171,6 +172,7 @@ export function PushNotificationSetting({ surface = 'profile' }: PushNotificatio
 
       await savePushPreference(false);
       setPushEnabled(false);
+      window.dispatchEvent(new CustomEvent('push-readiness-updated', { detail: { enabled: false } }));
       toast('info', 'Push notifications disabled');
     } catch {
       toast('error', 'Failed to disable');

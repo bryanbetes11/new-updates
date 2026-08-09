@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Navigation } from './Navigation';
 import { useAuth } from '../contexts/AuthContext';
 import { BillingStatusBanner } from './BillingStatusBanner';
+import { PushReadinessBanner } from './PushReadinessBanner';
 import { buildAppRoute, rememberRoute } from '../lib/navigationHistory';
 import { supabase } from '../lib/supabase';
 
@@ -280,6 +281,7 @@ export function Layout() {
                   : 'px-4 sm:px-6 lg:px-8 mobile-layout-padding'
             }
           >
+            {!staticHideNav && <PushReadinessBanner />}
             {!staticHideNav && !isWideShellPage && (
               <div className="max-w-7xl mx-auto pt-4 sm:pt-5">
                 <BillingStatusBanner />

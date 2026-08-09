@@ -3495,7 +3495,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                         : 'bg-amber-500/10 text-amber-300 ring-amber-500/15';
 
                     return (
-                      <div key={observation.id} className="rounded-2xl border border-gray-200/75 bg-white/[0.025] px-3.5 py-3.5 dark:border-white/[0.07]">
+                      <div key={observation.id} className="rounded-2xl border border-gray-200/75 bg-white/[0.035] px-3.5 py-3.5 dark:border-white/[0.10]">
                         <div className="flex items-start gap-3">
                           <Avatar
                             src={observation.profiles?.avatar_url}
@@ -3505,11 +3505,11 @@ const openLyricsModal = (ss: SetlistSong) => {
                           />
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
-                              <span className="rounded-full bg-white/[0.055] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-gray-500 dark:text-white/50">{categoryLabel}</span>
+                              <span className="rounded-full bg-white/[0.07] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-gray-500 dark:text-white/[0.68]">{categoryLabel}</span>
                               <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ${statusClass}`}>{POST_EVENT_STATUS_LABELS[observation.status]}</span>
                             </div>
-                            <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-700 dark:text-white/78">{observation.observation}</p>
-                            <p className="mt-2 text-[11px] text-gray-400 dark:text-white/30">
+                            <p className="mt-2 whitespace-pre-wrap break-words text-sm font-medium leading-relaxed text-gray-700 dark:text-white/[0.92]">{observation.observation}</p>
+                            <p className="mt-2 text-[11px] font-medium text-gray-500 dark:text-white/[0.58]">
                               {authorName} · {format(parseISO(observation.created_at), 'MMM d, h:mm a')}
                             </p>
                           </div>

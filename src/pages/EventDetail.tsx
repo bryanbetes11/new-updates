@@ -24,7 +24,7 @@ import { useSmartBack } from '../lib/navigationHistory';
 import { describeSetlistReviewAge, getSetlistPendingMessage } from '../lib/setlistReviewAge';
 import { getSingleLyricsAutofill, normalizeLyricsInputForSave, normalizeLyricsSearchResults, type LyricsSearchResult } from '../lib/lyricsSearch';
 import { getEventAssignmentKey, prepareEventAssignmentBatch, type EventAssignmentDraft } from '../lib/eventAssignmentBatch';
-import { isEventCompleted, type EventLifecycleOverride } from '../lib/eventLifecycle';
+import { hasEventScheduleEnded, isEventCompleted, type EventLifecycleOverride } from '../lib/eventLifecycle';
 
 import type { Event, EventAssignment, Setlist, SetlistSong, Song, ServiceFormat, SetlistCheckReport, PostEventObservation, PostEventObservationCategory, PostEventObservationStatus } from '../types';
 import { inferServiceFormat, SERVICE_FORMAT_LABELS } from '../lib/setlistCheckerEngine';
@@ -234,6 +234,7 @@ export function EventDetail() {
   const [editForm, setEditForm] = useState({ title: '', description: '', event_type: '', event_date: '', start_time: '', end_time: '', song_leader_id: '', linked_event_id: '' });
   const [savingEventEdit, setSavingEventEdit] = useState(false);
   const [savingLifecycleOverride, setSavingLifecycleOverride] = useState(false);
+  const [lifecycleNow, setLifecycleNow] = useState(() => new Date());
   const [sundayServices, setSundayServices] = useState<Event[]>([]);
   const [attendance, setAttendance] = useState<EventAttendance | null>(null);
   const [allAttendance, setAllAttendance] = useState<EventAttendance[]>([]);
@@ -500,6 +501,19 @@ export function EventDetail() {
       if (serviceModeEnterTimer.current) {
         window.clearTimeout(serviceModeEnterTimer.current);
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    const refreshLifecycle = () => setLifecycleNow(new Date());
+    const interval = window.setInterval(refreshLifecycle, 30_000);
+    window.addEventListener('focus', refreshLifecycle);
+    document.addEventListener('visibilitychange', refreshLifecycle);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refreshLifecycle);
+      document.removeEventListener('visibilitychange', refreshLifecycle);
     };
   }, []);
 
@@ -2001,14 +2015,15 @@ const openLyricsModal = (ss: SetlistSong) => {
 
   // Visual urgency state for hero card (mirrors Events list logic)
   const heroIsPast = isEventCompleted(event);
-  const postEventFeedbackOpen = heroIsPast;
+  const heroScheduleEnded = hasEventScheduleEnded(event, lifecycleNow);
+  const postEventFeedbackOpen = heroIsPast || heroScheduleEnded;
   const canManagePostEventObservations = isLeader || isProductionDirector;
   const activePostEventObservationCount = postEventObservations.filter(observation => observation.status !== 'resolved').length;
   const heroProposalDue = event.proposal_due_date ? parseISO(event.proposal_due_date) : null;
   const heroDaysUntilDue = heroProposalDue ? differenceInDays(heroProposalDue, new Date()) : null;
   const heroHasApprovedSetlist = setlist?.status === 'approved';
-  const heroIsOverdue = heroDaysUntilDue !== null && heroDaysUntilDue < 0 && !heroHasApprovedSetlist && !heroIsPast;
-  const heroIsDueSoon = heroDaysUntilDue !== null && heroDaysUntilDue >= 0 && heroDaysUntilDue <= 3 && !heroHasApprovedSetlist && !heroIsPast;
+  const heroIsOverdue = heroDaysUntilDue !== null && heroDaysUntilDue < 0 && !heroHasApprovedSetlist && !postEventFeedbackOpen;
+  const heroIsDueSoon = heroDaysUntilDue !== null && heroDaysUntilDue >= 0 && heroDaysUntilDue <= 3 && !heroHasApprovedSetlist && !postEventFeedbackOpen;
   const isApprovedSetlist = setlist?.status === 'approved';
   const showSetlistEditControls = !isApprovedSetlist || setlistEditMode;
   const canEditSetlistSongDetails = showSetlistEditControls && (canManageSetlist || canEditSetlist);
@@ -2481,6 +2496,11 @@ const openLyricsModal = (ss: SetlistSong) => {
                   {heroIsPast && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.09] px-2 py-1 text-[10px] font-black text-white/68">
                       <CheckCircle className="h-3 w-3" /> Completed
+                    </span>
+                  )}
+                  {!heroIsPast && heroScheduleEnded && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/[0.12] px-2 py-1 text-[10px] font-black text-amber-300">
+                      <Clock className="h-3 w-3" /> Finished
                     </span>
                   )}
                   {songLeaderName && <span>{songLeaderName}</span>}

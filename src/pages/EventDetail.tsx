@@ -285,6 +285,10 @@ export function EventDetail() {
   const [postEventObservations, setPostEventObservations] = useState<PostEventObservation[]>([]);
   const [observationCategory, setObservationCategory] = useState<PostEventObservationCategory>('sound');
   const [observationText, setObservationText] = useState('');
+  const [observationOwnerId, setObservationOwnerId] = useState('');
+  const [observationDueDate, setObservationDueDate] = useState('');
+  const [editingObservationFollowUpId, setEditingObservationFollowUpId] = useState<string | null>(null);
+  const [observationFollowUpForm, setObservationFollowUpForm] = useState({ assigned_to: '', due_date: '' });
   const [submittingObservation, setSubmittingObservation] = useState(false);
   const [updatingObservationId, setUpdatingObservationId] = useState<string | null>(null);
   const serviceSongStageRef = useRef<HTMLDivElement | null>(null);
@@ -538,7 +542,7 @@ export function EventDetail() {
         supabase.from('conversations').select('id').eq('event_id', id).eq('type', 'event').maybeSingle(),
         supabase
           .from('post_event_observations')
-          .select('*, profiles!post_event_observations_author_id_fkey(first_name, last_name, avatar_url)')
+          .select('*, profiles!post_event_observations_author_id_fkey(first_name, last_name, avatar_url), assignee:profiles!post_event_observations_assigned_to_fkey(first_name, last_name, avatar_url)')
           .eq('event_id', id)
           .order('created_at', { ascending: false }),
       ]);
@@ -1856,7 +1860,7 @@ const openLyricsModal = (ss: SetlistSong) => {
 
     const { data, error } = await supabase
       .from('post_event_observations')
-      .select('*, profiles!post_event_observations_author_id_fkey(first_name, last_name, avatar_url)')
+      .select('*, profiles!post_event_observations_author_id_fkey(first_name, last_name, avatar_url), assignee:profiles!post_event_observations_assigned_to_fkey(first_name, last_name, avatar_url)')
       .eq('event_id', id)
       .order('created_at', { ascending: false });
 
@@ -1867,6 +1871,10 @@ const openLyricsModal = (ss: SetlistSong) => {
   const handleAddPostEventObservation = async () => {
     const trimmedObservation = observationText.trim();
     if (!id || !user || !trimmedObservation || submittingObservation) return;
+    if (canManagePostEventObservations && Boolean(observationOwnerId) !== Boolean(observationDueDate)) {
+      toast('error', 'Choose both an owner and a due date, or leave both blank.');
+      return;
+    }
 
     setSubmittingObservation(true);
     try {
@@ -1875,16 +1883,56 @@ const openLyricsModal = (ss: SetlistSong) => {
         author_id: user.id,
         category: observationCategory,
         observation: trimmedObservation,
+        assigned_to: canManagePostEventObservations ? observationOwnerId || null : null,
+        due_date: canManagePostEventObservations ? observationDueDate || null : null,
       });
 
       if (error) throw error;
       setObservationText('');
+      setObservationOwnerId('');
+      setObservationDueDate('');
       await refreshPostEventObservations();
       toast('success', 'Observation added');
     } catch (error) {
       toast('error', getErrorMessage(error, 'Failed to add observation'));
     } finally {
       setSubmittingObservation(false);
+    }
+  };
+
+  const openObservationFollowUp = (observation: PostEventObservation) => {
+    setEditingObservationFollowUpId(observation.id);
+    setObservationFollowUpForm({
+      assigned_to: observation.assigned_to || '',
+      due_date: observation.due_date || '',
+    });
+  };
+
+  const handleSaveObservationFollowUp = async () => {
+    if (!editingObservationFollowUpId || updatingObservationId || !canManagePostEventObservations) return;
+    if (Boolean(observationFollowUpForm.assigned_to) !== Boolean(observationFollowUpForm.due_date)) {
+      toast('error', 'Choose both an owner and a due date, or clear both.');
+      return;
+    }
+
+    setUpdatingObservationId(editingObservationFollowUpId);
+    try {
+      const { error } = await supabase
+        .from('post_event_observations')
+        .update({
+          assigned_to: observationFollowUpForm.assigned_to || null,
+          due_date: observationFollowUpForm.due_date || null,
+        })
+        .eq('id', editingObservationFollowUpId);
+      if (error) throw error;
+
+      await refreshPostEventObservations();
+      setEditingObservationFollowUpId(null);
+      toast('success', observationFollowUpForm.assigned_to ? 'Follow-up assigned' : 'Follow-up assignment cleared');
+    } catch (error) {
+      toast('error', getErrorMessage(error, 'Failed to update follow-up assignment'));
+    } finally {
+      setUpdatingObservationId(null);
     }
   };
 
@@ -3494,6 +3542,40 @@ const openLyricsModal = (ss: SetlistSong) => {
                       </div>
                     </div>
                   </div>
+                  {canManagePostEventObservations && (
+                    <div className="mt-3 grid gap-3 border-t border-gray-200/60 pt-3 dark:border-white/[0.06] sm:grid-cols-2">
+                      <div>
+                        <label htmlFor="post-event-owner" className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-white/55">Follow-up owner (optional)</label>
+                        <select
+                          id="post-event-owner"
+                          value={observationOwnerId}
+                          onChange={event => {
+                            const ownerId = event.target.value;
+                            setObservationOwnerId(ownerId);
+                            setObservationDueDate(current => ownerId ? current || format(addDays(new Date(), 1), 'yyyy-MM-dd') : '');
+                          }}
+                          className="input-field min-h-11 text-sm"
+                        >
+                          <option value="">No owner yet</option>
+                          {members.map(member => (
+                            <option key={member.id} value={member.id}>{member.first_name} {member.last_name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label htmlFor="post-event-due-date" className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-white/55">Due date</label>
+                        <input
+                          id="post-event-due-date"
+                          type="date"
+                          min={getManilaTodayKey()}
+                          value={observationDueDate}
+                          onChange={event => setObservationDueDate(event.target.value)}
+                          disabled={!observationOwnerId}
+                          className="input-field min-h-11 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -3508,6 +3590,9 @@ const openLyricsModal = (ss: SetlistSong) => {
                   {postEventObservations.map(observation => {
                     const categoryLabel = POST_EVENT_CATEGORIES.find(category => category.value === observation.category)?.label || 'Other';
                     const authorName = `${observation.profiles?.first_name || ''} ${observation.profiles?.last_name || ''}`.trim() || 'Team member';
+                    const assigneeName = `${observation.assignee?.first_name || ''} ${observation.assignee?.last_name || ''}`.trim();
+                    const isObservationOwner = observation.assigned_to === user?.id;
+                    const isObservationOverdue = !!observation.due_date && observation.status !== 'resolved' && observation.due_date < getManilaTodayKey();
                     const statusClass = observation.status === 'resolved'
                       ? 'bg-emerald-500/10 text-emerald-300 ring-emerald-500/15'
                       : observation.status === 'monitoring'
@@ -3532,12 +3617,18 @@ const openLyricsModal = (ss: SetlistSong) => {
                             <p className="mt-2 text-[11px] font-medium text-gray-500 dark:text-white/[0.58]">
                               {authorName} · {format(parseISO(observation.created_at), 'MMM d, h:mm a')}
                             </p>
+                            {observation.assigned_to && observation.due_date && (
+                              <div className={`mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl px-2.5 py-2 text-[11px] font-semibold ${isObservationOverdue ? 'bg-red-500/10 text-red-600 dark:text-red-300' : 'bg-brand-500/10 text-brand-700 dark:text-brand-300'}`}>
+                                <span className="inline-flex items-center gap-1.5"><Users className="h-3.5 w-3.5" /> Owner: {assigneeName || 'Assigned member'}</span>
+                                <span className="inline-flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" /> {isObservationOverdue ? 'Overdue: ' : 'Due: '}{format(parseISO(observation.due_date), 'MMM d, yyyy')}</span>
+                              </div>
+                            )}
                           </div>
                         </div>
 
-                        {(canManagePostEventObservations || observation.author_id === user?.id) && (
-                          <div className="mt-3 flex items-center justify-end gap-2 border-t border-gray-200/60 pt-2.5 dark:border-white/[0.06]">
-                            {canManagePostEventObservations && (
+                        {(canManagePostEventObservations || isObservationOwner || observation.author_id === user?.id) && (
+                          <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-gray-200/60 pt-2.5 dark:border-white/[0.06]">
+                            {(canManagePostEventObservations || isObservationOwner) && (
                               <select
                                 value={observation.status}
                                 onChange={event => handleUpdateObservationStatus(observation.id, event.target.value as PostEventObservationStatus)}
@@ -3550,16 +3641,29 @@ const openLyricsModal = (ss: SetlistSong) => {
                                 <option value="resolved">Resolved</option>
                               </select>
                             )}
-                            <button
-                              type="button"
-                              onClick={() => handleDeletePostEventObservation(observation.id)}
-                              disabled={updatingObservationId === observation.id}
-                              className="inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-red-500/10 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-50 dark:text-white/30"
-                              title="Delete observation"
-                              aria-label="Delete observation"
-                            >
-                              {updatingObservationId === observation.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                            </button>
+                            {canManagePostEventObservations && (
+                              <button
+                                type="button"
+                                onClick={() => openObservationFollowUp(observation)}
+                                disabled={updatingObservationId === observation.id}
+                                className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-700 transition-colors hover:border-brand-300 hover:text-brand-700 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white/70"
+                              >
+                                <Calendar className="h-3.5 w-3.5" />
+                                {observation.assigned_to ? 'Edit follow-up' : 'Assign follow-up'}
+                              </button>
+                            )}
+                            {(canManagePostEventObservations || observation.author_id === user?.id) && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeletePostEventObservation(observation.id)}
+                                disabled={updatingObservationId === observation.id}
+                                className="inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-red-500/10 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-50 dark:text-white/30"
+                                title="Delete observation"
+                                aria-label="Delete observation"
+                              >
+                                {updatingObservationId === observation.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -3784,6 +3888,61 @@ const openLyricsModal = (ss: SetlistSong) => {
                   : assignmentBatch.assignments.length > 1
                   ? `Assign all (${assignmentBatch.assignments.length})`
                   : 'Assign member'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+
+        <Modal
+          open={!!editingObservationFollowUpId}
+          onClose={() => { if (!updatingObservationId) setEditingObservationFollowUpId(null); }}
+          title="Assign observation follow-up"
+        >
+          <div className="space-y-4">
+            <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+              Choose who will handle this observation and when it should be finished. They will receive reminders until it is resolved.
+            </p>
+            <div>
+              <label htmlFor="observation-follow-up-owner" className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Owner</label>
+              <select
+                id="observation-follow-up-owner"
+                value={observationFollowUpForm.assigned_to}
+                onChange={event => {
+                  const assignedTo = event.target.value;
+                  setObservationFollowUpForm(current => ({
+                    assigned_to: assignedTo,
+                    due_date: assignedTo ? current.due_date || format(addDays(new Date(), 1), 'yyyy-MM-dd') : '',
+                  }));
+                }}
+                className="input-field min-h-11"
+              >
+                <option value="">No owner</option>
+                {members.map(member => (
+                  <option key={member.id} value={member.id}>{member.first_name} {member.last_name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="observation-follow-up-date" className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Due date</label>
+              <input
+                id="observation-follow-up-date"
+                type="date"
+                min={getManilaTodayKey()}
+                value={observationFollowUpForm.due_date}
+                onChange={event => setObservationFollowUpForm(current => ({ ...current, due_date: event.target.value }))}
+                disabled={!observationFollowUpForm.assigned_to}
+                className="input-field min-h-11 disabled:cursor-not-allowed disabled:opacity-50"
+              />
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button type="button" onClick={() => setEditingObservationFollowUpId(null)} disabled={!!updatingObservationId} className="btn-secondary disabled:opacity-60">Cancel</button>
+              <button
+                type="button"
+                onClick={handleSaveObservationFollowUp}
+                disabled={!!updatingObservationId || Boolean(observationFollowUpForm.assigned_to) !== Boolean(observationFollowUpForm.due_date)}
+                className="btn-primary disabled:opacity-60"
+              >
+                {updatingObservationId ? 'Saving...' : observationFollowUpForm.assigned_to ? 'Save follow-up' : 'Clear assignment'}
               </button>
             </div>
           </div>

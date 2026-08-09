@@ -256,11 +256,14 @@ export interface PostEventObservation {
   category: PostEventObservationCategory;
   observation: string;
   status: PostEventObservationStatus;
+  assigned_to: string | null;
+  due_date: string | null;
   resolved_at: string | null;
   resolved_by: string | null;
   created_at: string;
   updated_at: string;
   profiles?: Pick<Profile, 'first_name' | 'last_name' | 'avatar_url'>;
+  assignee?: Pick<Profile, 'first_name' | 'last_name' | 'avatar_url'> | null;
 }
 
 export interface EventAssignment {

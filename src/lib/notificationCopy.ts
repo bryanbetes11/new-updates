@@ -116,6 +116,14 @@ const copy: Record<string, NotificationCopy> = {
     title: 'Observation Status Changed',
     body: 'A [category] observation for [event] is now [status].',
   },
+  post_event_observation_assigned: {
+    title: 'Observation Assigned to You',
+    body: 'You are responsible for a [category] observation for [event]. It is due on [due date].',
+  },
+  post_event_observation_due: {
+    title: 'Observation Follow-up Reminder',
+    body: 'Your [category] observation for [event] is [due status]. Update it when the work is complete.',
+  },
   announcement: {
     title: 'New Announcement: [announcement title]',
     body: '[Announcement content]',

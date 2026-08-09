@@ -749,6 +749,27 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
 
   const handleImport = async () => {
     if (!user || importData.length === 0) return;
+    const { data: librarySongs, error: libraryError } = await supabase
+      .from('songs')
+      .select('id, title, artist');
+    if (libraryError) {
+      toast('error', 'Could not check the song library. Please try again.');
+      return;
+    }
+
+    const songsByTitle = new Map(
+      (librarySongs || []).map(song => [normalizeSongTitle(song.title), song])
+    );
+    const missingArtists = importData.filter(row => {
+      const librarySong = songsByTitle.get(normalizeSongTitle(sanitizeSongTitle(row.song_title)));
+      return !row.artist.trim() && !librarySong?.artist?.trim();
+    });
+    if (missingArtists.length > 0) {
+      const names = missingArtists.slice(0, 3).map(row => sanitizeSongTitle(row.song_title)).join(', ');
+      const more = missingArtists.length > 3 ? ` and ${missingArtists.length - 3} more` : '';
+      toast('error', `Add an artist before importing: ${names}${more}.`);
+      return;
+    }
     setImporting(true);
 
     const eventGroups: Record<string, { date: string; name: string; songLeader: string; songs: ImportRow[] }> = {};
@@ -808,17 +829,25 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
           const song = group.songs[i];
           const cleanSongTitle = sanitizeSongTitle(song.song_title);
           const normalizedTitle = normalizeSongTitle(cleanSongTitle);
-          const { data: allSongs } = await supabase.from('songs').select('id, title');
-          const existingSong = allSongs?.find(s => normalizeSongTitle(s.title) === normalizedTitle);
+          const existingSong = songsByTitle.get(normalizedTitle);
           let songId: string;
           if (existingSong) {
             songId = existingSong.id;
+            if (!existingSong.artist?.trim() && song.artist.trim()) {
+              const artist = song.artist.trim();
+              const { error: artistError } = await supabase.from('songs').update({ artist }).eq('id', songId);
+              if (artistError) throw artistError;
+              existingSong.artist = artist;
+            }
           } else {
-            const { data: newSong, error: songError } = await supabase.from('songs').insert({ title: cleanSongTitle, artist: song.artist.trim(), song_key: song.song_key.trim(), created_by: user.id }).select('id').maybeSingle();
+            const artist = song.artist.trim();
+            const { data: newSong, error: songError } = await supabase.from('songs').insert({ title: cleanSongTitle, artist, song_key: song.song_key.trim(), created_by: user.id }).select('id, title, artist').maybeSingle();
             if (songError || !newSong) { songsDone++; setImportProgress({ songsDone, eventsDone, totalSongs, totalEvents }); continue; }
             songId = newSong.id;
+            songsByTitle.set(normalizedTitle, newSong);
           }
-          await supabase.from('setlist_songs').insert({ setlist_id: setlistId, song_id: songId, position: i + 1, song_category: song.song_category || '' });
+          const { error: setlistSongError } = await supabase.from('setlist_songs').insert({ setlist_id: setlistId, song_id: songId, position: i + 1, song_category: song.song_category || '' });
+          if (setlistSongError) throw setlistSongError;
           songsDone++;
           setImportProgress({ songsDone, eventsDone, totalSongs, totalEvents });
         }
@@ -1373,6 +1402,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                         {importData.some(r => r.song_leader) && <th className="text-left px-3 py-2 font-semibold text-gray-500">Song Leader</th>}
                         {importData.some(r => r.song_category) && <th className="text-left px-3 py-2 font-semibold text-gray-500">Category</th>}
                         <th className="text-left px-3 py-2 font-semibold text-gray-500">Song</th>
+                        <th className="text-left px-3 py-2 font-semibold text-gray-500">Artist</th>
                         <th className="text-left px-3 py-2 font-semibold text-gray-500">Key</th>
                       </tr>
                     </thead>
@@ -1384,13 +1414,22 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                           {importData.some(r => r.song_leader) && <td className="px-3 py-2 text-emerald-600 dark:text-emerald-400 font-medium">{row.song_leader}</td>}
                           {importData.some(r => r.song_category) && <td className="px-3 py-2 text-gray-500 dark:text-gray-400 capitalize">{row.song_category}</td>}
                           <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">{row.song_title}</td>
+                          <td className="px-3 py-2 min-w-40">
+                            <input
+                              type="text"
+                              value={row.artist}
+                              onChange={event => setImportData(current => current.map((item, index) => index === i ? { ...item, artist: event.target.value } : item))}
+                              className={`w-full rounded-lg border px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-brand-500 dark:bg-gray-900 ${row.artist.trim() ? 'border-gray-200 dark:border-gray-700' : 'border-amber-300 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-500/10'}`}
+                              placeholder="Add artist"
+                            />
+                          </td>
                           <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.song_key}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-                <p className="text-xs text-gray-400">Supports worship set format (Date, Service Type, Opening, Praise, Worship, Offering, Closing) or standard format (Date, Event, Song Title, Artist, Key). Song keys in brackets like [D] are auto-detected.</p>
+                <p className="text-xs text-gray-400">Every song needs an artist. If the artist is already saved in the library, a blank box can use that saved artist. Song keys in brackets like [D] are auto-detected.</p>
                 <div className="flex justify-end gap-3 pt-2">
                   <button onClick={() => { setShowImport(false); setImportData([]); }} className="btn-secondary">Cancel</button>
                   <button onClick={handleImport} className="btn-primary">Import {importData.length} Songs</button>

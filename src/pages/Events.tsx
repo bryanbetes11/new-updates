@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { format, parseISO, startOfDay, subWeeks, previousSunday, addDays, subDays, differenceInDays, eachDayOfInterval } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { motion } from 'framer-motion';
-import { Calendar, Plus, Search, Filter, Users, Trash2, CalendarOff, AlertCircle, Clock, X, PartyPopper, Heart, Sparkles, List } from 'lucide-react';
+import { Calendar, Plus, Search, Filter, Users, Trash2, CalendarOff, AlertCircle, Clock, X, PartyPopper, Heart, Sparkles, List, CheckCircle, MoreVertical } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -20,6 +20,7 @@ import { EventArtwork } from '../components/EventArtwork';
 import { CalendarGrid } from '../components/CalendarGrid';
 import type { Event } from '../types';
 import { hasArtworkArtist } from '../lib/songArtworkEligibility';
+import { hasEventScheduleEnded, isEventCompleted } from '../lib/eventLifecycle';
 
 const eventTypes = ['Sunday Service', 'Prayer Meeting', 'LGTF (Midweek)', 'Rehearsals', 'Online Devotion', 'Equipping', 'Revamp Session', 'Youth Recharge', 'Custom'];
 
@@ -323,9 +324,13 @@ function formatSongLeaderName(profile: RelatedProfile) {
   return prefix ? `${prefix} ${name}` : name;
 }
 
-function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEventClick, isPast, artworkClassName = 'h-16 w-16' }: {
-  event: Event; calendarEntries: CalendarEntry[]; songLeaderMap?: Record<string, string>; setlistInfoMap?: Record<string, SetlistInfo>; onEventClick: (id: string) => void; isPast?: boolean; artworkClassName?: string;
+function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEventClick, onLifecycleChange, isPast, artworkClassName = 'h-16 w-16' }: {
+  event: Event; calendarEntries: CalendarEntry[]; songLeaderMap?: Record<string, string>; setlistInfoMap?: Record<string, SetlistInfo>; onEventClick: (id: string) => void; onLifecycleChange?: (event: Event) => void; isPast?: boolean; artworkClassName?: string;
 }) {
+  const { user, isPlatformOwner } = useAuth();
+  const { toast } = useToast();
+  const [showLifecycleMenu, setShowLifecycleMenu] = useState(false);
+  const [savingLifecycle, setSavingLifecycle] = useState(false);
   const dayEntries = calendarEntries.filter(e => e.date === event.event_date && e.type === 'leave');
   const songLeader = songLeaderMap?.[event.id];
   const setlistInfo = setlistInfoMap?.[event.id];
@@ -339,17 +344,47 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
     ? describeSetlistReviewAge(setlistInfo.submitted_at || setlistInfo.created_at)
     : null;
   const pendingReviewMessage = pendingReviewAge ? getSetlistPendingMessage(pendingReviewAge, false) : null;
+  const scheduleHasEnded = hasEventScheduleEnded(event, now);
 
   // Visual urgency states (only when proposal is missing)
-  const showOverdueStyle = isOverdue && !hasApprovedSetlist && !isPast;
-  const showDueSoonStyle = isDueSoon && !hasApprovedSetlist && !isPast;
+  const showOverdueStyle = isOverdue && !hasApprovedSetlist && !isPast && !scheduleHasEnded;
+  const showDueSoonStyle = isDueSoon && !hasApprovedSetlist && !isPast && !scheduleHasEnded;
+
+  const handleLifecycleChange = async () => {
+    if (!user || !isPlatformOwner || savingLifecycle) return;
+
+    setSavingLifecycle(true);
+    const nextOverride = isPast ? 'upcoming' : 'completed';
+    const { data: updatedEvent, error } = await supabase
+      .from('events')
+      .update({
+        lifecycle_override: nextOverride,
+        lifecycle_override_by: user.id,
+        lifecycle_override_at: new Date().toISOString(),
+      })
+      .eq('id', event.id)
+      .select('*')
+      .maybeSingle();
+    setSavingLifecycle(false);
+
+    if (error || !updatedEvent) {
+      console.error('Failed to update event lifecycle:', error || 'The event was not updated');
+      toast('error', 'Failed to move event');
+      return;
+    }
+
+    setShowLifecycleMenu(false);
+    onLifecycleChange?.(updatedEvent as Event);
+    toast('success', isPast ? 'Event moved to Upcoming' : 'Event moved to Past events');
+  };
 
   return (
-    <button
-      onClick={() => onEventClick(event.id)}
-      className="touch-action-pan-y group relative flex min-h-[5.5rem] w-full items-center gap-3 bg-transparent px-0 py-3 text-left transition-colors hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#22c55e]"
-      style={{ opacity: isPast ? 0.62 : 1 }}
-    >
+    <div className="relative">
+      <button
+        onClick={() => onEventClick(event.id)}
+        className={`touch-action-pan-y group relative flex min-h-[5.5rem] w-full items-center gap-3 bg-transparent px-0 py-3 text-left transition-colors hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#22c55e] ${isPlatformOwner ? 'pr-11' : ''}`}
+        style={{ opacity: isPast ? 0.62 : 1 }}
+      >
       {setlistInfo?.songCount ? (
         <EventArtwork
           eventType={event.event_type}
@@ -387,6 +422,16 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
               <Clock className="h-3 w-3" /> {pendingReviewMessage}
             </span>
           )}
+          {isPast && (
+            <span className="inline-flex items-center gap-1 rounded-lg bg-white/[0.08] px-2 py-0.5 text-[10px] font-black text-white/58">
+              <CheckCircle className="h-3 w-3" /> Completed
+            </span>
+          )}
+          {!isPast && scheduleHasEnded && (
+            <span className="inline-flex items-center gap-1 rounded-lg bg-amber-400/[0.12] px-2 py-0.5 text-[10px] font-black text-amber-300">
+              <Clock className="h-3 w-3" /> Finished
+            </span>
+          )}
         </div>
 
         <div className="mt-1 flex min-w-0 items-center gap-1.5">
@@ -420,7 +465,41 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
           compact
         />
       </div>
-    </button>
+      </button>
+
+      {isPlatformOwner && (
+        <div className="absolute right-0 top-3 z-20">
+          <button
+            type="button"
+            onClick={() => setShowLifecycleMenu(open => !open)}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full text-white/48 transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e]"
+            aria-label="Event status actions"
+            aria-expanded={showLifecycleMenu}
+          >
+            <MoreVertical className="h-4 w-4" />
+          </button>
+          {showLifecycleMenu && (
+            <div className="absolute right-0 top-11 z-30 w-60 rounded-xl border border-white/[0.1] bg-[#181818] p-1.5 shadow-2xl shadow-black/60">
+              <button
+                type="button"
+                onClick={handleLifecycleChange}
+                disabled={savingLifecycle}
+                className="w-full rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] disabled:opacity-50"
+              >
+                <span className="block text-[13px] font-black text-white">
+                  {isPast ? 'Move to Upcoming' : 'Move to Past events'}
+                </span>
+                {!isPast && (
+                  <span className="mt-0.5 block text-[11px] font-semibold text-white/42">
+                    Opens post-event observations
+                  </span>
+                )}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -573,14 +652,15 @@ const createEmptyEventForm = (eventDate = ''): EventFormState => ({
   linked_event_id: '',
 });
 
-function EventList({ events, calendarEntries, songLeaderMap, setlistInfoMap, onEventClick, showPast, animateItems = true, layout = 'list' }: {
-  events: Event[]; calendarEntries: CalendarEntry[]; songLeaderMap?: Record<string, string>; setlistInfoMap?: Record<string, SetlistInfo>; onEventClick: (id: string) => void; showPast?: boolean; animateItems?: boolean; layout?: 'list' | 'grid';
+function EventList({ events, calendarEntries, songLeaderMap, setlistInfoMap, onEventClick, onLifecycleChange, showPast, animateItems = true, layout = 'list' }: {
+  events: Event[]; calendarEntries: CalendarEntry[]; songLeaderMap?: Record<string, string>; setlistInfoMap?: Record<string, SetlistInfo>; onEventClick: (id: string) => void; onLifecycleChange?: (event: Event) => void; showPast?: boolean; animateItems?: boolean; layout?: 'list' | 'grid';
 }) {
-  const today = startOfDay(new Date());
+  const now = new Date();
+  const today = startOfDay(now);
 
   const displayEvents = showPast
-    ? events.filter(e => parseISO(e.event_date) < today).sort((a, b) => b.event_date.localeCompare(a.event_date))
-    : events.filter(e => parseISO(e.event_date) >= today).sort((a, b) => a.event_date.localeCompare(b.event_date));
+    ? events.filter(e => isEventCompleted(e)).sort((a, b) => b.event_date.localeCompare(a.event_date))
+    : events.filter(e => !isEventCompleted(e)).sort((a, b) => a.event_date.localeCompare(b.event_date));
 
   // Upcoming birthday entries (deduplicated, not shown in past view)
   const birthdayEntries = showPast ? [] : Array.from(
@@ -607,7 +687,7 @@ function EventList({ events, calendarEntries, songLeaderMap, setlistInfoMap, onE
 
   const renderItem = (item: ListItem) => (
     item.kind === 'event' ? (
-      <EventCard event={item.event} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={onEventClick} isPast={showPast} />
+      <EventCard event={item.event} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={onEventClick} onLifecycleChange={onLifecycleChange} isPast={showPast} />
     ) : (
       <BirthdayCard name={item.entry.name} date={item.entry.date} />
     )
@@ -649,10 +729,11 @@ function EventList({ events, calendarEntries, songLeaderMap, setlistInfoMap, onE
 }
 
 function getEventListItems(events: Event[], calendarEntries: CalendarEntry[], showPast?: boolean) {
-  const today = startOfDay(new Date());
+  const now = new Date();
+  const today = startOfDay(now);
   const displayEvents = showPast
-    ? events.filter(e => parseISO(e.event_date) < today).sort((a, b) => b.event_date.localeCompare(a.event_date))
-    : events.filter(e => parseISO(e.event_date) >= today).sort((a, b) => a.event_date.localeCompare(b.event_date));
+    ? events.filter(e => isEventCompleted(e)).sort((a, b) => b.event_date.localeCompare(a.event_date))
+    : events.filter(e => !isEventCompleted(e)).sort((a, b) => a.event_date.localeCompare(b.event_date));
   const birthdayEntries = showPast ? [] : Array.from(
     new Map(
       calendarEntries
@@ -695,12 +776,13 @@ function groupEventItemsByMonth(items: EventListItem[]) {
   return Array.from(groups.entries()).map(([month, monthItems]) => ({ month, items: monthItems }));
 }
 
-function EventDesktopCardGroups({ events, calendarEntries, songLeaderMap, setlistInfoMap, onEventClick, showPast }: {
+function EventDesktopCardGroups({ events, calendarEntries, songLeaderMap, setlistInfoMap, onEventClick, onLifecycleChange, showPast }: {
   events: Event[];
   calendarEntries: CalendarEntry[];
   songLeaderMap?: Record<string, string>;
   setlistInfoMap?: Record<string, SetlistInfo>;
   onEventClick: (id: string) => void;
+  onLifecycleChange?: (event: Event) => void;
   showPast?: boolean;
 }) {
   const monthGroups = groupEventItemsByMonth(getEventListItems(events, calendarEntries, showPast) as EventListItem[]);
@@ -743,6 +825,7 @@ function EventDesktopCardGroups({ events, calendarEntries, songLeaderMap, setlis
                     songLeaderMap={songLeaderMap}
                     setlistInfoMap={setlistInfoMap}
                     onEventClick={onEventClick}
+                    onLifecycleChange={onLifecycleChange}
                     isPast={showPast}
                     artworkClassName="h-24 w-24"
                   />
@@ -783,6 +866,7 @@ export function Events() {
   const [form, setForm] = useState<EventFormState>(() => createEmptyEventForm());
   const [customName, setCustomName] = useState('');
   const [sundayServices, setSundayServices] = useState<Event[]>([]);
+  const [lifecycleNow, setLifecycleNow] = useState(() => new Date());
 
   const fetchEvents = useCallback(async () => {
     try {
@@ -933,6 +1017,18 @@ export function Events() {
   }, [fetchEvents, location.key, location.pathname, location.state, navigate]);
   useEffect(() => { localStorage.setItem('eventsActiveTab', activeTab); }, [activeTab]);
   useEffect(() => { sessionStorage.setItem('eventsDesktopView', desktopView); }, [desktopView]);
+  useEffect(() => {
+    const refreshLifecycle = () => setLifecycleNow(new Date());
+    const interval = window.setInterval(refreshLifecycle, 30_000);
+    window.addEventListener('focus', refreshLifecycle);
+    document.addEventListener('visibilitychange', refreshLifecycle);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refreshLifecycle);
+      document.removeEventListener('visibilitychange', refreshLifecycle);
+    };
+  }, []);
 
   const openCreateEvent = (eventDate = '') => {
     setForm(createEmptyEventForm(eventDate));
@@ -1080,15 +1176,20 @@ export function Events() {
     toast('success', 'Event moved');
   };
 
-  const today = startOfDay(new Date());
-  const upcomingEvents = events.filter(e => parseISO(e.event_date) >= today);
-  const pastEvents = events.filter(e => parseISO(e.event_date) < today);
+  const handleEventLifecycleChange = (updatedEvent: Event) => {
+    setEvents(prev => prev.map(event => event.id === updatedEvent.id ? updatedEvent : event));
+    setSundayServices(prev => prev.map(event => event.id === updatedEvent.id ? updatedEvent : event));
+  };
+
+  const today = startOfDay(lifecycleNow);
+  const upcomingEvents = events.filter(e => !isEventCompleted(e));
+  const pastEvents = events.filter(e => isEventCompleted(e));
   const approvedLeaveToday = calendarEntries.filter(e => e.type === 'leave' && e.date === format(today, 'yyyy-MM-dd')).length;
 
   const filtered = events.filter(e => {
     const matchSearch = !search || e.title.toLowerCase().includes(search.toLowerCase());
     const matchType = !typeFilter || e.event_type === typeFilter;
-    const matchTab = activeTab === 'upcoming' ? parseISO(e.event_date) >= today : parseISO(e.event_date) < today;
+    const matchTab = activeTab === 'upcoming' ? !isEventCompleted(e) : isEventCompleted(e);
     return matchSearch && matchType && matchTab;
   });
   const calendarEvents = events.filter(e => {
@@ -1249,12 +1350,13 @@ export function Events() {
                   songLeaderMap={songLeaderMap}
                   setlistInfoMap={setlistInfoMap}
                   onEventClick={id => navigate(`/events/${id}`)}
+                  onLifecycleChange={handleEventLifecycleChange}
                   showPast={activeTab === 'past'}
                 />
               </motion.div>
             )}
             <div className="touch-action-pan-y lg:hidden">
-              <EventList events={filtered} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={id => navigate(`/events/${id}`)} showPast={activeTab === 'past'} animateItems={false} />
+              <EventList events={filtered} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={id => navigate(`/events/${id}`)} onLifecycleChange={handleEventLifecycleChange} showPast={activeTab === 'past'} animateItems={false} />
             </div>
           </>
         )}

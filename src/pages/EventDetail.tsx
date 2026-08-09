@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { format, parseISO, differenceInDays, startOfDay, subWeeks, previousSunday, addDays, subDays } from 'date-fns';
+import { format, parseISO, differenceInDays, subWeeks, previousSunday, addDays, subDays } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { animate, motion, useMotionValue, AnimatePresence, type PanInfo } from 'framer-motion';
 import { ArrowLeft, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, ListOrdered, Pause, Play, Settings2, MoreHorizontal, Upload, Calendar, Loader2 } from 'lucide-react';
@@ -24,6 +24,7 @@ import { useSmartBack } from '../lib/navigationHistory';
 import { describeSetlistReviewAge, getSetlistPendingMessage } from '../lib/setlistReviewAge';
 import { getSingleLyricsAutofill, normalizeLyricsInputForSave, normalizeLyricsSearchResults, type LyricsSearchResult } from '../lib/lyricsSearch';
 import { getEventAssignmentKey, prepareEventAssignmentBatch, type EventAssignmentDraft } from '../lib/eventAssignmentBatch';
+import { isEventCompleted, type EventLifecycleOverride } from '../lib/eventLifecycle';
 
 import type { Event, EventAssignment, Setlist, SetlistSong, Song, ServiceFormat, SetlistCheckReport, PostEventObservation, PostEventObservationCategory, PostEventObservationStatus } from '../types';
 import { inferServiceFormat, SERVICE_FORMAT_LABELS } from '../lib/setlistCheckerEngine';
@@ -174,7 +175,7 @@ export function EventDetail() {
   const location = useLocation();
   const smartBack = useSmartBack('/events');
 
-  const { user, roles, userRoles, isLeader, isProductionDirector } = useAuth();
+  const { user, roles, userRoles, isLeader, isProductionDirector, isPlatformOwner } = useAuth();
   const { toast } = useToast();
 
   const isMissingSetlistSubmissionTableError = useCallback((message?: string | null) => {
@@ -232,6 +233,7 @@ export function EventDetail() {
   const [showEditEvent, setShowEditEvent] = useState(false);
   const [editForm, setEditForm] = useState({ title: '', description: '', event_type: '', event_date: '', start_time: '', end_time: '', song_leader_id: '', linked_event_id: '' });
   const [savingEventEdit, setSavingEventEdit] = useState(false);
+  const [savingLifecycleOverride, setSavingLifecycleOverride] = useState(false);
   const [sundayServices, setSundayServices] = useState<Event[]>([]);
   const [attendance, setAttendance] = useState<EventAttendance | null>(null);
   const [allAttendance, setAllAttendance] = useState<EventAttendance[]>([]);
@@ -500,7 +502,6 @@ export function EventDetail() {
       }
     };
   }, []);
-
 
   const fetchAll = useCallback(async () => {
     if (!id) return;
@@ -1493,6 +1494,36 @@ export function EventDetail() {
     });
   };
 
+  const handleLifecycleOverride = async (override: EventLifecycleOverride) => {
+    if (!id || !user || !isPlatformOwner || savingLifecycleOverride) return;
+
+    setSavingLifecycleOverride(true);
+    const overrideMetadata = {
+      lifecycle_override: override,
+      lifecycle_override_by: user.id,
+      lifecycle_override_at: new Date().toISOString(),
+    };
+    const { data: updatedEvent, error } = await supabase
+      .from('events')
+      .update(overrideMetadata)
+      .eq('id', id)
+      .select('*')
+      .maybeSingle();
+    setSavingLifecycleOverride(false);
+
+    if (error || !updatedEvent) {
+      console.error('Failed to update event lifecycle:', error || 'The event was not updated');
+      toast('error', 'Failed to update event status');
+      return;
+    }
+
+    setEvent(updatedEvent as Event);
+    setShowEventActionsMenu(false);
+    toast('success', override === 'completed'
+      ? 'Event moved to Past events'
+      : 'Event moved to Upcoming');
+  };
+
 
 const openLyricsModal = (ss: SetlistSong) => {
     setMobileSongActionsSong(null);
@@ -1969,11 +2000,8 @@ const openLyricsModal = (ss: SetlistSong) => {
   };
 
   // Visual urgency state for hero card (mirrors Events list logic)
-  const heroIsPast = parseISO(event.event_date) < startOfDay(new Date());
-  const postEventFeedbackOpen = heroIsPast || new Date() >= getManilaEventDateTime(
-    event.event_date,
-    event.end_time || event.start_time || '23:59',
-  );
+  const heroIsPast = isEventCompleted(event);
+  const postEventFeedbackOpen = heroIsPast;
   const canManagePostEventObservations = isLeader || isProductionDirector;
   const activePostEventObservationCount = postEventObservations.filter(observation => observation.status !== 'resolved').length;
   const heroProposalDue = event.proposal_due_date ? parseISO(event.proposal_due_date) : null;
@@ -2382,7 +2410,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                           </button>
                         )
                       )}
-                      {(isLeader || canEditEvent) && (
+                      {(isLeader || canEditEvent || isPlatformOwner) && (
                         <div className="relative shrink-0">
                           <button
                             onClick={() => setShowEventActionsMenu((open) => !open)}
@@ -2417,6 +2445,17 @@ const openLyricsModal = (ss: SetlistSong) => {
                                     Edit event
                                   </button>
                                 )}
+                                {isPlatformOwner && (
+                                  <button
+                                    onClick={() => handleLifecycleOverride(heroIsPast ? 'upcoming' : 'completed')}
+                                    disabled={savingLifecycleOverride}
+                                    className="flex min-h-11 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[13px] font-semibold text-white/80 transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] disabled:opacity-50"
+                                    role="menuitem"
+                                  >
+                                    {heroIsPast ? <Calendar className="h-3.5 w-3.5" /> : <CheckCircle className="h-3.5 w-3.5" />}
+                                    {heroIsPast ? 'Move to Upcoming' : 'Move to Past'}
+                                  </button>
+                                )}
                                 {isLeader && (
                                   <button
                                     onClick={() => {
@@ -2439,6 +2478,11 @@ const openLyricsModal = (ss: SetlistSong) => {
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] font-medium text-white/60">
                   <span className="badge-blue text-[10px]">{event.event_type}</span>
+                  {heroIsPast && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.09] px-2 py-1 text-[10px] font-black text-white/68">
+                      <CheckCircle className="h-3 w-3" /> Completed
+                    </span>
+                  )}
                   {songLeaderName && <span>{songLeaderName}</span>}
                   {compactEventFacts.map(fact => (
                     <span key={fact} className="flex items-center gap-2">

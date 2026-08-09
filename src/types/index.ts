@@ -238,6 +238,9 @@ export interface Event {
   proposal_due_date?: string | null;
   linked_event_id?: string | null;
   song_leader_id?: string | null;
+  lifecycle_override?: 'upcoming' | 'completed' | null;
+  lifecycle_override_by?: string | null;
+  lifecycle_override_at?: string | null;
   created_at: string;
   profiles?: Profile;
 }

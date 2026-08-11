@@ -23,7 +23,11 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          xlsx: ['xlsx'],
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-supabase': ['@supabase/supabase-js'],
+          'vendor-motion': ['framer-motion'],
+          'vendor-dates': ['date-fns', 'date-fns-tz'],
+          'vendor-chords': ['chordsheetjs'],
         },
       },
     },

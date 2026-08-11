@@ -59,6 +59,7 @@ export function NotificationSettings() {
   const [pushReadiness, setPushReadiness] = useState<PushReadinessMember[]>([]);
   const [refreshingReadiness, setRefreshingReadiness] = useState(false);
   const [testingMemberId, setTestingMemberId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'status' | 'controls'>('status');
 
   useEffect(() => {
     if (!profile?.org_id || !isOrgAdmin) return;
@@ -139,6 +140,34 @@ export function NotificationSettings() {
 
   return (
     <div className="space-y-5">
+      <div className="grid grid-cols-2 gap-1 rounded-2xl border border-gray-200/80 bg-gray-100 p-1 dark:border-white/[0.06] dark:bg-white/[0.04]">
+        <button
+          type="button"
+          onClick={() => setActiveTab('status')}
+          className={`rounded-xl px-4 py-2.5 text-sm font-black transition ${activeTab === 'status' ? 'bg-white text-gray-950 shadow-sm dark:bg-white/[0.1] dark:text-white' : 'text-gray-500 hover:text-gray-800 dark:text-white/45 dark:hover:text-white/75'}`}
+        >
+          Member Status
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('controls')}
+          className={`rounded-xl px-4 py-2.5 text-sm font-black transition ${activeTab === 'controls' ? 'bg-white text-gray-950 shadow-sm dark:bg-white/[0.1] dark:text-white' : 'text-gray-500 hover:text-gray-800 dark:text-white/45 dark:hover:text-white/75'}`}
+        >
+          Notification Controls
+        </button>
+      </div>
+
+      {activeTab === 'status' && (
+        <PushReadinessPanel
+          members={pushReadiness}
+          refreshing={refreshingReadiness}
+          testingMemberId={testingMemberId}
+          onRefresh={refreshPushReadiness}
+          onTest={sendPushTest}
+        />
+      )}
+
+      {activeTab === 'controls' && <>
       <section className="overflow-hidden rounded-[2rem] border border-emerald-200/70 bg-white shadow-sm dark:border-emerald-400/10 dark:bg-white/[0.025]">
         <div className="bg-gradient-to-br from-emerald-50 to-white px-5 py-5 dark:from-emerald-400/[0.08] dark:to-transparent sm:px-6">
           <div className="flex items-start gap-3">
@@ -166,14 +195,6 @@ export function NotificationSettings() {
           </label>
         </div>
       </section>
-
-      <PushReadinessPanel
-        members={pushReadiness}
-        refreshing={refreshingReadiness}
-        testingMemberId={testingMemberId}
-        onRefresh={refreshPushReadiness}
-        onTest={sendPushTest}
-      />
 
       {Object.entries(groupedRules).map(([category, categoryRules]) => (
         <section key={category} className="overflow-hidden rounded-[1.7rem] border border-gray-200/80 bg-white shadow-sm dark:border-white/[0.06] dark:bg-white/[0.025]">
@@ -217,6 +238,7 @@ export function NotificationSettings() {
       <button type="button" onClick={save} disabled={saving} className="sticky bottom-5 z-10 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3.5 text-sm font-black text-white shadow-xl shadow-emerald-700/20 transition hover:bg-emerald-700 disabled:opacity-60">
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save notification controls
       </button>
+      </>}
     </div>
   );
 }
@@ -246,8 +268,8 @@ function PushReadinessPanel({
             <Smartphone className="h-5 w-5" />
           </span>
           <div>
-            <h3 className="text-sm font-black text-gray-950 dark:text-white">Push readiness</h3>
-            <p className="mt-0.5 text-xs text-gray-500 dark:text-white/40">{readyCount} of {onboarded.length} onboarded active members are ready</p>
+            <h3 className="text-sm font-black text-gray-950 dark:text-white">Member Notification Status</h3>
+            <p className="mt-0.5 text-xs text-gray-500 dark:text-white/40">Current push-notification readiness for active members, across all ServeSync features.</p>
           </div>
         </div>
         <button type="button" onClick={onRefresh} disabled={refreshing} className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 px-3 py-2 text-xs font-black text-gray-600 transition hover:bg-gray-50 disabled:opacity-60 dark:border-white/10 dark:text-white/60 dark:hover:bg-white/[0.05]">

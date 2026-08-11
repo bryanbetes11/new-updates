@@ -26,3 +26,4 @@ dist-ssr
 screenshots/
 supabase/.temp/
 .claude/
+.vercel/

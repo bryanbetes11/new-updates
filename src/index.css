@@ -1009,6 +1009,12 @@
   }
 }
 
+@media (min-width: 768px) and (max-width: 1180px) and (orientation: portrait) {
+  .survey-modal-surface > div {
+    height: min(calc(100dvh - 6rem), 68rem);
+  }
+}
+
 @keyframes survey-ambient-shift {
   0%, 100% { background-position: 0% 10%, 100% 0%, 100% 100%, 0% 100%, 0 0; }
   50% { background-position: 35% 35%, 65% 25%, 65% 70%, 35% 65%, 0 0; }

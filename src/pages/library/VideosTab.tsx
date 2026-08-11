@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { motion } from 'framer-motion';
-import { PlayCircle, Plus, Search, ExternalLink, Film, CreditCard as Edit2, Trash2, MoreVertical, X } from 'lucide-react';
+import { PlayCircle, Plus, Search, ExternalLink, Film, CreditCard as Edit2, Trash2, MoreVertical, X, MessageCircle, Send, Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -31,8 +31,49 @@ const itemVariants = {
   show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] } },
 };
 
+interface VideoComment {
+  id: string;
+  video_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  profiles?: { first_name: string; last_name: string; avatar_url: string | null } | null;
+}
+
+interface YouTubeMetadata {
+  title: string;
+  thumbnail_url: string;
+}
+
+function getYouTubeId(value: string) {
+  try {
+    const url = new URL(value.trim());
+    if (url.hostname === 'youtu.be') return url.pathname.split('/').filter(Boolean)[0] || null;
+    if (!url.hostname.endsWith('youtube.com')) return null;
+    if (url.pathname === '/watch') return url.searchParams.get('v');
+    const [, type, id] = url.pathname.split('/');
+    return ['embed', 'shorts', 'live'].includes(type) ? id || null : null;
+  } catch {
+    return null;
+  }
+}
+
+function getYouTubeEmbedUrl(value: string) {
+  const id = getYouTubeId(value);
+  return id ? `https://www.youtube.com/embed/${id}` : '';
+}
+
+async function fetchYouTubeMetadata(url: string): Promise<YouTubeMetadata> {
+  if (!getYouTubeId(url)) throw new Error('Only valid YouTube links can be added.');
+  const response = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`);
+  if (!response.ok) throw new Error('YouTube could not read this video. Check that it is public or unlisted.');
+  const metadata = await response.json() as YouTubeMetadata;
+  if (!metadata.title) throw new Error('YouTube did not return a title for this video.');
+  return metadata;
+}
+
 export function VideosTab() {
-  const { user, isProductionDirector } = useAuth();
+  const { user, organization, isProductionDirector } = useAuth();
   const { toast } = useToast();
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,6 +87,14 @@ export function VideosTab() {
   const [updating, setUpdating] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [createLinks, setCreateLinks] = useState('');
+  const [createCategory, setCreateCategory] = useState('General');
+  const [createDescription, setCreateDescription] = useState('');
+  const [showPlayer, setShowPlayer] = useState(false);
+  const [comments, setComments] = useState<VideoComment[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentContent, setCommentContent] = useState('');
+  const [commentSubmitting, setCommentSubmitting] = useState(false);
   const [form, setForm] = useState({
     title: '', description: '', video_url: '', thumbnail_url: '', category: 'General',
   });
@@ -72,14 +121,91 @@ export function VideosTab() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+    const links = [...new Set(createLinks.split(/\s+/).map(link => link.trim()).filter(Boolean))];
+    if (links.length === 0) {
+      toast('info', 'Paste at least one YouTube link.');
+      return;
+    }
     setCreating(true);
-    const { error } = await supabase.from('videos').insert({ ...form, uploaded_by: user.id });
+    let rows: Array<Record<string, string>>;
+    try {
+      rows = await Promise.all(links.map(async videoUrl => {
+        const metadata = await fetchYouTubeMetadata(videoUrl);
+        return {
+          title: metadata.title,
+          description: createDescription.trim(),
+          video_url: videoUrl,
+          thumbnail_url: metadata.thumbnail_url,
+          category: createCategory,
+          uploaded_by: user.id,
+        };
+      }));
+    } catch (error) {
+      setCreating(false);
+      toast('error', error instanceof Error ? error.message : 'Could not read one of the YouTube links.');
+      return;
+    }
+    const { error } = await supabase.from('videos').insert(rows);
     setCreating(false);
-    if (error) { toast('error', 'Failed to add video'); return; }
-    toast('success', 'Video added to library');
+    if (error) { toast('error', error.message || 'Failed to add videos'); return; }
+    toast('success', `${rows.length} video${rows.length === 1 ? '' : 's'} added to the library`);
     setShowCreate(false);
-    setForm({ title: '', description: '', video_url: '', thumbnail_url: '', category: 'General' });
+    setCreateLinks('');
+    setCreateCategory('General');
+    setCreateDescription('');
     fetchVideos();
+  };
+
+  const fetchComments = async (videoId: string) => {
+    setCommentsLoading(true);
+    const { data, error } = await supabase
+      .from('video_comments')
+      .select('id, video_id, user_id, content, created_at, profiles!video_comments_user_id_fkey(first_name, last_name, avatar_url)')
+      .eq('video_id', videoId)
+      .order('created_at', { ascending: true });
+    setCommentsLoading(false);
+    if (error) {
+      toast('error', 'Comments could not be loaded.');
+      return;
+    }
+    setComments((data || []) as unknown as VideoComment[]);
+  };
+
+  const openVideo = (video: Video) => {
+    setSelectedVideo(video);
+    setShowPlayer(true);
+    setCommentContent('');
+    void fetchComments(video.id);
+  };
+
+  const handleAddComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const content = commentContent.trim();
+    if (!user || !organization || !selectedVideo || !content) return;
+    setCommentSubmitting(true);
+    const { error } = await supabase.from('video_comments').insert({
+      org_id: organization.id,
+      video_id: selectedVideo.id,
+      user_id: user.id,
+      content,
+    });
+    setCommentSubmitting(false);
+    if (error) {
+      toast('error', error.message || 'Comment could not be posted.');
+      return;
+    }
+    setCommentContent('');
+    await fetchComments(selectedVideo.id);
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!selectedVideo) return;
+    const { error } = await supabase.from('video_comments').delete().eq('id', commentId);
+    if (error) {
+      toast('error', 'Comment could not be deleted.');
+      return;
+    }
+    await fetchComments(selectedVideo.id);
   };
 
   const handleEdit = (video: Video, e: React.MouseEvent) => {
@@ -127,15 +253,15 @@ export function VideosTab() {
 
   const canManageVideo = (video: Video) => video.uploaded_by === user?.id || isProductionDirector;
 
-  const filtered = videos.filter(v => {
+  const filtered = [...videos].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)).filter(v => {
     const matchSearch = !search || v.title.toLowerCase().includes(search.toLowerCase()) || v.description.toLowerCase().includes(search.toLowerCase());
     const matchCat = !categoryFilter || v.category === categoryFilter;
     return matchSearch && matchCat;
   });
 
   const getYouTubeThumb = (url: string) => {
-    const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([^&\s?]+)/);
-    return match ? `https://img.youtube.com/vi/${match[1]}/mqdefault.jpg` : '';
+    const id = getYouTubeId(url);
+    return id ? `https://img.youtube.com/vi/${id}/mqdefault.jpg` : '';
   };
 
   if (loading) {
@@ -251,7 +377,7 @@ export function VideosTab() {
                   variants={itemVariants}
                   className="group relative border-b border-white/[0.075] transition-colors duration-200 last:border-b-0 hover:bg-white/[0.045]"
                 >
-                  <a href={video.video_url} target="_blank" rel="noopener noreferrer" className="grid gap-3 px-4 py-4 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-5 sm:px-5 lg:px-6">
+                  <button type="button" onClick={() => openVideo(video)} className="grid w-full gap-3 px-4 py-4 text-left sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-5 sm:px-5 lg:px-6">
                     <div className="flex items-start gap-3 sm:contents">
                       <div className="relative h-16 w-28 shrink-0 overflow-hidden rounded-md bg-white/[0.055] ring-1 ring-white/[0.08] sm:h-20 sm:w-36">
                       {thumb ? (
@@ -299,9 +425,9 @@ export function VideosTab() {
                       <span className="text-[11px] font-bold uppercase tracking-[0.12em] opacity-0 transition-opacity group-hover:opacity-100">
                         Open
                       </span>
-                      <ExternalLink className="h-4 w-4" />
+                      <PlayCircle className="h-4 w-4" />
                     </div>
-                  </a>
+                  </button>
 
                   {/* Manage menu */}
                   {canManage && (
@@ -349,33 +475,121 @@ export function VideosTab() {
       )}
 
       {/* Create modal */}
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Add Video">
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Add YouTube Videos">
         <form onSubmit={handleCreate} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Title</label>
-            <input type="text" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} className="input-field" required />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Video URL</label>
-            <input type="url" value={form.video_url} onChange={e => setForm({ ...form, video_url: e.target.value })} className="input-field" placeholder="YouTube or other video URL" required />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Thumbnail URL <span className="text-gray-400 font-normal">(optional)</span></label>
-            <input type="url" value={form.thumbnail_url} onChange={e => setForm({ ...form, thumbnail_url: e.target.value })} className="input-field" placeholder="Auto-detected for YouTube" />
+            <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">YouTube links</label>
+            <textarea
+              value={createLinks}
+              onChange={e => setCreateLinks(e.target.value)}
+              className="input-field min-h-36 resize-y"
+              placeholder={'Paste one or several links\nOne link per line'}
+              required
+            />
+            <p className="mt-2 text-xs leading-5 text-gray-400 dark:text-white/35">Titles and thumbnails are taken directly from YouTube. Public and unlisted videos are supported.</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Category</label>
-            <Select value={form.category} onChange={v => setForm({ ...form, category: v })} options={categories.map(c => ({ value: c, label: c }))} />
+            <Select value={createCategory} onChange={setCreateCategory} options={categories.map(c => ({ value: c, label: c }))} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Description</label>
-            <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="input-field h-20 resize-none" />
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Shared description <span className="font-normal text-gray-400">(optional)</span></label>
+            <textarea value={createDescription} onChange={e => setCreateDescription(e.target.value)} className="input-field h-20 resize-none" />
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={() => setShowCreate(false)} className="btn-secondary">Cancel</button>
-            <button type="submit" disabled={creating} className="btn-primary">{creating ? 'Adding...' : 'Add Video'}</button>
+            <button type="submit" disabled={creating} className="btn-primary">
+              {creating ? <><Loader2 className="h-4 w-4 animate-spin" /> Reading YouTube…</> : 'Add videos'}
+            </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Video player and discussion */}
+      <Modal
+        open={showPlayer}
+        onClose={() => { setShowPlayer(false); setComments([]); setSelectedVideo(null); }}
+        title={selectedVideo?.title || 'Video'}
+        size="lg"
+      >
+        {selectedVideo && (
+          <div className="space-y-5">
+            <div className="aspect-video overflow-hidden rounded-2xl bg-black ring-1 ring-white/10">
+              {getYouTubeEmbedUrl(selectedVideo.video_url) ? (
+                <iframe
+                  className="h-full w-full"
+                  src={`${getYouTubeEmbedUrl(selectedVideo.video_url)}?rel=0`}
+                  title={selectedVideo.title}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center">
+                  <a href={selectedVideo.video_url} target="_blank" rel="noreferrer" className="btn-primary">
+                    <ExternalLink className="h-4 w-4" /> Open video
+                  </a>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 pb-4 dark:border-white/10">
+              <div>
+                <p className="font-black text-gray-900 dark:text-white">Discussion</p>
+                <p className="mt-1 text-xs text-gray-400 dark:text-white/35">Share observations, questions, or helpful notes with the team.</p>
+              </div>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1.5 text-xs font-bold text-gray-500 dark:bg-white/[0.06] dark:text-white/45">
+                <MessageCircle className="h-3.5 w-3.5" /> {comments.length}
+              </span>
+            </div>
+
+            <div className="max-h-64 space-y-3 overflow-y-auto pr-1">
+              {commentsLoading ? (
+                <div className="flex items-center justify-center py-8 text-gray-400"><Loader2 className="h-5 w-5 animate-spin" /></div>
+              ) : comments.length === 0 ? (
+                <p className="py-8 text-center text-sm text-gray-400 dark:text-white/35">No comments yet. Start the conversation.</p>
+              ) : comments.map(comment => {
+                const name = `${comment.profiles?.first_name || ''} ${comment.profiles?.last_name || ''}`.trim() || 'Team member';
+                return (
+                  <div key={comment.id} className="flex gap-3 rounded-2xl bg-gray-50 p-3.5 dark:bg-white/[0.035]">
+                    {comment.profiles?.avatar_url ? (
+                      <img src={comment.profiles.avatar_url} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
+                    ) : (
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-xs font-black text-emerald-500">{name.slice(0, 1).toUpperCase()}</div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-black text-gray-800 dark:text-white/85">{name}</p>
+                          <p className="text-[11px] text-gray-400 dark:text-white/30">{format(parseISO(comment.created_at), 'MMM d, yyyy · h:mm a')}</p>
+                        </div>
+                        {comment.user_id === user?.id && (
+                          <button type="button" onClick={() => void handleDeleteComment(comment.id)} className="text-xs font-bold text-red-500/70 hover:text-red-500">Delete</button>
+                        )}
+                      </div>
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-gray-600 dark:text-white/65">{comment.content}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <form onSubmit={handleAddComment} className="flex items-end gap-2">
+              <textarea
+                value={commentContent}
+                onChange={e => setCommentContent(e.target.value)}
+                maxLength={2000}
+                rows={2}
+                className="input-field min-h-[3.25rem] flex-1 resize-none"
+                placeholder="Add a comment…"
+                aria-label="Add a comment"
+              />
+              <button type="submit" disabled={commentSubmitting || !commentContent.trim()} className="btn-primary h-[3.25rem] px-4">
+                {commentSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                <span className="hidden sm:inline">Post</span>
+              </button>
+            </form>
+          </div>
+        )}
       </Modal>
 
       {/* Edit modal */}

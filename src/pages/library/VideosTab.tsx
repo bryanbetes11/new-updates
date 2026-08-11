@@ -713,6 +713,7 @@ export function VideosTab() {
         onClose={() => { setShowPlayer(false); setComments([]); setSelectedVideo(null); }}
         title={selectedVideo?.title || 'Video'}
         size="xl"
+        bodyClassName="video-discussion-modal-body"
       >
         {selectedVideo && (
           <div className="video-discussion-layout flex min-h-[calc(90dvh-6.5rem)] flex-col gap-5 sm:min-h-0">

@@ -1837,7 +1837,12 @@ export function Navigation({
 
       {/* ── Mobile top bar ── */}
       <div
-        className={`fixed left-0 right-0 top-0 z-50 flex items-end justify-between overflow-visible lg:hidden ${hideMobileAll || hideMobileHeader ? "hidden" : ""}`}
+        aria-hidden="true"
+        className={`pointer-events-none fixed inset-x-0 top-0 z-40 bg-[#050505]/82 backdrop-blur-xl lg:hidden ${hideMobileAll || hideMobileHeader ? "hidden" : ""}`}
+        style={{ height: "calc(env(safe-area-inset-top) + 2px)" }}
+      />
+      <div
+        className={`fixed left-0 right-0 top-0 z-50 isolate flex items-end justify-between overflow-visible lg:hidden ${hideMobileAll || hideMobileHeader ? "hidden" : ""}`}
         style={{
           background: "transparent",
           borderBottom: "none",
@@ -1852,12 +1857,6 @@ export function Navigation({
           willChange: "transform",
         }}
       >
-        <div
-          className="pointer-events-none absolute inset-x-0 top-0 z-0 bg-[#050505]/82 backdrop-blur-xl"
-          style={{
-            height: "calc(env(safe-area-inset-top) + 2px)",
-          }}
-        />
         <div className="relative z-10 flex h-14 w-full items-center justify-between gap-2 bg-[#050505] px-4 pb-0">
           <button
             onClick={() => {

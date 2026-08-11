@@ -348,7 +348,7 @@ export function Profile() {
                 <div className="min-w-0 pt-0.5">
                   <p className="truncate text-xs font-semibold text-gray-500 dark:text-white/45 sm:text-sm">{primaryRoleLabel}</p>
                   <h1
-                    className="mt-1 text-[1.85rem] font-black leading-none text-gray-950 dark:text-white sm:text-[3.15rem] lg:text-[3.65rem]"
+                    className="mt-1 whitespace-nowrap text-[1.85rem] font-black leading-none text-gray-950 dark:text-white sm:text-[2.5rem] lg:text-[3.65rem]"
                   >
                     {fullName}
                   </h1>
@@ -363,7 +363,7 @@ export function Profile() {
                 </div>
               </div>
 
-              <div className="hidden grid-cols-3 gap-2 sm:grid sm:min-w-[23rem]">
+              <div className="hidden grid-cols-3 gap-2 sm:grid sm:min-w-[20rem] lg:min-w-[23rem]">
                 {heroFacts.map(item => (
                   <div key={item.label} className="rounded-2xl border border-white bg-white px-3 py-3 text-center shadow-sm dark:border-white/[0.08] dark:bg-white/[0.05]">
                     <p className="truncate text-lg font-black leading-none text-gray-950 dark:text-white">{item.value}</p>

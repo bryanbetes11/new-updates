@@ -62,6 +62,23 @@ const accessDurations = [
   { label: "7 days", hours: 168 },
 ];
 
+function getManilaDateTimeFields(date = new Date(Date.now() + 60 * 60 * 1000)) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    date: `${value.year}-${value.month}-${value.day}`,
+    time: `${value.hour}:${value.minute}`,
+  };
+}
+
 export function SurveyManagement() {
   const {
     isProductionDirector,
@@ -87,6 +104,10 @@ export function SurveyManagement() {
   const [testMembers, setTestMembers] = useState<TestMember[]>([]);
   const [testMemberId, setTestMemberId] = useState("");
   const [testAssignment, setTestAssignment] = useState<TestAssignment | null>(null);
+  const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
+  const initialSchedule = useMemo(() => getManilaDateTimeFields(), []);
+  const [scheduleDate, setScheduleDate] = useState(initialSchedule.date);
+  const [scheduleTime, setScheduleTime] = useState(initialSchedule.time);
   const [previewRevision, setPreviewRevision] = useState(0);
   const canManage = isProductionDirector;
   const canViewResults =
@@ -405,13 +426,16 @@ export function SurveyManagement() {
     setWorking(false);
   };
 
+  const openScheduleModal = () => {
+    const next = getManilaDateTimeFields();
+    setScheduleDate(next.date);
+    setScheduleTime(next.time);
+    setScheduleModalOpen(true);
+  };
+
   const schedule = async () => {
-    if (!selected) return;
-    const value = window.prompt(
-      "Enter the launch date and time (example: 2026-08-15 19:30). Manila time will be used.",
-    );
-    if (!value) return;
-    const launch = new Date(`${value.replace(" ", "T")}+08:00`);
+    if (!selected || !scheduleDate || !scheduleTime) return;
+    const launch = new Date(`${scheduleDate}T${scheduleTime}:00+08:00`);
     if (Number.isNaN(launch.getTime()) || launch <= new Date()) {
       toast("error", "Choose a valid future date and time.");
       return;
@@ -423,6 +447,7 @@ export function SurveyManagement() {
     });
     if (error) toast("error", error.message);
     else {
+      setScheduleModalOpen(false);
       toast(
         "success",
         `Survey scheduled for ${formatSurveyTime(launch.toISOString())}.`,
@@ -562,7 +587,7 @@ export function SurveyManagement() {
                     <Play className="h-4 w-4" /> Publish survey
                   </button>
                   <button
-                    onClick={() => void schedule()}
+                    onClick={openScheduleModal}
                     disabled={working}
                     className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-3 text-sm font-black dark:border-white/10 dark:text-white"
                   >
@@ -802,6 +827,53 @@ export function SurveyManagement() {
         ) : (
           <ResultsPanel campaignId={selected.id} canSeeCommitment={canManage} />
         )}
+        <Modal
+          open={scheduleModalOpen}
+          onClose={() => !working && setScheduleModalOpen(false)}
+          title="Schedule Survey Launch"
+          size="sm"
+          mobileView="dialog"
+          closeOnBackdrop={!working}
+          closeOnEscape={!working}
+        >
+          <div className="space-y-5">
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-900 dark:border-emerald-400/15 dark:bg-emerald-400/[0.06] dark:text-emerald-100/75">
+              Members will receive the survey notification at the scheduled launch time. All times below use Philippine time (Asia/Manila).
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block">
+                <span className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-white/40">Launch Date</span>
+                <input
+                  type="date"
+                  min={getManilaDateTimeFields(new Date()).date}
+                  value={scheduleDate}
+                  onChange={(event) => setScheduleDate(event.target.value)}
+                  className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-bold text-gray-950 outline-none focus:border-emerald-400 dark:border-white/10 dark:bg-[#111] dark:text-white"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-white/40">Launch Time</span>
+                <input
+                  type="time"
+                  value={scheduleTime}
+                  onChange={(event) => setScheduleTime(event.target.value)}
+                  className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-bold text-gray-950 outline-none focus:border-emerald-400 dark:border-white/10 dark:bg-[#111] dark:text-white"
+                />
+              </label>
+            </div>
+            {scheduleDate && scheduleTime && (
+              <p className="rounded-xl bg-gray-50 px-4 py-3 text-sm text-gray-600 dark:bg-white/[0.04] dark:text-white/55">
+                Scheduled for <span className="font-black text-gray-950 dark:text-white">{formatSurveyTime(new Date(`${scheduleDate}T${scheduleTime}:00+08:00`).toISOString())}</span>
+              </p>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <button onClick={() => setScheduleModalOpen(false)} disabled={working} className="rounded-xl border border-gray-200 px-4 py-3 text-sm font-black text-gray-700 dark:border-white/10 dark:text-white">Cancel</button>
+              <button onClick={() => void schedule()} disabled={working || !scheduleDate || !scheduleTime} className="rounded-xl bg-emerald-500 px-4 py-3 text-sm font-black text-black disabled:opacity-50">
+                {working ? "Scheduling..." : "Schedule Launch"}
+              </button>
+            </div>
+          </div>
+        </Modal>
         <Modal
           open={testModalOpen}
           onClose={() => !working && setTestModalOpen(false)}

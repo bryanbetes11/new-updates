@@ -1,15 +1,13 @@
 export type HapticStrength = 'light' | 'strong';
 
 const vibrationDuration: Record<HapticStrength, number> = {
-  light: 7,
-  strong: 18,
+  light: 12,
+  strong: 28,
 };
 
 export function triggerHaptic(strength: HapticStrength = 'light') {
   if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
   if (document.visibilityState !== 'visible') return false;
-  if (!window.matchMedia('(any-pointer: coarse)').matches) return false;
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
   if (typeof navigator.vibrate !== 'function') return false;
 
   try {

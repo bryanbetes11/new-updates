@@ -87,6 +87,7 @@ export function SurveyManagement() {
   const [testMembers, setTestMembers] = useState<TestMember[]>([]);
   const [testMemberId, setTestMemberId] = useState("");
   const [testAssignment, setTestAssignment] = useState<TestAssignment | null>(null);
+  const [previewRevision, setPreviewRevision] = useState(0);
   const canManage = isProductionDirector;
   const canViewResults =
     canManage || isMusicDirector || isStageDirector || isAdminCoordinator;
@@ -359,6 +360,7 @@ export function SurveyManagement() {
         ),
       );
       setEditing(false);
+      setPreviewRevision((revision) => revision + 1);
       toast("success", "Draft content updated.");
     }
     setWorking(false);
@@ -766,6 +768,7 @@ export function SurveyManagement() {
                 </div>
               )}
             </div>
+            <LiveSurveyPreview campaignId={selected.id} revision={previewRevision} />
           </section>
         ) : tab === "progress" ? (
           <ProgressTable
@@ -880,6 +883,61 @@ type ResultRow = {
         survey_sections: { campaign_id: string; title_en: string };
       }>;
 };
+
+type PreviewDevice = "phone" | "tablet" | "desktop";
+
+const previewDeviceWidths: Record<PreviewDevice, string> = {
+  phone: "390px",
+  tablet: "820px",
+  desktop: "1180px",
+};
+
+function LiveSurveyPreview({ campaignId, revision }: { campaignId: string; revision: number }) {
+  const [open, setOpen] = useState(true);
+  const [device, setDevice] = useState<PreviewDevice>("desktop");
+  const [manualRevision, setManualRevision] = useState(0);
+  const previewUrl = `/reflection?preview=intro&campaignId=${encodeURIComponent(campaignId)}&revision=${revision + manualRevision}`;
+
+  return (
+    <div className="mt-6 border-t border-gray-200 pt-5 dark:border-white/[0.07]">
+      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-black/20">
+        <div className="flex flex-wrap items-center gap-3 border-b border-gray-200 p-4 dark:border-white/10">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-300">
+            <Play className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-black text-gray-950 dark:text-white">Live survey preview</p>
+            <p className="mt-0.5 text-xs text-gray-500 dark:text-white/45">Uses this campaign’s real introduction, sections, questions, and role rules. Preview answers are never saved.</p>
+          </div>
+          <button onClick={() => setOpen((current) => !current)} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-black text-gray-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-white">
+            {open ? "Hide preview" : "Show preview"}
+          </button>
+        </div>
+        {open && (
+          <div className="p-4">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex rounded-xl border border-gray-200 bg-white p-1 dark:border-white/10 dark:bg-white/[0.035]">
+                {(["phone", "tablet", "desktop"] as const).map((item) => (
+                  <button key={item} onClick={() => setDevice(item)} aria-pressed={device === item} className={`rounded-lg px-3 py-2 text-xs font-black capitalize ${device === item ? "bg-gray-950 text-white dark:bg-white dark:text-black" : "text-gray-500 dark:text-white/45"}`}>
+                    {item === "tablet" ? "iPad" : item}
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => setManualRevision((current) => current + 1)} className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-black text-gray-600 dark:border-white/10 dark:bg-white/[0.035] dark:text-white/60">
+                <RefreshCw className="h-3.5 w-3.5" /> Refresh
+              </button>
+            </div>
+            <div className="overflow-x-auto rounded-2xl bg-[#050706] p-3">
+              <div className="mx-auto overflow-hidden rounded-[1.5rem] border border-white/10 bg-black shadow-2xl transition-[width] duration-300" style={{ width: previewDeviceWidths[device], maxWidth: "100%" }}>
+                <iframe key={`${campaignId}-${revision}-${manualRevision}`} title={`Live survey preview — ${device}`} src={previewUrl} className="block h-[780px] w-full bg-black" />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function ResultsPanel({
   campaignId,

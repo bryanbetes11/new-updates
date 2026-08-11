@@ -91,7 +91,7 @@ const optionTagalog: Record<string, string> = {
 };
 
 export function MinistryReflection() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, isProductionDirector } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [campaign, setCampaign] = useState<SurveyCampaign | null>(null);
@@ -109,21 +109,40 @@ export function MinistryReflection() {
   const [loading, setLoading] = useState(true);
   const [submitted, setSubmitted] = useState(false);
   const [language, setLanguage] = useState<SurveyLanguage>("en");
-  const isPreview = import.meta.env.DEV && new URLSearchParams(window.location.search).has("preview");
+  const previewParams = new URLSearchParams(window.location.search);
+  const previewCampaignId = previewParams.get("campaignId");
+  const previewScreen = previewParams.get("preview");
+  const isPreview = previewParams.has("preview") && (import.meta.env.DEV || isProductionDirector);
 
   const loadSurvey = useCallback(async () => {
-    if (
-      import.meta.env.DEV &&
-      new URLSearchParams(window.location.search).has("preview")
-    ) {
-      const preview = createReflectionPreview();
+    if (isPreview) {
+      let preview = createReflectionPreview();
+      if (previewCampaignId) {
+        const [{ data: campaignRow, error: campaignError }, { data: sectionRows, error: sectionError }] = await Promise.all([
+          supabase.from("survey_campaigns").select("*").eq("id", previewCampaignId).single(),
+          supabase.from("survey_sections").select("*,survey_questions(*)").eq("campaign_id", previewCampaignId).order("sort_order").order("sort_order", { referencedTable: "survey_questions" }),
+        ]);
+        if (campaignError || sectionError || !campaignRow) {
+          toast("error", (campaignError || sectionError)?.message || "Unable to load this survey preview.");
+          setLoading(false);
+          return;
+        }
+        preview = {
+          campaign: campaignRow as SurveyCampaign,
+          participation: { ...preview.participation, campaign_id: previewCampaignId },
+          sections: ((sectionRows || []) as Array<SurveySection & { survey_questions?: SurveyQuestion[] }>).map((section) => ({
+            ...section,
+            completed_at: null,
+            questions: [...(section.survey_questions || [])].sort((a, b) => a.sort_order - b.sort_order),
+          })),
+        };
+      }
       setCampaign(preview.campaign);
       setParticipation(preview.participation);
       setSections(preview.sections);
       setAnswers({});
       setActiveIndex(
-        new URLSearchParams(window.location.search).get("preview") ===
-          "overview"
+        previewScreen === "overview"
           ? -2
           : -1,
       );
@@ -203,7 +222,7 @@ export function MinistryReflection() {
     } finally {
       setLoading(false);
     }
-  }, [navigate, toast, user]);
+  }, [isPreview, navigate, previewCampaignId, previewScreen, toast, user]);
 
   useEffect(() => {
     void loadSurvey();

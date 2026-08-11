@@ -579,14 +579,14 @@ export function VideosTab() {
               )}
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 pb-4 dark:border-white/10">
-              <div>
+            <div className="border-b border-gray-200 pb-4 dark:border-white/10">
+              <div className="flex items-center justify-between gap-3">
                 <p className="font-black text-gray-900 dark:text-white">Discussion</p>
-                <p className="mt-1 text-xs text-gray-400 dark:text-white/35">Share observations, questions, or helpful notes with the team.</p>
+                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1.5 text-xs font-bold text-gray-500 dark:bg-white/[0.06] dark:text-white/45">
+                  <MessageCircle className="h-3.5 w-3.5" /> {comments.length}
+                </span>
               </div>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1.5 text-xs font-bold text-gray-500 dark:bg-white/[0.06] dark:text-white/45">
-                <MessageCircle className="h-3.5 w-3.5" /> {comments.length}
-              </span>
+              <p className="mt-1 text-xs text-gray-400 dark:text-white/35">Share observations, questions, or helpful notes with the team.</p>
             </div>
 
             <div className="max-h-64 space-y-2 overflow-y-auto overscroll-contain pr-1">

@@ -29,6 +29,14 @@ html[data-touch-feedback="apple"] .touch-feedback-strong {
     0 8px 22px rgb(0 0 0 / 0.24);
 }
 
+/* Navigation already has a strong selected state. Keep its touch response
+   tactile and shape-neutral instead of drawing a square highlight around it. */
+html[data-touch-feedback="apple"] :is(nav, aside) .touch-feedback-strong {
+  scale: 0.94;
+  filter: brightness(1.18) saturate(1.06);
+  box-shadow: none;
+}
+
 @layer base {
   * {
     -webkit-tap-highlight-color: transparent;

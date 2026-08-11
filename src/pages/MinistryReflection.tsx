@@ -676,10 +676,12 @@ export function MinistryReflection() {
   }
 
   if (activeIndex === -2) {
-    const nextIndex = Math.max(
-      0,
-      sections.findIndex((section) => !section.completed_at),
+    const firstIncompleteIndex = sections.findIndex(
+      (section) => !section.completed_at,
     );
+    const nextIndex = firstIncompleteIndex >= 0
+      ? firstIncompleteIndex
+      : Math.max(0, sections.length - 1);
     return renderSurveySurface(
       <div className="survey-modal-surface min-h-[calc(100dvh-5rem)] bg-[#070908] px-5 py-8 text-white">
         <div className="mx-auto flex min-h-full max-w-2xl flex-col">
@@ -714,13 +716,17 @@ export function MinistryReflection() {
             </p>
           </div>
           <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02]">
-            {sections.map((section, index) => (
-              <button
-                key={section.id}
-                onClick={() => setActiveIndex(index)}
-                data-haptic="strong"
-                className={`flex w-full items-center gap-3 border-b border-white/[0.07] px-4 py-3 text-left last:border-b-0 ${section.completed_at ? "bg-emerald-400/[0.045]" : index === nextIndex ? "bg-white/[0.035]" : "bg-transparent"}`}
-              >
+            {sections.map((section, index) => {
+              const isLocked = !section.completed_at && index !== nextIndex;
+              return (
+                <button
+                  key={section.id}
+                  onClick={() => setActiveIndex(index)}
+                  data-haptic={isLocked ? "none" : "strong"}
+                  disabled={isLocked}
+                  aria-label={`${section.title_en}${isLocked ? ", locked until the previous chapter is complete" : ""}`}
+                  className={`flex w-full items-center gap-3 border-b border-white/[0.07] px-4 py-3 text-left last:border-b-0 ${section.completed_at ? "bg-emerald-400/[0.045]" : index === nextIndex ? "bg-white/[0.035]" : "cursor-not-allowed bg-transparent"}`}
+                >
                 <span
                   className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-black ${section.completed_at ? "bg-emerald-400 text-black" : index === nextIndex ? "border border-emerald-400 text-emerald-400" : "border border-white/15 text-white/30"}`}
                 >
@@ -736,17 +742,18 @@ export function MinistryReflection() {
                     {section.required_role ? `${section.required_role}s only` : "All members"}
                   </span>
                 </span>
-                <span
-                  className={`text-[10px] font-black uppercase tracking-wide ${section.completed_at ? "text-emerald-400" : index === nextIndex ? "text-white/60" : "text-white/25"}`}
-                >
-                  {section.completed_at
-                    ? "Complete"
-                    : index === nextIndex
-                      ? "Continue"
-                      : "Upcoming"}
-                </span>
-              </button>
-            ))}
+                  <span
+                    className={`flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wide ${section.completed_at ? "text-emerald-400" : index === nextIndex ? "text-white/60" : "text-white/25"}`}
+                  >
+                    {section.completed_at
+                      ? "Complete"
+                      : index === nextIndex
+                        ? "Continue"
+                        : <><LockKeyhole className="h-3 w-3" /> Locked</>}
+                  </span>
+                </button>
+              );
+            })}
           </div>
           <div className="mt-auto pt-5">
             <button
@@ -774,6 +781,15 @@ export function MinistryReflection() {
       <div className="mx-auto flex min-h-full max-w-3xl flex-col">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setActiveIndex(-2)}
+              data-haptic="strong"
+              aria-label="Back to Chapters"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.035] text-white/65 transition-colors hover:bg-white/[0.07] hover:text-white"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
             <img
               src="/servesync-logo-latest.png"
               className="h-8 w-8 object-contain"

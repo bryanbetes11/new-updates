@@ -62,7 +62,7 @@ function timestampToSeconds(value: string) {
 function TimestampedComment({ content, onSeek }: { content: string; onSeek: (seconds: number) => void }) {
   const parts = content.split(/(\b(?:\d{1,2}:)?\d{1,2}:\d{2}\b)/g);
   return (
-    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-gray-600 dark:text-white/65">
+    <p className="mt-1 whitespace-pre-wrap text-[13px] leading-5 text-gray-600 dark:text-white/65">
       {parts.map((part, index) => {
         const seconds = timestampToSeconds(part);
         return seconds === null ? part : (
@@ -70,7 +70,7 @@ function TimestampedComment({ content, onSeek }: { content: string; onSeek: (sec
             key={`${part}-${index}`}
             type="button"
             onClick={() => onSeek(seconds)}
-            className="mx-0.5 inline-flex rounded-md bg-emerald-500/12 px-1.5 py-0.5 font-mono text-xs font-black text-emerald-600 transition-colors hover:bg-emerald-500/22 dark:text-emerald-400"
+            className="mx-0.5 inline-flex rounded-md bg-emerald-500/12 px-1.5 font-mono text-xs font-black text-emerald-600 transition-colors hover:bg-emerald-500/22 dark:text-emerald-400"
             aria-label={`Play video from ${part}`}
           >
             {part}
@@ -589,7 +589,7 @@ export function VideosTab() {
               </span>
             </div>
 
-            <div className="max-h-64 space-y-3 overflow-y-auto pr-1">
+            <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
               {commentsLoading ? (
                 <div className="flex items-center justify-center py-8 text-gray-400"><Loader2 className="h-5 w-5 animate-spin" /></div>
               ) : comments.length === 0 ? (
@@ -597,20 +597,20 @@ export function VideosTab() {
               ) : comments.map(comment => {
                 const name = `${comment.profiles?.first_name || ''} ${comment.profiles?.last_name || ''}`.trim() || 'Team member';
                 return (
-                  <div key={comment.id} className="flex gap-3 rounded-2xl bg-gray-50 p-3.5 dark:bg-white/[0.035]">
+                  <div key={comment.id} className="flex gap-2.5 rounded-xl bg-gray-50 p-2.5 dark:bg-white/[0.035]">
                     {comment.profiles?.avatar_url ? (
-                      <img src={comment.profiles.avatar_url} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
+                      <img src={comment.profiles.avatar_url} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" />
                     ) : (
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-xs font-black text-emerald-500">{name.slice(0, 1).toUpperCase()}</div>
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-[11px] font-black text-emerald-500">{name.slice(0, 1).toUpperCase()}</div>
                     )}
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-black text-gray-800 dark:text-white/85">{name}</p>
-                          <p className="text-[11px] text-gray-400 dark:text-white/30">{format(parseISO(comment.created_at), 'MMM d, yyyy · h:mm a')}</p>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                          <p className="truncate text-[13px] font-black text-gray-800 dark:text-white/85">{name}</p>
+                          <p className="whitespace-nowrap text-[10px] text-gray-400 dark:text-white/30">{format(parseISO(comment.created_at), 'MMM d, yyyy · h:mm a')}</p>
                         </div>
                         {comment.user_id === user?.id && (
-                          <button type="button" onClick={() => void handleDeleteComment(comment.id)} className="text-xs font-bold text-red-500/70 hover:text-red-500">Delete</button>
+                          <button type="button" onClick={() => void handleDeleteComment(comment.id)} className="shrink-0 text-[10px] font-bold text-red-500/70 hover:text-red-500">Delete</button>
                         )}
                       </div>
                       <TimestampedComment content={comment.content} onSeek={seekVideo} />

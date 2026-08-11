@@ -250,7 +250,7 @@ export function Profile() {
         style={{ background: 'radial-gradient(circle, rgba(34,197,94,0.18), transparent 70%)', filter: 'blur(60px)' }}
       />
 
-      <div className="relative max-w-2xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-10 space-y-5 sm:space-y-6">
+      <div className="relative max-w-2xl md:max-w-4xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-10 space-y-5 sm:space-y-6">
         {billingLocked && billingStatus === 'suspended' && (
           <div className="rounded-[26px] border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-900/10 px-4 py-4">
             <div className="flex items-start gap-3">
@@ -320,19 +320,15 @@ export function Profile() {
             <div className="relative mt-4 flex flex-col gap-4 sm:mt-5 sm:flex-row sm:items-end sm:justify-between sm:gap-5">
               <div className="flex min-w-0 items-start gap-3 sm:gap-5">
                 <div className="group relative shrink-0">
-                  <div
-                    className="absolute -inset-[3px] rounded-[1.25rem] opacity-80 dark:opacity-90 sm:rounded-[1.45rem]"
-                    style={{ background: 'conic-gradient(from 200deg, rgba(34,197,94,0.7), rgba(16,185,129,0.18), rgba(20,184,166,0.55), rgba(34,197,94,0.7))' }}
-                  />
                   {profile.avatar_url ? (
                     <img
                       src={profile.avatar_url}
                       alt={profile.first_name}
-                      className="relative h-16 w-16 rounded-[1.15rem] object-cover ring-4 ring-white sm:h-[104px] sm:w-[104px] sm:rounded-[1.35rem] dark:ring-[#0d0d0f]"
+                      className="relative h-16 w-16 rounded-[1.15rem] object-cover sm:h-[104px] sm:w-[104px] sm:rounded-[1.35rem]"
                     />
                   ) : (
                     <div
-                      className="relative flex h-16 w-16 items-center justify-center rounded-[1.15rem] text-xl font-black text-white ring-4 ring-white sm:h-[104px] sm:w-[104px] sm:rounded-[1.35rem] sm:text-[2.4rem] dark:ring-[#0d0d0f]"
+                      className="relative flex h-16 w-16 items-center justify-center rounded-[1.15rem] text-xl font-black text-white sm:h-[104px] sm:w-[104px] sm:rounded-[1.35rem] sm:text-[2.4rem]"
                       style={{ background: 'linear-gradient(145deg, #16a34a, #15803d)' }}
                     >
                       {profile.first_name[0]}{profile.last_name?.[0] || ''}

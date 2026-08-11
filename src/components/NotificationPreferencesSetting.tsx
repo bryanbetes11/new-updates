@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BellRing, Clock3, Loader2, Save, ShieldCheck } from 'lucide-react';
+import { BellRing, ChevronDown, Clock3, Loader2, Save, ShieldCheck } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -195,11 +195,17 @@ export function NotificationPreferencesSetting() {
           )}
         </div>
 
-        <div className="space-y-5">
+        <div className="space-y-3">
           {Object.entries(groupedRules).map(([category, categoryRules]) => (
-            <div key={category}>
-              <p className="mb-2 text-[11px] font-black uppercase tracking-[0.16em] text-gray-400 dark:text-white/30">{categoryLabels[category] || category}</p>
-              <div className="divide-y divide-gray-100 rounded-2xl border border-gray-100 dark:divide-white/[0.05] dark:border-white/[0.06]">
+            <details key={category} className="group overflow-hidden rounded-2xl border border-gray-100 dark:border-white/[0.06]">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5">
+                <span className="text-[11px] font-black uppercase tracking-[0.16em] text-gray-500 dark:text-white/45">{categoryLabels[category] || category}</span>
+                <span className="flex items-center gap-2">
+                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-black text-gray-500 dark:bg-white/[0.06] dark:text-white/40">{categoryRules.length}</span>
+                  <ChevronDown className="h-4 w-4 text-gray-400 transition-transform group-open:rotate-180" />
+                </span>
+              </summary>
+              <div className="divide-y divide-gray-100 border-t border-gray-100 dark:divide-white/[0.05] dark:border-white/[0.06]">
                 {categoryRules.map(rule => {
                   const available = rule.in_app_enabled || rule.push_enabled;
                   const enabled = rule.required || !preference.muted_types.includes(rule.type);
@@ -223,7 +229,7 @@ export function NotificationPreferencesSetting() {
                   );
                 })}
               </div>
-            </div>
+            </details>
           ))}
         </div>
 

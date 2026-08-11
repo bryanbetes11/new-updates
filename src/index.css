@@ -713,6 +713,19 @@ html[data-touch-feedback="apple"] :is(nav, aside) .touch-feedback-strong {
     height: var(--messages-viewport-height, 100dvh);
   }
 
+  /* The phone chat pane already follows visualViewport while the keyboard is
+     open. Applying the keyboard inset to the fixed composer as well lifts it
+     twice and leaves a large empty band above iOS' keyboard accessory bar. */
+  @media (max-width: 767px) {
+    .messages-keyboard-open .mobile-chat-composer {
+      bottom: 12px !important;
+    }
+
+    .messages-keyboard-open .mobile-chat-composer::before {
+      bottom: -12px;
+    }
+  }
+
   @media (min-width: 1024px) and (pointer: coarse) {
     .messages-keyboard-open .desktop-sidebar-main {
       bottom: auto !important;

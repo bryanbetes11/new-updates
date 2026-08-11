@@ -101,9 +101,11 @@ function getYouTubeEmbedUrl(value: string) {
 }
 
 function getVideoSortDate(video: Video) {
-  const monthDate = video.title.match(/\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2},\s+\d{4}\b/i);
+  const monthDate = video.title.match(/\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+(\d{1,2})(?:,\s*(\d{4}))?\b/i);
   if (monthDate) {
-    const parsed = Date.parse(monthDate[0].replace('.', ''));
+    const uploadedYear = new Date(video.created_at).getFullYear();
+    const year = monthDate[3] || (Number.isFinite(uploadedYear) ? String(uploadedYear) : String(new Date().getFullYear()));
+    const parsed = Date.parse(`${monthDate[1].replace('.', '')} ${monthDate[2]}, ${year}`);
     if (Number.isFinite(parsed)) return parsed;
   }
   return Date.parse(video.created_at);

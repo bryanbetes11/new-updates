@@ -355,22 +355,35 @@
   }
 
   @media (min-width: 1024px) {
+    .desktop-top-bar {
+      height: calc(72px + env(safe-area-inset-top, 0px));
+      padding-top: env(safe-area-inset-top, 0px);
+      padding-right: max(1.25rem, env(safe-area-inset-right, 0px));
+      padding-left: max(1.25rem, env(safe-area-inset-left, 0px));
+    }
+
+    .desktop-sidebar {
+      top: calc(72px + env(safe-area-inset-top, 0px));
+      bottom: env(safe-area-inset-bottom, 0px);
+    }
+
     .desktop-sidebar-main {
       padding-left: var(--desktop-sidebar-width, 0px);
+      padding-right: env(safe-area-inset-right, 0px);
     }
 
     .mobile-layout-padding {
-      padding-top: 2rem;
-      padding-bottom: 5.75rem;
+      padding-top: calc(2rem + env(safe-area-inset-top, 0px));
+      padding-bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px));
     }
 
     .wide-shell-spacing {
-      padding-top: 72px;
-      padding-bottom: 5.75rem;
+      padding-top: calc(72px + env(safe-area-inset-top, 0px));
+      padding-bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px));
     }
 
     .dashboard-shell-spacing {
-      padding-bottom: 5.75rem;
+      padding-bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px));
     }
 
     .event-detail-shell-spacing {

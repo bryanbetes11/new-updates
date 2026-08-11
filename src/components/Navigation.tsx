@@ -1428,7 +1428,7 @@ export function Navigation({
   return (
     <div className="dark contents">
       {/* ── Desktop top bar ── */}
-      <div className="fixed inset-x-0 top-0 z-50 hidden h-[72px] items-center gap-4 bg-[#050505]/96 px-5 text-white backdrop-blur-2xl lg:flex">
+      <div className="desktop-top-bar fixed inset-x-0 top-0 z-50 hidden items-center gap-4 bg-[#050505]/96 px-5 text-white backdrop-blur-2xl lg:flex">
         <button
           onClick={() => handleNav("/dashboard")}
           className="flex min-w-[170px] items-center gap-3 text-left"
@@ -2069,7 +2069,7 @@ export function Navigation({
       <motion.aside
         animate={{ width: sidebarWidth }}
         transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-        className="fixed bottom-0 left-0 top-[72px] z-40 hidden flex-col border-r border-white/[0.08] bg-[#050505] lg:flex"
+        className="desktop-sidebar fixed left-0 z-40 hidden flex-col border-r border-white/[0.08] bg-[#050505] lg:flex"
         style={{ overflow: "visible" }}
       >
         <div

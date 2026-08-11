@@ -141,6 +141,7 @@ export function VideosTab() {
   const [createDescription, setCreateDescription] = useState('');
   const [createNotifyMembers, setCreateNotifyMembers] = useState(false);
   const [showPlayer, setShowPlayer] = useState(false);
+  const [playerUnavailable, setPlayerUnavailable] = useState(false);
   const [comments, setComments] = useState<VideoComment[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [commentContent, setCommentContent] = useState('');
@@ -164,6 +165,21 @@ export function VideosTab() {
   useEffect(() => {
     setVisibleCount(VIDEOS_PER_PAGE);
   }, [search, categoryFilter]);
+
+  useEffect(() => {
+    if (!showPlayer) return;
+    const handlePlayerMessage = (event: MessageEvent) => {
+      if (!event.origin.endsWith('youtube.com') && !event.origin.endsWith('youtube-nocookie.com')) return;
+      try {
+        const payload = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        if (payload?.event === 'onError') setPlayerUnavailable(true);
+      } catch {
+        // Ignore unrelated YouTube player messages.
+      }
+    };
+    window.addEventListener('message', handlePlayerMessage);
+    return () => window.removeEventListener('message', handlePlayerMessage);
+  }, [showPlayer]);
 
   useEffect(() => {
     const handleClickOutside = () => setOpenMenuId(null);
@@ -230,9 +246,18 @@ export function VideosTab() {
 
   const openVideo = (video: Video) => {
     setSelectedVideo(video);
+    setPlayerUnavailable(false);
     setShowPlayer(true);
     setCommentContent('');
     void fetchComments(video.id);
+  };
+
+  const handlePlayerLoad = () => {
+    playerRef.current?.contentWindow?.postMessage(JSON.stringify({
+      event: 'command',
+      func: 'addEventListener',
+      args: ['onError'],
+    }), '*');
   };
 
   const handleAddComment = async (e: React.FormEvent) => {
@@ -620,22 +645,45 @@ export function VideosTab() {
       >
         {selectedVideo && (
           <div className="flex min-h-[calc(90dvh-6.5rem)] flex-col gap-5 sm:min-h-0">
-            <div className="aspect-video overflow-hidden rounded-2xl bg-black ring-1 ring-white/10">
-              {getYouTubeEmbedUrl(selectedVideo.video_url) ? (
+            <div className="relative aspect-video overflow-hidden rounded-2xl bg-black ring-1 ring-white/10">
+              {getYouTubeEmbedUrl(selectedVideo.video_url) && !playerUnavailable ? (
                 <iframe
                   ref={playerRef}
                   className="h-full w-full"
-                  src={`${getYouTubeEmbedUrl(selectedVideo.video_url)}?rel=0&enablejsapi=1`}
+                  src={`${getYouTubeEmbedUrl(selectedVideo.video_url)}?rel=0&enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}`}
                   title={selectedVideo.title}
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                   allowFullScreen
+                  onLoad={handlePlayerLoad}
                 />
               ) : (
-                <div className="flex h-full items-center justify-center">
-                  <a href={selectedVideo.video_url} target="_blank" rel="noreferrer" className="btn-primary">
-                    <ExternalLink className="h-4 w-4" /> Open video
-                  </a>
+                <div className="relative flex h-full items-center justify-center overflow-hidden">
+                  {(selectedVideo.thumbnail_url || getYouTubeThumb(selectedVideo.video_url)) && (
+                    <img
+                      src={selectedVideo.thumbnail_url || getYouTubeThumb(selectedVideo.video_url)}
+                      alt=""
+                      className="absolute inset-0 h-full w-full scale-105 object-cover opacity-35 blur-sm"
+                    />
+                  )}
+                  <div className="absolute inset-0 bg-black/65" />
+                  <div className="relative z-10 max-w-sm px-6 text-center">
+                    <p className="text-base font-black text-white">This video is restricted on embedded players.</p>
+                    <p className="mt-2 text-sm text-white/60">You can still watch it directly on YouTube.</p>
+                    <a href={selectedVideo.video_url} target="_blank" rel="noreferrer" className="btn-primary mt-5">
+                      <ExternalLink className="h-4 w-4" /> Watch on YouTube
+                    </a>
+                  </div>
                 </div>
+              )}
+              {!playerUnavailable && getYouTubeEmbedUrl(selectedVideo.video_url) && (
+                <a
+                  href={selectedVideo.video_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="absolute right-3 top-3 z-10 inline-flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-1.5 text-xs font-bold text-white/85 backdrop-blur-md transition-colors hover:bg-black/85 hover:text-white"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" /> YouTube
+                  </a>
               )}
             </div>
 

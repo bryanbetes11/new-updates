@@ -11,6 +11,7 @@ import { EmptyState } from '../../components/EmptyState';
 import type { Video } from '../../types';
 
 const categories = ['General', 'Worship', 'Tutorial', 'Sermon', 'Conference', 'Other'];
+const VIDEOS_PER_PAGE = 20;
 
 const categoryColors: Record<string, string> = {
   Worship: 'bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300',
@@ -99,6 +100,15 @@ function getYouTubeEmbedUrl(value: string) {
   return id ? `https://www.youtube.com/embed/${id}` : '';
 }
 
+function getVideoSortDate(video: Video) {
+  const monthDate = video.title.match(/\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2},\s+\d{4}\b/i);
+  if (monthDate) {
+    const parsed = Date.parse(monthDate[0].replace('.', ''));
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return Date.parse(video.created_at);
+}
+
 async function fetchYouTubeMetadata(url: string): Promise<YouTubeMetadata> {
   if (!getYouTubeId(url)) throw new Error('Only valid YouTube links can be added.');
   const response = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`);
@@ -115,6 +125,7 @@ export function VideosTab() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [visibleCount, setVisibleCount] = useState(VIDEOS_PER_PAGE);
   const [showCreate, setShowCreate] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
@@ -147,6 +158,10 @@ export function VideosTab() {
   };
 
   useEffect(() => { fetchVideos(); }, []);
+
+  useEffect(() => {
+    setVisibleCount(VIDEOS_PER_PAGE);
+  }, [search, categoryFilter]);
 
   useEffect(() => {
     const handleClickOutside = () => setOpenMenuId(null);
@@ -302,11 +317,15 @@ export function VideosTab() {
 
   const canManageVideo = (video: Video) => video.uploaded_by === user?.id || isProductionDirector;
 
-  const filtered = [...videos].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)).filter(v => {
+  const filtered = [...videos].sort((a, b) => {
+    const dateDifference = getVideoSortDate(b) - getVideoSortDate(a);
+    return dateDifference || Date.parse(b.created_at) - Date.parse(a.created_at);
+  }).filter(v => {
     const matchSearch = !search || v.title.toLowerCase().includes(search.toLowerCase()) || v.description.toLowerCase().includes(search.toLowerCase());
     const matchCat = !categoryFilter || v.category === categoryFilter;
     return matchSearch && matchCat;
   });
+  const visibleVideos = filtered.slice(0, visibleCount);
 
   const getYouTubeThumb = (url: string) => {
     const id = getYouTubeId(url);
@@ -416,7 +435,7 @@ export function VideosTab() {
             animate="show"
             className="overflow-visible border-y border-white/[0.08]"
           >
-            {filtered.map(video => {
+            {visibleVideos.map(video => {
               const thumb = video.thumbnail_url || getYouTubeThumb(video.video_url);
               const canManage = canManageVideo(video);
               const catColor = categoryColors[video.category] ?? categoryColors.General;
@@ -515,9 +534,21 @@ export function VideosTab() {
             })}
           </motion.div>
 
+          {visibleCount < filtered.length && (
+            <div className="flex justify-center pt-3">
+              <button
+                type="button"
+                onClick={() => setVisibleCount(count => count + VIDEOS_PER_PAGE)}
+                className="inline-flex h-11 items-center justify-center rounded-full bg-white/[0.095] px-6 text-sm font-black text-white transition-all hover:bg-white/[0.14] active:scale-[0.98]"
+              >
+                Show more <span className="ml-2 text-white/45">{Math.min(VIDEOS_PER_PAGE, filtered.length - visibleCount)}</span>
+              </button>
+            </div>
+          )}
+
           {!categoryFilter && !search && (
             <p className="text-center text-[11px] font-mono text-gray-400 dark:text-white/30 pt-1 tracking-wide">
-              {videos.length} video{videos.length !== 1 ? 's' : ''} in library
+              Showing {visibleVideos.length} of {videos.length} video{videos.length !== 1 ? 's' : ''}
             </p>
           )}
         </>

@@ -392,7 +392,7 @@ export function MinistryReflection() {
               onClick={() => setHolding(false)}
               className="mt-8 w-full rounded-2xl bg-emerald-500 px-5 py-4 font-black text-black"
             >
-              Continue reflection
+              Continue Reflection
             </button>
             <button
               onClick={async () => {
@@ -491,7 +491,7 @@ export function MinistryReflection() {
               onClick={() => setActiveIndex(-1)}
               className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-4 font-black text-black"
             >
-              Continue to introduction <ArrowRight className="h-4 w-4" />
+              Continue to Introduction <ArrowRight className="h-4 w-4" />
             </button>
             <p className="mt-4 text-center text-xs leading-5 text-white/32">
               You can save your progress and return when you are ready.<br />Maaari mong i-save ang iyong progress at bumalik kapag handa ka na.
@@ -546,19 +546,19 @@ export function MinistryReflection() {
               onClick={() => setActiveIndex(-2)}
               className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-4 font-black text-black"
             >
-              Begin reflection <ArrowRight className="h-4 w-4" />
+              Begin Reflection <ArrowRight className="h-4 w-4" />
             </button>
             <button
               onClick={() => setHolding(true)}
               className="mt-3 w-full px-5 py-3 text-sm font-bold text-emerald-400"
             >
-              Save & continue later
+              Save & Continue Later
             </button>
             <button
               onClick={() => setActiveIndex(-3)}
               className="mt-1 w-full px-5 py-3 text-sm font-bold text-white/40"
             >
-              Back to title page
+              Back to Title Page
             </button>
           </div>
         </div>
@@ -587,13 +587,19 @@ export function MinistryReflection() {
             </span>
           </div>
           <div className="mt-8">
+            <button
+              onClick={() => setActiveIndex(-1)}
+              className="mb-5 inline-flex items-center gap-2 text-sm font-bold text-white/45 transition-colors hover:text-white/75"
+            >
+              <ArrowLeft className="h-4 w-4" /> Back to Introduction
+            </button>
             <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400">
               Your reflection
             </p>
             <h1 className="mt-2 text-3xl font-black tracking-[-0.045em]">
               Move at a thoughtful pace.
             </h1>
-            <p className="mt-2 max-w-lg text-sm leading-5 text-white/45">
+            <p className="mt-2 text-sm leading-5 text-white/45">
               Complete one chapter at a time. You can save your work and return
               without losing your place.
             </p>
@@ -644,7 +650,7 @@ export function MinistryReflection() {
               onClick={() => setHolding(true)}
               className="mt-3 w-full px-5 py-3 text-sm font-bold text-emerald-400"
             >
-              Save & exit
+              Save & Exit
             </button>
           </div>
         </div>
@@ -739,7 +745,7 @@ export function MinistryReflection() {
               className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-4 font-black text-black disabled:opacity-60"
             >
               {activeIndex === sections.length - 1
-                ? "Submit reflection"
+                ? "Submit Reflection"
                 : "Continue"}{" "}
               <ArrowRight className="h-4 w-4" />
             </button>
@@ -751,7 +757,7 @@ export function MinistryReflection() {
             }}
             className="mt-3 w-full px-5 py-3 text-sm font-bold text-emerald-400"
           >
-            Save & continue later
+            Save & Continue Later
           </button>
           <p className="mt-6 flex items-center justify-center gap-2 text-center text-xs leading-5 text-white/30">
             <LockKeyhole className="h-3.5 w-3.5" />

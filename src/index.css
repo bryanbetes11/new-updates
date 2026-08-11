@@ -951,24 +951,57 @@
     height: 100dvh;
     min-height: 0;
     overflow: hidden;
-    padding-top: max(2rem, env(safe-area-inset-top)) !important;
-    padding-right: max(2rem, env(safe-area-inset-right)) !important;
-    padding-bottom: max(2rem, env(safe-area-inset-bottom)) !important;
-    padding-left: max(2rem, env(safe-area-inset-left)) !important;
-    background: linear-gradient(125deg, #020d09, #071713 35%, #14102b 68%, #06120d) !important;
-    background-size: 240% 240% !important;
+    isolation: isolate;
+    padding-top: calc(2.25rem + env(safe-area-inset-top)) !important;
+    padding-right: calc(2.25rem + env(safe-area-inset-right)) !important;
+    padding-bottom: calc(2.25rem + env(safe-area-inset-bottom)) !important;
+    padding-left: calc(2.25rem + env(safe-area-inset-left)) !important;
+    background:
+      radial-gradient(circle at 12% 18%, rgb(16 185 129 / 0.42), transparent 34%),
+      radial-gradient(circle at 84% 14%, rgb(79 70 229 / 0.38), transparent 29%),
+      radial-gradient(circle at 76% 84%, rgb(168 85 247 / 0.36), transparent 31%),
+      radial-gradient(circle at 24% 78%, rgb(13 148 136 / 0.34), transparent 27%),
+      linear-gradient(135deg, #020b08, #0b0718 54%, #02130d) !important;
+    background-size: 145% 145%, 160% 160%, 150% 150%, 165% 165%, 100% 100% !important;
     animation: survey-ambient-shift 16s ease-in-out infinite;
   }
 
+  .survey-modal-surface::before,
+  .survey-modal-surface::after {
+    position: absolute;
+    z-index: -1;
+    content: "";
+    border-radius: 9999px;
+    filter: blur(44px);
+    pointer-events: none;
+  }
+
+  .survey-modal-surface::before {
+    top: 8%;
+    left: 7%;
+    width: clamp(10rem, 24vw, 24rem);
+    aspect-ratio: 1;
+    background: rgb(16 185 129 / 0.24);
+    animation: survey-orb-one 13s ease-in-out infinite alternate;
+  }
+
+  .survey-modal-surface::after {
+    right: 8%;
+    bottom: 6%;
+    width: clamp(12rem, 28vw, 30rem);
+    aspect-ratio: 1;
+    background: rgb(124 58 237 / 0.25);
+    animation: survey-orb-two 17s ease-in-out infinite alternate;
+  }
+
   .survey-modal-surface > div {
-    width: min(100%, 48rem);
-    height: min(78dvh, 47.5rem);
-    max-width: 48rem;
+    position: relative;
+    z-index: 1;
+    width: min(100%, 70rem);
+    height: min(82dvh, 55rem);
+    max-width: 70rem;
     overflow-y: auto;
-    padding-top: max(1.75rem, env(safe-area-inset-top));
-    padding-right: max(1.75rem, env(safe-area-inset-right));
-    padding-bottom: max(1.75rem, env(safe-area-inset-bottom));
-    padding-left: max(1.75rem, env(safe-area-inset-left));
+    padding: 2rem;
     background: #070908;
     border: 1px solid rgb(255 255 255 / 0.12);
     border-radius: 2rem;
@@ -977,12 +1010,46 @@
 }
 
 @keyframes survey-ambient-shift {
-  0%, 100% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
+  0%, 100% { background-position: 0% 10%, 100% 0%, 100% 100%, 0% 100%, 0 0; }
+  50% { background-position: 35% 35%, 65% 25%, 65% 70%, 35% 65%, 0 0; }
+}
+
+@keyframes survey-orb-one {
+  to { transform: translate3d(32vw, 18vh, 0) scale(1.2); }
+}
+
+@keyframes survey-orb-two {
+  to { transform: translate3d(-28vw, -20vh, 0) scale(0.78); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .survey-modal-surface { animation: none; }
+  .survey-modal-surface,
+  .survey-modal-surface::before,
+  .survey-modal-surface::after { animation: none; }
+}
+
+@media (max-width: 767px) {
+  .survey-modal-surface {
+    position: fixed;
+    z-index: 80;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100dvh;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-top: calc(2rem + env(safe-area-inset-top)) !important;
+    padding-right: calc(1.25rem + env(safe-area-inset-right)) !important;
+    padding-bottom: calc(2rem + env(safe-area-inset-bottom)) !important;
+    padding-left: calc(1.25rem + env(safe-area-inset-left)) !important;
+    background: #070908 !important;
+  }
+
+  .survey-modal-surface > div {
+    height: auto;
+    overflow-y: visible;
+  }
 }
 
 html[data-survey-preview-device="phone"] .survey-modal-surface {
@@ -995,7 +1062,10 @@ html[data-survey-preview-device="phone"] .survey-modal-surface {
   overflow-x: hidden;
   overflow-y: auto;
   display: block;
-  padding: 2rem 1.25rem !important;
+  padding-top: calc(2rem + env(safe-area-inset-top)) !important;
+  padding-right: calc(1.25rem + env(safe-area-inset-right)) !important;
+  padding-bottom: calc(2rem + env(safe-area-inset-bottom)) !important;
+  padding-left: calc(1.25rem + env(safe-area-inset-left)) !important;
   background: #070908 !important;
   backdrop-filter: none;
 }

@@ -132,11 +132,13 @@ export function VideosTab() {
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [showNotify, setShowNotify] = useState(false);
+  const [showArchiveNotify, setShowArchiveNotify] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
   const [creating, setCreating] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [notifying, setNotifying] = useState(false);
+  const [archiveNotifying, setArchiveNotifying] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [createLinks, setCreateLinks] = useState('');
   const [createCategory, setCreateCategory] = useState('General');
@@ -379,6 +381,19 @@ export function VideosTab() {
     setSelectedVideo(null);
   };
 
+  const handleNotifyArchive = async () => {
+    if (!isProductionDirector) return;
+    setArchiveNotifying(true);
+    const { data, error } = await supabase.rpc('notify_team_about_video_archive');
+    setArchiveNotifying(false);
+    if (error) {
+      toast('error', error.message || 'The archive announcement could not be sent.');
+      return;
+    }
+    toast('success', `Archive announcement sent to ${Number(data) || 0} team member${Number(data) === 1 ? '' : 's'}.`);
+    setShowArchiveNotify(false);
+  };
+
   const canManageVideo = (video: Video) => video.uploaded_by === user?.id || isProductionDirector;
 
   const filtered = [...videos].sort((a, b) => {
@@ -452,12 +467,23 @@ export function VideosTab() {
               );
             })}
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-white/[0.095] px-5 text-[13px] font-black text-white transition-all hover:bg-[#1ed760] hover:text-black active:scale-[0.97]"
-        >
-          <Plus className="h-4 w-4" /> Add Video
-        </button>
+        <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+          {isProductionDirector && (
+            <button
+              type="button"
+              onClick={() => setShowArchiveNotify(true)}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/[0.08] px-5 text-[13px] font-black text-emerald-300 transition-all hover:bg-emerald-400 hover:text-black active:scale-[0.97]"
+            >
+              <Bell className="h-4 w-4" /> Announce 2026 archive
+            </button>
+          )}
+          <button
+            onClick={() => setShowCreate(true)}
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-white/[0.095] px-5 text-[13px] font-black text-white transition-all hover:bg-[#1ed760] hover:text-black active:scale-[0.97]"
+          >
+            <Plus className="h-4 w-4" /> Add Video
+          </button>
+        </div>
       </motion.div>
 
       {/* ── Toolbar ───────────────────────────────────── */}
@@ -835,6 +861,26 @@ export function VideosTab() {
             <button type="button" onClick={() => setShowNotify(false)} className="btn-secondary">Cancel</button>
             <button type="button" onClick={handleNotifyTeam} disabled={notifying} className="btn-primary">
               {notifying ? 'Sending...' : 'Notify Team'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={showArchiveNotify} onClose={() => setShowArchiveNotify(false)} title="Announce 2026 Recordings" size="sm">
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.07] p-4">
+            <p className="text-sm font-black text-gray-900 dark:text-white">2026 Sunday Service Recordings are now available</p>
+            <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">
+              All available Praise and Worship recordings from our 2026 Sunday Services have now been uploaded to ServeSync.
+            </p>
+          </div>
+          <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">
+            This sends one in-app and push notification to the team. Opening it will show the complete Videos library.
+          </p>
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={() => setShowArchiveNotify(false)} className="btn-secondary">Cancel</button>
+            <button type="button" onClick={handleNotifyArchive} disabled={archiveNotifying} className="btn-primary">
+              {archiveNotifying ? 'Sending...' : 'Send Announcement'}
             </button>
           </div>
         </div>

@@ -685,9 +685,11 @@ export function MinistryReflection() {
             {activeSection?.title_en}
           </h1>
           {activeSection?.description_en && (
-            <p className="mt-5 text-sm leading-6 text-white/55">
+            <p className="mt-2 text-sm leading-6 text-white/55">
               {activeSection.description_en}
-              {activeSection.description_tl && <span className="mt-2 block text-white/40">{activeSection.description_tl}</span>}
+              {activeSection.description_tl && activeSection.description_tl !== activeSection.description_en && (
+                <span className="mt-2 block text-white/40">{activeSection.description_tl}</span>
+              )}
             </p>
           )}
           {activeSection?.section_type === "feedback" && (

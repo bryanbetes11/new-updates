@@ -27,7 +27,6 @@ import {
 import { PageLoader } from "../components/LoadingSpinner";
 
 type Answers = Record<string, string>;
-type SurveyLanguage = "en" | "tl";
 
 function renderSurveySurface(content: ReactNode) {
   return createPortal(content, document.body);
@@ -62,8 +61,6 @@ const ratingTagalog: Record<string, string> = {
   Unsure: "Hindi tiyak",
   Agree: "Sumasang-ayon",
   "Strongly agree": "Lubos na sumasang-ayon",
-  "Not enough experience to assess":
-    "Wala pang sapat na karanasan upang makapagbigay ng pagtatasa",
 };
 
 const optionTagalog: Record<string, string> = {
@@ -108,7 +105,6 @@ export function MinistryReflection() {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitted, setSubmitted] = useState(false);
-  const [language, setLanguage] = useState<SurveyLanguage>("en");
   const previewParams = new URLSearchParams(window.location.search);
   const previewCampaignId = previewParams.get("campaignId");
   const previewScreen = previewParams.get("preview");
@@ -451,7 +447,6 @@ export function MinistryReflection() {
               <Save className="h-3.5 w-3.5" /> Saved
             </span>
           </div>
-          <LanguageSwitch language={language} onChange={setLanguage} />
           {participation.is_test && (
             <div className="mt-8 rounded-2xl border border-violet-400/20 bg-violet-400/[0.08] p-4 text-sm leading-6 text-violet-100/75">
               <span className="font-black text-violet-200">Private test</span>
@@ -462,18 +457,18 @@ export function MinistryReflection() {
           <p className="mt-12 text-xs font-black uppercase tracking-[0.22em] text-emerald-400">
             Remember · Reset · Rebuild · Recommit
           </p>
-          <h1 className="mt-4 text-4xl font-black tracking-[-0.05em]">
-            {language === "en" ? "A time to reflect together." : "Panahon upang sama-samang magnilay."}
-          </h1>
+          <h1 className="mt-4 text-4xl font-black tracking-[-0.05em]">A time to reflect together.</h1>
           <p className="mt-3 text-sm leading-6 text-white/45">
-            {language === "en"
-              ? "This reflection is available in English and Tagalog. Choose your preferred translation above; you can switch at any time."
-              : "Available ang reflection na ito sa English at Tagalog. Piliin ang nais mong salin sa itaas; maaari kang magpalit anumang oras."}
+            English is shown first, followed by the Tagalog translation.
+            <span className="mt-1 block text-white/35">Nauuna ang English at sinusundan ng salin sa Tagalog.</span>
           </p>
-          <div className="mt-8 space-y-5 text-[15px] leading-7 text-white/62">
-            {splitSurveyParagraphs(language === "en" ? campaign.introduction_en : campaign.introduction_tl).map((p, i) => (
-              <p key={`${language}-${i}`}>{p}</p>
-            ))}
+          <div className="mt-8 space-y-8 text-[15px] leading-7 text-white/62">
+            <div className="space-y-5">
+              {splitSurveyParagraphs(campaign.introduction_en).map((p, i) => <p key={`en-${i}`}>{p}</p>)}
+            </div>
+            <div className="space-y-5 border-t border-white/10 pt-7 text-white/48">
+              {splitSurveyParagraphs(campaign.introduction_tl).map((p, i) => <p key={`tl-${i}`}>{p}</p>)}
+            </div>
           </div>
           <button
             onClick={() => setActiveIndex(-2)}
@@ -512,7 +507,6 @@ export function MinistryReflection() {
               <Save className="h-3.5 w-3.5" /> Saved just now
             </span>
           </div>
-          <LanguageSwitch language={language} onChange={setLanguage} />
           <div className="mt-8">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400">
               Your reflection
@@ -542,9 +536,9 @@ export function MinistryReflection() {
                   )}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block font-black">{language === "en" ? section.title_en : section.title_tl}</span>
+                  <span className="block font-black">{section.title_en}</span>
                   <span className="mt-0.5 block text-xs text-white/35">
-                    {language === "en" ? (section.required_role ? `${section.required_role}s only` : "All members") : (section.required_role ? `Para lamang sa ${section.required_role}` : "Lahat ng miyembro")}
+                    {section.required_role ? `${section.required_role}s only` : "All members"}
                   </span>
                 </span>
                 <span
@@ -563,7 +557,7 @@ export function MinistryReflection() {
             onClick={() => setActiveIndex(nextIndex)}
             className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-3.5 font-black text-black"
           >
-            {language === "en" ? "Continue with" : "Magpatuloy sa"} {language === "en" ? sections[nextIndex]?.title_en : sections[nextIndex]?.title_tl}
+            Continue with {sections[nextIndex]?.title_en}
             <ArrowRight className="h-4 w-4" />
           </button>
           <button
@@ -592,7 +586,6 @@ export function MinistryReflection() {
             <Save className="h-3.5 w-3.5" /> Saved
           </span>
         </div>
-        <LanguageSwitch language={language} onChange={setLanguage} compact />
         <div className="mt-7 flex gap-1.5" aria-label="Section progress">
           {sections.map((section, index) => (
             <span
@@ -602,7 +595,7 @@ export function MinistryReflection() {
           ))}
         </div>
         <p className="mt-4 text-xs font-black uppercase tracking-[0.18em] text-emerald-400">
-          {language === "en" ? activeSection?.title_en : activeSection?.title_tl} <span className="text-white/20">·</span>{" "}
+          {activeSection?.title_en} <span className="text-white/20">·</span>{" "}
           Section {activeIndex + 1}
         </p>
         <motion.div
@@ -612,30 +605,31 @@ export function MinistryReflection() {
           className="mt-8"
         >
           <h1 className="text-3xl font-black tracking-[-0.04em]">
-            {language === "en" ? activeSection?.title_en : activeSection?.title_tl}
+            {activeSection?.title_en}
           </h1>
           {activeSection?.description_en && (
             <p className="mt-5 text-sm leading-6 text-white/55">
-              {language === "en" ? activeSection.description_en : activeSection.description_tl}
+              {activeSection.description_en}
+              {activeSection.description_tl && <span className="mt-2 block text-white/40">{activeSection.description_tl}</span>}
             </p>
           )}
           {activeSection?.section_type === "feedback" && (
-            <div className="mt-6 rounded-2xl border border-emerald-400/15 bg-emerald-400/[0.05] p-4 text-sm leading-6 text-white/55">
-              <ShieldCheck className="mb-2 h-5 w-5 text-emerald-400" />
-              {language === "en"
-                ? "Answer from your actual observations during this ministry season—not from expectations or assumptions."
-                : "Sumagot batay sa iyong aktuwal na napansin sa panahong ito ng ministeryo—hindi batay sa inaasahan o palagay."}
+            <div className="mt-6 flex items-start gap-3 rounded-2xl border border-emerald-400/15 bg-emerald-400/[0.05] p-4 text-sm leading-6 text-white/55">
+              <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400" />
+              <p>
+                Answer from your actual observations during this ministry season—not from expectations or assumptions.
+                <span className="mt-1 block text-white/40">Sumagot batay sa iyong aktuwal na napansin sa panahong ito ng ministeryo—hindi batay sa inaasahan o palagay.</span>
+              </p>
             </div>
           )}
           <div className="mt-7 space-y-9">
             {activeSection?.section_type === "commitment" ? (
-              <CommitmentEditor value={commitment} onChange={setCommitment} language={language} />
+              <CommitmentEditor value={commitment} onChange={setCommitment} />
             ) : (
               (activeSection?.questions || []).map((question) => (
                 <QuestionEditor
                   key={question.id}
                   question={question}
-                  language={language}
                   value={answers[question.id] || ""}
                   onChange={(value) =>
                     setAnswers((current) => ({
@@ -692,32 +686,6 @@ export function MinistryReflection() {
   );
 }
 
-function LanguageSwitch({
-  language,
-  onChange,
-  compact = false,
-}: {
-  language: SurveyLanguage;
-  onChange: (language: SurveyLanguage) => void;
-  compact?: boolean;
-}) {
-  return (
-    <div className={`${compact ? "mt-5" : "mt-8"} grid grid-cols-2 rounded-2xl border border-white/10 bg-white/[0.035] p-1`} aria-label="Survey translation">
-      {(["en", "tl"] as const).map((item) => (
-        <button
-          key={item}
-          type="button"
-          onClick={() => onChange(item)}
-          aria-pressed={language === item}
-          className={`rounded-xl px-3 py-2.5 text-sm font-black transition ${language === item ? "bg-white text-black shadow-sm" : "text-white/45"}`}
-        >
-          {item === "en" ? "English" : "Tagalog"}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function createReflectionPreview(): {
   campaign: SurveyCampaign;
   participation: SurveyParticipation;
@@ -734,9 +702,9 @@ function createReflectionPreview(): {
     published_at: new Date().toISOString(),
     created_at: new Date().toISOString(),
     introduction_en:
-      "Please answer honestly and thoughtfully.\nBase your answers on what you have personally observed and experienced. Do not answer only according to what you hope to see—or what you think the ideal answer should be.\n\nYour feedback will help our ministry leadership understand our current strengths and identify areas that need clarification or improvement. There are no perfect responses. Constructive feedback, uncertainty, and different experiences are welcome.\n\nIf you have not observed enough to answer a question fairly, you may select “Not enough experience to assess.”\n\nYour commitment response is not a test of faith or a way to earn God’s approval.\n\nPlease choose the response that truthfully reflects where you are in this season.",
+      "This survey gives our ministry a clear and honest picture of how we are serving together today. Your responses will help leadership recognize our strengths, understand where communication or ministry processes are unclear, and decide what support or improvements the team needs.\n\nPlease answer honestly and thoughtfully. Base your answers on what you have personally observed and experienced—not only on what you hope to see or what you think the ideal answer should be.\n\nThere are no perfect responses. Constructive feedback, uncertainty, and different experiences are welcome.\n\nYour commitment response is not a test of faith or a way to earn God’s approval. Please choose the response that truthfully reflects where you are in this season.",
     introduction_tl:
-      "Mangyaring sumagot nang tapat at may pag-iingat.\nIbase ang iyong mga sagot sa personal mong napansin at naranasan. Huwag sumagot batay lamang sa nais mong mangyari—o sa palagay mong dapat na maging ideal na sagot.\n\nMakakatulong ang iyong feedback upang maunawaan ng mga lider ng ministeryo ang ating kasalukuyang kalakasan at makita ang mga bagay na nangangailangan ng paglilinaw o pagpapabuti. Walang perpektong sagot. Malugod naming tinatanggap ang makabuluhang puna, pag-aalinlangan, at magkakaibang karanasan.\n\nKung wala ka pang sapat na karanasan upang makasagot nang patas, maaari mong piliin ang “Wala pang sapat na karanasan upang makapagbigay ng pagtatasa.”\n\nAng iyong sagot tungkol sa pagtatalaga ay hindi pagsusulit sa pananampalataya o paraan upang makamit ang pagsang-ayon ng Diyos.\n\nPiliin ang sagot na tapat na naglalarawan kung nasaan ka sa panahong ito.",
+      "Layunin ng survey na ito na magkaroon ang ating ministry ng malinaw at tapat na larawan kung paano tayo kasalukuyang naglilingkod nang sama-sama. Makakatulong ang iyong mga sagot upang makita ng leadership ang ating mga kalakasan, maunawaan kung saan hindi malinaw ang komunikasyon o mga proseso, at malaman kung anong suporta o pagbabago ang kailangan ng team.\n\nMangyaring sumagot nang tapat at may pag-iingat. Ibase ang iyong mga sagot sa personal mong napansin at naranasan—hindi lamang sa nais mong mangyari o sa palagay mong ideal na sagot.\n\nWalang perpektong sagot. Malugod naming tinatanggap ang makabuluhang puna, pag-aalinlangan, at magkakaibang karanasan.\n\nAng iyong sagot tungkol sa commitment ay hindi pagsusulit sa pananampalataya o paraan upang makamit ang pagsang-ayon ng Diyos. Piliin ang sagot na tapat na naglalarawan kung nasaan ka sa panahong ito.",
   };
   const titles = [
     [
@@ -823,29 +791,29 @@ function QuestionEditor({
   question,
   value,
   onChange,
-  language,
 }: {
   question: SurveyQuestion;
   value: string;
   onChange: (value: string) => void;
-  language: SurveyLanguage;
 }) {
+  const visibleOptions = question.options.filter((option) => option.value !== "na");
   return (
     <fieldset className="border-b border-white/12 pb-9 last:border-b-0 last:pb-0">
       <legend className="text-lg font-black leading-7">
-        {language === "en" ? question.prompt_en : question.prompt_tl}
+        {question.prompt_en}
+        {question.prompt_tl && <span className="mt-2 block text-base font-semibold text-white/48">{question.prompt_tl}</span>}
       </legend>
       {question.answer_type === "long_text" ? (
         <textarea
           value={value}
           onChange={(event) => onChange(event.target.value)}
           rows={5}
-          placeholder={language === "en" ? "Share what you have observed…" : "Ibahagi ang iyong napansin…"}
+          placeholder="Share what you have observed… / Ibahagi ang iyong napansin…"
           className="mt-4 w-full resize-none rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-4 text-white outline-none placeholder:text-white/25 focus:border-emerald-400/60"
         />
       ) : (
         <div className="mt-4 grid gap-2">
-          {question.options.map((option) => (
+          {visibleOptions.map((option) => (
             <label
               key={option.value}
               className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3.5 transition ${value === option.value ? "border-emerald-400 bg-emerald-400/[0.07]" : "border-white/10 bg-white/[0.025]"}`}
@@ -864,7 +832,10 @@ function QuestionEditor({
                 {value === option.value && <Check className="h-3 w-3" />}
               </span>
               <span>
-                <span className="block text-sm font-bold">{language === "tl" ? ratingTagalog[option.label] || optionTagalog[option.label] || option.label : option.label}</span>
+                <span className="block text-sm font-bold">{option.label}</span>
+                {(ratingTagalog[option.label] || optionTagalog[option.label]) && (
+                  <span className="mt-1 block text-xs leading-5 text-white/42">{ratingTagalog[option.label] || optionTagalog[option.label]}</span>
+                )}
               </span>
             </label>
           ))}
@@ -877,18 +848,15 @@ function QuestionEditor({
 function CommitmentEditor({
   value,
   onChange,
-  language,
 }: {
   value: { response_key: string; reflection: string };
   onChange: (value: { response_key: string; reflection: string }) => void;
-  language: SurveyLanguage;
 }) {
   return (
     <div>
       <div className="rounded-2xl border border-emerald-400/15 bg-emerald-400/[0.05] p-4 text-sm leading-6 text-white/55">
-        {language === "en"
-          ? "This is not a test or a way to earn God’s approval. Choose the response that honestly reflects where you are today."
-          : "Hindi ito pagsusulit o paraan upang makamit ang pagsang-ayon ng Diyos. Piliin ang tapat na naglalarawan kung nasaan ka ngayon."}
+        <p>This is not a test or a way to earn God’s approval. Choose the response that honestly reflects where you are today.</p>
+        <p className="mt-2 text-white/40">Hindi ito pagsusulit o paraan upang makamit ang pagsang-ayon ng Diyos. Piliin ang tapat na naglalarawan kung nasaan ka ngayon.</p>
       </div>
       <div className="mt-5 grid gap-3">
         {commitmentOptions.map(([key, en, tl]) => (
@@ -906,14 +874,15 @@ function CommitmentEditor({
               className={`mt-1 h-5 w-5 shrink-0 rounded-full border-4 ${value.response_key === key ? "border-emerald-400 bg-emerald-400" : "border-white/25"}`}
             />
             <span>
-              <span className="block font-black">{language === "en" ? en : tl}</span>
+              <span className="block font-black">{en}</span>
+              <span className="mt-1 block text-sm text-white/45">{tl}</span>
             </span>
           </label>
         ))}
       </div>
       <label className="mt-7 block text-sm font-bold">
-        {language === "en" ? "Anything you’d like us to understand?" : "May nais ka bang ipabatid sa amin?"}{" "}
-        <span className="font-normal text-white/35">{language === "en" ? "(Optional)" : "(Opsyonal)"}</span>
+        Anything you’d like us to understand? <span className="font-normal text-white/35">(Optional)</span>
+        <span className="mt-1 block font-normal text-white/45">May nais ka bang ipabatid sa amin? (Opsyonal)</span>
         <textarea
           value={value.reflection}
           maxLength={250}

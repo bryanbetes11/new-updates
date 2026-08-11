@@ -8,12 +8,16 @@ import {
   Clock3,
   MessageCircle,
   Pause,
+  Pencil,
   Play,
   Plus,
   RefreshCw,
+  Save,
   Send,
   ShieldCheck,
+  Trash2,
   Users,
+  X,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useToast } from "../../contexts/ToastContext";
@@ -58,6 +62,10 @@ export function SurveyManagement() {
   const [contentOpen, setContentOpen] = useState(false);
   const [contentLoading, setContentLoading] = useState(false);
   const [sections, setSections] = useState<SurveySection[]>([]);
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editIntroductionEn, setEditIntroductionEn] = useState("");
+  const [editIntroductionTl, setEditIntroductionTl] = useState("");
   const canManage = isProductionDirector;
   const canViewResults =
     canManage || isMusicDirector || isStageDirector || isAdminCoordinator;
@@ -181,7 +189,90 @@ export function SurveyManagement() {
   useEffect(() => {
     setContentOpen(false);
     setSections([]);
+    setEditing(false);
   }, [selected?.id]);
+
+  const beginEditing = () => {
+    if (!selected || selected.status !== "draft") return;
+    setEditTitle(selected.title);
+    setEditIntroductionEn(selected.introduction_en);
+    setEditIntroductionTl(selected.introduction_tl);
+    setEditing(true);
+  };
+
+  const saveContent = async () => {
+    if (!selected || !editTitle.trim()) return;
+    setWorking(true);
+    const { error: campaignError } = await supabase
+      .from("survey_campaigns")
+      .update({
+        title: editTitle.trim(),
+        introduction_en: editIntroductionEn.trim(),
+        introduction_tl: editIntroductionTl.trim(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", selected.id)
+      .eq("status", "draft");
+    const questionResults = campaignError
+      ? []
+      : await Promise.all(
+          sections.flatMap((section) =>
+            (section.questions || []).map((question) =>
+              supabase
+                .from("survey_questions")
+                .update({
+                  prompt_en: question.prompt_en.trim(),
+                  prompt_tl: question.prompt_tl.trim(),
+                })
+                .eq("id", question.id),
+            ),
+          ),
+        );
+    const questionError = questionResults.find((result) => result.error)?.error;
+    if (campaignError || questionError) {
+      toast("error", (campaignError || questionError)?.message || "Unable to save changes.");
+    } else {
+      setCampaigns((current) =>
+        current.map((campaign) =>
+          campaign.id === selected.id
+            ? {
+                ...campaign,
+                title: editTitle.trim(),
+                introduction_en: editIntroductionEn.trim(),
+                introduction_tl: editIntroductionTl.trim(),
+              }
+            : campaign,
+        ),
+      );
+      setEditing(false);
+      toast("success", "Draft content updated.");
+    }
+    setWorking(false);
+  };
+
+  const deleteDraft = async () => {
+    if (
+      !selected ||
+      selected.status !== "draft" ||
+      !window.confirm(
+        `Delete “${selected.title}”? This permanently removes its sections and questions.`,
+      )
+    )
+      return;
+    setWorking(true);
+    const { error } = await supabase
+      .from("survey_campaigns")
+      .delete()
+      .eq("id", selected.id)
+      .eq("status", "draft");
+    if (error) toast("error", error.message);
+    else {
+      toast("success", "Draft reflection deleted.");
+      setSelectedId(null);
+      await load();
+    }
+    setWorking(false);
+  };
 
   const publish = async () => {
     if (
@@ -416,16 +507,69 @@ export function SurveyManagement() {
               </button>
               {contentOpen && (
                 <div className="mt-4 space-y-3">
+                  {selected.status === "draft" && (
+                    <div className="flex flex-wrap gap-2">
+                      {!editing ? (
+                        <button
+                          onClick={beginEditing}
+                          className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-xs font-black dark:border-white/10 dark:text-white"
+                        >
+                          <Pencil className="h-3.5 w-3.5" /> Edit content
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => void saveContent()}
+                            disabled={working || !editTitle.trim()}
+                            className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-3 py-2 text-xs font-black text-black disabled:opacity-50"
+                          >
+                            <Save className="h-3.5 w-3.5" /> Save changes
+                          </button>
+                          <button
+                            onClick={() => setEditing(false)}
+                            disabled={working}
+                            className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-xs font-black dark:border-white/10 dark:text-white"
+                          >
+                            <X className="h-3.5 w-3.5" /> Cancel
+                          </button>
+                        </>
+                      )}
+                      {!editing && (
+                        <button
+                          onClick={() => void deleteDraft()}
+                          disabled={working}
+                          className="inline-flex items-center gap-2 rounded-xl border border-red-300 px-3 py-2 text-xs font-black text-red-600 dark:border-red-400/20 dark:text-red-300"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" /> Delete draft
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {editing && (
+                    <label className="block rounded-2xl border border-emerald-400/30 p-4">
+                      <span className="text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Campaign title</span>
+                      <input
+                        value={editTitle}
+                        onChange={(event) => setEditTitle(event.target.value)}
+                        className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-bold text-gray-950 outline-none focus:border-emerald-400 dark:border-white/10 dark:bg-black dark:text-white"
+                      />
+                    </label>
+                  )}
                   <div className="rounded-2xl border border-gray-200 p-4 dark:border-white/10">
                     <p className="text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
                       Introduction
                     </p>
-                    <p className="mt-3 whitespace-pre-line text-sm leading-6 text-gray-700 dark:text-white/70">
-                      {selected.introduction_en}
-                    </p>
-                    <p className="mt-4 whitespace-pre-line border-t border-gray-200 pt-4 text-sm leading-6 text-gray-600 dark:border-white/10 dark:text-white/55">
-                      {selected.introduction_tl}
-                    </p>
+                    {editing ? (
+                      <>
+                        <textarea value={editIntroductionEn} onChange={(event) => setEditIntroductionEn(event.target.value)} rows={8} className="mt-3 w-full rounded-xl border border-gray-200 bg-white p-3 text-sm leading-6 text-gray-900 outline-none focus:border-emerald-400 dark:border-white/10 dark:bg-black dark:text-white" />
+                        <textarea value={editIntroductionTl} onChange={(event) => setEditIntroductionTl(event.target.value)} rows={8} className="mt-3 w-full rounded-xl border border-gray-200 bg-white p-3 text-sm leading-6 text-gray-900 outline-none focus:border-emerald-400 dark:border-white/10 dark:bg-black dark:text-white" />
+                      </>
+                    ) : (
+                      <>
+                        <p className="mt-3 whitespace-pre-line text-sm leading-6 text-gray-700 dark:text-white/70">{selected.introduction_en}</p>
+                        <p className="mt-4 whitespace-pre-line border-t border-gray-200 pt-4 text-sm leading-6 text-gray-600 dark:border-white/10 dark:text-white/55">{selected.introduction_tl}</p>
+                      </>
+                    )}
                   </div>
                   {contentLoading ? (
                     <p className="py-6 text-center text-sm text-gray-500">Loading survey content…</p>
@@ -445,8 +589,17 @@ export function SurveyManagement() {
                           {(section.questions || []).map((question, index) => (
                             <div key={question.id} className="rounded-xl bg-gray-50 p-3 dark:bg-white/[0.035]">
                               <p className="text-xs font-black text-gray-400">QUESTION {index + 1}</p>
-                              <p className="mt-1 text-sm font-bold text-gray-900 dark:text-white/85">{question.prompt_en}</p>
-                              <p className="mt-1 text-sm text-gray-500 dark:text-white/50">{question.prompt_tl}</p>
+                              {editing ? (
+                                <div className="mt-2 space-y-2">
+                                  <textarea value={question.prompt_en} onChange={(event) => setSections((current) => current.map((item) => item.id === section.id ? { ...item, questions: (item.questions || []).map((candidate) => candidate.id === question.id ? { ...candidate, prompt_en: event.target.value } : candidate) } : item))} rows={2} className="w-full rounded-lg border border-gray-200 bg-white p-2 text-sm font-bold text-gray-900 outline-none focus:border-emerald-400 dark:border-white/10 dark:bg-black dark:text-white" />
+                                  <textarea value={question.prompt_tl} onChange={(event) => setSections((current) => current.map((item) => item.id === section.id ? { ...item, questions: (item.questions || []).map((candidate) => candidate.id === question.id ? { ...candidate, prompt_tl: event.target.value } : candidate) } : item))} rows={2} className="w-full rounded-lg border border-gray-200 bg-white p-2 text-sm text-gray-700 outline-none focus:border-emerald-400 dark:border-white/10 dark:bg-black dark:text-white/70" />
+                                </div>
+                              ) : (
+                                <>
+                                  <p className="mt-1 text-sm font-bold text-gray-900 dark:text-white/85">{question.prompt_en}</p>
+                                  <p className="mt-1 text-sm text-gray-500 dark:text-white/50">{question.prompt_tl}</p>
+                                </>
+                              )}
                             </div>
                           ))}
                           {section.section_type === "commitment" && (

@@ -940,3 +940,29 @@
     }
   }
 }
+@media (min-width: 768px) {
+  .survey-modal-surface {
+    position: fixed;
+    z-index: 80;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+    padding: 1.5rem !important;
+    background: rgb(0 0 0 / 0.42) !important;
+    backdrop-filter: blur(14px);
+  }
+
+  .survey-modal-surface > div {
+    height: 100%;
+    max-width: 56rem;
+    overflow-y: auto;
+    padding: 2rem;
+    background: #070908;
+    border: 1px solid rgb(255 255 255 / 0.12);
+    border-radius: 2rem;
+    box-shadow: 0 32px 100px rgb(0 0 0 / 0.6);
+  }
+}

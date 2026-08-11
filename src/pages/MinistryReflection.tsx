@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -26,6 +27,11 @@ import {
 import { PageLoader } from "../components/LoadingSpinner";
 
 type Answers = Record<string, string>;
+type SurveyLanguage = "en" | "tl";
+
+function renderSurveySurface(content: ReactNode) {
+  return createPortal(content, document.body);
+}
 
 const commitmentOptions = [
   [
@@ -60,6 +66,30 @@ const ratingTagalog: Record<string, string> = {
     "Wala pang sapat na karanasan upang makapagbigay ng pagtatasa",
 };
 
+const optionTagalog: Record<string, string> = {
+  "Popularity and crowd response": "Popularidad at tugon ng mga tao",
+  "Gospel clarity, biblical truth, and the whole service": "Malinaw na Ebanghelyo, biblikal na katotohanan, at kabuuan ng service",
+  "The Song Leader’s personal preference": "Personal na kagustuhan ng Song Leader",
+  "Response → Call to Worship → Gospel Proclamation": "Pagtugon → Panawagan sa Pagsamba → Pagpapahayag ng Ebanghelyo",
+  "Call to Worship → Gospel Proclamation → Response": "Panawagan sa Pagsamba → Pagpapahayag ng Ebanghelyo → Pagtugon",
+  "Any order, as long as the songs are popular": "Anumang ayos, basta popular ang mga awit",
+  "Does it mention Jesus, the cross, His death, or resurrection clearly?": "Malinaw ba nitong binabanggit si Jesus, ang krus, Kanyang kamatayan, o muling pagkabuhay?",
+  "Is it currently popular?": "Popular ba ito ngayon?",
+  "Is it easy for the band to play?": "Madali ba itong tugtugin ng banda?",
+  "Whether the lyrics are grounded in Scripture rather than clichés or feelings alone": "Kung ang lyrics ay nakaugat sa Kasulatan sa halip na sa clichés o damdamin lamang",
+  "Whether the recording has a strong build": "Kung malakas ang build ng recording",
+  "Whether many churches use it": "Kung ginagamit ito ng maraming iglesia",
+  "What Christ has finished for us": "Ang tinapos na ni Cristo para sa atin",
+  "What we must achieve to earn God’s favor": "Ang kailangan nating makamit upang makuha ang pabor ng Diyos",
+  "A stronger emotional atmosphere": "Mas matinding emosyonal na atmosphere",
+  "God’s grace in Christ": "Ang biyaya ng Diyos kay Cristo",
+  "Our praise controls God’s response or guarantees prosperity": "Kinokontrol ng ating papuri ang tugon ng Diyos o ginagarantiya ang kasaganaan",
+  "Christ’s death and resurrection": "Ang kamatayan at muling pagkabuhay ni Cristo",
+  "How the songs support the sermon and the whole Gospel flow of the service": "Kung paano sinusuportahan ng mga awit ang sermon at kabuuang daloy ng Ebanghelyo sa service",
+  "Only the Song Leader’s preferred key": "Tanging gustong key ng Song Leader",
+  "Only which songs receive the strongest crowd response": "Tanging mga awit na may pinakamalakas na tugon ng mga tao",
+};
+
 export function MinistryReflection() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
@@ -78,6 +108,7 @@ export function MinistryReflection() {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitted, setSubmitted] = useState(false);
+  const [language, setLanguage] = useState<SurveyLanguage>("en");
   const isPreview = import.meta.env.DEV && new URLSearchParams(window.location.search).has("preview");
 
   const loadSurvey = useCallback(async () => {
@@ -289,8 +320,8 @@ export function MinistryReflection() {
   if (!campaign || !participation) return null;
 
   if (submitted) {
-    return (
-      <div className="min-h-[calc(100dvh-5rem)] bg-[#070908] px-5 py-12 text-white">
+    return renderSurveySurface(
+      <div className="survey-modal-surface min-h-[calc(100dvh-5rem)] bg-[#070908] px-5 py-12 text-white">
         <div className="mx-auto max-w-xl text-center">
           <CheckCircle2 className="mx-auto h-14 w-14 text-emerald-400" />
           <h1 className="mt-6 text-3xl font-black tracking-tight">
@@ -312,8 +343,8 @@ export function MinistryReflection() {
   }
 
   if (holding) {
-    return (
-      <div className="min-h-[calc(100dvh-5rem)] bg-[#070908] px-5 py-10 text-white">
+    return renderSurveySurface(
+      <div className="survey-modal-surface min-h-[calc(100dvh-5rem)] bg-[#070908] px-5 py-10 text-white">
         <div className="mx-auto max-w-xl">
           <div className="flex items-center gap-3">
             <img
@@ -377,8 +408,8 @@ export function MinistryReflection() {
   }
 
   if (activeIndex === -1) {
-    return (
-      <div className="min-h-[calc(100dvh-5rem)] bg-[#070908] px-5 py-8 text-white">
+    return renderSurveySurface(
+      <div className="survey-modal-surface min-h-[calc(100dvh-5rem)] bg-[#070908] px-5 py-8 text-white">
         <div className="mx-auto max-w-2xl">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -392,6 +423,7 @@ export function MinistryReflection() {
               <Save className="h-3.5 w-3.5" /> Saved
             </span>
           </div>
+          <LanguageSwitch language={language} onChange={setLanguage} />
           {participation.is_test && (
             <div className="mt-8 rounded-2xl border border-violet-400/20 bg-violet-400/[0.08] p-4 text-sm leading-6 text-violet-100/75">
               <span className="font-black text-violet-200">Private test</span>
@@ -403,16 +435,16 @@ export function MinistryReflection() {
             Remember · Reset · Rebuild · Recommit
           </p>
           <h1 className="mt-4 text-4xl font-black tracking-[-0.05em]">
-            A time to reflect together.
+            {language === "en" ? "A time to reflect together." : "Panahon upang sama-samang magnilay."}
           </h1>
+          <p className="mt-3 text-sm leading-6 text-white/45">
+            {language === "en"
+              ? "This reflection is available in English and Tagalog. Choose your preferred translation above; you can switch at any time."
+              : "Available ang reflection na ito sa English at Tagalog. Piliin ang nais mong salin sa itaas; maaari kang magpalit anumang oras."}
+          </p>
           <div className="mt-8 space-y-5 text-[15px] leading-7 text-white/62">
-            {splitSurveyParagraphs(campaign.introduction_en).map((p, i) => (
-              <p key={`en-${i}`}>{p}</p>
-            ))}
-          </div>
-          <div className="mt-8 border-t border-white/10 pt-8 space-y-5 text-sm leading-7 text-white/42">
-            {splitSurveyParagraphs(campaign.introduction_tl).map((p, i) => (
-              <p key={`tl-${i}`}>{p}</p>
+            {splitSurveyParagraphs(language === "en" ? campaign.introduction_en : campaign.introduction_tl).map((p, i) => (
+              <p key={`${language}-${i}`}>{p}</p>
             ))}
           </div>
           <button
@@ -437,8 +469,8 @@ export function MinistryReflection() {
       0,
       sections.findIndex((section) => !section.completed_at),
     );
-    return (
-      <div className="min-h-[calc(100dvh-5rem)] bg-[#070908] px-5 py-8 text-white">
+    return renderSurveySurface(
+      <div className="survey-modal-surface min-h-[calc(100dvh-5rem)] bg-[#070908] px-5 py-8 text-white">
         <div className="mx-auto max-w-2xl">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -452,6 +484,7 @@ export function MinistryReflection() {
               <Save className="h-3.5 w-3.5" /> Saved just now
             </span>
           </div>
+          <LanguageSwitch language={language} onChange={setLanguage} />
           <div className="mt-8">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400">
               Your reflection
@@ -481,12 +514,9 @@ export function MinistryReflection() {
                   )}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block font-black">{section.title_en}</span>
+                  <span className="block font-black">{language === "en" ? section.title_en : section.title_tl}</span>
                   <span className="mt-0.5 block text-xs text-white/35">
-                    {section.title_tl}
-                    {section.required_role
-                      ? ` · ${section.required_role}s only`
-                      : ""}
+                    {language === "en" ? (section.required_role ? `${section.required_role}s only` : "All members") : (section.required_role ? `Para lamang sa ${section.required_role}` : "Lahat ng miyembro")}
                   </span>
                 </span>
                 <span
@@ -505,7 +535,7 @@ export function MinistryReflection() {
             onClick={() => setActiveIndex(nextIndex)}
             className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-3.5 font-black text-black"
           >
-            Continue with {sections[nextIndex]?.title_en}
+            {language === "en" ? "Continue with" : "Magpatuloy sa"} {language === "en" ? sections[nextIndex]?.title_en : sections[nextIndex]?.title_tl}
             <ArrowRight className="h-4 w-4" />
           </button>
           <button
@@ -519,8 +549,8 @@ export function MinistryReflection() {
     );
   }
 
-  return (
-    <div className="min-h-[calc(100dvh-5rem)] bg-[#070908] px-4 py-6 text-white sm:px-6">
+  return renderSurveySurface(
+    <div className="survey-modal-surface min-h-[calc(100dvh-5rem)] bg-[#070908] px-4 py-6 text-white sm:px-6">
       <div className="mx-auto max-w-3xl">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -534,6 +564,7 @@ export function MinistryReflection() {
             <Save className="h-3.5 w-3.5" /> Saved
           </span>
         </div>
+        <LanguageSwitch language={language} onChange={setLanguage} compact />
         <div className="mt-7 flex gap-1.5" aria-label="Section progress">
           {sections.map((section, index) => (
             <span
@@ -543,7 +574,7 @@ export function MinistryReflection() {
           ))}
         </div>
         <p className="mt-4 text-xs font-black uppercase tracking-[0.18em] text-emerald-400">
-          {activeSection?.title_en} <span className="text-white/20">·</span>{" "}
+          {language === "en" ? activeSection?.title_en : activeSection?.title_tl} <span className="text-white/20">·</span>{" "}
           Section {activeIndex + 1}
         </p>
         <motion.div
@@ -553,40 +584,30 @@ export function MinistryReflection() {
           className="mt-8"
         >
           <h1 className="text-3xl font-black tracking-[-0.04em]">
-            {activeSection?.title_en}
+            {language === "en" ? activeSection?.title_en : activeSection?.title_tl}
           </h1>
-          <p className="mt-1 text-lg font-bold text-white/35">
-            {activeSection?.title_tl}
-          </p>
           {activeSection?.description_en && (
             <p className="mt-5 text-sm leading-6 text-white/55">
-              {activeSection.description_en}
-              <br />
-              <span className="text-white/35">
-                {activeSection.description_tl}
-              </span>
+              {language === "en" ? activeSection.description_en : activeSection.description_tl}
             </p>
           )}
           {activeSection?.section_type === "feedback" && (
             <div className="mt-6 rounded-2xl border border-emerald-400/15 bg-emerald-400/[0.05] p-4 text-sm leading-6 text-white/55">
               <ShieldCheck className="mb-2 h-5 w-5 text-emerald-400" />
-              Answer from your actual observations during this ministry
-              season—not from expectations or assumptions.
-              <br />
-              <span className="text-white/35">
-                Sumagot batay sa iyong aktuwal na napansin sa panahong ito ng
-                ministeryo—hindi batay sa inaasahan o palagay.
-              </span>
+              {language === "en"
+                ? "Answer from your actual observations during this ministry season—not from expectations or assumptions."
+                : "Sumagot batay sa iyong aktuwal na napansin sa panahong ito ng ministeryo—hindi batay sa inaasahan o palagay."}
             </div>
           )}
           <div className="mt-7 space-y-9">
             {activeSection?.section_type === "commitment" ? (
-              <CommitmentEditor value={commitment} onChange={setCommitment} />
+              <CommitmentEditor value={commitment} onChange={setCommitment} language={language} />
             ) : (
               (activeSection?.questions || []).map((question) => (
                 <QuestionEditor
                   key={question.id}
                   question={question}
+                  language={language}
                   value={answers[question.id] || ""}
                   onChange={(value) =>
                     setAnswers((current) => ({
@@ -639,6 +660,32 @@ export function MinistryReflection() {
         )}
         <p className="sr-only">{completedCount} sections completed</p>
       </div>
+    </div>
+  );
+}
+
+function LanguageSwitch({
+  language,
+  onChange,
+  compact = false,
+}: {
+  language: SurveyLanguage;
+  onChange: (language: SurveyLanguage) => void;
+  compact?: boolean;
+}) {
+  return (
+    <div className={`${compact ? "mt-5" : "mt-8"} grid grid-cols-2 rounded-2xl border border-white/10 bg-white/[0.035] p-1`} aria-label="Survey translation">
+      {(["en", "tl"] as const).map((item) => (
+        <button
+          key={item}
+          type="button"
+          onClick={() => onChange(item)}
+          aria-pressed={language === item}
+          className={`rounded-xl px-3 py-2.5 text-sm font-black transition ${language === item ? "bg-white text-black shadow-sm" : "text-white/45"}`}
+        >
+          {item === "en" ? "English" : "Tagalog"}
+        </button>
+      ))}
     </div>
   );
 }
@@ -748,25 +795,24 @@ function QuestionEditor({
   question,
   value,
   onChange,
+  language,
 }: {
   question: SurveyQuestion;
   value: string;
   onChange: (value: string) => void;
+  language: SurveyLanguage;
 }) {
   return (
-    <fieldset>
+    <fieldset className="border-b border-white/12 pb-9 last:border-b-0 last:pb-0">
       <legend className="text-lg font-black leading-7">
-        {question.prompt_en}
+        {language === "en" ? question.prompt_en : question.prompt_tl}
       </legend>
-      <p className="mt-2 text-sm leading-6 text-white/38">
-        {question.prompt_tl}
-      </p>
       {question.answer_type === "long_text" ? (
         <textarea
           value={value}
           onChange={(event) => onChange(event.target.value)}
           rows={5}
-          placeholder="Share what you have observed…"
+          placeholder={language === "en" ? "Share what you have observed…" : "Ibahagi ang iyong napansin…"}
           className="mt-4 w-full resize-none rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-4 text-white outline-none placeholder:text-white/25 focus:border-emerald-400/60"
         />
       ) : (
@@ -790,12 +836,7 @@ function QuestionEditor({
                 {value === option.value && <Check className="h-3 w-3" />}
               </span>
               <span>
-                <span className="block text-sm font-bold">{option.label}</span>
-                {ratingTagalog[option.label] && (
-                  <span className="mt-0.5 block text-xs text-white/35">
-                    {ratingTagalog[option.label]}
-                  </span>
-                )}
+                <span className="block text-sm font-bold">{language === "tl" ? ratingTagalog[option.label] || optionTagalog[option.label] || option.label : option.label}</span>
               </span>
             </label>
           ))}
@@ -808,20 +849,18 @@ function QuestionEditor({
 function CommitmentEditor({
   value,
   onChange,
+  language,
 }: {
   value: { response_key: string; reflection: string };
   onChange: (value: { response_key: string; reflection: string }) => void;
+  language: SurveyLanguage;
 }) {
   return (
     <div>
       <div className="rounded-2xl border border-emerald-400/15 bg-emerald-400/[0.05] p-4 text-sm leading-6 text-white/55">
-        This is not a test or a way to earn God’s approval. Choose the response
-        that honestly reflects where you are today.
-        <br />
-        <span className="text-white/35">
-          Hindi ito pagsusulit o paraan upang makamit ang pagsang-ayon ng Diyos.
-          Piliin ang tapat na naglalarawan kung nasaan ka ngayon.
-        </span>
+        {language === "en"
+          ? "This is not a test or a way to earn God’s approval. Choose the response that honestly reflects where you are today."
+          : "Hindi ito pagsusulit o paraan upang makamit ang pagsang-ayon ng Diyos. Piliin ang tapat na naglalarawan kung nasaan ka ngayon."}
       </div>
       <div className="mt-5 grid gap-3">
         {commitmentOptions.map(([key, en, tl]) => (
@@ -839,20 +878,14 @@ function CommitmentEditor({
               className={`mt-1 h-5 w-5 shrink-0 rounded-full border-4 ${value.response_key === key ? "border-emerald-400 bg-emerald-400" : "border-white/25"}`}
             />
             <span>
-              <span className="block font-black">{en}</span>
-              <span className="mt-1 block text-sm leading-5 text-white/38">
-                {tl}
-              </span>
+              <span className="block font-black">{language === "en" ? en : tl}</span>
             </span>
           </label>
         ))}
       </div>
       <label className="mt-7 block text-sm font-bold">
-        Anything you’d like us to understand?{" "}
-        <span className="font-normal text-white/35">(Optional)</span>
-        <span className="mt-1 block font-normal text-white/38">
-          May nais ka bang ipabatid sa amin?
-        </span>
+        {language === "en" ? "Anything you’d like us to understand?" : "May nais ka bang ipabatid sa amin?"}{" "}
+        <span className="font-normal text-white/35">{language === "en" ? "(Optional)" : "(Opsyonal)"}</span>
         <textarea
           value={value.reflection}
           maxLength={250}

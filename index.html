@@ -4,6 +4,24 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg?v=2026-05-10-pwa-update-flow-v2" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <script>
+      (() => {
+        const viewport = document.querySelector('meta[name="viewport"]');
+        const shortestScreenSide = Math.min(window.screen.width, window.screen.height);
+        const hasTouch = navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
+        const phoneUserAgent = /iPhone|iPod|Android.+Mobile|Windows Phone/i.test(navigator.userAgent);
+        const desktopModeIPhone = navigator.platform === 'MacIntel' && hasTouch && shortestScreenSide <= 600;
+
+        if (!viewport || shortestScreenSide > 600 || (!phoneUserAgent && !desktopModeIPhone)) return;
+
+        // Keep phone PWAs on mobile breakpoints even when the browser reports a desktop viewport.
+        viewport.setAttribute(
+          'content',
+          `width=${shortestScreenSide}, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover`,
+        );
+        document.documentElement.dataset.phoneLayout = 'true';
+      })();
+    </script>
     <meta name="theme-color" content="#0e0d0b" />
     <meta name="description" content="Open the event setlist, assignments, and team details in ServeSync." />
     <meta property="og:type" content="website" />

@@ -29,6 +29,7 @@ import {
   type SurveySection,
 } from "../../lib/survey";
 import { PageLoader } from "../../components/LoadingSpinner";
+import { Modal } from "../../components/Modal";
 
 type ProgressMember = SurveyParticipation & {
   name: string;
@@ -66,6 +67,7 @@ export function SurveyManagement() {
   const [editTitle, setEditTitle] = useState("");
   const [editIntroductionEn, setEditIntroductionEn] = useState("");
   const [editIntroductionTl, setEditIntroductionTl] = useState("");
+  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
   const canManage = isProductionDirector;
   const canViewResults =
     canManage || isMusicDirector || isStageDirector || isAdminCoordinator;
@@ -251,14 +253,7 @@ export function SurveyManagement() {
   };
 
   const deleteDraft = async () => {
-    if (
-      !selected ||
-      selected.status !== "draft" ||
-      !window.confirm(
-        `Delete “${selected.title}”? This permanently removes its sections and questions.`,
-      )
-    )
-      return;
+    if (!selected || selected.status !== "draft") return;
     setWorking(true);
     const { error } = await supabase
       .from("survey_campaigns")
@@ -268,6 +263,7 @@ export function SurveyManagement() {
     if (error) toast("error", error.message);
     else {
       toast("success", "Draft reflection deleted.");
+      setDeleteConfirmationOpen(false);
       setSelectedId(null);
       await load();
     }
@@ -536,7 +532,7 @@ export function SurveyManagement() {
                       )}
                       {!editing && (
                         <button
-                          onClick={() => void deleteDraft()}
+                          onClick={() => setDeleteConfirmationOpen(true)}
                           disabled={working}
                           className="inline-flex items-center gap-2 rounded-xl border border-red-300 px-3 py-2 text-xs font-black text-red-600 dark:border-red-400/20 dark:text-red-300"
                         >
@@ -598,6 +594,15 @@ export function SurveyManagement() {
                                 <>
                                   <p className="mt-1 text-sm font-bold text-gray-900 dark:text-white/85">{question.prompt_en}</p>
                                   <p className="mt-1 text-sm text-gray-500 dark:text-white/50">{question.prompt_tl}</p>
+                                  {question.options?.length > 0 && (
+                                    <div className="mt-3 flex flex-wrap gap-2 border-t border-gray-200 pt-3 dark:border-white/10">
+                                      {question.options.map((option) => (
+                                        <span key={option.value} className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-gray-600 ring-1 ring-gray-200 dark:bg-white/[0.04] dark:text-white/55 dark:ring-white/10">
+                                          {option.label}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
                                 </>
                               )}
                             </div>
@@ -645,6 +650,32 @@ export function SurveyManagement() {
         ) : (
           <ResultsPanel campaignId={selected.id} canSeeCommitment={canManage} />
         )}
+        <Modal
+          open={deleteConfirmationOpen}
+          onClose={() => !working && setDeleteConfirmationOpen(false)}
+          title="Delete this draft?"
+          size="sm"
+          mobileView="sheet"
+          closeOnBackdrop={!working}
+          closeOnEscape={!working}
+        >
+          <div className="space-y-5">
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-4 dark:border-red-400/15 dark:bg-red-400/[0.06]">
+              <p className="text-sm font-bold text-red-900 dark:text-red-100">{selected?.title}</p>
+              <p className="mt-2 text-sm leading-6 text-red-700 dark:text-red-200/70">
+                This permanently removes this draft, including all of its sections and questions. Published campaigns cannot be deleted here.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <button onClick={() => setDeleteConfirmationOpen(false)} disabled={working} className="rounded-xl border border-gray-200 px-4 py-3 text-sm font-black text-gray-700 dark:border-white/10 dark:text-white">
+                Keep draft
+              </button>
+              <button onClick={() => void deleteDraft()} disabled={working} className="rounded-xl bg-red-600 px-4 py-3 text-sm font-black text-white disabled:opacity-50">
+                {working ? "Deleting…" : "Delete permanently"}
+              </button>
+            </div>
+          </div>
+        </Modal>
       </div>
     </div>
   );

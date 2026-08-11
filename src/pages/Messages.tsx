@@ -2729,11 +2729,8 @@ function ChatWindow({
       const scrollToLatest = () => {
         if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
       };
-      requestAnimationFrame(() => {
-        scrollToLatest();
-        setTimeout(scrollToLatest, 60);
-        setTimeout(scrollToLatest, 240);
-      });
+      scrollToLatest();
+      requestAnimationFrame(() => requestAnimationFrame(scrollToLatest));
     };
     const handleComposerFocus = () => {
       forceStickToLatestRef.current = true;
@@ -3771,7 +3768,7 @@ export function Messages() {
     updateGroupConversationPhoto,
     discardEmptyConversation,
   } = useConversations();
-  useMessagesKeyboardInset(!isDesktop && Boolean(selectedConvId));
+  useMessagesKeyboardInset(Boolean(selectedConvId));
   useDisableChatEdgeBackSwipe(!isDesktop && Boolean(selectedConvId));
 
   const myUserId = user?.id ?? '';

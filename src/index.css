@@ -712,6 +712,14 @@ html[data-touch-feedback="apple"] :is(nav, aside) .touch-feedback-strong {
     height: var(--messages-viewport-height, 100dvh);
   }
 
+  @media (min-width: 1024px) and (pointer: coarse) {
+    .messages-keyboard-open .desktop-sidebar-main {
+      bottom: auto !important;
+      height: var(--messages-viewport-height, 100dvh) !important;
+      min-height: 0 !important;
+    }
+  }
+
   .service-mode-overlay {
     top: 0;
     right: 0;

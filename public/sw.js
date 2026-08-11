@@ -1,3 +1,6 @@
+const serviceWorkerVersion = new URL(self.location.href).searchParams.get('v') || 'unversioned';
+const appShellCacheName = `servesync-app-shell-${serviceWorkerVersion}`;
+
 function askClientVisibility(client) {
   return new Promise(resolve => {
     const channel = new MessageChannel();
@@ -103,19 +106,42 @@ self.addEventListener('notificationclick', function(event) {
 self.addEventListener('fetch', function(event) {
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).catch(function() {
-        return caches.match('/index.html') || fetch('/index.html');
-      })
+      (async function() {
+        const cache = await caches.open(appShellCacheName);
+        try {
+          const response = await fetch(event.request);
+          if (response.ok && response.type === 'basic') {
+            await cache.put('/index.html', response.clone());
+          }
+          return response;
+        } catch {
+          return (await cache.match('/index.html')) || Response.error();
+        }
+      })()
     );
   }
 });
 
-self.addEventListener('install', function() {
+self.addEventListener('install', function(event) {
   // Wait for explicit approval from the client before activating over an existing app shell.
+  event.waitUntil(
+    caches.open(appShellCacheName)
+      .then(cache => cache.add('/index.html'))
+      .catch(error => console.warn('[SW] Could not precache navigation shell:', error))
+  );
 });
 
 self.addEventListener('activate', function(event) {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    Promise.all([
+      self.clients.claim(),
+      caches.keys().then(keys => Promise.all(
+        keys
+          .filter(key => key.startsWith('servesync-app-shell-') && key !== appShellCacheName)
+          .map(key => caches.delete(key))
+      )),
+    ])
+  );
 });
 
 self.addEventListener('message', function(event) {

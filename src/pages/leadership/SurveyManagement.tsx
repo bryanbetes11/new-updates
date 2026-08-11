@@ -25,6 +25,7 @@ import { useToast } from "../../contexts/ToastContext";
 import { supabase } from "../../lib/supabase";
 import {
   formatSurveyTime,
+  parseSurveyRating,
   type SurveyCampaign,
   type SurveyParticipation,
   type SurveySection,
@@ -1100,8 +1101,9 @@ function ResultsPanel({
         typeof row.answer === "string"
           ? row.answer
           : String(row.answer?.value || "");
-      if (question.answer_type === "rating" && /^[1-5]$/.test(value))
-        entry.ratings.push(Number(value));
+      const rating = parseSurveyRating(value);
+      if (question.answer_type === "rating" && rating !== null)
+        entry.ratings.push(rating);
       else if (question.answer_type === "long_text" && value.trim())
         entry.suggestions.push(value);
       else if (

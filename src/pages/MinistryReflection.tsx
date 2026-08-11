@@ -28,6 +28,38 @@ import { PageLoader } from "../components/LoadingSpinner";
 
 type Answers = Record<string, string>;
 
+type LocalReflectionDraft = {
+  activeIndex: number;
+  answers: Answers;
+  commitment: { response_key: string; reflection: string };
+  updatedAt: string;
+};
+
+function getLocalDraftKey(participationId: string) {
+  return `servesync:reflection-draft:${participationId}`;
+}
+
+function readLocalDraft(participationId: string): LocalReflectionDraft | null {
+  try {
+    const stored = window.localStorage.getItem(getLocalDraftKey(participationId));
+    if (!stored) return null;
+    const draft = JSON.parse(stored) as Partial<LocalReflectionDraft>;
+    if (
+      typeof draft.activeIndex !== "number" ||
+      !draft.answers ||
+      !draft.commitment ||
+      typeof draft.updatedAt !== "string"
+    ) return null;
+    return draft as LocalReflectionDraft;
+  } catch {
+    return null;
+  }
+}
+
+function removeLocalDraft(participationId: string) {
+  window.localStorage.removeItem(getLocalDraftKey(participationId));
+}
+
 function renderSurveySurface(content: ReactNode) {
   return createPortal(content, document.body);
 }
@@ -59,6 +91,7 @@ const ratingTagalog: Record<string, string> = {
   "Strongly disagree": "Lubos na hindi sumasang-ayon",
   Disagree: "Hindi sumasang-ayon",
   Unsure: "Hindi tiyak",
+  Sometimes: "Minsan",
   Agree: "Sumasang-ayon",
   "Strongly agree": "Lubos na sumasang-ayon",
 };
@@ -101,6 +134,7 @@ export function MinistryReflection() {
     reflection: "",
   });
   const [activeIndex, setActiveIndex] = useState(-3);
+  const [introLanguage, setIntroLanguage] = useState<"en" | "tl">("en");
   const [holding, setHolding] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -205,24 +239,38 @@ export function MinistryReflection() {
           } as SurveySection;
         })
         .sort((a, b) => a.sort_order - b.sort_order);
-      setSections(normalized);
-      setAnswers(
-        Object.fromEntries(
-          (responseRows || []).map((row) => [
-            row.question_id,
-            String(row.answer?.value ?? row.answer ?? ""),
-          ]),
-        ),
+      const serverAnswers = Object.fromEntries(
+        (responseRows || []).map((row) => [
+          row.question_id,
+          String(row.answer?.value ?? row.answer ?? ""),
+        ]),
       );
-      if (commitmentRow)
-        setCommitment({
+      const serverCommitment = commitmentRow
+        ? {
           response_key: commitmentRow.response_key,
           reflection: commitmentRow.reflection || "",
-        });
+        }
+        : { response_key: "", reflection: "" };
+      const localDraft = readLocalDraft(gate.participation.id);
+      const localIsNewer = Boolean(
+        localDraft &&
+        (!gate.participation.last_saved_at ||
+          new Date(localDraft.updatedAt).getTime() >=
+            new Date(gate.participation.last_saved_at).getTime()),
+      );
+      setSections(normalized);
+      setAnswers(localIsNewer && localDraft ? { ...serverAnswers, ...localDraft.answers } : serverAnswers);
+      setCommitment(localIsNewer && localDraft ? localDraft.commitment : serverCommitment);
       const resume = normalized.findIndex(
         (section) => section.id === gate.participation.last_section_id,
       );
-      setActiveIndex(resume >= 0 ? resume : -3);
+      const localIndex = localDraft?.activeIndex;
+      const canResumeLocal =
+        localIsNewer &&
+        typeof localIndex === "number" &&
+        localIndex >= -3 &&
+        localIndex < normalized.length;
+      setActiveIndex(canResumeLocal ? localIndex : resume >= 0 ? resume : -3);
     } catch (error) {
       console.error(error);
       toast("error", "We could not load your reflection. Please try again.");
@@ -236,6 +284,32 @@ export function MinistryReflection() {
   }, [loadSurvey]);
 
   const activeSection = activeIndex >= 0 ? sections[activeIndex] : null;
+
+  useEffect(() => {
+    if (loading || isPreview || !participation || !campaign) return;
+    const draft: LocalReflectionDraft = {
+      activeIndex,
+      answers,
+      commitment,
+      updatedAt: new Date().toISOString(),
+    };
+    window.localStorage.setItem(
+      getLocalDraftKey(participation.id),
+      JSON.stringify(draft),
+    );
+  }, [activeIndex, answers, campaign, commitment, isPreview, loading, participation]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const surface = document.querySelector<HTMLElement>(".survey-modal-surface");
+      surface?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      const card = surface?.firstElementChild;
+      if (card instanceof HTMLElement)
+        card.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeIndex]);
   const completedCount = sections.filter(
     (section) => section.completed_at,
   ).length;
@@ -338,7 +412,10 @@ export function MinistryReflection() {
         p_participation_id: participation.id,
       });
       if (error) toast("error", error.message);
-      else setSubmitted(true);
+      else {
+        removeLocalDraft(participation.id);
+        setSubmitted(true);
+      }
     }
   };
 
@@ -477,10 +554,12 @@ export function MinistryReflection() {
             ].map(([Icon, en, tl]) => {
               const LandingIcon = Icon as typeof ShieldCheck;
               return (
-                <div key={String(en)} className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
-                  <LandingIcon className="h-5 w-5 text-emerald-400" />
-                  <p className="mt-4 text-sm font-black">{String(en)}</p>
-                  <p className="mt-1 text-xs leading-5 text-white/38">{String(tl)}</p>
+                <div key={String(en)} className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+                  <LandingIcon className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-black">{String(en)}</p>
+                    <p className="mt-1 text-xs leading-5 text-white/38">{String(tl)}</p>
+                  </div>
                 </div>
               );
             })}
@@ -491,10 +570,10 @@ export function MinistryReflection() {
               onClick={() => setActiveIndex(-1)}
               className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-4 font-black text-black"
             >
-              Continue to Introduction <ArrowRight className="h-4 w-4" />
+              Start the Survey <ArrowRight className="h-4 w-4" />
             </button>
             <p className="mt-4 text-center text-xs leading-5 text-white/32">
-              You can save your progress and return when you are ready.<br />Maaari mong i-save ang iyong progress at bumalik kapag handa ka na.
+              You can save your progress and return when you are ready.
             </p>
           </div>
         </div>
@@ -529,16 +608,42 @@ export function MinistryReflection() {
             Remember · Reset · Rebuild · Recommit
           </p>
           <h1 className="mt-4 text-4xl font-black tracking-[-0.05em]">A time to reflect together.</h1>
-          <p className="mt-3 text-sm leading-6 text-white/45">
-            English is shown first, followed by the Tagalog translation.
-            <span className="mt-1 block text-white/35">Nauuna ang English at sinusundan ng salin sa Tagalog.</span>
-          </p>
-          <div className="mt-8 space-y-8 text-[15px] leading-7 text-white/62">
-            <div className="space-y-5">
-              {splitSurveyParagraphs(campaign.introduction_en).map((p, i) => <p key={`en-${i}`}>{p}</p>)}
+          <div className="mt-8">
+            <div
+              className="grid grid-cols-2 rounded-2xl border border-white/10 bg-white/[0.035] p-1"
+              role="tablist"
+              aria-label="Introduction language"
+            >
+              {(["en", "tl"] as const).map((language) => (
+                <button
+                  key={language}
+                  type="button"
+                  role="tab"
+                  aria-selected={introLanguage === language}
+                  onClick={() => setIntroLanguage(language)}
+                  className={`rounded-xl px-4 py-2.5 text-xs font-black transition-colors ${
+                    introLanguage === language
+                      ? language === "en"
+                        ? "bg-emerald-500 text-black"
+                        : "bg-violet-500 text-white"
+                      : "text-white/40 hover:text-white/65"
+                  }`}
+                >
+                  {language === "en" ? "English" : "Tagalog"}
+                </button>
+              ))}
             </div>
-            <div className="space-y-5 border-t border-white/10 pt-7 text-white/48">
-              {splitSurveyParagraphs(campaign.introduction_tl).map((p, i) => <p key={`tl-${i}`}>{p}</p>)}
+            <div
+              className="mt-7 space-y-5 text-[15px] leading-7 text-white/70"
+              role="tabpanel"
+            >
+              {splitSurveyParagraphs(
+                introLanguage === "en"
+                  ? campaign.introduction_en
+                  : campaign.introduction_tl,
+              ).map((paragraph, index) => (
+                <p key={`${introLanguage}-${index}`}>{paragraph}</p>
+              ))}
             </div>
           </div>
           <div className="mt-auto pt-10">

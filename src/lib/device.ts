@@ -5,6 +5,38 @@ export function isIosDevice() {
     || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
 
+interface IpadLayoutSignals {
+  userAgent: string;
+  platform: string;
+  maxTouchPoints: number;
+  screenWidth: number;
+  screenHeight: number;
+}
+
+export function isIpadLayoutDevice(signals: IpadLayoutSignals) {
+  const shortestScreenSide = Math.min(signals.screenWidth, signals.screenHeight);
+  return shortestScreenSide > 600 && (
+    /iPad/i.test(signals.userAgent)
+    || (signals.platform === 'MacIntel' && signals.maxTouchPoints > 1)
+  );
+}
+
+export function initializeDeviceLayout() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+
+  const isIpadPreview = import.meta.env.DEV
+    && new URLSearchParams(window.location.search).get('device') === 'ipad';
+  const isIpad = isIpadPreview || isIpadLayoutDevice({
+    userAgent: navigator.userAgent,
+    platform: navigator.platform,
+    maxTouchPoints: navigator.maxTouchPoints,
+    screenWidth: window.screen.width,
+    screenHeight: window.screen.height,
+  });
+
+  document.documentElement.dataset.ipadLayout = isIpad ? 'true' : 'false';
+}
+
 export function isAndroidDevice() {
   if (typeof navigator === 'undefined') return false;
   return /Android/i.test(navigator.userAgent);

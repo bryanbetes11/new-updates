@@ -355,15 +355,19 @@
   }
 
   @media (min-width: 1024px) {
+    :root {
+      --desktop-safe-area-top: env(safe-area-inset-top, 0px);
+    }
+
     .desktop-top-bar {
-      height: calc(72px + env(safe-area-inset-top, 0px));
-      padding-top: env(safe-area-inset-top, 0px);
+      height: calc(72px + var(--desktop-safe-area-top));
+      padding-top: var(--desktop-safe-area-top);
       padding-right: max(1.25rem, env(safe-area-inset-right, 0px));
       padding-left: max(1.25rem, env(safe-area-inset-left, 0px));
     }
 
     .desktop-sidebar {
-      top: calc(72px + env(safe-area-inset-top, 0px));
+      top: calc(72px + var(--desktop-safe-area-top));
       bottom: env(safe-area-inset-bottom, 0px);
     }
 
@@ -373,12 +377,12 @@
     }
 
     .mobile-layout-padding {
-      padding-top: calc(2rem + env(safe-area-inset-top, 0px));
+      padding-top: calc(2rem + var(--desktop-safe-area-top));
       padding-bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px));
     }
 
     .wide-shell-spacing {
-      padding-top: calc(72px + env(safe-area-inset-top, 0px));
+      padding-top: calc(72px + var(--desktop-safe-area-top));
       padding-bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px));
     }
 
@@ -393,6 +397,12 @@
     .page-loader-shell {
       min-height: calc(100vh - 4rem);
       min-height: calc(100dvh - 4rem);
+    }
+  }
+
+  @media (min-width: 1024px) and (orientation: landscape) {
+    :root[data-ipad-layout="true"] {
+      --desktop-safe-area-top: max(env(safe-area-inset-top, 0px), 24px);
     }
   }
 

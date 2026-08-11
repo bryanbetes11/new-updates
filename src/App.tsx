@@ -15,6 +15,7 @@ import { Layout } from "./components/Layout";
 import { PageLoader } from "./components/LoadingSpinner";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { SurveyGate } from "./components/SurveyGate";
+import { InteractiveLabelCase } from "./components/InteractiveLabelCase";
 import {
   isPasswordRecoveryUrl,
   recoveryRedirectPath,
@@ -271,6 +272,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <InteractiveLabelCase />
       <PasswordRecoveryRedirect />
       <ServiceModeResumeRedirect />
       <ThemeProvider>

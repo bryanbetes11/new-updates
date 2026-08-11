@@ -43,6 +43,16 @@ interface EventAttendance {
   profiles?: { first_name: string; last_name: string; avatar_url: string | null };
 }
 
+interface SetlistRevisionComment {
+  id: string;
+  setlist_id: string;
+  user_id: string;
+  content: string;
+  reply_to: string | null;
+  created_at: string;
+  profiles?: { first_name: string; last_name: string; avatar_url: string | null } | null;
+}
+
 const MANILA_TIMEZONE = 'Asia/Manila';
 
 function getManilaTodayKey(date = new Date()) {
@@ -224,6 +234,10 @@ export function EventDetail() {
   const [deleting, setDeleting] = useState(false);
   const [showRevisionRequest, setShowRevisionRequest] = useState(false);
   const [revisionReason, setRevisionReason] = useState('');
+  const [revisionComments, setRevisionComments] = useState<SetlistRevisionComment[]>([]);
+  const [revisionCommentText, setRevisionCommentText] = useState('');
+  const [replyingToRevisionComment, setReplyingToRevisionComment] = useState<SetlistRevisionComment | null>(null);
+  const [postingRevisionComment, setPostingRevisionComment] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [editingSongId, setEditingSongId] = useState<string | null>(null);
@@ -644,6 +658,29 @@ export function EventDetail() {
   }, [id, isMissingSetlistSubmissionTableError]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const fetchRevisionComments = useCallback(async (setlistId: string) => {
+    const { data, error } = await supabase
+      .from('setlist_revision_comments')
+      .select('id, setlist_id, user_id, content, reply_to, created_at, profiles!setlist_revision_comments_user_id_fkey(first_name, last_name, avatar_url)')
+      .eq('setlist_id', setlistId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      // Access is intentionally limited by RLS. An unauthorized viewer simply sees no thread.
+      setRevisionComments([]);
+      return;
+    }
+    setRevisionComments((data || []) as unknown as SetlistRevisionComment[]);
+  }, []);
+
+  useEffect(() => {
+    if (!setlist?.id) {
+      setRevisionComments([]);
+      return;
+    }
+    void fetchRevisionComments(setlist.id);
+  }, [fetchRevisionComments, setlist?.id]);
 
   useEffect(() => {
     const activeSetlistIds = [setlist?.id, linkedSetlist?.id].filter((value): value is string => Boolean(value));
@@ -1442,6 +1479,29 @@ export function EventDetail() {
     await handleSetlistAction('revision_requested', revisionReason);
     setShowRevisionRequest(false);
     setRevisionReason('');
+  };
+
+  const handlePostRevisionComment = async () => {
+    const content = revisionCommentText.trim();
+    if (!setlist || !user || !content || postingRevisionComment) return;
+
+    setPostingRevisionComment(true);
+    const { error } = await supabase.from('setlist_revision_comments').insert({
+      setlist_id: setlist.id,
+      user_id: user.id,
+      content,
+      reply_to: replyingToRevisionComment?.id || null,
+    });
+
+    if (error) {
+      toast('error', error.message || 'Could not add the revision comment');
+    } else {
+      setRevisionCommentText('');
+      setReplyingToRevisionComment(null);
+      await fetchRevisionComments(setlist.id);
+      toast('success', replyingToRevisionComment ? 'Reply added' : 'Comment added');
+    }
+    setPostingRevisionComment(false);
   };
 
   const handleReject = async () => {
@@ -2800,16 +2860,66 @@ const openLyricsModal = (ss: SetlistSong) => {
           );
         })()}
 
-        {setlist && setlist.status === 'revision_requested' && (
-          <div className="card p-4 bg-amber-50 dark:bg-amber-900/20 ring-amber-200 dark:ring-amber-800 animate-slide-up" style={{ animationDelay: '100ms' }}>
-            <div className="flex items-start gap-3">
-              <div className="flex items-center justify-center h-9 w-9 rounded-full bg-amber-100 dark:bg-amber-900/40 shrink-0">
-                <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+        {setlist && (canReviewSetlist || isSongLeader) && (setlist.status === 'revision_requested' || revisionComments.length > 0) && (
+          <div className="card overflow-hidden animate-slide-up">
+            <div className="border-b border-gray-200/70 px-3.5 py-3 dark:border-white/[0.08] sm:px-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white">
+                    <MessageCircle className="h-4 w-4 text-amber-500" />
+                    {setlist.status === 'revision_requested' ? 'Revision Requested' : 'Revision Discussion'}
+                  </p>
+                </div>
+                <span className="badge badge-yellow shrink-0">{revisionComments.length}</span>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">Revision Requested</p>
-                <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">{setlist.review_note || setlist.approval_notes || 'Please review and make necessary changes to the setlist.'}</p>
-                {canSubmitSetlist && <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">Make your changes and use Resubmit when ready.</p>}
+              {setlist.status === 'revision_requested' && (
+                <div className="mt-2.5 flex items-start gap-2 rounded-xl border border-amber-300/50 bg-amber-50/80 px-3 py-2.5 dark:border-amber-700/35 dark:bg-amber-900/15">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                  <div className="min-w-0 flex-1">
+                    <p className="whitespace-pre-wrap break-words text-sm leading-5 text-amber-800 dark:text-amber-200">{setlist.review_note || setlist.approval_notes || 'Please review and make necessary changes to the setlist.'}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2 px-3.5 py-3 sm:px-4">
+              {revisionComments.length === 0 ? (
+                <p className="py-1 text-center text-xs text-gray-500 dark:text-gray-400">No comments yet.</p>
+              ) : revisionComments.map(comment => {
+                const authorName = `${comment.profiles?.first_name || 'Team'} ${comment.profiles?.last_name || 'member'}`.trim();
+                return (
+                  <div key={comment.id} className={`rounded-lg border border-gray-200/70 bg-gray-50/70 px-2.5 py-2 dark:border-white/[0.08] dark:bg-white/[0.03] ${comment.reply_to ? 'ml-4 border-l-2 border-l-amber-400/70 sm:ml-6' : ''}`}>
+                    <div className="flex items-center gap-1.5">
+                      <Avatar src={comment.profiles?.avatar_url} firstName={comment.profiles?.first_name || '?'} lastName={comment.profiles?.last_name} size="xs" />
+                      <div className="flex min-w-0 flex-1 items-baseline gap-1.5 overflow-hidden">
+                        <p className="shrink-0 truncate text-xs font-semibold text-gray-900 dark:text-white">{authorName}</p>
+                        <p className="min-w-0 truncate text-[11px] text-gray-500 before:mr-1.5 before:text-gray-400 before:content-['|'] dark:text-gray-400 dark:before:text-gray-600">{format(parseISO(comment.created_at), 'MMM d, yyyy · h:mm a')}</p>
+                      </div>
+                      <button type="button" onClick={() => setReplyingToRevisionComment(comment)} className="text-xs font-semibold text-amber-600 hover:text-amber-700 dark:text-amber-400">Reply</button>
+                    </div>
+                    <p className="mt-1 whitespace-pre-wrap break-words pl-7 text-sm leading-5 text-gray-700 dark:text-gray-200">{comment.content}</p>
+                  </div>
+                );
+              })}
+
+              {replyingToRevisionComment && (
+                <div className="flex items-center justify-between gap-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+                  <span className="truncate">Replying to {replyingToRevisionComment.profiles?.first_name || 'comment'}</span>
+                  <button type="button" onClick={() => setReplyingToRevisionComment(null)} className="font-semibold">Cancel</button>
+                </div>
+              )}
+              <textarea
+                value={revisionCommentText}
+                onChange={event => setRevisionCommentText(event.target.value)}
+                placeholder={replyingToRevisionComment ? 'Write a reply…' : 'Add a comment about the requested revisions…'}
+                className="input-field min-h-16 resize-y whitespace-pre-wrap"
+                maxLength={4000}
+              />
+              <div className="flex justify-end">
+                <button type="button" onClick={handlePostRevisionComment} disabled={!revisionCommentText.trim() || postingRevisionComment} className="btn-primary inline-flex items-center gap-2 disabled:opacity-50">
+                  {postingRevisionComment ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  {replyingToRevisionComment ? 'Post Reply' : 'Post Comment'}
+                </button>
               </div>
             </div>
           </div>
@@ -2823,7 +2933,7 @@ const openLyricsModal = (ss: SetlistSong) => {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-red-900 dark:text-red-100">Setlist Rejected</p>
-                <p className="text-sm text-red-700 dark:text-red-300 mt-1">{setlist.review_note || 'This setlist was not approved.'}</p>
+                <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-red-700 dark:text-red-300">{setlist.review_note || 'This setlist was not approved.'}</p>
                 {canSubmitSetlist && <p className="text-xs text-red-600 dark:text-red-400 mt-2">You can reset it to Draft and rework it if needed.</p>}
               </div>
             </div>
@@ -3418,7 +3528,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                   {(setlist.review_note || setlist.approval_notes) && !['revision_requested', 'rejected', 'approved'].includes(setlist.status) && (
                     <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
                       <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Notes</p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">{setlist.review_note || setlist.approval_notes}</p>
+                      <p className="whitespace-pre-wrap break-words text-sm leading-6 text-gray-500 dark:text-gray-400">{setlist.review_note || setlist.approval_notes}</p>
                     </div>
                   )}
                 </div>

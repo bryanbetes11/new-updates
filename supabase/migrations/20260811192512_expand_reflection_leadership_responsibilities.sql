@@ -1,6 +1,6 @@
 do $$
 declare
-  v_rating jsonb := '[{"value":"1","label":"Strongly disagree"},{"value":"2","label":"Disagree"},{"value":"3","label":"Unsure"},{"value":"4","label":"Agree"},{"value":"5","label":"Strongly agree"}]'::jsonb;
+  v_rating jsonb := '[{"value":"1","label":"Strongly disagree"},{"value":"2","label":"Disagree"},{"value":"3","label":"Unsure"},{"value":"3.5","label":"Sometimes"},{"value":"4","label":"Agree"},{"value":"5","label":"Strongly agree"}]'::jsonb;
 begin
   insert into public.survey_questions (section_id, question_key, prompt_en, prompt_tl, answer_type, options, sort_order)
   select s.id, q.question_key, q.prompt_en, q.prompt_tl, q.answer_type, q.options, q.sort_order

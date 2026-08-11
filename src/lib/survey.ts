@@ -72,6 +72,10 @@ export type SurveyGateState = {
   participation: SurveyParticipation;
 };
 
+export function parseSurveyRating(value: string): number | null {
+  return /^(?:[1-5]|3\.5)$/.test(value) ? Number(value) : null;
+}
+
 export async function getActiveSurveyGate(
   userId: string,
 ): Promise<SurveyGateState | null> {

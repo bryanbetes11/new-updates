@@ -1837,9 +1837,9 @@ export function Navigation({
 
       {/* ── Mobile top bar ── */}
       <div
-        className={`fixed top-0 left-0 right-0 z-30 flex items-end justify-between overflow-hidden px-4 lg:hidden ${hideMobileAll || hideMobileHeader ? "hidden" : ""}`}
+        className={`fixed left-0 right-0 top-0 z-50 flex items-end justify-between overflow-visible lg:hidden ${hideMobileAll || hideMobileHeader ? "hidden" : ""}`}
         style={{
-          background: "#050505",
+          background: "transparent",
           borderBottom: "none",
           boxShadow: "none",
           top: "-1px",
@@ -1853,13 +1853,12 @@ export function Navigation({
         }}
       >
         <div
-          className="pointer-events-none absolute inset-x-0 z-0 bg-[#050505]"
+          className="pointer-events-none absolute inset-x-0 top-0 z-0 bg-[#050505]/82 backdrop-blur-xl"
           style={{
-            top: "max(0px, calc(env(safe-area-inset-top) - 2px))",
-            height: "4px",
+            height: "calc(env(safe-area-inset-top) + 2px)",
           }}
         />
-        <div className="relative flex h-14 w-full items-center justify-between gap-2 pb-0">
+        <div className="relative z-10 flex h-14 w-full items-center justify-between gap-2 bg-[#050505] px-4 pb-0">
           <button
             onClick={() => {
               setDrawerPanel("menu");

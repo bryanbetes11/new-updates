@@ -552,6 +552,7 @@ export interface SwapRequest {
   reviewed_at: string | null;
   approval_notes: string | null;
   review_note: string | null;
+  requester_dashboard_dismissed_at: string | null;
   created_at: string;
   requester?: Profile;
   target?: Profile;

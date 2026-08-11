@@ -424,6 +424,7 @@ export function Dashboard() {
       `)
       .eq('user_id', user.id)
       .in('request_type', ['sub', 'swap'])
+      .is('requester_dashboard_dismissed_at', null)
       .order('created_at', { ascending: false })
       .limit(8);
 
@@ -864,7 +865,22 @@ export function Dashboard() {
     }
   };
 
-  const dismissSentSwapRequest = (swapId: string) => {
+  const dismissSentSwapRequest = async (swapId: string) => {
+    if (!user) return;
+
+    const dismissedAt = new Date().toISOString();
+    const { error } = await supabase
+      .from('user_availability')
+      .update({ requester_dashboard_dismissed_at: dismissedAt })
+      .eq('id', swapId)
+      .eq('user_id', user.id);
+
+    if (error) {
+      console.error('[Dashboard] Failed to persist dismissed request:', error);
+      toast('error', 'Could not remove this request. Please try again.');
+      return;
+    }
+
     setDismissedSwapIds(current => {
       const next = new Set(current);
       next.add(swapId);
@@ -1201,7 +1217,7 @@ export function Dashboard() {
                         )}
                         {canDismiss && (
                           <button
-                            onClick={() => dismissSentSwapRequest(req.id)}
+                            onClick={() => void dismissSentSwapRequest(req.id)}
                             className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full border border-white/[0.08] bg-[#2a2a2a] text-[12px] font-black text-white/88 transition-colors hover:bg-[#333333]"
                           >
                             <X className="h-3.5 w-3.5" /> Remove from dashboard

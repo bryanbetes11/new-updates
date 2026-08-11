@@ -724,7 +724,9 @@ export function SurveyManagement() {
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div>
                             <h3 className="font-black text-gray-950 dark:text-white">{section.title_en}</h3>
-                            <p className="text-sm text-gray-500 dark:text-white/45">{section.title_tl}</p>
+                            {section.description_en && (
+                              <p className="text-sm text-gray-500 dark:text-white/45">{section.description_en}</p>
+                            )}
                           </div>
                           <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-gray-600 dark:bg-white/10 dark:text-white/55">
                             {section.required_role ? `${section.required_role} only` : "All members"}

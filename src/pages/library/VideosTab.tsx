@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { motion } from 'framer-motion';
-import { PlayCircle, Plus, Search, ExternalLink, Film, CreditCard as Edit2, Trash2, MoreVertical, X, MessageCircle, Send, Loader2 } from 'lucide-react';
+import { PlayCircle, Plus, Search, ExternalLink, Film, CreditCard as Edit2, Trash2, MoreVertical, X, MessageCircle, Send, Loader2, Bell, BellOff } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -126,6 +126,7 @@ export function VideosTab() {
   const [createLinks, setCreateLinks] = useState('');
   const [createCategory, setCreateCategory] = useState('General');
   const [createDescription, setCreateDescription] = useState('');
+  const [createNotifyMembers, setCreateNotifyMembers] = useState(false);
   const [showPlayer, setShowPlayer] = useState(false);
   const [comments, setComments] = useState<VideoComment[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
@@ -164,7 +165,7 @@ export function VideosTab() {
       return;
     }
     setCreating(true);
-    let rows: Array<Record<string, string>>;
+    let rows: Array<Record<string, string | boolean>>;
     try {
       rows = await Promise.all(links.map(async videoUrl => {
         const metadata = await fetchYouTubeMetadata(videoUrl);
@@ -175,6 +176,7 @@ export function VideosTab() {
           thumbnail_url: metadata.thumbnail_url,
           category: createCategory,
           uploaded_by: user.id,
+          notify_members: isProductionDirector ? createNotifyMembers : true,
         };
       }));
     } catch (error) {
@@ -190,6 +192,7 @@ export function VideosTab() {
     setCreateLinks('');
     setCreateCategory('General');
     setCreateDescription('');
+    setCreateNotifyMembers(false);
     fetchVideos();
   };
 
@@ -542,6 +545,30 @@ export function VideosTab() {
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Shared description <span className="font-normal text-gray-400">(optional)</span></label>
             <textarea value={createDescription} onChange={e => setCreateDescription(e.target.value)} className="input-field h-20 resize-none" />
           </div>
+          {isProductionDirector && (
+            <label className="flex cursor-pointer items-start justify-between gap-4 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.035]">
+              <span className="flex min-w-0 gap-3">
+                <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${createNotifyMembers ? 'bg-emerald-500/15 text-emerald-500' : 'bg-gray-200 text-gray-500 dark:bg-white/10 dark:text-white/45'}`}>
+                  {createNotifyMembers ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
+                </span>
+                <span>
+                  <span className="block text-sm font-bold text-gray-900 dark:text-white">Notify team members</span>
+                  <span className="mt-1 block text-xs leading-5 text-gray-500 dark:text-white/45">
+                    {createNotifyMembers
+                      ? 'Each added video will send its own notification.'
+                      : 'No notifications will be sent for this import. Recommended for backlog batches.'}
+                  </span>
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                checked={createNotifyMembers}
+                onChange={e => setCreateNotifyMembers(e.target.checked)}
+                className="mt-2 h-5 w-5 shrink-0 accent-emerald-500"
+                aria-label="Notify team members about these videos"
+              />
+            </label>
+          )}
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={() => setShowCreate(false)} className="btn-secondary">Cancel</button>
             <button type="submit" disabled={creating} className="btn-primary">

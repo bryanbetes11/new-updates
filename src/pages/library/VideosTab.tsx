@@ -877,9 +877,9 @@ export function VideosTab() {
           <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">
             This sends one in-app and push notification to the team. Opening it will show the complete Videos library.
           </p>
-          <div className="flex justify-end gap-3">
-            <button type="button" onClick={() => setShowArchiveNotify(false)} className="btn-secondary">Cancel</button>
-            <button type="button" onClick={handleNotifyArchive} disabled={archiveNotifying} className="btn-primary">
+          <div className="grid grid-cols-2 gap-3">
+            <button type="button" onClick={() => setShowArchiveNotify(false)} className="btn-secondary w-full">Cancel</button>
+            <button type="button" onClick={handleNotifyArchive} disabled={archiveNotifying} className="btn-primary w-full whitespace-nowrap px-3">
               {archiveNotifying ? 'Sending...' : 'Send Announcement'}
             </button>
           </div>

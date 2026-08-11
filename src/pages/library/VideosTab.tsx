@@ -617,7 +617,7 @@ export function VideosTab() {
         size="xl"
       >
         {selectedVideo && (
-          <div className="space-y-5">
+          <div className="flex min-h-[calc(90dvh-6.5rem)] flex-col gap-5 sm:min-h-0">
             <div className="aspect-video overflow-hidden rounded-2xl bg-black ring-1 ring-white/10">
               {getYouTubeEmbedUrl(selectedVideo.video_url) ? (
                 <iframe
@@ -647,7 +647,7 @@ export function VideosTab() {
               <p className="mt-1 text-xs text-gray-400 dark:text-white/35">Share observations, questions, or helpful notes with the team.</p>
             </div>
 
-            <div className="max-h-64 space-y-2 overflow-y-auto overscroll-contain pr-1">
+            <div className="min-h-24 flex-1 space-y-2 overflow-y-auto overscroll-contain pr-1 sm:max-h-64 sm:flex-none">
               {commentsLoading ? (
                 <div className="flex items-center justify-center py-8 text-gray-400"><Loader2 className="h-5 w-5 animate-spin" /></div>
               ) : comments.length === 0 ? (

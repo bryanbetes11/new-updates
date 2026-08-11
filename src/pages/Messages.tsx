@@ -3649,19 +3649,29 @@ function useMessagesKeyboardInset(active: boolean) {
       const rawKeyboardInset = viewport
         ? Math.max(0, restingViewportHeight - viewport.height - viewport.offsetTop)
         : 0;
+      const isPhoneViewport = window.matchMedia('(max-width: 600px)').matches;
       if (!composerFocused || rawKeyboardInset < 80) {
         restingViewportHeight = Math.max(restingViewportHeight, window.innerHeight, viewport?.height || 0);
       }
-      const keyboardOpen = composerFocused && rawKeyboardInset > 120;
+      // iPhone Safari reports the keyboard animation in small visual viewport
+      // increments. React on the first real shrink so the fixed chat pane does
+      // not briefly remain panned above the visible viewport. Keep the proven
+      // higher threshold on tablets and desktop touch devices.
+      const keyboardOpen = composerFocused && rawKeyboardInset > (isPhoneViewport ? 24 : 120);
       const keyboardInset = keyboardOpen ? rawKeyboardInset : 0;
       document.documentElement.classList.toggle('messages-keyboard-open', keyboardOpen);
       if (keyboardOpen && viewport) {
         document.documentElement.style.setProperty('--messages-viewport-height', `${Math.round(viewport.height)}px`);
+        document.documentElement.style.setProperty(
+          '--messages-viewport-offset-top',
+          `${isPhoneViewport ? Math.round(viewport.offsetTop) : 0}px`,
+        );
       } else {
         document.documentElement.style.removeProperty('--messages-viewport-height');
+        document.documentElement.style.removeProperty('--messages-viewport-offset-top');
       }
       document.documentElement.style.setProperty('--messages-keyboard-inset', `${Math.round(keyboardInset)}px`);
-      window.scrollTo(0, 0);
+      if (!isPhoneViewport) window.scrollTo(0, 0);
       window.dispatchEvent(new Event('messages-keyboard-inset-change'));
     };
 
@@ -3680,6 +3690,7 @@ function useMessagesKeyboardInset(active: boolean) {
       window.removeEventListener('focusout', setInset);
       document.documentElement.style.removeProperty('--messages-keyboard-inset');
       document.documentElement.style.removeProperty('--messages-viewport-height');
+      document.documentElement.style.removeProperty('--messages-viewport-offset-top');
       document.documentElement.classList.remove('messages-keyboard-open');
       document.documentElement.classList.remove('messages-chat-active');
       document.body.classList.remove('messages-chat-active');

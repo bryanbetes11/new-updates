@@ -707,6 +707,7 @@ html[data-touch-feedback="apple"] :is(nav, aside) .touch-feedback-strong {
   }
 
   .messages-keyboard-open .mobile-chat-pane {
+    top: var(--messages-viewport-offset-top, 0px);
     bottom: auto;
     min-height: 0;
     height: var(--messages-viewport-height, 100dvh);

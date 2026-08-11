@@ -7,14 +7,14 @@ import { VideosTab } from './library/VideosTab';
 type Tab = 'songs' | 'sets' | 'videos';
 
 const tabs: { id: Tab; label: string; shortLabel: string; icon: ElementType }[] = [
+  { id: 'videos', label: 'Videos', shortLabel: 'Videos', icon: Video },
   { id: 'songs', label: 'Songs', shortLabel: 'Songs', icon: BookOpen },
   { id: 'sets', label: 'Sets', shortLabel: 'Sets', icon: ListChecks },
-  { id: 'videos', label: 'Videos', shortLabel: 'Videos', icon: Video },
 ];
 
 export function Library() {
   const requestedTab = new URLSearchParams(window.location.search).get('tab');
-  const [tab, setTab] = useState<Tab>(requestedTab === 'videos' ? 'videos' : requestedTab === 'sets' ? 'sets' : 'songs');
+  const [tab, setTab] = useState<Tab>(requestedTab === 'songs' ? 'songs' : requestedTab === 'sets' ? 'sets' : 'videos');
   const tabRefs = useRef<Record<Tab, HTMLButtonElement | null>>({
     songs: null,
     sets: null,
@@ -45,7 +45,7 @@ export function Library() {
 
   return (
     <div className="page-container page-bottom-pad overflow-x-clip">
-      <div className="mx-auto max-w-2xl space-y-5 px-4 pt-4 sm:max-w-3xl sm:px-6 sm:pt-6 lg:max-w-5xl lg:px-8 xl:max-w-7xl 2xl:max-w-[1680px]">
+      <div className="mx-auto max-w-2xl space-y-5 px-4 pt-0 sm:max-w-3xl sm:px-6 sm:pt-3 lg:max-w-5xl lg:px-8 lg:pt-4 xl:max-w-7xl 2xl:max-w-[1680px]">
         <h1 className="sr-only">Library</h1>
 
         {/* ── Toolbar ────────────────────────────────── */}

@@ -3,7 +3,6 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Activity,
-  AlertTriangle,
   ArrowLeftRight,
   BookOpen,
   BellRing,
@@ -98,9 +97,6 @@ const SwapsNavIcon: NavIcon = ({ className, style }) => (
 );
 const TeamNavIcon: NavIcon = ({ className, style }) => (
   <Users className={className} style={style} />
-);
-const ConductNavIcon: NavIcon = ({ className, style }) => (
-  <AlertTriangle className={className} style={style} />
 );
 const NotificationNavIcon: NavIcon = ({ className, style }) => (
   <BellRing className={className} style={style} />
@@ -292,7 +288,6 @@ export function Navigation({
     isAdminCoordinator,
     isPlatformOwner,
     canApproveLeave,
-    canManageDiscipline,
     profile,
     signOut,
     savedAccounts,
@@ -751,6 +746,16 @@ export function Navigation({
   const leadershipHomePath =
     isOrgAdmin && !isLeader ? "/leadership/church" : "/leadership/overview";
   const sidebarManagementItems: NavItem[] = [
+    ...(isLeader || isOrgAdmin
+      ? [
+          {
+            path: leadershipHomePath,
+            label: "Overview",
+            icon: ShieldNavIcon,
+            tone: "from-indigo-500/85 via-violet-900 to-black",
+          },
+        ]
+      : []),
     {
       path: canApproveLeave ? "/leadership/leave" : "/request-leave",
       label: canApproveLeave ? "Leave Queue" : "Request Leave",
@@ -779,16 +784,16 @@ export function Navigation({
     ...(isLeader || isOrgAdmin
       ? [
           {
-            path: leadershipHomePath,
-            label: "Leadership",
-            icon: ShieldNavIcon,
-            tone: "from-indigo-500/85 via-violet-900 to-black",
-          },
-          {
             path: "/leadership/team",
             label: "Team Roster",
             icon: TeamNavIcon,
             tone: "from-fuchsia-500/80 via-slate-800 to-black",
+          },
+          {
+            path: "/leadership/accountability",
+            label: "Accountability",
+            icon: ListChecks,
+            tone: "from-amber-500/85 via-orange-900 to-black",
           },
         ]
       : []),
@@ -812,16 +817,6 @@ export function Navigation({
             label: "Ministry Reflections",
             icon: CheckCircle2,
             tone: "from-emerald-500/85 via-green-900 to-black",
-          },
-        ]
-      : []),
-    ...(isLeader || canManageDiscipline
-      ? [
-          {
-            path: "/leadership/discipline",
-            label: "Conduct",
-            icon: ConductNavIcon,
-            tone: "from-red-500/85 via-rose-900 to-black",
           },
         ]
       : []),
@@ -1076,20 +1071,20 @@ export function Navigation({
       color: "#0ea5e9",
     },
     {
-      icon: AlertTriangle,
-      label: "Conduct",
-      desc: "Discipline and records",
-      path: "/leadership/discipline",
-      show: isLeader || !!canManageDiscipline,
-      color: "#f97316",
-    },
-    {
       icon: Users,
       label: "Team",
       desc: "Manage team members",
       path: "/leadership/team",
       show: isLeader || isOrgAdmin,
       color: "#8b5cf6",
+    },
+    {
+      icon: ListChecks,
+      label: "Accountability",
+      desc: "Review attendance and conduct",
+      path: "/leadership/accountability",
+      show: isLeader || isOrgAdmin,
+      color: "#f59e0b",
     },
     {
       icon: BellRing,
@@ -2181,7 +2176,7 @@ export function Navigation({
                 {!collapsed && (
                   <div className="mb-2 px-2.5">
                     <p className="text-[10px] font-black uppercase tracking-[0.12em] text-white/36">
-                      Management
+                      Leadership
                     </p>
                   </div>
                 )}

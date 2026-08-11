@@ -122,11 +122,6 @@ const UnavailableMembers = lazy(() =>
     default: UnavailableMembers,
   })),
 );
-const Discipline = lazy(() =>
-  import("./pages/Discipline").then(({ Discipline }) => ({
-    default: Discipline,
-  })),
-);
 const LeaderDashboard = lazy(() =>
   import("./pages/LeaderDashboard").then(({ LeaderDashboard }) => ({
     default: LeaderDashboard,
@@ -135,6 +130,11 @@ const LeaderDashboard = lazy(() =>
 const TeamManage = lazy(() =>
   import("./pages/TeamManage").then(({ TeamManage }) => ({
     default: TeamManage,
+  })),
+);
+const Accountability = lazy(() =>
+  import("./pages/Accountability").then(({ Accountability }) => ({
+    default: Accountability,
   })),
 );
 const Requests = lazy(() =>
@@ -389,9 +389,10 @@ export default function App() {
                       />
                       <Route
                         path="/leadership/discipline"
-                        element={<Discipline />}
+                        element={<Navigate to="/leadership/accountability?tab=conduct" replace />}
                       />
                       <Route path="/leadership/team" element={<TeamManage />} />
+                      <Route path="/leadership/accountability" element={<Accountability />} />
                       <Route
                         path="/leadership/church"
                         element={<OrganizationSettings />}
@@ -421,7 +422,7 @@ export default function App() {
                         path="/requests"
                         element={<Navigate to="/leadership/leave" replace />}
                       />
-                      <Route path="/discipline" element={<Discipline />} />
+                      <Route path="/discipline" element={<Navigate to="/leadership/accountability?tab=conduct" replace />} />
                     </Route>
                   </Route>
                   <Route path="*" element={<Navigate to="/login" replace />} />

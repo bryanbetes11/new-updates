@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { format, parseISO } from 'date-fns';
 import { motion } from 'framer-motion';
-import { Users, Shield, Search, ChevronDown, ChevronUp, Plus, X, Check, BarChart3, Crown, CreditCard as Edit3, Save, Camera, Loader2, ClipboardCheck, AlertTriangle, FileText, KeyRound } from 'lucide-react';
+import { Users, Shield, Search, ChevronDown, ChevronUp, Plus, X, Check, Crown, CreditCard as Edit3, Save, Camera, Loader2, FileText, KeyRound } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { passwordResetRedirectUrl } from '../lib/authRedirect';
 import { useAuth } from '../contexts/AuthContext';
@@ -12,39 +12,12 @@ import { PageLoader } from '../components/LoadingSpinner';
 import { DatePicker } from '../components/DatePicker';
 import { RoleBadge, sortRolesLeadershipFirst } from '../components/RoleBadge';
 import { Avatar } from '../components/Avatar';
-import { AttendanceMonitoring } from '../components/AttendanceMonitoring';
 import { LeadershipHeroCard } from '../components/LeadershipHeroCard';
 import { phoneHref } from '../lib/phone';
 import type { Profile, UserRole } from '../types';
 
 interface MemberWithRoles extends Profile {
   user_roles: UserRole[];
-}
-
-interface MemberAttendanceStats {
-  user_id: string;
-  late_count: number;
-  absent_count: number;
-  offense_level: number;
-  events_assigned: number;
-  present_count: number;
-  excused_count: number;
-}
-
-interface MemberAccountabilitySummary {
-  user_id: string;
-  proposal_overdue_count: number;
-  proposal_submitted_late_count: number;
-  pending_assignment_count: number;
-  approved_leave_count: number;
-  pending_leave_count: number;
-  open_discipline_count: number;
-  events_assigned: number;
-  present_count: number;
-  late_count: number;
-  absent_count: number;
-  excused_count: number;
-  offense_level: number;
 }
 
 interface MemberAuthAudit {
@@ -67,14 +40,6 @@ const ministryStatusConfig: Record<string, { label: string; textColor: string; b
   restoration: { label: 'Restoration', textColor: 'text-amber-700 dark:text-amber-300', bgColor: 'bg-amber-50 dark:bg-amber-900/20' },
   suspended: { label: 'Suspended', textColor: 'text-red-700 dark:text-red-300', bgColor: 'bg-red-50 dark:bg-red-900/20' },
   inactive: { label: 'Inactive', textColor: 'text-gray-500 dark:text-gray-400', bgColor: 'bg-gray-100 dark:bg-gray-800' },
-};
-
-const offenseColors: Record<number, { text: string; bg: string }> = {
-  0: { text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
-  1: { text: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-900/20' },
-  2: { text: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-900/20' },
-  3: { text: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20' },
-  4: { text: 'text-red-800 dark:text-red-200', bg: 'bg-red-100 dark:bg-red-900/30' },
 };
 
 const authStatusConfig: Record<MemberAuthAudit['auth_status'], { label: string; detail: string; className: string }> = {
@@ -118,19 +83,13 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showRoleModal, setShowRoleModal] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState('');
-  const [stats, setStats] = useState({ total: 0, leaders: 0, events: 0 });
+  const [stats, setStats] = useState({ total: 0, leaders: 0 });
   const [editingMember, setEditingMember] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
     first_name: '', second_name: '', middle_name: '', last_name: '', nickname: '', phone: '', gender: '', birthday: '', official_join_date: '', ministry_status: 'active', leadership_notes: '',
   });
   const [saving, setSaving] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'members' | 'attendance'>(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get('tab') === 'attendance' ? 'attendance' : 'members';
-  });
-  const [attendanceStats, setAttendanceStats] = useState<Record<string, MemberAttendanceStats>>({});
-  const [accountabilityStats, setAccountabilityStats] = useState<Record<string, MemberAccountabilitySummary>>({});
   const [authAudit, setAuthAudit] = useState<Record<string, MemberAuthAudit>>({});
   const [resetConfirmMember, setResetConfirmMember] = useState<MemberWithRoles | null>(null);
   const [sendingReset, setSendingReset] = useState(false);
@@ -138,9 +97,6 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
   const [removingMember, setRemovingMember] = useState(false);
 
   const canManageChurchMembers = canManageMembers || isOrgAdmin;
-
-  const currentYear = new Date().getFullYear();
-  const currentQuarter = Math.ceil((new Date().getMonth() + 1) / 3);
 
   const fetchMembers = useCallback(async () => {
     const { data } = await supabase
@@ -154,37 +110,10 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
       m.user_roles?.some(ur => leaderRoleIds.includes(ur.role_id))
     );
 
-    const { count: eventCount } = await supabase
-      .from('events')
-      .select('*', { count: 'exact', head: true });
-
     setStats({
       total: (data || []).length,
       leaders: leaders.length,
-      events: eventCount || 0,
     });
-
-    const { data: statsData } = await supabase.rpc('get_all_members_attendance_stats', {
-      p_year: currentYear,
-      p_quarter: currentQuarter,
-    });
-
-    if (statsData) {
-      const statsMap: Record<string, MemberAttendanceStats> = {};
-      (statsData as MemberAttendanceStats[]).forEach(s => { statsMap[s.user_id] = s; });
-      setAttendanceStats(statsMap);
-    }
-
-    const { data: accountabilityData } = await supabase.rpc('get_team_member_accountability_summaries', {
-      p_year: currentYear,
-      p_quarter: currentQuarter,
-    });
-
-    if (accountabilityData) {
-      const accountabilityMap: Record<string, MemberAccountabilitySummary> = {};
-      (accountabilityData as MemberAccountabilitySummary[]).forEach(s => { accountabilityMap[s.user_id] = s; });
-      setAccountabilityStats(accountabilityMap);
-    }
 
     if (canManageChurchMembers) {
       const { data: authAuditData, error: authAuditError } = await supabase.rpc('get_current_org_auth_audit');
@@ -200,7 +129,7 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
     }
 
     setLoading(false);
-  }, [roles, currentYear, currentQuarter, canManageChurchMembers]);
+  }, [roles, canManageChurchMembers]);
 
   useEffect(() => { fetchMembers(); }, [fetchMembers]);
 
@@ -359,82 +288,28 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
           icon={Users}
           eyebrow="Roles & Roster"
           title="Team."
-          description="Manage your member roster, roles, and attendance accountability from one shared leadership workspace."
+          description="Manage your member roster, ministry roles, and account access from one shared leadership workspace."
         />
       )}
-
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-        className="flex gap-1 p-1 rounded-2xl"
-        role="tablist"
-        aria-label="Team management views"
-        style={{ background: 'rgba(0,0,0,0.04)', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.06)' }}
-      >
-        {(['members', 'attendance'] as const).map(tab => {
-          const isActive = activeTab === tab;
-          const Icon = tab === 'members' ? Users : ClipboardCheck;
-          const label = tab === 'members' ? 'Members' : 'Attendance';
-          return (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setActiveTab(tab)}
-              onKeyDown={(event) => {
-                if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-                  event.preventDefault();
-                  setActiveTab(tab === 'members' ? 'attendance' : 'members');
-                }
-              }}
-              role="tab"
-              aria-selected={isActive}
-              tabIndex={isActive ? 0 : -1}
-              className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl py-2.5 transition-all duration-200 ${
-                isActive
-                  ? 'bg-white dark:bg-white/[0.06] shadow-sm ring-1 ring-black/[0.06] dark:ring-white/[0.09]'
-                  : 'hover:bg-white/50 dark:hover:bg-white/[0.04]'
-              }`}
-            >
-              <Icon className={`h-3.5 w-3.5 transition-colors ${isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-500'}`} />
-              <span className={`text-[12px] font-bold transition-colors leading-none ${isActive ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-500'}`}>
-                {label}
-              </span>
-              {tab === 'members' && (
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold ${
-                  isActive
-                    ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
-                    : 'bg-black/[0.06] dark:bg-white/[0.08] text-gray-500 dark:text-white/35'
-                }`}>{filtered.length}</span>
-              )}
-            </button>
-          );
-        })}
-      </motion.div>
-
-      {activeTab === 'attendance' ? (
-        <AttendanceMonitoring />
-      ) : (
-        <>
+      <>
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className="grid grid-cols-2 sm:grid-cols-4 gap-3"
+            className="grid grid-cols-3 gap-2.5"
           >
             {[
               { label: 'Members', value: stats.total, icon: Users, dot: '#22c55e', dotDark: '#22c55e', tone: 'bg-emerald-50 dark:bg-emerald-500/[0.10] text-emerald-600 dark:text-emerald-400' },
               { label: 'Leaders', value: stats.leaders, icon: Shield, dot: '#0d9488', dotDark: '#2dd4bf', tone: 'bg-teal-50 dark:bg-teal-500/[0.10] text-teal-600 dark:text-teal-400' },
-              { label: 'Events', value: stats.events, icon: BarChart3, dot: '#f59e0b', dotDark: '#fbbf24', tone: 'bg-amber-50 dark:bg-amber-500/[0.10] text-amber-600 dark:text-amber-400' },
               { label: 'Auth issues', value: authIssueCount, icon: KeyRound, dot: '#ef4444', dotDark: '#f87171', tone: authIssueCount > 0 ? 'bg-red-50 dark:bg-red-500/[0.10] text-red-600 dark:text-red-400' : 'bg-gray-50 dark:bg-white/[0.06] text-gray-500 dark:text-white/45' },
             ].map(s => (
-              <div key={s.label} className="relative rounded-3xl p-4 bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 4px 14px -8px rgba(15,23,42,0.08)' }}>
+              <div key={s.label} className="relative rounded-2xl p-3 bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 4px 14px -8px rgba(15,23,42,0.08)' }}>
                 <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.05] dark:via-white/[0.08] to-transparent" />
-                <div className={`inline-flex items-center justify-center h-9 w-9 rounded-2xl mb-3 ${s.tone}`}>
+                <div className={`inline-flex items-center justify-center h-8 w-8 rounded-xl mb-2 ${s.tone}`}>
                   <s.icon className="h-4 w-4" />
                 </div>
-                <p className="text-[26px] font-black text-gray-900 dark:text-white leading-none tabular-nums" style={{ letterSpacing: '-0.04em' }}>{s.value}</p>
-                <p className="text-[11px] text-gray-500 dark:text-white/45 mt-2 font-medium">{s.label}</p>
+                <p className="text-xl font-black text-gray-900 dark:text-white leading-none tabular-nums" style={{ letterSpacing: '-0.04em' }}>{s.value}</p>
+                <p className="text-[10px] text-gray-500 dark:text-white/45 mt-1.5 font-medium">{s.label}</p>
               </div>
             ))}
           </motion.div>
@@ -474,12 +349,6 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
             {filtered.map((member, idx) => {
               const memberRoles = sortRolesLeadershipFirst(member.user_roles || []);
               const isExpanded = expanded === member.id;
-              const mStats = attendanceStats[member.id];
-              const accountability = accountabilityStats[member.id];
-              const hasStats = mStats && mStats.events_assigned > 0;
-              const attendanceRate = hasStats ? Math.round(((mStats.present_count + mStats.late_count) / mStats.events_assigned) * 100) : null;
-              const offLevel = mStats?.offense_level ?? 0;
-              const offColors = offenseColors[Math.min(offLevel, 4)] ?? offenseColors[0];
               const ministryStatus = member.ministry_status ?? 'active';
               const statusCfg = ministryStatusConfig[ministryStatus] ?? ministryStatusConfig.active;
               const audit = authAudit[member.id];
@@ -493,19 +362,19 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
               return (
                 <div
                   key={member.id}
-                  className="relative rounded-3xl overflow-hidden bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] transition-all duration-200"
+                  className="relative rounded-2xl overflow-hidden bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] transition-all duration-200"
                   style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -12px rgba(15,23,42,0.10)', animationDelay: `${idx * 20}ms`, animationFillMode: 'both' }}
                 >
                   <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.12] to-transparent" />
                   <button
                     onClick={() => setExpanded(isExpanded ? null : member.id)}
-                    className="relative w-full flex items-center gap-3.5 px-5 py-4 text-left hover:bg-gray-50/60 dark:hover:bg-white/[0.02] transition-colors"
+                    className="relative w-full flex min-h-14 items-center gap-3 px-4 py-3 text-left hover:bg-gray-50/60 dark:hover:bg-white/[0.02] transition-colors"
                   >
                     <Avatar
                       src={member.avatar_url}
                       firstName={member.first_name}
                       lastName={member.last_name}
-                      size="md"
+                      size="sm"
                       className="shrink-0"
                     />
                     <div className="min-w-0 flex-1">
@@ -532,25 +401,6 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                         {memberRoles.length === 0 && <span className="text-[11px] text-gray-400">No roles</span>}
                         {memberRoles.length > 3 && <span className="text-[11px] text-gray-400">+{memberRoles.length - 3} more</span>}
                       </div>
-                    </div>
-                    <div className="hidden sm:flex flex-col items-end gap-1 shrink-0 mr-1">
-                      {attendanceRate !== null ? (
-                        <>
-                          <span className={`text-xs font-bold ${
-                            attendanceRate >= 80 ? 'text-emerald-600 dark:text-emerald-400' :
-                            attendanceRate >= 60 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'
-                          }`}>
-                            {attendanceRate}%
-                          </span>
-                          {offLevel > 0 && (
-                            <span className={`text-[10px] font-bold flex items-center gap-0.5 ${offColors.text}`}>
-                              <AlertTriangle className="h-2.5 w-2.5" /> Lvl {offLevel}
-                            </span>
-                          )}
-                        </>
-                      ) : (
-                        <span className="text-[11px] text-gray-400">No data</span>
-                      )}
                     </div>
                     {isExpanded
                       ? <ChevronUp className="h-4 w-4 text-gray-400 shrink-0" />
@@ -762,62 +612,6 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                               </div>
                             )}
 
-                            {hasStats && attendanceRate !== null && (
-                              <div className="rounded-xl bg-gray-50 dark:bg-white/[0.03] ring-1 ring-black/[0.04] dark:ring-white/[0.05] p-3">
-                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-wide mb-2.5">Attendance This Quarter</p>
-                                <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-                                  {[
-                                    { label: 'Assigned', value: mStats!.events_assigned, color: 'text-gray-700 dark:text-gray-300' },
-                                    { label: 'Present', value: mStats!.present_count, color: 'text-emerald-600 dark:text-emerald-400' },
-                                    { label: 'Late', value: mStats!.late_count, color: 'text-amber-600 dark:text-amber-400' },
-                                    { label: 'Absent', value: mStats!.absent_count, color: 'text-red-600 dark:text-red-400' },
-                                    { label: 'Rate', value: `${attendanceRate}%`, color: attendanceRate >= 80 ? 'text-emerald-600 dark:text-emerald-400' : attendanceRate >= 60 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400' },
-                                  ].map(s => (
-                                    <div key={s.label} className="text-center">
-                                      <p className={`text-sm font-black ${s.color}`}>{s.value}</p>
-                                      <p className="text-[10px] text-gray-400 dark:text-gray-500">{s.label}</p>
-                                    </div>
-                                  ))}
-                                </div>
-                                {offLevel > 0 && (
-                                  <div className={`mt-2.5 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg ${offColors.bg}`}>
-                                    <AlertTriangle className={`h-3 w-3 shrink-0 ${offColors.text}`} />
-                                    <p className={`text-xs font-bold ${offColors.text}`}>Offense Level {offLevel}</p>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-
-                            {accountability && (
-                              <div className="rounded-xl bg-gray-50 dark:bg-white/[0.03] ring-1 ring-black/[0.04] dark:ring-white/[0.05] p-3">
-                                <div className="flex items-center justify-between gap-3 mb-2.5">
-                                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-wide">Member Accountability</p>
-                                  {accountability.open_discipline_count > 0 && (
-                                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-300">
-                                      {accountability.open_discipline_count} open
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                                  {[
-                                    { label: 'Overdue Proposals', value: accountability.proposal_overdue_count, color: accountability.proposal_overdue_count > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-300' },
-                                    { label: 'Late Proposal Submits', value: accountability.proposal_submitted_late_count, color: accountability.proposal_submitted_late_count > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-700 dark:text-gray-300' },
-                                    { label: 'Pending Assignments', value: accountability.pending_assignment_count, color: accountability.pending_assignment_count > 0 ? 'text-violet-600 dark:text-violet-400' : 'text-gray-700 dark:text-gray-300' },
-                                    { label: 'Approved Leaves', value: accountability.approved_leave_count, color: accountability.approved_leave_count > 0 ? 'text-sky-600 dark:text-sky-400' : 'text-gray-700 dark:text-gray-300' },
-                                    { label: 'Pending Leaves', value: accountability.pending_leave_count, color: accountability.pending_leave_count > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-700 dark:text-gray-300' },
-                                    { label: 'Excused', value: accountability.excused_count, color: accountability.excused_count > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300' },
-                                    { label: 'Late / Absent', value: `${accountability.late_count} / ${accountability.absent_count}`, color: accountability.late_count + accountability.absent_count > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-300' },
-                                    { label: 'Offense Level', value: accountability.offense_level, color: accountability.offense_level > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400' },
-                                  ].map(item => (
-                                    <div key={item.label} className="rounded-lg bg-white/80 dark:bg-white/[0.03] ring-1 ring-black/[0.04] dark:ring-white/[0.05] px-3 py-2.5">
-                                      <p className={`text-sm font-black ${item.color}`}>{item.value}</p>
-                                      <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{item.label}</p>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-
                             {member.leadership_notes && (
                               <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 ring-1 ring-amber-200/60 dark:ring-amber-800/40">
                                 <p className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-wide mb-1 flex items-center gap-1">
@@ -942,8 +736,7 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
               </div>
             </div>
           </Modal>
-        </>
-      )}
+      </>
     </div>
   );
 

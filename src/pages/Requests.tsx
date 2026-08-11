@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { motion } from 'framer-motion';
-import { Check, X, Shield, MessageSquare, RefreshCw, ClipboardCheck } from 'lucide-react';
+import { Check, X, Shield, MessageSquare, RefreshCw, ClipboardCheck, CalendarDays, Users } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -31,27 +31,82 @@ interface RequestsProps {
   embedded?: boolean;
 }
 
+function getLeaveStart(request: UnavailabilityRequest) {
+  return request.leave_type === 'range'
+    ? request.start_date
+    : request.unavailable_date;
+}
+
+function getLeaveEnd(request: UnavailabilityRequest) {
+  return request.leave_type === 'range'
+    ? request.end_date || request.start_date
+    : request.unavailable_date;
+}
+
+function formatLeaveDate(request: UnavailabilityRequest) {
+  if (request.leave_type === 'range' && request.start_date && request.end_date) {
+    const start = parseISO(request.start_date);
+    const end = parseISO(request.end_date);
+    if (format(start, 'MMM yyyy') === format(end, 'MMM yyyy')) {
+      return `${format(start, 'MMM d')}–${format(end, 'd, yyyy')}`;
+    }
+    return `${format(start, 'MMM d')} – ${format(end, 'MMM d, yyyy')}`;
+  }
+  return request.unavailable_date
+    ? format(parseISO(request.unavailable_date), 'EEEE, MMM d, yyyy')
+    : '—';
+}
+
+function countOverlappingLeaves(target: UnavailabilityRequest, requests: UnavailabilityRequest[]) {
+  const targetStart = getLeaveStart(target);
+  const targetEnd = getLeaveEnd(target);
+  if (!targetStart || !targetEnd) return 1;
+
+  return requests.filter(request => {
+    const start = getLeaveStart(request);
+    const end = getLeaveEnd(request);
+    return Boolean(start && end && start <= targetEnd && targetStart <= end);
+  }).length;
+}
+
 export function Requests({ embedded }: RequestsProps = {}) {
   const { canApproveLeave } = useAuth();
   const { toast } = useToast();
   const [requests, setRequests] = useState<UnavailabilityRequest[]>([]);
+  const [approvedUpcoming, setApprovedUpcoming] = useState<UnavailabilityRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [approvalModal, setApprovalModal] = useState<{ request: UnavailabilityRequest; approved: boolean } | null>(null);
   const [approvalNotes, setApprovalNotes] = useState('');
   const [saving, setSaving] = useState(false);
 
   const fetchRequests = async () => {
-    const { data, error } = await supabase
-      .from('user_availability')
-      .select('*, profiles!user_availability_user_id_fkey(*)')
-      .eq('status', 'pending')
-      .order('created_at', { ascending: true });
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const [pendingResult, approvedResult] = await Promise.all([
+      supabase
+        .from('user_availability')
+        .select('*, profiles!user_availability_user_id_fkey(*)')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('user_availability')
+        .select('*, profiles!user_availability_user_id_fkey(*)')
+        .eq('status', 'approved')
+        .or(`unavailable_date.gte.${today},end_date.gte.${today}`),
+    ]);
 
-    if (error) {
-      console.error('Error fetching requests:', error);
+    if (pendingResult.error) {
+      console.error('Error fetching requests:', pendingResult.error);
+    }
+    if (approvedResult.error) {
+      console.error('Error fetching approved upcoming leave:', approvedResult.error);
     }
 
-    setRequests((data || []) as UnavailabilityRequest[]);
+    setRequests((pendingResult.data || []) as UnavailabilityRequest[]);
+    setApprovedUpcoming(((approvedResult.data || []) as UnavailabilityRequest[]).sort((a, b) => {
+      const aDate = a.leave_type === 'range' ? a.start_date : a.unavailable_date;
+      const bDate = b.leave_type === 'range' ? b.start_date : b.unavailable_date;
+      return String(aDate || '').localeCompare(String(bDate || ''));
+    }));
     setLoading(false);
   };
 
@@ -258,6 +313,57 @@ export function Requests({ embedded }: RequestsProps = {}) {
               </motion.div>
             ))}
           </motion.div>
+        )}
+
+        {!embedded && (
+          <section className="pt-2 sm:pt-3">
+            <div className="mb-3 flex items-end justify-between gap-3 px-1">
+              <div>
+                <p className="flex items-center gap-2 text-sm font-bold text-gray-900 dark:text-white">
+                  <CalendarDays className="h-4 w-4 text-emerald-500" />
+                  Approved Upcoming Leaves
+                </p>
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-white/40">Review upcoming absences and overlapping leave dates.</p>
+              </div>
+              <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 px-2 text-xs font-bold text-emerald-700 dark:border-emerald-500/25 dark:bg-emerald-500/[0.12] dark:text-emerald-300">
+                {approvedUpcoming.length}
+              </span>
+            </div>
+
+            {approvedUpcoming.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-gray-200 px-4 py-6 text-center dark:border-white/[0.08]">
+                <p className="text-sm font-semibold text-gray-700 dark:text-white/65">No approved upcoming leave</p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-white/35">Approved requests will appear here.</p>
+              </div>
+            ) : (
+              <div className="grid gap-2.5 lg:grid-cols-2">
+                {approvedUpcoming.map(request => {
+                  const overlapCount = countOverlappingLeaves(request, approvedUpcoming);
+                  return (
+                    <div key={request.id} className="rounded-2xl border border-gray-200/80 bg-white px-4 py-3 dark:border-white/[0.07] dark:bg-white/[0.025]">
+                      <div className="flex items-start gap-3">
+                        <Avatar src={request.profiles.avatar_url} firstName={request.profiles.first_name} lastName={request.profiles.last_name} size="sm" className="ring-1 ring-black/[0.06] dark:ring-white/[0.08]" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <p className="truncate text-sm font-bold text-gray-900 dark:text-white">{request.profiles.first_name} {request.profiles.last_name}</p>
+                            <span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 dark:bg-emerald-500/[0.12] dark:text-emerald-300">Approved</span>
+                          </div>
+                          <p className="mt-1 text-xs font-semibold text-gray-700 dark:text-white/65">{formatLeaveDate(request)}</p>
+                          {request.reason && <p className="mt-1 line-clamp-2 text-xs leading-5 text-gray-500 dark:text-white/40">{request.reason}</p>}
+                          {overlapCount > 1 && (
+                            <p className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-700 dark:border-amber-500/25 dark:bg-amber-500/[0.12] dark:text-amber-300">
+                              <Users className="h-3 w-3" />
+                              {overlapCount} approved leaves overlap this period
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
         )}
       </div>
 

@@ -4,13 +4,14 @@ import { format, parseISO, startOfToday } from 'date-fns';
 import { motion } from 'framer-motion';
 import {
   Shield, AlertTriangle, ClipboardCheck, UserX, ChevronRight,
-  AlertCircle, Users
+  AlertCircle, Users, ArrowLeftRight, ListMusic, CalendarCheck, CheckCircle2
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Avatar } from '../components/Avatar';
 import { PageLoader } from '../components/LoadingSpinner';
 import { describeSetlistReviewAge } from '../lib/setlistReviewAge';
+import { useUnreadCounts } from '../hooks/useUnreadCounts';
 import type { Setlist, UserAvailability, DisciplineRecord, Profile } from '../types';
 
 interface RecentOffense {
@@ -61,6 +62,7 @@ interface LeaderDashboardProps {
 export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
   const { isLeader } = useAuth();
   const navigate = useNavigate();
+  const unread = useUnreadCounts();
   const [loading, setLoading] = useState(true);
   const [recentOffenses, setRecentOffenses] = useState<RecentOffense[]>([]);
   const [disciplineAlerts, setDisciplineAlerts] = useState<DisciplineAlert[]>([]);
@@ -139,7 +141,7 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
       urgent: recentOffenses.length > 0,
       tone: { bg: 'bg-red-50 dark:bg-red-500/[0.12]', text: 'text-red-600 dark:text-red-400', dot: '#ef4444' },
       neutral: { bg: 'bg-emerald-50 dark:bg-emerald-500/[0.10]', text: 'text-emerald-600 dark:text-emerald-400', dot: '#22c55e' },
-      onClick: () => navigate('/leadership/team?tab=attendance'),
+      onClick: () => navigate('/leadership/accountability?tab=attendance'),
     },
     {
       label: 'Discipline Open',
@@ -256,6 +258,57 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
           </motion.div>
         )}
 
+        {!embedded && (
+          <motion.section
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.42, delay: 0.04, ease: [0.16, 1, 0.3, 1] }}
+            className="overflow-hidden rounded-[1.6rem] border border-gray-200/80 bg-white dark:border-white/[0.07] dark:bg-white/[0.025]"
+          >
+            <div className="border-b border-gray-100 px-5 py-4 dark:border-white/[0.06]">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-300">Leadership Overview</p>
+              <h2 className="mt-1 text-lg font-black text-gray-950 dark:text-white">Your Ministry Tools at a Glance</h2>
+              <p className="mt-1 text-sm text-gray-500 dark:text-white/45">Review the current queues or open an area for more detail.</p>
+            </div>
+            <div className="grid gap-px bg-gray-100 dark:bg-white/[0.06] sm:grid-cols-2 xl:grid-cols-3">
+              {[
+                { label: 'Leave Queue', description: 'Pending requests and approved upcoming leave', value: unread.pendingLeave, valueLabel: 'pending', icon: CalendarCheck, path: '/leadership/leave', tone: 'text-amber-600 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/[0.10]' },
+                { label: 'Setlist Queue', description: 'Proposals waiting for leadership review', value: unread.pendingSetlists, valueLabel: 'to review', icon: ListMusic, path: '/leadership/setlists', tone: 'text-emerald-600 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-500/[0.10]' },
+                { label: 'Swap Requests', description: 'Coverage changes awaiting approval', value: unread.pendingSwaps, valueLabel: 'pending', icon: ArrowLeftRight, path: '/leadership/swaps', tone: 'text-sky-600 dark:text-sky-300 bg-sky-50 dark:bg-sky-500/[0.10]' },
+                { label: 'Team Roster', description: 'Members, roles, and account access', icon: Users, path: '/leadership/team', tone: 'text-fuchsia-600 dark:text-fuchsia-300 bg-fuchsia-50 dark:bg-fuchsia-500/[0.10]' },
+                { label: 'Ministry Reflections', description: 'Campaign progress, feedback, and results', icon: CheckCircle2, path: '/leadership/surveys', tone: 'text-teal-600 dark:text-teal-300 bg-teal-50 dark:bg-teal-500/[0.10]' },
+                { label: 'Conduct', description: 'Attendance concerns and open ministry records', icon: AlertTriangle, path: '/leadership/discipline', tone: 'text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/[0.10]' },
+              ].map(area => {
+                const Icon = area.icon;
+                return (
+                  <button
+                    key={area.label}
+                    type="button"
+                    onClick={() => navigate(area.path)}
+                    className="group flex min-h-[8.25rem] items-start gap-3 bg-white p-4 text-left transition-colors hover:bg-gray-50 dark:bg-[#0b0d0c] dark:hover:bg-white/[0.045]"
+                  >
+                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${area.tone}`}>
+                      <Icon className="h-[18px] w-[18px]" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-start justify-between gap-2">
+                        <span className="text-sm font-black text-gray-950 dark:text-white">{area.label}</span>
+                        <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-gray-300 transition-transform group-hover:translate-x-0.5 dark:text-white/25" />
+                      </span>
+                      <span className="mt-1 block text-xs leading-5 text-gray-500 dark:text-white/42">{area.description}</span>
+                      {'value' in area && typeof area.value === 'number' && (
+                        <span className={`mt-3 inline-flex items-center rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${area.value > 0 ? area.tone : 'bg-gray-100 text-gray-500 dark:bg-white/[0.06] dark:text-white/40'}`}>
+                          {area.value} {area.valueLabel}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </motion.section>
+        )}
+
         {/* Metric widgets */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
@@ -288,7 +341,7 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
           <DashCard index="01" title="Attendance Alerts" icon={AlertTriangle} iconColor="text-amber-500"
             badge={recentOffenses.length}
             linkLabel="Full Report"
-            onLink={() => navigate('/leadership/team?tab=attendance')}
+            onLink={() => navigate('/leadership/accountability?tab=attendance')}
           >
             <div className="divide-y divide-black/[0.03] dark:divide-white/[0.04]">
               {recentOffenses.length === 0 ? (

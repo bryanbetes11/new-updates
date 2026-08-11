@@ -568,6 +568,7 @@ export function MinistryReflection() {
           <div className="mt-auto pt-10">
             <button
               onClick={() => setActiveIndex(-1)}
+              data-haptic="strong"
               className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-4 font-black text-black"
             >
               Start the Survey <ArrowRight className="h-4 w-4" />
@@ -649,22 +650,25 @@ export function MinistryReflection() {
           <div className="mt-auto pt-10">
             <button
               onClick={() => setActiveIndex(-2)}
+              data-haptic="strong"
               className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-4 font-black text-black"
             >
               Begin Reflection <ArrowRight className="h-4 w-4" />
             </button>
-            <button
-              onClick={() => setHolding(true)}
-              className="mt-3 w-full px-5 py-3 text-sm font-bold text-emerald-400"
-            >
-              Save & Continue Later
-            </button>
-            <button
-              onClick={() => setActiveIndex(-3)}
-              className="mt-1 w-full px-5 py-3 text-sm font-bold text-white/40"
-            >
-              Back to Title Page
-            </button>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setHolding(true)}
+                className="min-h-12 rounded-xl border border-emerald-400/15 px-2 py-3 text-xs font-bold text-emerald-400 transition-colors hover:bg-emerald-400/[0.05] sm:px-4 sm:text-sm"
+              >
+                Save & Continue Later
+              </button>
+              <button
+                onClick={() => setActiveIndex(-3)}
+                className="min-h-12 rounded-xl border border-white/10 px-2 py-3 text-xs font-bold text-white/45 transition-colors hover:bg-white/[0.04] hover:text-white/70 sm:px-4 sm:text-sm"
+              >
+                Back to Title Page
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -714,6 +718,7 @@ export function MinistryReflection() {
               <button
                 key={section.id}
                 onClick={() => setActiveIndex(index)}
+                data-haptic="strong"
                 className={`flex w-full items-center gap-3 border-b border-white/[0.07] px-4 py-3 text-left last:border-b-0 ${section.completed_at ? "bg-emerald-400/[0.045]" : index === nextIndex ? "bg-white/[0.035]" : "bg-transparent"}`}
               >
                 <span
@@ -746,6 +751,7 @@ export function MinistryReflection() {
           <div className="mt-auto pt-5">
             <button
               onClick={() => setActiveIndex(nextIndex)}
+              data-haptic="strong"
               className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-3.5 font-black text-black"
             >
               Continue with {sections[nextIndex]?.title_en}
@@ -840,12 +846,14 @@ export function MinistryReflection() {
           <div className="flex gap-3">
             <button
               onClick={() => setActiveIndex((index) => Math.max(-1, index - 1))}
+              data-haptic="strong"
               className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 text-white/65"
             >
               <ArrowLeft className="h-5 w-5" />
             </button>
             <button
               onClick={() => void continueNext()}
+              data-haptic="strong"
               disabled={saving}
               className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-4 font-black text-black disabled:opacity-60"
             >

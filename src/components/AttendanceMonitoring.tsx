@@ -62,6 +62,10 @@ function getQuarterFromDate(date: Date): number {
   return Math.ceil((date.getMonth() + 1) / 3);
 }
 
+function getQuarterEndDate(year: number, quarter: number): Date {
+  return new Date(year, quarter * 3, 0);
+}
+
 export function AttendanceMonitoring() {
   const { canManageDiscipline } = useAuth();
   const { toast } = useToast();
@@ -90,6 +94,8 @@ export function AttendanceMonitoring() {
     { value: 3, label: 'Q3 (Jul - Sep)' },
     { value: 4, label: 'Q4 (Oct - Dec)' },
   ];
+  const selectedQuarterEnd = getQuarterEndDate(selectedYear, selectedQuarter);
+  const isCurrentQuarter = selectedYear === currentYear && selectedQuarter === getQuarterFromDate(new Date());
 
   const fetchStats = useCallback(async () => {
     setLoading(true);
@@ -267,10 +273,38 @@ export function AttendanceMonitoring() {
           </button>
           {canManageDiscipline && (
             <button onClick={() => setShowResetModal(true)} className="btn-ghost min-h-11 flex-1 text-xs text-amber-600 hover:text-amber-700 sm:flex-none">
-              <RotateCcw className="h-3.5 w-3.5" /> Reset
+              <RotateCcw className="h-3.5 w-3.5" /> Re-send Alerts
             </button>
           )}
         </div>
+      </div>
+
+      <div className="flex flex-col gap-2 rounded-xl border border-brand-500/20 bg-brand-500/[0.06] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">
+            Q{selectedQuarter} {selectedYear} accountability period
+          </p>
+          <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+            Late and absence totals are calculated only from this quarter. Prior-quarter attendance stays in history but does not carry into these offense levels.
+          </p>
+        </div>
+        <span className="shrink-0 text-xs font-medium text-brand-700 dark:text-brand-300">
+          {isCurrentQuarter ? `Resets automatically after ${format(selectedQuarterEnd, 'MMM d, yyyy')}` : `Ended ${format(selectedQuarterEnd, 'MMM d, yyyy')}`}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {[
+          { level: 'Level 1', threshold: '3 lates or 1 absence' },
+          { level: 'Level 2', threshold: '6 lates or 2 absences' },
+          { level: 'Level 3', threshold: '9 lates or 3 absences' },
+          { level: 'Level 4', threshold: '12 lates or 4 absences' },
+        ].map(rule => (
+          <div key={rule.level} className="rounded-xl border border-gray-200/80 bg-white/60 px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.03]">
+            <p className="text-xs font-semibold text-gray-900 dark:text-white">{rule.level}</p>
+            <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{rule.threshold}</p>
+          </div>
+        ))}
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -503,15 +537,15 @@ export function AttendanceMonitoring() {
         )}
       </div>
 
-      <Modal open={showResetModal} onClose={() => setShowResetModal(false)} title="Reset Offense Notifications" size="sm">
+      <Modal open={showResetModal} onClose={() => setShowResetModal(false)} title="Re-send Offense Alerts" size="sm">
         <div className="space-y-4">
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            This will reset the offense notification tracking for Q{selectedQuarter} {selectedYear}. Leadership will be notified again if members reach offense thresholds. Attendance records will not be affected.
+            This does not reset attendance or offense levels. It only clears alert tracking for Q{selectedQuarter} {selectedYear}, allowing leadership alerts to be sent again when attendance is updated. Quarterly totals reset automatically at the start of the next quarter.
           </p>
           <div className="flex justify-end gap-3">
             <button onClick={() => setShowResetModal(false)} className="btn-secondary min-h-11">Cancel</button>
             <button onClick={handleReset} disabled={resetting} className="btn-primary min-h-11 bg-amber-600 hover:bg-amber-700">
-              {resetting ? 'Resetting...' : 'Reset Notifications'}
+              {resetting ? 'Preparing...' : 'Allow Alerts Again'}
             </button>
           </div>
         </div>

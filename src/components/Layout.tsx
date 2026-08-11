@@ -1,6 +1,7 @@
 import {
   useState,
   useEffect,
+  useLayoutEffect,
   type CSSProperties,
   type WheelEvent as ReactWheelEvent,
 } from "react";
@@ -13,6 +14,7 @@ import { PushReadinessBanner } from "./PushReadinessBanner";
 import { SurveyAccessBanner } from "./SurveyAccessBanner";
 import { buildAppRoute, rememberRoute } from "../lib/navigationHistory";
 import { supabase } from "../lib/supabase";
+import { getInteractionHapticStrength, triggerHaptic } from "../lib/haptics";
 
 const scrollableOverflowValues = new Set(["auto", "scroll", "overlay"]);
 const nativeWheelScrollSelectors = [
@@ -65,6 +67,17 @@ export function Layout() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const mobileChromeHidden = false;
+
+  useEffect(() => {
+    const handleTouchInteraction = (event: PointerEvent) => {
+      if (event.pointerType !== "touch") return;
+      const strength = getInteractionHapticStrength(event.target);
+      if (strength) triggerHaptic(strength);
+    };
+
+    document.addEventListener("pointerup", handleTouchInteraction, { passive: true });
+    return () => document.removeEventListener("pointerup", handleTouchInteraction);
+  }, []);
 
   const staticHideNav =
     [
@@ -130,6 +143,16 @@ export function Layout() {
       buildAppRoute(location.pathname, location.search, location.hash),
     );
   }, [location.hash, location.pathname, location.search]);
+
+  useLayoutEffect(() => {
+    const scrollingElement =
+      document.scrollingElement || document.documentElement;
+
+    scrollingElement.scrollTop = 0;
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [location.pathname]);
 
   useEffect(() => {
     document.body.classList.toggle(

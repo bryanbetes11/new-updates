@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import {
   Shield, Plus, ChevronDown, Search,
   Filter, CheckCircle, Clock, XCircle, FileCheck, MessageSquare,
-  Eye, X, Lock
+  Eye, X, Lock, AlertTriangle, ArrowRight
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -46,6 +46,24 @@ interface DisciplineProps {
   embedded?: boolean;
 }
 
+interface AttendanceViolationCandidate {
+  user_id: string;
+  first_name: string;
+  last_name: string;
+  nickname: string | null;
+  avatar_url: string | null;
+  late_count: number;
+  absent_count: number;
+  offense_level: number;
+}
+
+const attendanceActionByLevel: Record<number, string> = {
+  1: 'Verbal warning by the Admin Coordinator or Music Director',
+  2: 'Verbal warning by the Production Director',
+  3: 'Counselling with the Pastors',
+  4: 'Suspension',
+};
+
 export function Discipline({ embedded }: DisciplineProps = {}) {
   const { user, isLeader, canManageDiscipline } = useAuth();
   const { toast } = useToast();
@@ -57,6 +75,7 @@ export function Discipline({ embedded }: DisciplineProps = {}) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingRecord, setEditingRecord] = useState<DisciplineRecordWithProfile | null>(null);
   const [members, setMembers] = useState<Profile[]>([]);
+  const [attendanceViolations, setAttendanceViolations] = useState<AttendanceViolationCandidate[]>([]);
 
   const [formData, setFormData] = useState({
     user_id: '',
@@ -102,10 +121,26 @@ export function Discipline({ embedded }: DisciplineProps = {}) {
     setMembers((data || []) as Profile[]);
   }, [canManageDiscipline]);
 
+  const fetchAttendanceViolations = useCallback(async () => {
+    if (!canManageDiscipline) return;
+    const now = new Date();
+    const quarter = Math.ceil((now.getMonth() + 1) / 3);
+    const { data, error } = await supabase.rpc('get_all_members_attendance_stats', {
+      p_year: now.getFullYear(),
+      p_quarter: quarter,
+    });
+    if (error) {
+      console.warn('[Discipline] Attendance violation detection unavailable:', error);
+      return;
+    }
+    setAttendanceViolations(((data || []) as AttendanceViolationCandidate[]).filter(member => member.offense_level > 0));
+  }, [canManageDiscipline]);
+
   useEffect(() => {
     fetchRecords();
     fetchMembers();
-  }, [fetchRecords, fetchMembers]);
+    fetchAttendanceViolations();
+  }, [fetchRecords, fetchMembers, fetchAttendanceViolations]);
 
   const resetForm = () => {
     setFormData({
@@ -126,6 +161,35 @@ export function Discipline({ embedded }: DisciplineProps = {}) {
     resetForm();
     setEditingRecord(null);
     setShowCreateModal(true);
+  };
+
+  const prefillAttendanceViolation = (candidate: AttendanceViolationCandidate) => {
+    const now = new Date();
+    const level = Math.min(Math.max(candidate.offense_level, 1), 4);
+    const action = attendanceActionByLevel[level];
+    setFormData({
+      user_id: candidate.user_id,
+      source: 'attendance',
+      offense_number: level,
+      quarter_year: now.getFullYear(),
+      quarter_number: Math.ceil((now.getMonth() + 1) / 3),
+      status: level >= 4 ? 'suspension' : level === 3 ? 'counselling' : 'verbal_warning',
+      title: `Quarterly Attendance - ${offenseLabels[level].label}`,
+      notes: `Automatically detected from the current quarter attendance record.\n\nLate: ${candidate.late_count}\nAbsent: ${candidate.absent_count}\n\nRequired action: ${action}`,
+      leader_notes: '',
+      final_decision: '',
+    });
+    setEditingRecord(null);
+    setShowCreateModal(true);
+  };
+
+  const handleMemberSelection = (userId: string) => {
+    const detectedViolation = attendanceViolations.find(candidate => candidate.user_id === userId);
+    if (detectedViolation) {
+      prefillAttendanceViolation(detectedViolation);
+      return;
+    }
+    setFormData(current => ({ ...current, user_id: userId }));
   };
 
   const openEdit = (record: DisciplineRecordWithProfile) => {
@@ -194,6 +258,16 @@ export function Discipline({ embedded }: DisciplineProps = {}) {
   if (loading) return <PageLoader />;
 
   const isOwnView = !isLeader;
+  const currentYear = new Date().getFullYear();
+  const currentQuarter = Math.ceil((new Date().getMonth() + 1) / 3);
+  const unresolvedAttendanceViolations = attendanceViolations.filter(candidate => !records.some(record =>
+    record.user_id === candidate.user_id
+    && record.source === 'attendance'
+    && record.quarter_year === currentYear
+    && record.quarter_number === currentQuarter
+    && record.offense_number === candidate.offense_level
+    && record.status !== 'resolved'
+  ));
 
   const content = (
     <>
@@ -256,6 +330,37 @@ export function Discipline({ embedded }: DisciplineProps = {}) {
               This is your personal record. Leadership will speak with you regarding any open items.
             </p>
           </motion.div>
+        )}
+
+        {canManageDiscipline && unresolvedAttendanceViolations.length > 0 && (
+          <section className="rounded-2xl border border-amber-200 bg-amber-50/70 p-3.5 dark:border-amber-500/20 dark:bg-amber-500/[0.06]" aria-labelledby="detected-attendance-violations">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <h2 id="detected-attendance-violations" className="flex items-center gap-2 text-sm font-black text-gray-900 dark:text-white">
+                  <AlertTriangle className="h-4 w-4 text-amber-500" /> Detected Attendance Violations
+                </h2>
+                <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-white/45">Select a member to review a pre-filled Conduct record before saving it.</p>
+              </div>
+              <span className="rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-black text-white">{unresolvedAttendanceViolations.length}</span>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {unresolvedAttendanceViolations.map(candidate => (
+                <button
+                  key={candidate.user_id}
+                  type="button"
+                  onClick={() => prefillAttendanceViolation(candidate)}
+                  className="flex min-h-14 items-center gap-3 rounded-xl border border-amber-200/80 bg-white px-3 py-2.5 text-left transition-all hover:border-amber-400 hover:shadow-sm dark:border-amber-500/15 dark:bg-white/[0.035] dark:hover:border-amber-500/40"
+                >
+                  <Avatar src={candidate.avatar_url} firstName={candidate.first_name} lastName={candidate.last_name} size="sm" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-bold text-gray-900 dark:text-white">{candidate.first_name} {candidate.last_name}</span>
+                    <span className="mt-0.5 block text-[11px] text-gray-500 dark:text-white/40">{candidate.late_count} late / {candidate.absent_count} absent - {offenseLabels[candidate.offense_level]?.label}</span>
+                  </span>
+                  <ArrowRight className="h-4 w-4 shrink-0 text-amber-500" />
+                </button>
+              ))}
+            </div>
+          </section>
         )}
 
         <motion.div
@@ -451,7 +556,7 @@ export function Discipline({ embedded }: DisciplineProps = {}) {
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Member *</label>
               <Select
                 value={formData.user_id}
-                onChange={v => setFormData({ ...formData, user_id: v })}
+                onChange={handleMemberSelection}
                 options={members.map(m => ({
                   value: m.id,
                   label: `${m.first_name} ${m.last_name}${m.nickname ? ` (${m.nickname})` : ''}`,

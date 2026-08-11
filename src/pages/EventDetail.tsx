@@ -53,6 +53,15 @@ interface SetlistRevisionComment {
   profiles?: { first_name: string; last_name: string; avatar_url: string | null } | null;
 }
 
+interface PostEventObservationReply {
+  id: string;
+  observation_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  profiles?: { first_name: string; last_name: string; avatar_url: string | null } | null;
+}
+
 const MANILA_TIMEZONE = 'Asia/Manila';
 
 function getManilaTodayKey(date = new Date()) {
@@ -297,6 +306,10 @@ export function EventDetail() {
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [showPastEventDetails, setShowPastEventDetails] = useState(false);
   const [postEventObservations, setPostEventObservations] = useState<PostEventObservation[]>([]);
+  const [postEventObservationReplies, setPostEventObservationReplies] = useState<PostEventObservationReply[]>([]);
+  const [replyingToObservationId, setReplyingToObservationId] = useState<string | null>(null);
+  const [observationReplyText, setObservationReplyText] = useState('');
+  const [postingObservationReply, setPostingObservationReply] = useState(false);
   const [observationCategory, setObservationCategory] = useState<PostEventObservationCategory>('sound');
   const [observationText, setObservationText] = useState('');
   const [observationOwnerId, setObservationOwnerId] = useState('');
@@ -538,7 +551,7 @@ export function EventDetail() {
   const fetchAll = useCallback(async () => {
     if (!id) return;
     try {
-      const [eventRes, assignRes, membersRes, memberRolesRes, setlistRes, songsRes, allSetlistsRes, sundayServicesRes, convRes, observationsRes] = await Promise.all([
+      const [eventRes, assignRes, membersRes, memberRolesRes, setlistRes, songsRes, allSetlistsRes, sundayServicesRes, convRes, observationsRes, observationRepliesRes] = await Promise.all([
         supabase.from('events').select('*').eq('id', id).maybeSingle(),
         supabase.from('event_assignments').select('*, events(*), profiles(first_name, last_name, gender, avatar_url), roles(name)').eq('event_id', id),
         supabase.from('profiles').select('id, first_name, last_name'),
@@ -559,6 +572,11 @@ export function EventDetail() {
           .select('*, profiles!post_event_observations_author_id_fkey(first_name, last_name, avatar_url), assignee:profiles!post_event_observations_assigned_to_fkey(first_name, last_name, avatar_url)')
           .eq('event_id', id)
           .order('created_at', { ascending: false }),
+        supabase
+          .from('post_event_observation_replies')
+          .select('id, observation_id, user_id, content, created_at, profiles!post_event_observation_replies_user_id_fkey(first_name, last_name, avatar_url)')
+          .eq('event_id', id)
+          .order('created_at', { ascending: true }),
       ]);
       setEventConversationId(convRes.data?.id ?? null);
       setEvent(eventRes.data);
@@ -570,6 +588,12 @@ export function EventDetail() {
         setPostEventObservations([]);
       } else {
         setPostEventObservations((observationsRes.data || []) as PostEventObservation[]);
+      }
+      if (observationRepliesRes.error) {
+        console.error('Failed to load post-event observation replies:', observationRepliesRes.error);
+        setPostEventObservationReplies([]);
+      } else {
+        setPostEventObservationReplies((observationRepliesRes.data || []) as unknown as PostEventObservationReply[]);
       }
       if (setlistRes.data) {
         setSetlist(setlistRes.data);
@@ -1926,6 +1950,43 @@ const openLyricsModal = (ss: SetlistSong) => {
 
     if (error) throw error;
     setPostEventObservations((data || []) as PostEventObservation[]);
+  };
+
+  const refreshPostEventObservationReplies = async () => {
+    if (!id) return;
+
+    const { data, error } = await supabase
+      .from('post_event_observation_replies')
+      .select('id, observation_id, user_id, content, created_at, profiles!post_event_observation_replies_user_id_fkey(first_name, last_name, avatar_url)')
+      .eq('event_id', id)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    setPostEventObservationReplies((data || []) as unknown as PostEventObservationReply[]);
+  };
+
+  const handlePostObservationReply = async (observationId: string) => {
+    const content = observationReplyText.trim();
+    if (!id || !user || !content || postingObservationReply) return;
+
+    setPostingObservationReply(true);
+    try {
+      const { error } = await supabase.from('post_event_observation_replies').insert({
+        observation_id: observationId,
+        event_id: id,
+        user_id: user.id,
+        content,
+      });
+      if (error) throw error;
+      setObservationReplyText('');
+      setReplyingToObservationId(null);
+      await refreshPostEventObservationReplies();
+      toast('success', 'Reply added');
+    } catch (error) {
+      toast('error', getErrorMessage(error, 'Failed to add reply'));
+    } finally {
+      setPostingObservationReply(false);
+    }
   };
 
   const handleAddPostEventObservation = async () => {
@@ -3708,9 +3769,10 @@ const openLyricsModal = (ss: SetlistSong) => {
                       : observation.status === 'monitoring'
                         ? 'bg-blue-500/10 text-blue-300 ring-blue-500/15'
                         : 'bg-amber-500/10 text-amber-300 ring-amber-500/15';
+                    const observationReplies = postEventObservationReplies.filter(reply => reply.observation_id === observation.id);
 
                     return (
-                      <div key={observation.id} className="rounded-2xl border border-gray-200/75 bg-white/[0.035] px-3.5 py-3.5 dark:border-white/[0.10]">
+                      <div key={observation.id} className="rounded-2xl border border-gray-200/75 bg-white/[0.035] px-3 py-3 dark:border-white/[0.10]">
                         <div className="flex items-start gap-3">
                           <Avatar
                             src={observation.profiles?.avatar_url}
@@ -3719,14 +3781,16 @@ const openLyricsModal = (ss: SetlistSong) => {
                             size="sm"
                           />
                           <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="rounded-full bg-white/[0.07] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-gray-500 dark:text-white/[0.68]">{categoryLabel}</span>
-                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ${statusClass}`}>{POST_EVENT_STATUS_LABELS[observation.status]}</span>
+                            <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] leading-4">
+                              <span className="font-bold text-gray-800 dark:text-white/90">{authorName}</span>
+                              <span className="text-gray-400 dark:text-white/25">|</span>
+                              <span className="text-gray-500 dark:text-white/55">{format(parseISO(observation.created_at), 'MMM d, h:mm a')}</span>
+                              <span className="text-gray-400 dark:text-white/25">|</span>
+                              <span className="font-bold uppercase tracking-[0.06em] text-gray-500 dark:text-white/65">{categoryLabel}</span>
+                              <span className="text-gray-400 dark:text-white/25">|</span>
+                              <span className={`font-bold ${statusClass.includes('blue') ? 'text-blue-500 dark:text-blue-300' : statusClass.includes('emerald') ? 'text-emerald-500 dark:text-emerald-300' : 'text-amber-500 dark:text-amber-300'}`}>{POST_EVENT_STATUS_LABELS[observation.status]}</span>
                             </div>
-                            <p className="mt-2 whitespace-pre-wrap break-words text-sm font-medium leading-relaxed text-gray-700 dark:text-white/[0.92]">{observation.observation}</p>
-                            <p className="mt-2 text-[11px] font-medium text-gray-500 dark:text-white/[0.58]">
-                              {authorName} · {format(parseISO(observation.created_at), 'MMM d, h:mm a')}
-                            </p>
+                            <p className="mt-1.5 whitespace-pre-wrap break-words text-sm font-medium leading-5 text-gray-700 dark:text-white/[0.92]">{observation.observation}</p>
                             {observation.assigned_to && observation.due_date && (
                               <div className={`mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl px-2.5 py-2 text-[11px] font-semibold ${isObservationOverdue ? 'bg-red-500/10 text-red-600 dark:text-red-300' : 'bg-brand-500/10 text-brand-700 dark:text-brand-300'}`}>
                                 <span className="inline-flex items-center gap-1.5"><Users className="h-3.5 w-3.5" /> Owner: {assigneeName || 'Assigned member'}</span>
@@ -3736,8 +3800,55 @@ const openLyricsModal = (ss: SetlistSong) => {
                           </div>
                         </div>
 
-                        {(canManagePostEventObservations || isObservationOwner || observation.author_id === user?.id) && (
-                          <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-gray-200/60 pt-2.5 dark:border-white/[0.06]">
+                        {observationReplies.length > 0 && (
+                          <div className="ml-9 mt-2 space-y-1.5 border-l border-gray-200/70 pl-2.5 dark:border-white/[0.10]">
+                            {observationReplies.map(reply => {
+                              const replyAuthor = `${reply.profiles?.first_name || ''} ${reply.profiles?.last_name || ''}`.trim() || 'Team member';
+                              return (
+                                <div key={reply.id} className="rounded-lg bg-gray-50/80 px-2.5 py-2 dark:bg-white/[0.035]">
+                                  <div className="flex min-w-0 items-center gap-1.5 text-[10px] leading-4">
+                                    <Avatar src={reply.profiles?.avatar_url} firstName={reply.profiles?.first_name || '?'} lastName={reply.profiles?.last_name} size="xs" />
+                                    <span className="truncate font-bold text-gray-800 dark:text-white/85">{replyAuthor}</span>
+                                    <span className="text-gray-400 dark:text-white/25">|</span>
+                                    <span className="shrink-0 text-gray-500 dark:text-white/45">{format(parseISO(reply.created_at), 'MMM d, h:mm a')}</span>
+                                  </div>
+                                  <p className="mt-0.5 whitespace-pre-wrap break-words pl-7 text-xs leading-4 text-gray-700 dark:text-white/75">{reply.content}</p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {replyingToObservationId === observation.id && (
+                          <div className="ml-9 mt-2 flex items-end gap-2">
+                            <textarea
+                              value={observationReplyText}
+                              onChange={event => setObservationReplyText(event.target.value)}
+                              placeholder="Write a reply…"
+                              maxLength={2000}
+                              rows={2}
+                              autoFocus
+                              className="input-field min-h-12 flex-1 resize-none text-sm"
+                            />
+                            <button type="button" onClick={() => void handlePostObservationReply(observation.id)} disabled={!observationReplyText.trim() || postingObservationReply} className="btn-primary min-h-11 px-3 text-xs disabled:opacity-50">
+                              {postingObservationReply ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                              Send
+                            </button>
+                          </div>
+                        )}
+
+                        <div className="mt-2 flex flex-wrap items-center justify-end gap-1.5 border-t border-gray-200/60 pt-2 dark:border-white/[0.06]">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReplyingToObservationId(current => current === observation.id ? null : observation.id);
+                                setObservationReplyText('');
+                              }}
+                              className="inline-flex min-h-9 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold text-brand-600 hover:bg-brand-500/10 dark:text-brand-300"
+                            >
+                              <MessageCircle className="h-3.5 w-3.5" /> Reply{observationReplies.length > 0 ? ` (${observationReplies.length})` : ''}
+                            </button>
+                          {(canManagePostEventObservations || isObservationOwner || observation.author_id === user?.id) && (<>
                             {(canManagePostEventObservations || isObservationOwner) && (
                               <select
                                 value={observation.status}
@@ -3774,8 +3885,8 @@ const openLyricsModal = (ss: SetlistSong) => {
                                 {updatingObservationId === observation.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                               </button>
                             )}
-                          </div>
-                        )}
+                          </>)}
+                        </div>
                       </div>
                     );
                   })}

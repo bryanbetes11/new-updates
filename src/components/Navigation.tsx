@@ -1838,7 +1838,7 @@ export function Navigation({
       {/* ── Mobile top bar ── */}
       <div
         aria-hidden="true"
-        className={`pointer-events-none fixed inset-x-0 top-0 z-40 bg-[#050505]/82 backdrop-blur-xl lg:hidden ${hideMobileAll || hideMobileHeader ? "hidden" : ""}`}
+        className={`pointer-events-none fixed inset-x-0 top-0 z-40 bg-[#050505] lg:hidden ${hideMobileAll || hideMobileHeader ? "hidden" : ""}`}
         style={{ height: "calc(env(safe-area-inset-top) + 2px)" }}
       />
       <div

@@ -336,13 +336,25 @@ html[data-touch-feedback="apple"] :is(nav, aside) .touch-feedback-strong {
   }
 
   @media (max-width: 639px) {
-    body:has(.video-comment-input:focus),
+    body:has(.video-comment-input:focus) {
+      background: #1c1b1e;
+    }
+
+    body:has(.video-comment-input:focus)::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: 2147483646;
+      pointer-events: none;
+      background: #1c1b1e;
+    }
+
     body:has(.video-comment-input:focus) [role="presentation"]:has(.video-discussion-modal-body) {
-      background: #111013;
+      background: #1c1b1e;
     }
 
     body:has(.video-comment-input:focus) [role="presentation"]:has(.video-discussion-modal-body) > .fixed.inset-0 {
-      background: #111013;
+      background: #1c1b1e;
       -webkit-backdrop-filter: none;
       backdrop-filter: none;
     }

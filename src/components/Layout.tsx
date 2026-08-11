@@ -14,7 +14,12 @@ import { PushReadinessBanner } from "./PushReadinessBanner";
 import { SurveyAccessBanner } from "./SurveyAccessBanner";
 import { buildAppRoute, rememberRoute } from "../lib/navigationHistory";
 import { supabase } from "../lib/supabase";
-import { getInteractionHapticStrength, triggerHaptic } from "../lib/haptics";
+import {
+  getInteractionHapticStrength,
+  getInteractionTarget,
+  shouldUseAppleTouchFeedback,
+  triggerHaptic,
+} from "../lib/haptics";
 
 const scrollableOverflowValues = new Set(["auto", "scroll", "overlay"]);
 const nativeWheelScrollSelectors = [
@@ -69,14 +74,41 @@ export function Layout() {
   const mobileChromeHidden = false;
 
   useEffect(() => {
+    const useAppleTouchFeedback = shouldUseAppleTouchFeedback();
+    if (useAppleTouchFeedback) {
+      document.documentElement.dataset.touchFeedback = "apple";
+    }
+
+    const handleTouchPress = (event: PointerEvent) => {
+      if (!useAppleTouchFeedback || event.pointerType !== "touch") return;
+      const interactive = getInteractionTarget(event.target);
+      const strength = getInteractionHapticStrength(event.target);
+      if (!interactive || !strength) return;
+
+      interactive.classList.remove("touch-feedback-light", "touch-feedback-strong");
+      // Restart the response when the same control is tapped repeatedly.
+      void interactive.offsetWidth;
+      interactive.classList.add(`touch-feedback-${strength}`);
+      window.setTimeout(() => {
+        interactive.classList.remove("touch-feedback-light", "touch-feedback-strong");
+      }, strength === "strong" ? 190 : 140);
+    };
+
     const handleTouchInteraction = (event: PointerEvent) => {
       if (event.pointerType !== "touch") return;
       const strength = getInteractionHapticStrength(event.target);
       if (strength) triggerHaptic(strength);
     };
 
+    document.addEventListener("pointerdown", handleTouchPress, { passive: true });
     document.addEventListener("pointerup", handleTouchInteraction, { passive: true });
-    return () => document.removeEventListener("pointerup", handleTouchInteraction);
+    return () => {
+      document.removeEventListener("pointerdown", handleTouchPress);
+      document.removeEventListener("pointerup", handleTouchInteraction);
+      if (useAppleTouchFeedback) {
+        delete document.documentElement.dataset.touchFeedback;
+      }
+    };
   }, []);
 
   const staticHideNav =

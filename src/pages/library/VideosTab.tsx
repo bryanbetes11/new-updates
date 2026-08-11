@@ -589,7 +589,7 @@ export function VideosTab() {
               </span>
             </div>
 
-            <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+            <div className="max-h-64 space-y-2 overflow-y-auto overscroll-contain pr-1">
               {commentsLoading ? (
                 <div className="flex items-center justify-center py-8 text-gray-400"><Loader2 className="h-5 w-5 animate-spin" /></div>
               ) : comments.length === 0 ? (
@@ -620,22 +620,24 @@ export function VideosTab() {
               })}
             </div>
 
-            <form onSubmit={handleAddComment} className="flex items-end gap-2">
-              <textarea
-                value={commentContent}
-                onChange={e => setCommentContent(e.target.value)}
-                maxLength={2000}
-                rows={2}
-                className="input-field min-h-[3.25rem] flex-1 resize-none"
-                placeholder="Add a comment…"
-                aria-label="Add a comment"
-              />
-              <button type="submit" disabled={commentSubmitting || !commentContent.trim()} className="btn-primary h-[3.25rem] px-4">
-                {commentSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                <span className="hidden sm:inline">Post</span>
-              </button>
-            </form>
-            <p className="-mt-3 text-[11px] text-gray-400 dark:text-white/30">Tip: add a timestamp such as <span className="font-mono font-bold text-emerald-500">1:23</span> or <span className="font-mono font-bold text-emerald-500">1:02:15</span>. It becomes a link to that moment.</p>
+            <div className="sticky -bottom-5 z-10 -mx-5 border-t border-gray-200 bg-white/95 px-5 pb-1 pt-3 shadow-[0_-16px_30px_-24px_rgba(0,0,0,0.35)] backdrop-blur-xl dark:border-white/10 dark:bg-[#1c1b1e]/95">
+              <form onSubmit={handleAddComment} className="flex items-end gap-2">
+                <textarea
+                  value={commentContent}
+                  onChange={e => setCommentContent(e.target.value)}
+                  maxLength={2000}
+                  rows={2}
+                  className="input-field min-h-[3.25rem] flex-1 resize-none"
+                  placeholder="Add a comment…"
+                  aria-label="Add a comment"
+                />
+                <button type="submit" disabled={commentSubmitting || !commentContent.trim()} className="btn-primary h-[3.25rem] px-4">
+                  {commentSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  <span className="hidden sm:inline">Post</span>
+                </button>
+              </form>
+              <p className="mt-2 text-[11px] text-gray-400 dark:text-white/30">Tip: add a timestamp such as <span className="font-mono font-bold text-emerald-500">1:23</span> or <span className="font-mono font-bold text-emerald-500">1:02:15</span>. It becomes a link to that moment.</p>
+            </div>
           </div>
         )}
       </Modal>

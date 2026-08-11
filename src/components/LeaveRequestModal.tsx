@@ -94,6 +94,7 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
       onClose={handleClose}
       title="Request Leave / Paalam"
       size="md"
+      mobileView="dialog"
     >
       <div className="space-y-3">
         {/* Leave Type Toggle */}
@@ -120,7 +121,7 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
                   : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
               }`}
             >
-              Date Range
+              Multiple Dates
             </button>
           </div>
         </div>

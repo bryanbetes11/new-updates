@@ -100,6 +100,10 @@ const copy: Record<string, NotificationCopy> = {
     title: 'Setlist Revision Requested',
     body: 'The setlist for [event] needs revision. Reason: [review notes].',
   },
+  setlist_revision_comment: {
+    title: 'New Revision Discussion Activity',
+    body: '[Member] commented or replied in the revision discussion for [event].',
+  },
   setlist_rejected: {
     title: 'Setlist Rejected',
     body: 'The setlist for [event] was not approved. Reason: [review notes].',
@@ -131,6 +135,10 @@ const copy: Record<string, NotificationCopy> = {
   comment: {
     title: 'New Comment',
     body: '[Member] commented on “[announcement title]”.',
+  },
+  video_comment: {
+    title: 'New Video Discussion Comment',
+    body: '[Member] commented on [video].',
   },
   mention: {
     title: 'You were mentioned',

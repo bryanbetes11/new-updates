@@ -3850,17 +3850,20 @@ const openLyricsModal = (ss: SetlistSong) => {
                             </button>
                           {(canManagePostEventObservations || isObservationOwner || observation.author_id === user?.id) && (<>
                             {(canManagePostEventObservations || isObservationOwner) && (
-                              <select
-                                value={observation.status}
-                                onChange={event => handleUpdateObservationStatus(observation.id, event.target.value as PostEventObservationStatus)}
-                                disabled={updatingObservationId === observation.id}
-                                aria-label={`Update status for ${categoryLabel} observation`}
-                                className="min-h-10 rounded-full border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white/70"
-                              >
-                                <option value="open">Needs action</option>
-                                <option value="monitoring">Monitoring</option>
-                                <option value="resolved">Resolved</option>
-                              </select>
+                              <div className="relative min-w-[7.75rem]">
+                                <select
+                                  value={observation.status}
+                                  onChange={event => handleUpdateObservationStatus(observation.id, event.target.value as PostEventObservationStatus)}
+                                  disabled={updatingObservationId === observation.id}
+                                  aria-label={`Update status for ${categoryLabel} observation`}
+                                  className="min-h-10 w-full appearance-none rounded-full border border-gray-200 bg-white py-2 pl-3 pr-9 text-xs font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white/70"
+                                >
+                                  <option value="open">Needs action</option>
+                                  <option value="monitoring">Monitoring</option>
+                                  <option value="resolved">Resolved</option>
+                                </select>
+                                <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400 dark:text-white/45" />
+                              </div>
                             )}
                             {canManagePostEventObservations && (
                               <button
@@ -3870,7 +3873,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                 className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-700 transition-colors hover:border-brand-300 hover:text-brand-700 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white/70"
                               >
                                 <Calendar className="h-3.5 w-3.5" />
-                                {observation.assigned_to ? 'Edit follow-up' : 'Assign follow-up'}
+                                {observation.assigned_to ? 'Edit' : 'Assign'}
                               </button>
                             )}
                             {(canManagePostEventObservations || observation.author_id === user?.id) && (
@@ -3878,7 +3881,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                 type="button"
                                 onClick={() => handleDeletePostEventObservation(observation.id)}
                                 disabled={updatingObservationId === observation.id}
-                                className="inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-red-500/10 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-50 dark:text-white/30"
+                                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 transition-colors hover:border-red-400/50 hover:bg-red-500/10 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white/35"
                                 title="Delete observation"
                                 aria-label="Delete observation"
                               >

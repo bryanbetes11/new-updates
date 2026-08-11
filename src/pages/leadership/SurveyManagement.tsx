@@ -896,7 +896,7 @@ function LiveSurveyPreview({ campaignId, revision }: { campaignId: string; revis
   const [open, setOpen] = useState(true);
   const [device, setDevice] = useState<PreviewDevice>("desktop");
   const [manualRevision, setManualRevision] = useState(0);
-  const previewUrl = `/reflection?preview=intro&campaignId=${encodeURIComponent(campaignId)}&device=${device}&revision=${revision + manualRevision}`;
+  const previewUrl = `/reflection?preview=landing&campaignId=${encodeURIComponent(campaignId)}&device=${device}&revision=${revision + manualRevision}`;
 
   return (
     <div className="mt-6 border-t border-gray-200 pt-5 dark:border-white/[0.07]">

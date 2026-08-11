@@ -100,7 +100,7 @@ export function MinistryReflection() {
     response_key: "",
     reflection: "",
   });
-  const [activeIndex, setActiveIndex] = useState(-1);
+  const [activeIndex, setActiveIndex] = useState(-3);
   const [holding, setHolding] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -149,7 +149,9 @@ export function MinistryReflection() {
       setActiveIndex(
         previewScreen === "overview"
           ? -2
-          : -1,
+          : previewScreen === "intro"
+            ? -1
+            : -3,
       );
       setLoading(false);
       return;
@@ -220,7 +222,7 @@ export function MinistryReflection() {
       const resume = normalized.findIndex(
         (section) => section.id === gate.participation.last_section_id,
       );
-      setActiveIndex(resume >= 0 ? resume : -1);
+      setActiveIndex(resume >= 0 ? resume : -3);
     } catch (error) {
       console.error(error);
       toast("error", "We could not load your reflection. Please try again.");
@@ -431,6 +433,73 @@ export function MinistryReflection() {
     );
   }
 
+  if (activeIndex === -3) {
+    return renderSurveySurface(
+      <div className="survey-modal-surface min-h-[calc(100dvh-5rem)] bg-[#070908] px-5 py-8 text-white">
+        <div className="mx-auto max-w-4xl">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <img src="/servesync-logo-latest.png" alt="" className="h-9 w-9 object-contain" />
+              <span className="text-xl font-black">ServeSync</span>
+            </div>
+            <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+              <Save className="h-3.5 w-3.5" /> Saved
+            </span>
+          </div>
+
+          {participation.is_test && (
+            <div className="mt-7 inline-flex rounded-full border border-violet-400/20 bg-violet-400/[0.08] px-3 py-1.5 text-xs font-black text-violet-200">
+              Private test · Answers stay out of official results
+            </div>
+          )}
+
+          <div className="mt-12 max-w-3xl">
+            <p className="text-xs font-black uppercase tracking-[0.24em] text-emerald-400">{campaign.title}</p>
+            <h1 className="mt-5 text-5xl font-black leading-[0.98] tracking-[-0.055em] sm:text-6xl">
+              Remember.<br />Reset. Rebuild.<br />Recommit.
+            </h1>
+            <p className="mt-6 text-xl font-bold leading-8 text-white/72">
+              A guided reflection for our Worship &amp; Production Ministry.
+              <span className="mt-2 block text-base font-medium leading-7 text-white/42">Isang gabay na pagninilay para sa ating Worship &amp; Production Ministry.</span>
+            </p>
+          </div>
+
+          <div className="mt-10 border-l-2 border-emerald-400/55 pl-5 text-[15px] leading-7 text-white/62">
+            <p>Before we plan what comes next, we want to listen carefully and understand where our ministry is today.</p>
+            <p className="mt-3 text-white/42">Bago natin planuhin ang susunod, nais muna nating makinig nang mabuti at maunawaan kung nasaan ang ating ministry ngayon.</p>
+          </div>
+
+          <div className="mt-10 grid gap-3 sm:grid-cols-3">
+            {[
+              [ShieldCheck, "Honest reflection", "Tapat na pagninilay"],
+              [CheckCircle2, "Growth, not ranking", "Pag-unlad, hindi pagraranggo"],
+              [Clock3, "Save and continue", "I-save at ipagpatuloy"],
+            ].map(([Icon, en, tl]) => {
+              const LandingIcon = Icon as typeof ShieldCheck;
+              return (
+                <div key={String(en)} className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+                  <LandingIcon className="h-5 w-5 text-emerald-400" />
+                  <p className="mt-4 text-sm font-black">{String(en)}</p>
+                  <p className="mt-1 text-xs leading-5 text-white/38">{String(tl)}</p>
+                </div>
+              );
+            })}
+          </div>
+
+          <button
+            onClick={() => setActiveIndex(-1)}
+            className="mt-10 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-4 font-black text-black"
+          >
+            Continue to introduction <ArrowRight className="h-4 w-4" />
+          </button>
+          <p className="mt-4 text-center text-xs leading-5 text-white/32">
+            You can save your progress and return when you are ready.<br />Maaari mong i-save ang iyong progress at bumalik kapag handa ka na.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (activeIndex === -1) {
     return renderSurveySurface(
       <div className="survey-modal-surface min-h-[calc(100dvh-5rem)] bg-[#070908] px-5 py-8 text-white">
@@ -481,6 +550,12 @@ export function MinistryReflection() {
             className="mt-3 w-full px-5 py-3 text-sm font-bold text-emerald-400"
           >
             Save & continue later
+          </button>
+          <button
+            onClick={() => setActiveIndex(-3)}
+            className="mt-1 w-full px-5 py-3 text-sm font-bold text-white/40"
+          >
+            Back to title page
           </button>
         </div>
       </div>

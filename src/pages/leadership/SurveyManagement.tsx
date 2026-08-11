@@ -5,6 +5,7 @@ import {
   BookOpen,
   CalendarClock,
   ChevronDown,
+  ClipboardCheck,
   Clock3,
   MessageCircle,
   Pause,
@@ -39,6 +40,20 @@ type ProgressMember = SurveyParticipation & {
   currentSection: string;
 };
 
+type TestMember = {
+  id: string;
+  name: string;
+  email: string;
+};
+
+type TestAssignment = {
+  id: string;
+  user_id: string;
+  status: SurveyParticipation["status"];
+  name: string;
+  email: string;
+};
+
 const accessDurations = [
   { label: "6 hours", hours: 6 },
   { label: "12 hours", hours: 12 },
@@ -68,6 +83,10 @@ export function SurveyManagement() {
   const [editIntroductionEn, setEditIntroductionEn] = useState("");
   const [editIntroductionTl, setEditIntroductionTl] = useState("");
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
+  const [testModalOpen, setTestModalOpen] = useState(false);
+  const [testMembers, setTestMembers] = useState<TestMember[]>([]);
+  const [testMemberId, setTestMemberId] = useState("");
+  const [testAssignment, setTestAssignment] = useState<TestAssignment | null>(null);
   const canManage = isProductionDirector;
   const canViewResults =
     canManage || isMusicDirector || isStageDirector || isAdminCoordinator;
@@ -133,12 +152,105 @@ export function SurveyManagement() {
     );
   }, [selected, toast]);
 
+  const loadTestAssignment = useCallback(async () => {
+    if (!selected || selected.status !== "draft" || !canManage) {
+      setTestAssignment(null);
+      return;
+    }
+    const { data, error } = await supabase
+      .from("survey_participations")
+      .select("id,user_id,status,profiles!survey_participations_user_id_fkey(first_name,last_name,nickname,email)")
+      .eq("campaign_id", selected.id)
+      .eq("is_test", true)
+      .maybeSingle();
+    if (error) {
+      toast("error", error.message);
+      return;
+    }
+    if (!data) {
+      setTestAssignment(null);
+      return;
+    }
+    const profile = Array.isArray(data.profiles) ? data.profiles[0] : data.profiles;
+    const fullName = `${profile?.first_name || ""} ${profile?.last_name || ""}`.trim();
+    setTestAssignment({
+      id: data.id,
+      user_id: data.user_id,
+      status: data.status as SurveyParticipation["status"],
+      name: profile?.nickname || fullName || profile?.email || "Member",
+      email: profile?.email || "",
+    });
+  }, [canManage, selected, toast]);
+
   useEffect(() => {
     void load();
   }, [load]);
   useEffect(() => {
     if (tab === "progress") void loadProgress();
   }, [loadProgress, tab]);
+  useEffect(() => {
+    void loadTestAssignment();
+  }, [loadTestAssignment]);
+
+  const openTestModal = async () => {
+    if (!selected) return;
+    setWorking(true);
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id,first_name,last_name,nickname,email")
+      .eq("org_id", selected.org_id)
+      .eq("is_onboarded", true)
+      .eq("ministry_status", "active")
+      .order("first_name");
+    setWorking(false);
+    if (error) {
+      toast("error", error.message);
+      return;
+    }
+    const available = (data || []).map((profile) => {
+      const fullName = `${profile.first_name || ""} ${profile.last_name || ""}`.trim();
+      return {
+        id: profile.id,
+        name: profile.nickname || fullName || profile.email || "Member",
+        email: profile.email || "",
+      };
+    });
+    setTestMembers(available);
+    setTestMemberId(testAssignment?.user_id || available[0]?.id || "");
+    setTestModalOpen(true);
+  };
+
+  const startTest = async () => {
+    if (!selected || !testMemberId) return;
+    setWorking(true);
+    const { error } = await supabase.rpc("start_ministry_reflection_test", {
+      p_campaign_id: selected.id,
+      p_user_id: testMemberId,
+    });
+    setWorking(false);
+    if (error) {
+      toast("error", error.message);
+      return;
+    }
+    setTestModalOpen(false);
+    toast("success", "Private test assigned. Only the selected member was notified.");
+    await loadTestAssignment();
+  };
+
+  const endTest = async () => {
+    if (!testAssignment) return;
+    setWorking(true);
+    const { error } = await supabase.rpc("end_ministry_reflection_test", {
+      p_participation_id: testAssignment.id,
+    });
+    setWorking(false);
+    if (error) {
+      toast("error", error.message);
+      return;
+    }
+    toast("success", "Test ended and its responses were removed.");
+    await loadTestAssignment();
+  };
 
   const createDraft = async () => {
     const existingDraft = campaigns.find((campaign) =>
@@ -481,6 +593,41 @@ export function SurveyManagement() {
                 </button>
               )}
             </div>
+            {selected.status === "draft" && (
+              <div className="mt-6 rounded-2xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-400/15 dark:bg-violet-400/[0.055]">
+                <div className="flex flex-wrap items-center gap-4">
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-violet-500/10 text-violet-600 dark:text-violet-300">
+                    <ClipboardCheck className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-black text-gray-950 dark:text-white">Test with one member</p>
+                    {testAssignment ? (
+                      <p className="mt-1 text-sm text-gray-600 dark:text-white/55">
+                        {testAssignment.name} · {testAssignment.status.replace(/_/g, " ")}. Test answers stay out of official results.
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-sm text-gray-600 dark:text-white/55">
+                        Send the real draft experience to one person without notifying the rest of the team.
+                      </p>
+                    )}
+                  </div>
+                  {testAssignment ? (
+                    <div className="flex gap-2">
+                      <button onClick={() => void openTestModal()} disabled={working} className="rounded-xl border border-violet-300 px-3 py-2.5 text-xs font-black text-violet-700 dark:border-violet-300/20 dark:text-violet-200">
+                        Reset test
+                      </button>
+                      <button onClick={() => void endTest()} disabled={working} className="rounded-xl border border-red-300 px-3 py-2.5 text-xs font-black text-red-600 dark:border-red-300/20 dark:text-red-300">
+                        End test
+                      </button>
+                    </div>
+                  ) : (
+                    <button onClick={() => void openTestModal()} disabled={working} className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">
+                      Choose tester
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="mt-6 border-t border-gray-200 pt-5 dark:border-white/[0.07]">
               <button
                 onClick={() => void toggleContent()}
@@ -651,6 +798,35 @@ export function SurveyManagement() {
           <ResultsPanel campaignId={selected.id} canSeeCommitment={canManage} />
         )}
         <Modal
+          open={testModalOpen}
+          onClose={() => !working && setTestModalOpen(false)}
+          title={testAssignment ? "Reset member test" : "Test with one member"}
+          size="sm"
+          mobileView="sheet"
+          closeOnBackdrop={!working}
+          closeOnEscape={!working}
+        >
+          <div className="space-y-5">
+            <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4 text-sm leading-6 text-violet-900 dark:border-violet-400/15 dark:bg-violet-400/[0.06] dark:text-violet-100/75">
+              Only this member receives the test assignment and notification. Starting or resetting clears this member’s earlier test answers. Official campaign results are unaffected.
+            </div>
+            <label className="block">
+              <span className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-white/40">Test member</span>
+              <select value={testMemberId} onChange={(event) => setTestMemberId(event.target.value)} disabled={Boolean(testAssignment)} className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-bold text-gray-950 dark:border-white/10 dark:bg-[#111] dark:text-white">
+                {testMembers.map((member) => (
+                  <option key={member.id} value={member.id}>{member.name}{member.email ? ` · ${member.email}` : ""}</option>
+                ))}
+              </select>
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <button onClick={() => setTestModalOpen(false)} disabled={working} className="rounded-xl border border-gray-200 px-4 py-3 text-sm font-black text-gray-700 dark:border-white/10 dark:text-white">Cancel</button>
+              <button onClick={() => void startTest()} disabled={working || !testMemberId} className="rounded-xl bg-violet-600 px-4 py-3 text-sm font-black text-white disabled:opacity-50">
+                {working ? "Preparing…" : testAssignment ? "Reset test" : "Send test"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+        <Modal
           open={deleteConfirmationOpen}
           onClose={() => !working && setDeleteConfirmationOpen(false)}
           title="Delete this draft?"
@@ -683,6 +859,9 @@ export function SurveyManagement() {
 
 type ResultRow = {
   answer: { value?: string } | string;
+  survey_participations:
+    | { is_test: boolean }
+    | Array<{ is_test: boolean }>;
   survey_questions:
     | {
         prompt_en: string;
@@ -720,33 +899,43 @@ function ResultsPanel({
       supabase
         .from("survey_responses")
         .select(
-          "answer,survey_questions(prompt_en,answer_type,correct_option,clarification_area,survey_sections(campaign_id,title_en))",
+          "answer,survey_participations!inner(is_test),survey_questions(prompt_en,answer_type,correct_option,clarification_area,survey_sections(campaign_id,title_en))",
         ),
       canSeeCommitment
         ? supabase
             .from("survey_commitment_responses")
-            .select("response_key,reflection")
+            .select("response_key,reflection,survey_participations!inner(is_test)")
         : Promise.resolve({ data: [] }),
     ]).then(([responseResult, commitmentResult]) => {
       if (!active) return;
       setRows(
         ((responseResult.data || []) as unknown as ResultRow[]).filter(
           (row) => {
+            const participation = Array.isArray(row.survey_participations)
+              ? row.survey_participations[0]
+              : row.survey_participations;
             const question = Array.isArray(row.survey_questions)
               ? row.survey_questions[0]
               : row.survey_questions;
             const section = Array.isArray(question?.survey_sections)
               ? question.survey_sections[0]
               : question?.survey_sections;
-            return section?.campaign_id === campaignId;
+            return !participation?.is_test && section?.campaign_id === campaignId;
           },
         ),
       );
       setCommitments(
-        (commitmentResult.data || []) as Array<{
-          response_key: string;
-          reflection: string | null;
-        }>,
+        (commitmentResult.data || [])
+          .filter((row) => {
+            const participation = Array.isArray(row.survey_participations)
+              ? row.survey_participations[0]
+              : row.survey_participations;
+            return !participation?.is_test;
+          })
+          .map((row) => ({ response_key: row.response_key, reflection: row.reflection })) as Array<{
+            response_key: string;
+            reflection: string | null;
+          }>,
       );
       setLoading(false);
     });

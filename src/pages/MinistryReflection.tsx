@@ -392,6 +392,13 @@ export function MinistryReflection() {
               <Save className="h-3.5 w-3.5" /> Saved
             </span>
           </div>
+          {participation.is_test && (
+            <div className="mt-8 rounded-2xl border border-violet-400/20 bg-violet-400/[0.08] p-4 text-sm leading-6 text-violet-100/75">
+              <span className="font-black text-violet-200">Private test</span>
+              <br />
+              Please use the survey as a member normally would. Your answers are temporary and will not be included in official ministry results.
+            </div>
+          )}
           <p className="mt-12 text-xs font-black uppercase tracking-[0.22em] text-emerald-400">
             Remember · Reset · Rebuild · Recommit
           </p>
@@ -731,6 +738,7 @@ function createReflectionPreview(): {
       temporary_access_requested_at: null,
       temporary_access_until: null,
       temporary_access_reason: null,
+      is_test: false,
     },
     sections,
   };

@@ -32,6 +32,7 @@ export type SurveyParticipation = {
   temporary_access_requested_at: string | null;
   temporary_access_until: string | null;
   temporary_access_reason: string | null;
+  is_test: boolean;
 };
 
 export type SurveyQuestion = {
@@ -96,7 +97,7 @@ export async function getActiveSurveyGate(
     if (
       !campaign ||
       !campaign.blocker_enabled ||
-      campaign.status === "draft" ||
+      (campaign.status === "draft" && !row.is_test) ||
       campaign.status === "paused" ||
       campaign.status === "closed"
     )

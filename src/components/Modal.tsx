@@ -8,7 +8,7 @@ interface ModalProps {
   title: string;
   children: ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl';
-  mobileView?: 'sheet' | 'page';
+  mobileView?: 'sheet' | 'page' | 'dialog';
   hideCloseButton?: boolean;
   hideHeader?: boolean;
   closeOnBackdrop?: boolean;
@@ -296,13 +296,14 @@ export function Modal({
 
   const backdropClass = closing ? 'animate-fade-out' : 'animate-fade-in';
   const isMobilePage = mobileView === 'page';
+  const isMobileDialog = mobileView === 'dialog';
   const sheetClass = closing
-    ? `${isMobilePage ? 'animate-fade-out sm:animate-scale-out' : 'animate-slide-sheet-out sm:animate-scale-out'}`
-    : `${isMobilePage ? 'animate-fade-in sm:animate-scale-in' : 'animate-slide-sheet sm:animate-scale-in'}`;
+    ? `${isMobilePage ? 'animate-fade-out sm:animate-scale-out' : isMobileDialog ? 'animate-scale-out' : 'animate-slide-sheet-out sm:animate-scale-out'}`
+    : `${isMobilePage ? 'animate-fade-in sm:animate-scale-in' : isMobileDialog ? 'animate-scale-in' : 'animate-slide-sheet sm:animate-scale-in'}`;
 
   return createPortal(
     <div
-      className={`fixed inset-x-0 top-0 z-[2147483647] flex justify-center ${isMobilePage ? 'items-stretch sm:items-center' : 'items-end sm:items-center'}`}
+      className={`fixed inset-x-0 top-0 z-[2147483647] flex justify-center ${isMobilePage ? 'items-stretch sm:items-center' : isMobileDialog ? 'items-center' : 'items-end sm:items-center'}`}
       style={{
         height: visualViewport?.height ?? window.innerHeight,
         top: visualViewport?.offsetTop ?? 0,
@@ -314,7 +315,7 @@ export function Modal({
       <div className={`fixed inset-0 bg-black/50 backdrop-blur-sm ${backdropClass}`} />
       <div
         ref={dialogRef}
-        className={`modal-dialog-viewport relative w-full ${desktopSizes[size]} ${isMobilePage ? 'h-[100dvh] rounded-none sm:h-auto sm:rounded-2xl' : 'rounded-t-[28px] sm:rounded-2xl'} bg-white dark:bg-[#1c1b1e] ring-1 ring-black/[0.06] dark:ring-white/[0.08] ${sheetClass} ${isMobilePage ? 'max-h-[100dvh] sm:max-h-[85vh]' : 'max-h-[92dvh] sm:max-h-[85vh]'} flex flex-col overflow-hidden ${isMobilePage ? '' : 'sm:mx-4'}`}
+        className={`modal-dialog-viewport relative w-full ${desktopSizes[size]} ${isMobilePage ? 'h-[100dvh] rounded-none sm:h-auto sm:rounded-2xl' : isMobileDialog ? 'mx-4 rounded-[28px]' : 'rounded-t-[28px] sm:rounded-2xl'} bg-white dark:bg-[#1c1b1e] ring-1 ring-black/[0.06] dark:ring-white/[0.08] ${sheetClass} ${isMobilePage ? 'max-h-[100dvh] sm:max-h-[85vh]' : 'max-h-[92dvh] sm:max-h-[85vh]'} flex flex-col overflow-hidden ${isMobilePage || isMobileDialog ? '' : 'sm:mx-4'}`}
         style={{
           boxShadow: '0 24px 64px -16px rgba(0,0,0,0.3), 0 8px 24px -8px rgba(0,0,0,0.15)',
         }}
@@ -328,10 +329,10 @@ export function Modal({
       >
         {!hideHeader && (
           <div
-            className={`relative flex items-center justify-between px-5 border-b border-black/[0.05] dark:border-white/[0.06] shrink-0 ${titleAlign === 'center' ? 'pt-8 pb-5' : 'pt-7 pb-4'} ${isMobilePage ? 'sm:pt-7 sm:pb-4' : ''}`}
+            className={`relative flex items-center justify-between px-5 border-b border-black/[0.05] dark:border-white/[0.06] shrink-0 ${titleAlign === 'center' ? 'pt-8 pb-5' : isMobileDialog ? 'pt-5 pb-4 sm:pt-7' : 'pt-7 pb-4'} ${isMobilePage ? 'sm:pt-7 sm:pb-4' : ''}`}
             style={isMobilePage ? { paddingTop: 'calc(env(safe-area-inset-top) + 1.25rem)' } : undefined}
           >
-            {!isMobilePage && (
+            {!isMobilePage && !isMobileDialog && (
               <div className="absolute top-3 left-1/2 -translate-x-1/2 w-8 h-1 rounded-full bg-gray-200 dark:bg-gray-700 sm:hidden" />
             )}
             <h2

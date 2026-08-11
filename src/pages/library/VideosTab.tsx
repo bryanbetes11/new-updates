@@ -866,7 +866,7 @@ export function VideosTab() {
         </div>
       </Modal>
 
-      <Modal open={showArchiveNotify} onClose={() => setShowArchiveNotify(false)} title="Announce 2026 Recordings" size="sm">
+      <Modal open={showArchiveNotify} onClose={() => setShowArchiveNotify(false)} title="Announce 2026 Recordings" size="sm" mobileView="dialog">
         <div className="space-y-4">
           <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.07] p-4">
             <p className="text-sm font-black text-gray-900 dark:text-white">2026 Sunday Service Recordings are now available</p>

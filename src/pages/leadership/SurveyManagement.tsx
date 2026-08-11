@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
   BellRing,
+  BookOpen,
   CalendarClock,
+  ChevronDown,
   Clock3,
   MessageCircle,
   Pause,
@@ -20,6 +22,7 @@ import {
   formatSurveyTime,
   type SurveyCampaign,
   type SurveyParticipation,
+  type SurveySection,
 } from "../../lib/survey";
 import { PageLoader } from "../../components/LoadingSpinner";
 
@@ -52,6 +55,9 @@ export function SurveyManagement() {
   const [members, setMembers] = useState<ProgressMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
+  const [contentOpen, setContentOpen] = useState(false);
+  const [contentLoading, setContentLoading] = useState(false);
+  const [sections, setSections] = useState<SurveySection[]>([]);
   const canManage = isProductionDirector;
   const canViewResults =
     canManage || isMusicDirector || isStageDirector || isAdminCoordinator;
@@ -125,6 +131,15 @@ export function SurveyManagement() {
   }, [loadProgress, tab]);
 
   const createDraft = async () => {
+    const existingDraft = campaigns.find((campaign) =>
+      ["draft", "scheduled", "live", "paused"].includes(campaign.status),
+    );
+    if (existingDraft) {
+      setSelectedId(existingDraft.id);
+      setTab("campaign");
+      toast("info", "Your existing reflection campaign is ready to review.");
+      return;
+    }
     setWorking(true);
     const { data, error } = await supabase.rpc(
       "create_default_ministry_reflection",
@@ -137,6 +152,36 @@ export function SurveyManagement() {
     }
     setWorking(false);
   };
+
+  const toggleContent = async () => {
+    const nextOpen = !contentOpen;
+    setContentOpen(nextOpen);
+    if (!nextOpen || !selected || sections.length) return;
+    setContentLoading(true);
+    const { data, error } = await supabase
+      .from("survey_sections")
+      .select("*,survey_questions(*)")
+      .eq("campaign_id", selected.id)
+      .order("sort_order")
+      .order("sort_order", { referencedTable: "survey_questions" });
+    if (error) toast("error", error.message);
+    else {
+      setSections(
+        ((data || []) as Array<SurveySection & { survey_questions?: SurveySection["questions"] }>).map((section) => ({
+          ...section,
+          questions: [...(section.survey_questions || [])].sort(
+            (a, b) => a.sort_order - b.sort_order,
+          ),
+        })),
+      );
+    }
+    setContentLoading(false);
+  };
+
+  useEffect(() => {
+    setContentOpen(false);
+    setSections([]);
+  }, [selected?.id]);
 
   const publish = async () => {
     if (
@@ -347,6 +392,73 @@ export function SurveyManagement() {
                 >
                   Close campaign
                 </button>
+              )}
+            </div>
+            <div className="mt-6 border-t border-gray-200 pt-5 dark:border-white/[0.07]">
+              <button
+                onClick={() => void toggleContent()}
+                className="flex w-full items-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 text-left dark:border-white/10 dark:bg-white/[0.035]"
+              >
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-500">
+                  <BookOpen className="h-5 w-5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-black text-gray-950 dark:text-white">
+                    Review survey content
+                  </span>
+                  <span className="mt-0.5 block text-xs text-gray-500 dark:text-white/45">
+                    Introduction, bilingual sections, questions, and role scope
+                  </span>
+                </span>
+                <ChevronDown
+                  className={`h-5 w-5 text-gray-400 transition-transform ${contentOpen ? "rotate-180" : ""}`}
+                />
+              </button>
+              {contentOpen && (
+                <div className="mt-4 space-y-3">
+                  <div className="rounded-2xl border border-gray-200 p-4 dark:border-white/10">
+                    <p className="text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+                      Introduction
+                    </p>
+                    <p className="mt-3 whitespace-pre-line text-sm leading-6 text-gray-700 dark:text-white/70">
+                      {selected.introduction_en}
+                    </p>
+                    <p className="mt-4 whitespace-pre-line border-t border-gray-200 pt-4 text-sm leading-6 text-gray-600 dark:border-white/10 dark:text-white/55">
+                      {selected.introduction_tl}
+                    </p>
+                  </div>
+                  {contentLoading ? (
+                    <p className="py-6 text-center text-sm text-gray-500">Loading survey content…</p>
+                  ) : (
+                    sections.map((section) => (
+                      <div key={section.id} className="rounded-2xl border border-gray-200 p-4 dark:border-white/10">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <h3 className="font-black text-gray-950 dark:text-white">{section.title_en}</h3>
+                            <p className="text-sm text-gray-500 dark:text-white/45">{section.title_tl}</p>
+                          </div>
+                          <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-gray-600 dark:bg-white/10 dark:text-white/55">
+                            {section.required_role ? `${section.required_role} only` : "All members"}
+                          </span>
+                        </div>
+                        <div className="mt-4 space-y-3">
+                          {(section.questions || []).map((question, index) => (
+                            <div key={question.id} className="rounded-xl bg-gray-50 p-3 dark:bg-white/[0.035]">
+                              <p className="text-xs font-black text-gray-400">QUESTION {index + 1}</p>
+                              <p className="mt-1 text-sm font-bold text-gray-900 dark:text-white/85">{question.prompt_en}</p>
+                              <p className="mt-1 text-sm text-gray-500 dark:text-white/50">{question.prompt_tl}</p>
+                            </div>
+                          ))}
+                          {section.section_type === "commitment" && (
+                            <p className="rounded-xl bg-emerald-500/[0.07] p-3 text-sm text-emerald-700 dark:text-emerald-300">
+                              Commitment choices are presented separately from feedback and knowledge-check answers.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               )}
             </div>
           </section>

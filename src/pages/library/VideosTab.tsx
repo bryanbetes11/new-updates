@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { motion } from 'framer-motion';
 import { PlayCircle, Plus, Search, ExternalLink, Film, CreditCard as Edit2, Trash2, MoreVertical, X, MessageCircle, Send, Loader2 } from 'lucide-react';
@@ -43,6 +43,42 @@ interface VideoComment {
 interface YouTubeMetadata {
   title: string;
   thumbnail_url: string;
+}
+
+function timestampToSeconds(value: string) {
+  const parts = value.split(':').map(Number);
+  if (parts.some(part => !Number.isFinite(part))) return null;
+  if (parts.length === 2) {
+    const [minutes, seconds] = parts;
+    return seconds < 60 ? minutes * 60 + seconds : null;
+  }
+  if (parts.length === 3) {
+    const [hours, minutes, seconds] = parts;
+    return minutes < 60 && seconds < 60 ? hours * 3600 + minutes * 60 + seconds : null;
+  }
+  return null;
+}
+
+function TimestampedComment({ content, onSeek }: { content: string; onSeek: (seconds: number) => void }) {
+  const parts = content.split(/(\b(?:\d{1,2}:)?\d{1,2}:\d{2}\b)/g);
+  return (
+    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-gray-600 dark:text-white/65">
+      {parts.map((part, index) => {
+        const seconds = timestampToSeconds(part);
+        return seconds === null ? part : (
+          <button
+            key={`${part}-${index}`}
+            type="button"
+            onClick={() => onSeek(seconds)}
+            className="mx-0.5 inline-flex rounded-md bg-emerald-500/12 px-1.5 py-0.5 font-mono text-xs font-black text-emerald-600 transition-colors hover:bg-emerald-500/22 dark:text-emerald-400"
+            aria-label={`Play video from ${part}`}
+          >
+            {part}
+          </button>
+        );
+      })}
+    </p>
+  );
 }
 
 function getYouTubeId(value: string) {
@@ -95,6 +131,7 @@ export function VideosTab() {
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [commentContent, setCommentContent] = useState('');
   const [commentSubmitting, setCommentSubmitting] = useState(false);
+  const playerRef = useRef<HTMLIFrameElement>(null);
   const [form, setForm] = useState({
     title: '', description: '', video_url: '', thumbnail_url: '', category: 'General',
   });
@@ -206,6 +243,15 @@ export function VideosTab() {
       return;
     }
     await fetchComments(selectedVideo.id);
+  };
+
+  const seekVideo = (seconds: number) => {
+    const playerWindow = playerRef.current?.contentWindow;
+    if (!playerWindow) return;
+    playerWindow.postMessage(JSON.stringify({ event: 'command', func: 'seekTo', args: [seconds, true] }), 'https://www.youtube.com');
+    window.setTimeout(() => {
+      playerWindow.postMessage(JSON.stringify({ event: 'command', func: 'playVideo', args: [] }), 'https://www.youtube.com');
+    }, 80);
   };
 
   const handleEdit = (video: Video, e: React.MouseEvent) => {
@@ -510,15 +556,16 @@ export function VideosTab() {
         open={showPlayer}
         onClose={() => { setShowPlayer(false); setComments([]); setSelectedVideo(null); }}
         title={selectedVideo?.title || 'Video'}
-        size="lg"
+        size="xl"
       >
         {selectedVideo && (
           <div className="space-y-5">
             <div className="aspect-video overflow-hidden rounded-2xl bg-black ring-1 ring-white/10">
               {getYouTubeEmbedUrl(selectedVideo.video_url) ? (
                 <iframe
+                  ref={playerRef}
                   className="h-full w-full"
-                  src={`${getYouTubeEmbedUrl(selectedVideo.video_url)}?rel=0`}
+                  src={`${getYouTubeEmbedUrl(selectedVideo.video_url)}?rel=0&enablejsapi=1`}
                   title={selectedVideo.title}
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                   allowFullScreen
@@ -566,7 +613,7 @@ export function VideosTab() {
                           <button type="button" onClick={() => void handleDeleteComment(comment.id)} className="text-xs font-bold text-red-500/70 hover:text-red-500">Delete</button>
                         )}
                       </div>
-                      <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-gray-600 dark:text-white/65">{comment.content}</p>
+                      <TimestampedComment content={comment.content} onSeek={seekVideo} />
                     </div>
                   </div>
                 );
@@ -588,6 +635,7 @@ export function VideosTab() {
                 <span className="hidden sm:inline">Post</span>
               </button>
             </form>
+            <p className="-mt-3 text-[11px] text-gray-400 dark:text-white/30">Tip: add a timestamp such as <span className="font-mono font-bold text-emerald-500">1:23</span> or <span className="font-mono font-bold text-emerald-500">1:02:15</span>. It becomes a link to that moment.</p>
           </div>
         )}
       </Modal>

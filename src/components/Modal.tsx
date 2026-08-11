@@ -7,7 +7,7 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: ReactNode;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   mobileView?: 'sheet' | 'page';
   hideCloseButton?: boolean;
   hideHeader?: boolean;
@@ -21,6 +21,7 @@ const desktopSizes = {
   sm: 'sm:max-w-sm',
   md: 'sm:max-w-md',
   lg: 'sm:max-w-xl',
+  xl: 'sm:max-w-3xl lg:max-w-4xl',
 };
 
 const MODAL_LOCK_ATTR = 'data-modal-lock-count';

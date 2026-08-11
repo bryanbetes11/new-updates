@@ -436,7 +436,7 @@ export function MinistryReflection() {
   if (activeIndex === -3) {
     return renderSurveySurface(
       <div className="survey-modal-surface min-h-[calc(100dvh-5rem)] bg-[#070908] px-5 py-8 text-white">
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto flex max-w-4xl flex-col">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <img src="/servesync-logo-latest.png" alt="" className="h-9 w-9 object-contain" />
@@ -486,15 +486,17 @@ export function MinistryReflection() {
             })}
           </div>
 
-          <button
-            onClick={() => setActiveIndex(-1)}
-            className="mt-10 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-4 font-black text-black"
-          >
-            Continue to introduction <ArrowRight className="h-4 w-4" />
-          </button>
-          <p className="mt-4 text-center text-xs leading-5 text-white/32">
-            You can save your progress and return when you are ready.<br />Maaari mong i-save ang iyong progress at bumalik kapag handa ka na.
-          </p>
+          <div className="mt-auto pt-10">
+            <button
+              onClick={() => setActiveIndex(-1)}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-4 font-black text-black"
+            >
+              Continue to introduction <ArrowRight className="h-4 w-4" />
+            </button>
+            <p className="mt-4 text-center text-xs leading-5 text-white/32">
+              You can save your progress and return when you are ready.<br />Maaari mong i-save ang iyong progress at bumalik kapag handa ka na.
+            </p>
+          </div>
         </div>
       </div>
     );

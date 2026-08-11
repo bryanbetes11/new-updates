@@ -3851,7 +3851,10 @@ export function Messages() {
   }, [isDesktop, selectedConvId]);
 
   return (
-    <div className="relative flex h-full min-h-0 w-full overflow-hidden bg-white dark:bg-[#111013] lg:bg-[#f5f5f7] lg:dark:bg-[#0d0d0f] lg:p-4">
+    <div
+      className="relative flex h-full min-h-0 w-full overflow-hidden bg-white dark:bg-[#111013] lg:bg-[#f5f5f7] lg:dark:bg-[#0d0d0f] lg:p-4"
+      style={isDesktop ? { paddingTop: 'calc(72px + var(--desktop-safe-area-top, 0px) + 1rem)' } : undefined}
+    >
       <div className="contents lg:relative lg:flex lg:h-full lg:flex-1 lg:min-h-0 lg:overflow-hidden lg:rounded-[2rem] lg:border lg:border-black/[0.06] lg:bg-white lg:shadow-[0_24px_80px_-52px_rgba(15,23,42,0.85)] lg:ring-1 lg:ring-white/70 dark:lg:border-white/[0.07] dark:lg:bg-[#111013] dark:lg:ring-white/[0.04]">
         <div className="pointer-events-none absolute inset-x-10 top-0 z-10 hidden h-px bg-gradient-to-r from-transparent via-white/90 to-transparent dark:via-white/[0.12] lg:block" />
 
@@ -3868,11 +3871,11 @@ export function Messages() {
           exit={isDesktop ? undefined : { x: 0, opacity: 1 }}
           transition={isDesktop ? undefined : mobilePanelTransition}
         >
-        {/* Mobile top bar spacer */}
-        <div className="lg:hidden shrink-0" style={{ height: 'calc(3.5rem + env(safe-area-inset-top))' }} />
-
         {/* List header */}
-        <div className="relative z-20 shrink-0 px-4 pt-4 pb-3 lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96">
+        <div
+          className="relative z-20 shrink-0 px-4 pb-3 lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96"
+          style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 1rem)' }}
+        >
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-[20px] font-bold text-gray-900 dark:text-white tracking-[-0.02em]">Messages</h1>
             <button

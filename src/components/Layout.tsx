@@ -373,7 +373,7 @@ export function Layout() {
         <Navigation
           hideMobile={hideNavMobile}
           hideMobileAll={isMessagesConversation}
-          hideMobileHeader={isEventDetail}
+          hideMobileHeader={isEventDetail || isMessagesPage}
           collapsed={collapsed}
           onCollapsedChange={setCollapsed}
           mobileOpen={mobileOpen}

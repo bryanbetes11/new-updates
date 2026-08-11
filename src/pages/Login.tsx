@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowRight, CheckCircle2, ChevronLeft, Eye, EyeOff, KeyRound, Mail, RefreshCw, Trash2, Users } from 'lucide-react';
+import { ArrowRight, CheckCircle2, ChevronLeft, Eye, EyeOff, KeyRound, Mail, Users } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -28,8 +28,7 @@ export function Login() {
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSent, setForgotSent] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
-  const [switchingAccountId, setSwitchingAccountId] = useState<string | null>(null);
-  const { signIn, user, savedAccounts, switchAccount, forgetSavedAccount } = useAuth();
+  const { signIn, user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -107,14 +106,6 @@ export function Login() {
     }
   };
 
-  const handleQuickSwitch = async (targetUserId: string) => {
-    setSwitchingAccountId(targetUserId);
-    const { error } = await switchAccount(targetUserId);
-    setSwitchingAccountId(null);
-
-    if (error) toast('error', error.message);
-  };
-
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-[#050505] text-white">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_16%_8%,rgba(34,197,94,0.18),transparent_32%),radial-gradient(circle_at_82%_18%,rgba(250,204,21,0.08),transparent_28%),linear-gradient(180deg,#090b09_0%,#050505_48%,#000_100%)]" />
@@ -189,36 +180,6 @@ export function Login() {
                         Sign in to continue your ServeSync workspace.
                       </p>
                     </div>
-
-                    {savedAccounts.length > 0 && (
-                      <div className="mb-6 rounded-3xl border border-white/[0.08] bg-black/20 p-3.5">
-                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/35">Saved on this device</p>
-                        <div className="mt-3 space-y-2">
-                          {savedAccounts.map(account => {
-                            const isSwitching = switchingAccountId === account.userId;
-
-                            return (
-                              <div key={account.userId} className="flex items-center gap-2 rounded-2xl border border-white/[0.07] bg-white/[0.04] px-2.5 py-2">
-                                <button type="button" onClick={() => handleQuickSwitch(account.userId)} disabled={isSwitching} className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:opacity-60">
-                                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/12 text-[12px] font-black text-emerald-300">
-                                    {(account.displayName || account.email || '?').slice(0, 1).toUpperCase()}
-                                  </div>
-                                  <div className="min-w-0">
-                                    <p className="truncate text-[13px] font-bold text-white">{account.displayName}</p>
-                                    <p className="truncate text-[11px] font-mono text-white/34">{account.email}</p>
-                                  </div>
-                                  <RefreshCw className={`h-3.5 w-3.5 shrink-0 text-emerald-300 ${isSwitching ? 'animate-spin' : ''}`} />
-                                </button>
-
-                                <button type="button" onClick={() => forgetSavedAccount(account.userId)} className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white/30 transition-colors hover:bg-red-500/10 hover:text-red-300" title="Forget saved account" aria-label={`Forget ${account.displayName || account.email}`}>
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
 
                     <form onSubmit={handleSubmit} className="space-y-4">
                       <div>

@@ -715,8 +715,8 @@ export function VideosTab() {
         size="xl"
       >
         {selectedVideo && (
-          <div className="flex min-h-[calc(90dvh-6.5rem)] flex-col gap-5 sm:min-h-0">
-            <div className="relative aspect-video overflow-hidden rounded-2xl bg-black ring-1 ring-white/10">
+          <div className="video-discussion-layout flex min-h-[calc(90dvh-6.5rem)] flex-col gap-5 sm:min-h-0">
+            <div className="video-discussion-player relative aspect-video shrink-0 overflow-hidden rounded-2xl bg-black ring-1 ring-white/10">
               {getYouTubeEmbedUrl(selectedVideo.video_url) && !playerUnavailable ? (
                 <iframe
                   ref={playerRef}
@@ -769,7 +769,7 @@ export function VideosTab() {
               <p className="mt-1 text-xs text-gray-400 dark:text-white/35">Share observations, questions, or helpful notes with the team.</p>
             </div>
 
-            <div className="min-h-24 flex-1 space-y-2 overflow-y-auto overscroll-contain pr-1 sm:max-h-64 sm:flex-none">
+            <div className="video-discussion-comments min-h-24 flex-1 space-y-2 overflow-y-auto overscroll-contain pr-1 sm:max-h-64 sm:flex-none">
               {commentsLoading ? (
                 <div className="flex items-center justify-center py-8 text-gray-400"><Loader2 className="h-5 w-5 animate-spin" /></div>
               ) : comments.length === 0 ? (
@@ -800,14 +800,14 @@ export function VideosTab() {
               })}
             </div>
 
-            <div className="sticky -bottom-5 z-10 -mx-5 border-t border-gray-200 bg-white/95 px-5 pb-1 pt-3 shadow-[0_-16px_30px_-24px_rgba(0,0,0,0.35)] backdrop-blur-xl dark:border-white/10 dark:bg-[#1c1b1e]/95">
+            <div className="video-comment-composer sticky -bottom-5 z-10 -mx-5 border-t border-gray-200 bg-white px-5 pb-1 pt-3 shadow-[0_-16px_30px_-24px_rgba(0,0,0,0.35)] dark:border-white/10 dark:bg-[#1c1b1e]">
               <form onSubmit={handleAddComment} className="flex items-end gap-2">
                 <textarea
                   value={commentContent}
                   onChange={e => setCommentContent(e.target.value)}
                   maxLength={2000}
                   rows={2}
-                  className="input-field min-h-[3.25rem] flex-1 resize-none"
+                  className="video-comment-input input-field min-h-[3.25rem] flex-1 resize-none"
                   placeholder="Add a comment…"
                   aria-label="Add a comment"
                 />
@@ -816,7 +816,7 @@ export function VideosTab() {
                   <span className="hidden sm:inline">Post</span>
                 </button>
               </form>
-              <p className="mt-2 text-[11px] text-gray-400 dark:text-white/30">Tip: add a timestamp such as <span className="font-mono font-bold text-emerald-500">1:23</span> or <span className="font-mono font-bold text-emerald-500">1:02:15</span>. It becomes a link to that moment.</p>
+              <p className="video-comment-tip mt-2 text-[11px] text-gray-400 dark:text-white/30">Tip: add a timestamp such as <span className="font-mono font-bold text-emerald-500">1:23</span> or <span className="font-mono font-bold text-emerald-500">1:02:15</span>. It becomes a link to that moment.</p>
             </div>
           </div>
         )}

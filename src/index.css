@@ -290,6 +290,45 @@
   .page-container {
   }
 
+  .modal-dialog-viewport {
+    max-height: min(92dvh, calc(var(--modal-visual-height, 100dvh) - 0.5rem)) !important;
+  }
+
+  @media (min-width: 640px) {
+    .modal-dialog-viewport {
+      max-height: 85vh !important;
+    }
+  }
+
+  @media (max-width: 639px) {
+    .video-discussion-layout:has(.video-comment-input:focus) {
+      min-height: 0;
+      gap: 0.625rem;
+    }
+
+    .video-discussion-layout:has(.video-comment-input:focus) .video-discussion-player {
+      height: clamp(7rem, calc(var(--modal-visual-height, 100dvh) * 0.3), 10rem);
+      aspect-ratio: auto;
+    }
+
+    .video-discussion-layout:has(.video-comment-input:focus) .video-discussion-comments {
+      min-height: 0;
+    }
+
+    .video-discussion-layout:has(.video-comment-input:focus) .video-discussion-comments > p {
+      padding-block: 0.5rem;
+    }
+
+    .video-discussion-layout:has(.video-comment-input:focus) .video-comment-tip {
+      display: none;
+    }
+
+    .video-discussion-layout:has(.video-comment-input:focus) .video-comment-composer {
+      bottom: -1.25rem;
+      padding-top: 0.625rem;
+    }
+  }
+
   .mobile-layout-padding {
     padding-top: calc(3.5rem + env(safe-area-inset-top) + 1rem);
     padding-bottom: calc(132px + env(safe-area-inset-bottom) + 1rem);

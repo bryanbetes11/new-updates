@@ -164,6 +164,7 @@ export function Modal({
 }: ModalProps) {
   const [visible, setVisible] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [visualViewport, setVisualViewport] = useState<{ height: number; offsetTop: number } | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const titleId = useId();
@@ -195,6 +196,25 @@ export function Modal({
   useEffect(() => {
     if (!visible) return;
     return lockBodyScroll();
+  }, [visible]);
+
+  useEffect(() => {
+    if (!visible) return;
+    const viewport = window.visualViewport;
+    const updateViewport = () => {
+      setVisualViewport(viewport
+        ? { height: viewport.height, offsetTop: viewport.offsetTop }
+        : { height: window.innerHeight, offsetTop: 0 });
+    };
+    updateViewport();
+    window.addEventListener('resize', updateViewport);
+    viewport?.addEventListener('resize', updateViewport);
+    viewport?.addEventListener('scroll', updateViewport);
+    return () => {
+      window.removeEventListener('resize', updateViewport);
+      viewport?.removeEventListener('resize', updateViewport);
+      viewport?.removeEventListener('scroll', updateViewport);
+    };
   }, [visible]);
 
   useEffect(() => {
@@ -282,14 +302,19 @@ export function Modal({
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-[2147483647] flex justify-center ${isMobilePage ? 'items-stretch sm:items-center' : 'items-end sm:items-center'}`}
+      className={`fixed inset-x-0 top-0 z-[2147483647] flex justify-center ${isMobilePage ? 'items-stretch sm:items-center' : 'items-end sm:items-center'}`}
+      style={{
+        height: visualViewport?.height ?? window.innerHeight,
+        top: visualViewport?.offsetTop ?? 0,
+        ['--modal-visual-height' as string]: `${visualViewport?.height ?? window.innerHeight}px`,
+      }}
       onClick={() => { if (closeOnBackdrop) requestClose(); }}
       role="presentation"
     >
       <div className={`fixed inset-0 bg-black/50 backdrop-blur-sm ${backdropClass}`} />
       <div
         ref={dialogRef}
-        className={`relative w-full ${desktopSizes[size]} ${isMobilePage ? 'h-[100dvh] rounded-none sm:h-auto sm:rounded-2xl' : 'rounded-t-[28px] sm:rounded-2xl'} bg-white dark:bg-[#1c1b1e] ring-1 ring-black/[0.06] dark:ring-white/[0.08] ${sheetClass} ${isMobilePage ? 'max-h-[100dvh] sm:max-h-[85vh]' : 'max-h-[92dvh] sm:max-h-[85vh]'} flex flex-col overflow-hidden ${isMobilePage ? '' : 'sm:mx-4'}`}
+        className={`modal-dialog-viewport relative w-full ${desktopSizes[size]} ${isMobilePage ? 'h-[100dvh] rounded-none sm:h-auto sm:rounded-2xl' : 'rounded-t-[28px] sm:rounded-2xl'} bg-white dark:bg-[#1c1b1e] ring-1 ring-black/[0.06] dark:ring-white/[0.08] ${sheetClass} ${isMobilePage ? 'max-h-[100dvh] sm:max-h-[85vh]' : 'max-h-[92dvh] sm:max-h-[85vh]'} flex flex-col overflow-hidden ${isMobilePage ? '' : 'sm:mx-4'}`}
         style={{
           boxShadow: '0 24px 64px -16px rgba(0,0,0,0.3), 0 8px 24px -8px rgba(0,0,0,0.15)',
         }}

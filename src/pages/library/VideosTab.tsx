@@ -131,10 +131,12 @@ export function VideosTab() {
   const [showCreate, setShowCreate] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
+  const [showNotify, setShowNotify] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
   const [creating, setCreating] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [notifying, setNotifying] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [createLinks, setCreateLinks] = useState('');
   const [createCategory, setCreateCategory] = useState('General');
@@ -252,6 +254,19 @@ export function VideosTab() {
     void fetchComments(video.id);
   };
 
+  useEffect(() => {
+    if (loading || videos.length === 0) return;
+    const videoId = new URLSearchParams(window.location.search).get('video');
+    if (!videoId) return;
+    const video = videos.find(item => item.id === videoId);
+    if (video) openVideo(video);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('video');
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+    // This runs only when the requested video becomes available after loading.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, videos]);
+
   const handlePlayerLoad = () => {
     playerRef.current?.contentWindow?.postMessage(JSON.stringify({
       event: 'command',
@@ -340,6 +355,28 @@ export function VideosTab() {
     setShowDelete(false);
     setSelectedVideo(null);
     fetchVideos();
+  };
+
+  const handleNotifyClick = (video: Video, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setSelectedVideo(video);
+    setShowNotify(true);
+    setOpenMenuId(null);
+  };
+
+  const handleNotifyTeam = async () => {
+    if (!selectedVideo || !isProductionDirector) return;
+    setNotifying(true);
+    const { data, error } = await supabase.rpc('notify_team_about_video', { p_video_id: selectedVideo.id });
+    setNotifying(false);
+    if (error) {
+      toast('error', error.message || 'The team could not be notified.');
+      return;
+    }
+    toast('success', `Notification sent to ${Number(data) || 0} team member${Number(data) === 1 ? '' : 's'}.`);
+    setShowNotify(false);
+    setSelectedVideo(null);
   };
 
   const canManageVideo = (video: Video) => video.uploaded_by === user?.id || isProductionDirector;
@@ -545,6 +582,14 @@ export function VideosTab() {
                             >
                               <Edit2 className="h-3.5 w-3.5 text-gray-400" /> Edit
                             </button>
+                            {isProductionDirector && (
+                              <button
+                                onClick={e => handleNotifyClick(video, e)}
+                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-emerald-700 transition-colors hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-900/20"
+                              >
+                                <Bell className="h-3.5 w-3.5" /> Notify team
+                              </button>
+                            )}
                             <button
                               onClick={e => handleDeleteClick(video, e)}
                               className="w-full px-3 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2 transition-colors"
@@ -779,6 +824,20 @@ export function VideosTab() {
             <button type="submit" disabled={updating} className="btn-primary">{updating ? 'Updating...' : 'Update Video'}</button>
           </div>
         </form>
+      </Modal>
+
+      <Modal open={showNotify} onClose={() => setShowNotify(false)} title="Notify Team" size="sm">
+        <div className="space-y-4">
+          <p className="text-sm leading-6 text-gray-600 dark:text-gray-300">
+            Send one in-app and push notification to your team that <span className="font-bold text-gray-900 dark:text-white">{selectedVideo?.title}</span> is now available. The notification will open this video directly.
+          </p>
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={() => setShowNotify(false)} className="btn-secondary">Cancel</button>
+            <button type="button" onClick={handleNotifyTeam} disabled={notifying} className="btn-primary">
+              {notifying ? 'Sending...' : 'Notify Team'}
+            </button>
+          </div>
+        </div>
       </Modal>
 
       {/* Delete modal */}

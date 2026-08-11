@@ -1,20 +1,24 @@
 import { useRef, useState, type ElementType, type KeyboardEvent } from 'react';
-import { BookOpen, ListChecks } from 'lucide-react';
+import { BookOpen, ListChecks, Video } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { SetlistsTab } from './library/SetlistsTab';
+import { VideosTab } from './library/VideosTab';
 
-type Tab = 'songs' | 'sets';
+type Tab = 'songs' | 'sets' | 'videos';
 
 const tabs: { id: Tab; label: string; shortLabel: string; icon: ElementType }[] = [
   { id: 'songs', label: 'Songs', shortLabel: 'Songs', icon: BookOpen },
   { id: 'sets', label: 'Sets', shortLabel: 'Sets', icon: ListChecks },
+  { id: 'videos', label: 'Videos', shortLabel: 'Videos', icon: Video },
 ];
 
 export function Library() {
-  const [tab, setTab] = useState<Tab>('songs');
+  const requestedTab = new URLSearchParams(window.location.search).get('tab');
+  const [tab, setTab] = useState<Tab>(requestedTab === 'videos' ? 'videos' : requestedTab === 'sets' ? 'sets' : 'songs');
   const tabRefs = useRef<Record<Tab, HTMLButtonElement | null>>({
     songs: null,
     sets: null,
+    videos: null,
   });
 
   const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, currentTab: Tab) => {
@@ -101,11 +105,9 @@ export function Library() {
           animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
           transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
         >
-          {tab === 'songs' ? (
-            <SetlistsTab fixedView="songs" />
-          ) : (
-            <SetlistsTab fixedView="setlists" />
-          )}
+          {tab === 'songs' && <SetlistsTab fixedView="songs" />}
+          {tab === 'sets' && <SetlistsTab fixedView="setlists" />}
+          {tab === 'videos' && <VideosTab />}
         </motion.div>
 
       </div>

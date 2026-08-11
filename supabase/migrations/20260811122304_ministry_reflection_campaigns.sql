@@ -243,7 +243,7 @@ begin
 end; $$;
 
 create or replace function public.request_survey_temporary_access(p_participation_id uuid, p_reason text default null)
-returns void language plpgsql security invoker set search_path='' as $$
+returns void language sql security invoker set search_path='' as $$
   update public.survey_participations set status='temporary_access_requested',temporary_access_requested_at=now(),temporary_access_reason=nullif(btrim(p_reason),'') where id=p_participation_id and user_id=auth.uid() and submitted_at is null;
 $$;
 

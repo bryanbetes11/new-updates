@@ -966,3 +966,24 @@
     box-shadow: 0 32px 100px rgb(0 0 0 / 0.6);
   }
 }
+
+html[data-survey-preview-device="phone"] .survey-modal-surface {
+  position: static;
+  width: auto;
+  height: auto;
+  min-height: calc(100dvh - 5rem);
+  overflow: visible;
+  padding: 2rem 1.25rem !important;
+  background: #070908 !important;
+  backdrop-filter: none;
+}
+
+html[data-survey-preview-device="phone"] .survey-modal-surface > div {
+  height: auto;
+  overflow-y: visible;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}

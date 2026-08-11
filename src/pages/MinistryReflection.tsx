@@ -112,7 +112,16 @@ export function MinistryReflection() {
   const previewParams = new URLSearchParams(window.location.search);
   const previewCampaignId = previewParams.get("campaignId");
   const previewScreen = previewParams.get("preview");
+  const previewDevice = previewParams.get("device");
   const isPreview = previewParams.has("preview") && (import.meta.env.DEV || isProductionDirector);
+
+  useEffect(() => {
+    if (!isPreview || previewDevice !== "phone") return;
+    document.documentElement.dataset.surveyPreviewDevice = "phone";
+    return () => {
+      delete document.documentElement.dataset.surveyPreviewDevice;
+    };
+  }, [isPreview, previewDevice]);
 
   const loadSurvey = useCallback(async () => {
     if (isPreview) {

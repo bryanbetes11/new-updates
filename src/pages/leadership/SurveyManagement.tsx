@@ -896,7 +896,7 @@ function LiveSurveyPreview({ campaignId, revision }: { campaignId: string; revis
   const [open, setOpen] = useState(true);
   const [device, setDevice] = useState<PreviewDevice>("desktop");
   const [manualRevision, setManualRevision] = useState(0);
-  const previewUrl = `/reflection?preview=intro&campaignId=${encodeURIComponent(campaignId)}&revision=${revision + manualRevision}`;
+  const previewUrl = `/reflection?preview=intro&campaignId=${encodeURIComponent(campaignId)}&device=${device}&revision=${revision + manualRevision}`;
 
   return (
     <div className="mt-6 border-t border-gray-200 pt-5 dark:border-white/[0.07]">
@@ -928,8 +928,8 @@ function LiveSurveyPreview({ campaignId, revision }: { campaignId: string; revis
               </button>
             </div>
             <div className="overflow-x-auto rounded-2xl bg-[#050706] p-3">
-              <div className="mx-auto overflow-hidden rounded-[1.5rem] border border-white/10 bg-black shadow-2xl transition-[width] duration-300" style={{ width: previewDeviceWidths[device], maxWidth: "100%" }}>
-                <iframe key={`${campaignId}-${revision}-${manualRevision}`} title={`Live survey preview — ${device}`} src={previewUrl} className="block h-[780px] w-full bg-black" />
+              <div className="mx-auto overflow-hidden rounded-[1.5rem] border border-white/10 bg-black shadow-2xl" style={{ width: previewDeviceWidths[device], maxWidth: "100%" }}>
+                <iframe key={`${campaignId}-${revision}-${manualRevision}-${device}`} title={`Live survey preview — ${device}`} src={previewUrl} className="block h-[780px] w-full bg-black" />
               </div>
             </div>
           </div>

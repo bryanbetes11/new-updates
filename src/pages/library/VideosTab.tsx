@@ -239,7 +239,7 @@ export function VideosTab() {
             variants={containerVariants}
             initial="hidden"
             animate="show"
-            className="overflow-hidden border-y border-white/[0.08]"
+            className="overflow-visible border-y border-white/[0.08]"
           >
             {filtered.map(video => {
               const thumb = video.thumbnail_url || getYouTubeThumb(video.video_url);
@@ -309,12 +309,15 @@ export function VideosTab() {
                       <div className="relative">
                         <button
                           onClick={e => { e.preventDefault(); e.stopPropagation(); setOpenMenuId(openMenuId === video.id ? null : video.id); }}
+                          aria-label={`Manage ${video.title}`}
+                          aria-expanded={openMenuId === video.id}
+                          aria-haspopup="menu"
                           className="p-1.5 rounded-full bg-white/[0.075] text-white/60 backdrop-blur-sm ring-1 ring-white/[0.08] transition-colors hover:bg-white/[0.12] hover:text-white"
                         >
                           <MoreVertical className="h-3.5 w-3.5" />
                         </button>
                         {openMenuId === video.id && (
-                          <div className="absolute left-0 mt-1 w-36 bg-white dark:bg-[#232325] rounded-2xl shadow-xl ring-1 ring-black/[0.07] dark:ring-white/[0.08] py-1 z-30">
+                          <div role="menu" className="absolute right-0 mt-1 w-36 bg-white dark:bg-[#232325] rounded-2xl shadow-xl ring-1 ring-black/[0.07] dark:ring-white/[0.08] py-1 z-30">
                             <button
                               onClick={e => handleEdit(video, e)}
                               className="w-full px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/[0.05] flex items-center gap-2 transition-colors"

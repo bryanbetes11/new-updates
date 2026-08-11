@@ -436,7 +436,7 @@ export function MinistryReflection() {
   if (activeIndex === -3) {
     return renderSurveySurface(
       <div className="survey-modal-surface min-h-[calc(100dvh-5rem)] bg-[#070908] px-5 py-8 text-white">
-        <div className="mx-auto flex max-w-4xl flex-col">
+        <div className="mx-auto flex min-h-full max-w-4xl flex-col">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <img src="/servesync-logo-latest.png" alt="" className="h-9 w-9 object-contain" />
@@ -505,7 +505,7 @@ export function MinistryReflection() {
   if (activeIndex === -1) {
     return renderSurveySurface(
       <div className="survey-modal-surface min-h-[calc(100dvh-5rem)] bg-[#070908] px-5 py-8 text-white">
-        <div className="mx-auto max-w-2xl">
+        <div className="mx-auto flex min-h-full max-w-2xl flex-col">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <img
@@ -541,24 +541,26 @@ export function MinistryReflection() {
               {splitSurveyParagraphs(campaign.introduction_tl).map((p, i) => <p key={`tl-${i}`}>{p}</p>)}
             </div>
           </div>
-          <button
-            onClick={() => setActiveIndex(-2)}
-            className="mt-10 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-4 font-black text-black"
-          >
-            Begin reflection <ArrowRight className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => setHolding(true)}
-            className="mt-3 w-full px-5 py-3 text-sm font-bold text-emerald-400"
-          >
-            Save & continue later
-          </button>
-          <button
-            onClick={() => setActiveIndex(-3)}
-            className="mt-1 w-full px-5 py-3 text-sm font-bold text-white/40"
-          >
-            Back to title page
-          </button>
+          <div className="mt-auto pt-10">
+            <button
+              onClick={() => setActiveIndex(-2)}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-4 font-black text-black"
+            >
+              Begin reflection <ArrowRight className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setHolding(true)}
+              className="mt-3 w-full px-5 py-3 text-sm font-bold text-emerald-400"
+            >
+              Save & continue later
+            </button>
+            <button
+              onClick={() => setActiveIndex(-3)}
+              className="mt-1 w-full px-5 py-3 text-sm font-bold text-white/40"
+            >
+              Back to title page
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -571,7 +573,7 @@ export function MinistryReflection() {
     );
     return renderSurveySurface(
       <div className="survey-modal-surface min-h-[calc(100dvh-5rem)] bg-[#070908] px-5 py-8 text-white">
-        <div className="mx-auto max-w-2xl">
+        <div className="mx-auto flex min-h-full max-w-2xl flex-col">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <img
@@ -630,19 +632,21 @@ export function MinistryReflection() {
               </button>
             ))}
           </div>
-          <button
-            onClick={() => setActiveIndex(nextIndex)}
-            className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-3.5 font-black text-black"
-          >
-            Continue with {sections[nextIndex]?.title_en}
-            <ArrowRight className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => setHolding(true)}
-            className="mt-3 w-full px-5 py-3 text-sm font-bold text-emerald-400"
-          >
-            Save & exit
-          </button>
+          <div className="mt-auto pt-5">
+            <button
+              onClick={() => setActiveIndex(nextIndex)}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-3.5 font-black text-black"
+            >
+              Continue with {sections[nextIndex]?.title_en}
+              <ArrowRight className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setHolding(true)}
+              className="mt-3 w-full px-5 py-3 text-sm font-bold text-emerald-400"
+            >
+              Save & exit
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -650,7 +654,7 @@ export function MinistryReflection() {
 
   return renderSurveySurface(
     <div className="survey-modal-surface min-h-[calc(100dvh-5rem)] bg-[#070908] px-4 py-6 text-white sm:px-6">
-      <div className="mx-auto max-w-3xl">
+      <div className="mx-auto flex min-h-full max-w-3xl flex-col">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img
@@ -721,44 +725,46 @@ export function MinistryReflection() {
             )}
           </div>
         </motion.div>
-        <div className="mt-10 flex gap-3">
+        <div className="mt-auto pt-10">
+          <div className="flex gap-3">
+            <button
+              onClick={() => setActiveIndex((index) => Math.max(-1, index - 1))}
+              className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 text-white/65"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+            <button
+              onClick={() => void continueNext()}
+              disabled={saving}
+              className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-4 font-black text-black disabled:opacity-60"
+            >
+              {activeIndex === sections.length - 1
+                ? "Submit reflection"
+                : "Continue"}{" "}
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
           <button
-            onClick={() => setActiveIndex((index) => Math.max(-1, index - 1))}
-            className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 text-white/65"
+            onClick={async () => {
+              await saveCurrent(false);
+              setHolding(true);
+            }}
+            className="mt-3 w-full px-5 py-3 text-sm font-bold text-emerald-400"
           >
-            <ArrowLeft className="h-5 w-5" />
+            Save & continue later
           </button>
-          <button
-            onClick={() => void continueNext()}
-            disabled={saving}
-            className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-4 font-black text-black disabled:opacity-60"
-          >
-            {activeIndex === sections.length - 1
-              ? "Submit reflection"
-              : "Continue"}{" "}
-            <ArrowRight className="h-4 w-4" />
-          </button>
-        </div>
-        <button
-          onClick={async () => {
-            await saveCurrent(false);
-            setHolding(true);
-          }}
-          className="mt-3 w-full px-5 py-3 text-sm font-bold text-emerald-400"
-        >
-          Save & continue later
-        </button>
-        <p className="mt-6 flex items-center justify-center gap-2 text-center text-xs leading-5 text-white/30">
-          <LockKeyhole className="h-3.5 w-3.5" />
-          Commitment responses stay separate from knowledge-check results.
-        </p>
-        {participation.temporary_access_until && (
-          <p className="mt-2 flex items-center justify-center gap-2 text-xs text-amber-300">
-            <Clock3 className="h-3.5 w-3.5" />
-            Temporary access ends{" "}
-            {formatSurveyTime(participation.temporary_access_until)}
+          <p className="mt-6 flex items-center justify-center gap-2 text-center text-xs leading-5 text-white/30">
+            <LockKeyhole className="h-3.5 w-3.5" />
+            Commitment responses stay separate from knowledge-check results.
           </p>
-        )}
+          {participation.temporary_access_until && (
+            <p className="mt-2 flex items-center justify-center gap-2 text-xs text-amber-300">
+              <Clock3 className="h-3.5 w-3.5" />
+              Temporary access ends{" "}
+              {formatSurveyTime(participation.temporary_access_until)}
+            </p>
+          )}
+        </div>
         <p className="sr-only">{completedCount} sections completed</p>
       </div>
     </div>

@@ -40,6 +40,7 @@ export function AppUpdateModal({
       onClose={() => {}}
       title="Update Available"
       size="md"
+      mobileView="dialog"
       titleAlign="center"
       hideCloseButton
       closeOnBackdrop={false}
@@ -51,9 +52,9 @@ export function AppUpdateModal({
             <Download className="h-5 w-5" />
           </div>
           <div className="min-w-0">
-            <p className="text-[16px] font-bold text-gray-900 dark:text-white">A new version of ServeSync is ready.</p>
+            <p className="text-[16px] font-bold text-gray-900 dark:text-white">A fresh ServeSync update is ready.</p>
             <p className="mt-1 text-[13px] leading-relaxed text-gray-500 dark:text-white/50">
-              Update now to load the latest build without reinstalling the app.
+              Here are the changes that matter for your day-to-day ministry work.
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-mono uppercase tracking-[0.18em] text-gray-400 dark:text-white/30">
               <span>Installed {formatVersionLabel(currentVersion)}</span>
@@ -62,7 +63,7 @@ export function AppUpdateModal({
           </div>
         </div>
 
-        <div className="rounded-2xl border border-gray-200/80 bg-gray-50/80 dark:border-white/[0.08] dark:bg-white/[0.04] divide-y divide-gray-200/80 dark:divide-white/[0.06] overflow-hidden">
+        <div className="max-h-[min(46dvh,26rem)] overflow-y-auto rounded-2xl border border-gray-200/80 bg-gray-50/80 dark:border-white/[0.08] dark:bg-white/[0.04] divide-y divide-gray-200/80 dark:divide-white/[0.06]">
           {APP_UPDATE_FEATURES.length > 0 && (
             <div className="p-4">
               <div className="mb-3 flex items-center gap-2">
@@ -89,7 +90,7 @@ export function AppUpdateModal({
             disabled={applying}
             className="w-full h-10 rounded-xl bg-emerald-500 text-[13px] font-semibold text-white transition-colors hover:bg-emerald-600 disabled:opacity-45"
           >
-            {applying ? 'Updating…' : 'Update Now'}
+            {applying ? 'Installing Update...' : 'Update ServeSync'}
           </button>
         </div>
       </div>

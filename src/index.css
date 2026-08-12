@@ -185,6 +185,11 @@ html[data-touch-feedback="apple"] :is(nav, aside) .touch-feedback-strong {
     display: none !important;
   }
 
+  html.new-message-modal-active [data-mobile-nav="true"],
+  body.new-message-modal-active [data-mobile-nav="true"] {
+    display: none !important;
+  }
+
   [data-mobile-header="true"] {
     background: #050505 !important;
     -webkit-backdrop-filter: none !important;

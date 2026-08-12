@@ -284,7 +284,7 @@ export default function App() {
               targetVersion={APP_UPDATE_VERSION}
               onUpdate={() => {
                 setApplyingUpdate(true);
-                applyPendingAppUpdate();
+                void applyPendingAppUpdate();
               }}
               applying={applyingUpdate}
             />

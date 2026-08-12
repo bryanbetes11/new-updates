@@ -109,13 +109,25 @@ export function shouldRequireAppUpdate() {
   return hasPendingAppUpdate();
 }
 
-export function applyPendingAppUpdate() {
+export async function applyPendingAppUpdate() {
   userRequestedUpdate = true;
-  if (pendingRegistration?.waiting) {
-    pendingRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
+
+  const registration = pendingRegistration || await navigator.serviceWorker.getRegistration();
+  if (registration) {
+    try {
+      await registration.update();
+    } catch (error) {
+      console.warn('Could not check for the latest ServeSync update:', error);
+    }
+  }
+
+  const waitingWorker = registration?.waiting || pendingRegistration?.waiting;
+  if (waitingWorker) {
+    waitingWorker.postMessage({ type: 'SKIP_WAITING' });
     return;
   }
 
+  persistInstalledAppVersion(APP_UPDATE_VERSION);
   window.location.reload();
 }
 

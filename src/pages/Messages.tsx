@@ -328,6 +328,8 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
   useEffect(() => {
     if (!open) return;
 
+    document.documentElement.classList.add('new-message-modal-active');
+    document.body.classList.add('new-message-modal-active');
     const dialog = dialogRef.current;
     const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const focusableSelector = '[data-autofocus="true"], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -358,6 +360,8 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
 
     document.addEventListener('keydown', handleKeyDown);
     return () => {
+      document.documentElement.classList.remove('new-message-modal-active');
+      document.body.classList.remove('new-message-modal-active');
       window.cancelAnimationFrame(focusFrame);
       document.removeEventListener('keydown', handleKeyDown);
       previouslyFocused?.focus();
@@ -415,12 +419,13 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
             initial={{ opacity: 0, scale: 0.96, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
+            transformTemplate={(_, generatedTransform) => `translateY(-50%) ${generatedTransform}`}
             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
             ref={dialogRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="new-message-title"
-            className="fixed inset-x-4 top-4 z-50 mx-auto flex max-h-[calc(100dvh-2rem)] max-w-sm flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#1c1c1e] sm:top-[15%] sm:max-h-[70dvh]"
+            className="fixed inset-x-4 top-1/2 z-[60] mx-auto flex max-h-[min(72dvh,36rem)] max-w-sm flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#1c1c1e]"
           >
             <h2 id="new-message-title" className="sr-only">New message</h2>
             <div className="px-4 pt-4 pb-3 border-b border-gray-100 dark:border-white/[0.06]">

@@ -4027,6 +4027,7 @@ const openLyricsModal = (ss: SetlistSong) => {
           onClose={() => !submittingObservation && setShowObservationModal(false)}
           title="Add Observation"
           size="md"
+          mobileView="dialog"
           closeOnBackdrop={!submittingObservation}
           closeOnEscape={!submittingObservation}
         >
@@ -4057,9 +4058,9 @@ const openLyricsModal = (ss: SetlistSong) => {
                 </div>
               </div>
             )}
-            <div className="flex justify-end gap-2 border-t border-gray-200/60 pt-4 dark:border-white/[0.06]">
-              <button type="button" onClick={() => setShowObservationModal(false)} disabled={submittingObservation} className="btn-secondary min-h-11">Cancel</button>
-              <button type="button" onClick={handleAddPostEventObservation} disabled={!observationText.trim() || submittingObservation} className="btn-primary min-h-11 disabled:cursor-not-allowed disabled:opacity-50">
+            <div className="grid grid-cols-2 gap-2 border-t border-gray-200/60 pt-4 dark:border-white/[0.06]">
+              <button type="button" onClick={() => setShowObservationModal(false)} disabled={submittingObservation} className="btn-secondary min-h-11 w-full whitespace-nowrap">Cancel</button>
+              <button type="button" onClick={handleAddPostEventObservation} disabled={!observationText.trim() || submittingObservation} className="btn-primary min-h-11 w-full whitespace-nowrap px-3 disabled:cursor-not-allowed disabled:opacity-50">
                 {submittingObservation ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                 {submittingObservation ? 'Adding...' : 'Add Observation'}
               </button>

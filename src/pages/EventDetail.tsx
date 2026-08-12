@@ -317,6 +317,7 @@ export function EventDetail() {
   const [editingObservationFollowUpId, setEditingObservationFollowUpId] = useState<string | null>(null);
   const [observationFollowUpForm, setObservationFollowUpForm] = useState({ assigned_to: '', due_date: '' });
   const [submittingObservation, setSubmittingObservation] = useState(false);
+  const [showObservationModal, setShowObservationModal] = useState(false);
   const [updatingObservationId, setUpdatingObservationId] = useState<string | null>(null);
   const serviceSongStageRef = useRef<HTMLDivElement | null>(null);
   const serviceSwipeAnimating = useRef(false);
@@ -2012,6 +2013,7 @@ const openLyricsModal = (ss: SetlistSong) => {
       setObservationText('');
       setObservationOwnerId('');
       setObservationDueDate('');
+      setShowObservationModal(false);
       await refreshPostEventObservations();
       toast('success', 'Observation added');
     } catch (error) {
@@ -3655,25 +3657,33 @@ const openLyricsModal = (ss: SetlistSong) => {
         {(postEventFeedbackOpen || postEventObservations.length > 0) && (
           <div className="animate-slide-up border-t border-gray-200/70 pt-4 dark:border-white/[0.08]" style={{ animationDelay: '145ms' }}>
             <div>
-              <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h2 className="flex items-center gap-2 text-lg font-black text-gray-900 dark:text-white">
+              <div className="mb-3 space-y-2">
+                <div className="flex min-w-0 items-center justify-between gap-2">
+                  <h2 className="flex min-w-0 items-center gap-2 text-base font-black text-gray-900 dark:text-white sm:text-lg">
                     <ClipboardCheck className="h-4 w-4 text-brand-600 dark:text-brand-400" />
-                    Past-event Observations
+                    <span className="truncate">Past-event Observations</span>
                   </h2>
-                  <p className="mt-1 max-w-2xl text-xs leading-relaxed text-gray-500 dark:text-white/45">
+                  {postEventFeedbackOpen && (
+                    <button type="button" onClick={() => setShowObservationModal(true)} className="btn-primary min-h-9 shrink-0 px-2.5 text-[11px] sm:min-h-10 sm:px-3 sm:text-xs">
+                      <Plus className="h-3.5 w-3.5" />
+                      Add Observation
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                  <p className="max-w-2xl text-xs leading-relaxed text-gray-500 dark:text-white/45">
                     Record what worked, what needs attention, and what the team should keep monitoring.
                   </p>
+                  {postEventObservations.length > 0 && (
+                    <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${activePostEventObservationCount > 0 ? 'bg-amber-500/10 text-amber-300' : 'bg-emerald-500/10 text-emerald-300'}`}>
+                      {activePostEventObservationCount > 0 ? `${activePostEventObservationCount} active` : 'All resolved'}
+                    </span>
+                  )}
                 </div>
-                {postEventObservations.length > 0 && (
-                  <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${activePostEventObservationCount > 0 ? 'bg-amber-500/10 text-amber-300' : 'bg-emerald-500/10 text-emerald-300'}`}>
-                    {activePostEventObservationCount > 0 ? `${activePostEventObservationCount} active` : 'All resolved'}
-                  </span>
-                )}
               </div>
 
               {postEventFeedbackOpen && (
-                <div className="rounded-2xl border border-gray-200/80 bg-white/[0.025] p-3.5 dark:border-white/[0.08]">
+                <div className="hidden rounded-2xl border border-gray-200/80 bg-white/[0.025] p-3.5 dark:border-white/[0.08]">
                   <div className="grid gap-3 sm:grid-cols-[11rem_minmax(0,1fr)]">
                     <div>
                       <label htmlFor="post-event-category" className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-white/55">Area</label>
@@ -3828,7 +3838,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                               maxLength={2000}
                               rows={2}
                               autoFocus
-                              className="input-field min-h-12 flex-1 resize-none text-sm"
+                              className="post-event-observation-reply-input input-field min-h-12 flex-1 resize-none text-sm"
                             />
                             <button type="button" onClick={() => void handlePostObservationReply(observation.id)} disabled={!observationReplyText.trim() || postingObservationReply} className="btn-primary min-h-11 px-3 text-xs disabled:opacity-50">
                               {postingObservationReply ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
@@ -4011,6 +4021,51 @@ const openLyricsModal = (ss: SetlistSong) => {
         </div>
 
         )}
+
+        <Modal
+          open={showObservationModal}
+          onClose={() => !submittingObservation && setShowObservationModal(false)}
+          title="Add Observation"
+          size="md"
+          closeOnBackdrop={!submittingObservation}
+          closeOnEscape={!submittingObservation}
+        >
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="post-event-modal-category" className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-white/55">Area</label>
+              <select id="post-event-modal-category" value={observationCategory} onChange={event => setObservationCategory(event.target.value as PostEventObservationCategory)} className="input-field min-h-11 text-sm">
+                {POST_EVENT_CATEGORIES.map(category => <option key={category.value} value={category.value}>{category.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="post-event-modal-observation" className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-white/55">Comment or Observation</label>
+              <textarea id="post-event-modal-observation" value={observationText} onChange={event => setObservationText(event.target.value)} maxLength={2000} rows={4} autoFocus placeholder="Example: The main microphone cut out twice. Check the cable and monitor it during the next service." className="input-field resize-y text-sm leading-relaxed" />
+              <p className="mt-1.5 text-right text-[11px] text-gray-400 dark:text-white/30">{observationText.length}/2000</p>
+            </div>
+            {canManagePostEventObservations && (
+              <div className="grid gap-3 border-t border-gray-200/60 pt-4 dark:border-white/[0.06] sm:grid-cols-2">
+                <div>
+                  <label htmlFor="post-event-modal-owner" className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-white/55">Follow-up Owner (Optional)</label>
+                  <select id="post-event-modal-owner" value={observationOwnerId} onChange={event => { const ownerId = event.target.value; setObservationOwnerId(ownerId); setObservationDueDate(current => ownerId ? current || format(addDays(new Date(), 1), 'yyyy-MM-dd') : ''); }} className="input-field min-h-11 text-sm">
+                    <option value="">No owner yet</option>
+                    {members.map(member => <option key={member.id} value={member.id}>{member.first_name} {member.last_name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="post-event-modal-due-date" className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-white/55">Due Date</label>
+                  <input id="post-event-modal-due-date" type="date" min={getManilaTodayKey()} value={observationDueDate} onChange={event => setObservationDueDate(event.target.value)} disabled={!observationOwnerId} className="input-field min-h-11 text-sm disabled:cursor-not-allowed disabled:opacity-50" />
+                </div>
+              </div>
+            )}
+            <div className="flex justify-end gap-2 border-t border-gray-200/60 pt-4 dark:border-white/[0.06]">
+              <button type="button" onClick={() => setShowObservationModal(false)} disabled={submittingObservation} className="btn-secondary min-h-11">Cancel</button>
+              <button type="button" onClick={handleAddPostEventObservation} disabled={!observationText.trim() || submittingObservation} className="btn-primary min-h-11 disabled:cursor-not-allowed disabled:opacity-50">
+                {submittingObservation ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                {submittingObservation ? 'Adding...' : 'Add Observation'}
+              </button>
+            </div>
+          </div>
+        </Modal>
 
         <Modal
           open={showAssign}

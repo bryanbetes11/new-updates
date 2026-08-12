@@ -1842,9 +1842,10 @@ export function Navigation({
         style={{ height: "calc(env(safe-area-inset-top) + 2px)" }}
       />
       <div
+        data-mobile-header="true"
         className={`fixed left-0 right-0 top-0 z-50 isolate flex items-end justify-between overflow-visible lg:hidden ${hideMobileAll || hideMobileHeader ? "hidden" : ""}`}
         style={{
-          background: "transparent",
+          background: "#050505",
           borderBottom: "none",
           boxShadow: "none",
           top: "-1px",

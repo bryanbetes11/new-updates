@@ -2961,7 +2961,7 @@ function ChatWindow({
     <div className="relative flex flex-col h-full min-h-0 overflow-hidden bg-white dark:bg-[#111013]">
       <div ref={chatHeaderRef} className="relative z-20 shrink-0 bg-white dark:bg-[#111013] lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96">
         {/* Header */}
-        <div className="flex items-center gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+12px)] border-b border-gray-100 dark:border-white/[0.06] lg:pt-4">
+        <div className="flex items-center gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+40px)] sm:pt-[calc(env(safe-area-inset-top)+12px)] border-b border-gray-100 dark:border-white/[0.06] lg:pt-4">
           <button
             onClick={onBack}
             className="lg:hidden shrink-0 h-8 w-8 flex items-center justify-center rounded-full text-gray-500 dark:text-white/40 hover:bg-gray-100 dark:hover:bg-white/[0.07] transition-colors"

@@ -233,8 +233,29 @@ function EmojiPicker({ onPick }: { onPick: (e: string) => void }) {
 
 // ─── Conversation list item ──────────────────────────────────────────────────
 
-function ConvItem({ conv, selected, myUserId, onSelect }: {
-  conv: Conversation; selected: boolean; myUserId: string; onSelect: () => void;
+const MESSAGE_DRAFT_CHANGED_EVENT = 'servesync-message-draft-changed';
+
+function messageDraftKey(userId: string, conversationId: string) {
+  return `servesync:message-draft:${userId}:${conversationId}`;
+}
+
+function readMessageDraft(userId: string, conversationId: string) {
+  if (!userId || !conversationId || typeof window === 'undefined') return '';
+  return window.localStorage.getItem(messageDraftKey(userId, conversationId)) ?? '';
+}
+
+function writeMessageDraft(userId: string, conversationId: string, value: string) {
+  if (!userId || !conversationId || typeof window === 'undefined') return;
+  const key = messageDraftKey(userId, conversationId);
+  if (value.trim()) window.localStorage.setItem(key, value);
+  else window.localStorage.removeItem(key);
+  window.dispatchEvent(new CustomEvent(MESSAGE_DRAFT_CHANGED_EVENT, {
+    detail: { conversationId },
+  }));
+}
+
+function ConvItem({ conv, selected, myUserId, draft, onSelect }: {
+  conv: Conversation; selected: boolean; myUserId: string; draft: string; onSelect: () => void;
 }) {
   const name = getConvName(conv, myUserId);
   const lastContent = conv.last_message ? previewContent(conv.last_message.content) : 'No messages yet';
@@ -276,8 +297,8 @@ function ConvItem({ conv, selected, myUserId, onSelect }: {
             </span>
           )}
         </div>
-        <p className={`text-[12px] truncate ${conv.unread_count > 0 ? 'text-gray-700 dark:text-white/70 font-medium' : 'text-gray-400 dark:text-white/35'}`}>
-          {isMyLast ? `You: ${lastContent}` : lastContent}
+        <p className={`truncate text-[12px] ${draft.trim() ? 'font-semibold text-rose-500 dark:text-rose-400' : conv.unread_count > 0 ? 'text-gray-700 dark:text-white/70 font-medium' : 'text-gray-400 dark:text-white/35'}`}>
+          {draft.trim() ? `Draft: ${draft.trim()}` : isMyLast ? `You: ${lastContent}` : lastContent}
         </p>
       </div>
     </button>
@@ -581,7 +602,8 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
 
 const QUICK_ACTION_OPTIONS = ['👍', '❤️', '🙏', '😂', '🔥', '👏'];
 
-function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, mentionProfiles }: {
+function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply, onTyping, mentionProfiles }: {
+  conversationId: string;
   onSend: (text: string, imageUrl?: string) => void;
   replyTo: string | null;
   replyPreview: string | null;
@@ -599,7 +621,8 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
     mentionType?: 'person' | 'everyone';
   }>;
 }) {
-  const [text, setText] = useState('');
+  const { user } = useAuth();
+  const [text, setText] = useState(() => readMessageDraft(user?.id ?? '', conversationId));
   const [uploading, setUploading] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [quickEmoji, setQuickEmoji] = useState(() => localStorage.getItem('msg-quick-action') || '👍');
@@ -608,16 +631,16 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
   const [showEditableMentionDropdown, setShowEditableMentionDropdown] = useState(false);
   const [editableMentionStart, setEditableMentionStart] = useState<number | null>(null);
   const [editableMentionActiveIndex, setEditableMentionActiveIndex] = useState(0);
-  const [editableDropdownRect, setEditableDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [editableDropdownRect, setEditableDropdownRect] = useState<{ bottom: number; left: number; width: number; maxHeight: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const attachRef = useRef<HTMLInputElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const editableRef = useRef<HTMLDivElement>(null);
+  const loadedDraftIdentityRef = useRef('');
   const editableMentionTouchHandledRef = useRef(false);
   const editableMentionReleaseCleanupRef = useRef<(() => void) | null>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [useEditableComposer, setUseEditableComposer] = useState(false);
-  const { user } = useAuth();
 
   const resizeComposer = useCallback(() => {
     const el = textRef.current || editableRef.current;
@@ -644,12 +667,28 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
     const el = editableRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const dropdownHeight = Math.min(editableMentionProfiles.length, 6) * 52 + 8;
-    const width = Math.min(Math.max(rect.width + 56, 260), window.innerWidth - 16);
-    const top = Math.max(8, rect.top - dropdownHeight - 8);
-    const left = Math.min(Math.max(rect.left, 8), window.innerWidth - width - 8);
-    setEditableDropdownRect({ top, left, width });
-  }, [editableMentionProfiles.length]);
+    const viewport = window.visualViewport;
+    const viewportWidth = viewport?.width ?? window.innerWidth;
+    const viewportHeight = viewport?.height ?? window.innerHeight;
+    const viewportOffsetLeft = viewport?.offsetLeft ?? 0;
+    const viewportOffsetTop = viewport?.offsetTop ?? 0;
+    const composerTop = rect.top - viewportOffsetTop;
+    const width = Math.min(Math.max(rect.width + 56, 260), viewportWidth - 16);
+    const left = Math.min(Math.max(rect.left - viewportOffsetLeft, 8), viewportWidth - width - 8);
+    const bottom = Math.max(8, viewportHeight - composerTop + 6);
+    const maxHeight = Math.min(224, Math.max(112, composerTop - 16));
+    setEditableDropdownRect({ bottom, left, width, maxHeight });
+  }, []);
+
+  useEffect(() => {
+    loadedDraftIdentityRef.current = user?.id ? `${user.id}:${conversationId}` : '';
+    setText(readMessageDraft(user?.id ?? '', conversationId));
+  }, [conversationId, user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || loadedDraftIdentityRef.current !== `${user.id}:${conversationId}`) return;
+    writeMessageDraft(user.id, conversationId, text);
+  }, [conversationId, text, user?.id]);
 
   const getEditableCaretOffset = useCallback(() => {
     const el = editableRef.current;
@@ -930,9 +969,13 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
     computeEditableDropdownPosition();
     window.addEventListener('resize', computeEditableDropdownPosition);
     window.addEventListener('scroll', computeEditableDropdownPosition, true);
+    window.visualViewport?.addEventListener('resize', computeEditableDropdownPosition);
+    window.visualViewport?.addEventListener('scroll', computeEditableDropdownPosition);
     return () => {
       window.removeEventListener('resize', computeEditableDropdownPosition);
       window.removeEventListener('scroll', computeEditableDropdownPosition, true);
+      window.visualViewport?.removeEventListener('resize', computeEditableDropdownPosition);
+      window.visualViewport?.removeEventListener('scroll', computeEditableDropdownPosition);
     };
   }, [computeEditableDropdownPosition, showEditableMentionDropdown, useEditableComposer]);
 
@@ -1173,11 +1216,12 @@ function InputBar({ onSend, replyTo, replyPreview, onCancelReply, onTyping, ment
       {useEditableComposer && showEditableMentionDropdown && editableMentionProfiles.length > 0 && editableDropdownRect &&
         createPortal(
           <div
-            className="fixed z-[2147483647] overflow-hidden rounded-xl bg-white shadow-2xl ring-1 ring-black/[0.08] dark:bg-[#1c1b1e] dark:ring-white/[0.1]"
+            className="fixed z-[2147483647] overflow-y-auto rounded-xl bg-white shadow-2xl ring-1 ring-black/[0.08] dark:bg-[#1c1b1e] dark:ring-white/[0.1]"
             style={{
-              top: editableDropdownRect.top,
+              bottom: editableDropdownRect.bottom,
               left: editableDropdownRect.left,
               width: editableDropdownRect.width,
+              maxHeight: editableDropdownRect.maxHeight,
               touchAction: 'none',
               WebkitUserSelect: 'none',
               userSelect: 'none',
@@ -1479,7 +1523,7 @@ function ConvInfoPanel({
   return (
     <div className="flex flex-col h-full bg-[#f5f5f7] dark:bg-[#0d0d0f]">
       {/* Header */}
-      <div className="relative z-20 shrink-0 flex items-center gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+32px)] sm:pt-[calc(env(safe-area-inset-top)+12px)] bg-white dark:bg-[#111013] border-b border-gray-100 dark:border-white/[0.06] lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96 lg:pt-4">
+      <div className="relative z-20 shrink-0 flex items-center gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+40px)] sm:pt-[calc(env(safe-area-inset-top)+12px)] bg-white dark:bg-[#111013] border-b border-gray-100 dark:border-white/[0.06] lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96 lg:pt-4">
         <button
           onClick={() => {
             if (infoView !== 'main') {
@@ -2382,7 +2426,7 @@ function EventDetailPanel({ eventId, onClose, onViewFullEvent }: {
     <div className="flex flex-col h-full bg-gray-50 dark:bg-[#0d0d0f]">
       {/* Header — padded below the status bar on iOS/Android */}
       <div
-        className="relative z-20 flex items-center justify-between gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+32px)] sm:pt-[calc(env(safe-area-inset-top)+12px)] bg-white dark:bg-[#111013] border-b border-gray-200/60 dark:border-white/[0.06] shrink-0 lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96 lg:pt-4"
+        className="relative z-20 flex items-center justify-between gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+40px)] sm:pt-[calc(env(safe-area-inset-top)+12px)] bg-white dark:bg-[#111013] border-b border-gray-200/60 dark:border-white/[0.06] shrink-0 lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96 lg:pt-4"
       >
         <button
           onClick={onClose}
@@ -3080,34 +3124,7 @@ function ChatWindow({
 
 
                   <div className={`flex max-w-full flex-col ${isMe ? 'items-end self-end' : 'items-start self-start'}`}>
-                    {msg.reply_preview && (
-                      <div
-                        className={`max-w-full ${isMe ? 'self-end' : 'self-start'}`}
-                        onClick={e => e.stopPropagation()}
-                      >
-                        <div className={`mb-0.5 flex items-center gap-1.5 px-1 text-[10px] font-medium ${isMe ? 'text-emerald-200 dark:text-emerald-300/80' : 'text-gray-400 dark:text-white/35'}`}>
-                          <CornerUpLeft className={`h-3 w-3 shrink-0 ${isMe ? 'text-emerald-200 dark:text-emerald-300/80' : 'text-emerald-500'}`} />
-                          <span>{`Replied to ${msg.reply_preview.sender_name}`}</span>
-                        </div>
-                        <div
-                          className="relative z-[1] max-w-full min-w-[180px] rounded-[18px] bg-[#f1f2f4] px-3 py-2.5 pb-5 text-[11px] leading-snug text-gray-500 dark:bg-white/[0.045] dark:text-white/55 sm:min-w-[220px]"
-                        >
-                          <p
-                            className="overflow-hidden whitespace-pre-wrap break-words"
-                            style={{
-                              overflowWrap: 'anywhere',
-                              display: '-webkit-box',
-                              WebkitLineClamp: 5,
-                              WebkitBoxOrient: 'vertical',
-                            }}
-                          >
-                            {replyPreviewContent(msg.reply_preview.content)}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
-                  <div className={`flex max-w-full items-end gap-1.5 ${isMe ? 'self-end' : 'self-start'} ${msg.reply_preview ? '-mt-3 relative z-[2]' : ''}`}>
+                  <div className={`flex max-w-full items-end gap-1.5 ${isMe ? 'self-end' : 'self-start'}`}>
                     {/* Hover actions (my side) */}
                     {isMe && (
                       <div className="hidden sm:flex opacity-0 group-hover:opacity-100 transition-opacity items-center gap-0.5 mb-1">
@@ -3170,6 +3187,31 @@ function ChatWindow({
                             : 'px-3.5 py-2 rounded-2xl bg-gray-100 dark:bg-white/[0.07] text-gray-900 dark:text-white rounded-bl-md border border-gray-200/80 dark:border-white/[0.06]'
                       } ${msg.is_pinned ? 'ring-1 ring-amber-400/50' : ''}`}
                     >
+                      {msg.reply_preview && (
+                        <div
+                          className={`mb-1.5 min-w-0 rounded-xl border-l-2 px-2.5 py-1.5 text-[11px] leading-snug ${
+                            isMe
+                              ? 'border-white/70 bg-black/10 text-white/75'
+                              : 'border-emerald-500 bg-black/[0.035] text-gray-500 dark:bg-black/20 dark:text-white/50'
+                          }`}
+                          onClick={event => event.stopPropagation()}
+                        >
+                          <p className={`mb-0.5 truncate text-[10px] font-semibold ${isMe ? 'text-white/90' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                            {msg.reply_preview.sender_name}
+                          </p>
+                          <p
+                            className="overflow-hidden whitespace-pre-wrap break-words"
+                            style={{
+                              overflowWrap: 'anywhere',
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical',
+                            }}
+                          >
+                            {replyPreviewContent(msg.reply_preview.content)}
+                          </p>
+                        </div>
+                      )}
                       {content.type === 'image' ? (
                         <img
                           src={content.url}
@@ -3431,6 +3473,7 @@ function ChatWindow({
       {!showInfo && !detailsSheetOpen && (
         <>
           <InputBar
+            conversationId={conv.id}
             onSend={handleSend}
             replyTo={replyTo?.id ?? null}
             replyPreview={replyTo?.preview ?? null}
@@ -3767,6 +3810,7 @@ export function Messages() {
   const [selectedConvId, setSelectedConvId] = useState<string | null>(paramConvId ?? null);
   const [search, setSearch] = useState('');
   const [newMsgOpen, setNewMsgOpen] = useState(false);
+  const [draftRevision, setDraftRevision] = useState(0);
 
   const {
     conversations,
@@ -3855,6 +3899,16 @@ export function Messages() {
     };
   }, []);
 
+  useEffect(() => {
+    const refreshDraftPreviews = () => setDraftRevision(revision => revision + 1);
+    window.addEventListener(MESSAGE_DRAFT_CHANGED_EVENT, refreshDraftPreviews);
+    window.addEventListener('storage', refreshDraftPreviews);
+    return () => {
+      window.removeEventListener(MESSAGE_DRAFT_CHANGED_EVENT, refreshDraftPreviews);
+      window.removeEventListener('storage', refreshDraftPreviews);
+    };
+  }, []);
+
   useLayoutEffect(() => {
     if (!isDesktop) return;
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
@@ -3885,7 +3939,7 @@ export function Messages() {
         >
         {/* List header */}
         <div
-          className="relative z-20 shrink-0 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+32px)] sm:pt-[max(env(safe-area-inset-top),1rem)] lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96 lg:pt-4"
+          className="relative z-20 shrink-0 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+40px)] sm:pt-[max(env(safe-area-inset-top),1rem)] lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96 lg:pt-4"
         >
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-[20px] font-bold text-gray-900 dark:text-white tracking-[-0.02em]">Messages</h1>
@@ -3932,6 +3986,7 @@ export function Messages() {
               conv={c}
               selected={c.id === selectedConvId}
               myUserId={myUserId}
+              draft={draftRevision >= 0 ? readMessageDraft(myUserId, c.id) : ''}
               onSelect={() => selectConversation(c.id)}
             />
           ))}

@@ -1479,7 +1479,7 @@ function ConvInfoPanel({
   return (
     <div className="flex flex-col h-full bg-[#f5f5f7] dark:bg-[#0d0d0f]">
       {/* Header */}
-      <div className="relative z-20 shrink-0 flex items-center gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+12px)] bg-white dark:bg-[#111013] border-b border-gray-100 dark:border-white/[0.06] lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96 lg:pt-4">
+      <div className="relative z-20 shrink-0 flex items-center gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+32px)] sm:pt-[calc(env(safe-area-inset-top)+12px)] bg-white dark:bg-[#111013] border-b border-gray-100 dark:border-white/[0.06] lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96 lg:pt-4">
         <button
           onClick={() => {
             if (infoView !== 'main') {
@@ -2382,8 +2382,7 @@ function EventDetailPanel({ eventId, onClose, onViewFullEvent }: {
     <div className="flex flex-col h-full bg-gray-50 dark:bg-[#0d0d0f]">
       {/* Header — padded below the status bar on iOS/Android */}
       <div
-        className="relative z-20 flex items-center justify-between gap-3 px-4 pb-3 bg-white dark:bg-[#111013] border-b border-gray-200/60 dark:border-white/[0.06] shrink-0 lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96"
-        style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 12px)' }}
+        className="relative z-20 flex items-center justify-between gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+32px)] sm:pt-[calc(env(safe-area-inset-top)+12px)] bg-white dark:bg-[#111013] border-b border-gray-200/60 dark:border-white/[0.06] shrink-0 lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96 lg:pt-4"
       >
         <button
           onClick={onClose}
@@ -3886,8 +3885,7 @@ export function Messages() {
         >
         {/* List header */}
         <div
-          className="relative z-20 shrink-0 px-4 pb-3 lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96"
-          style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 1rem)' }}
+          className="relative z-20 shrink-0 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+32px)] sm:pt-[max(env(safe-area-inset-top),1rem)] lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96 lg:pt-4"
         >
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-[20px] font-bold text-gray-900 dark:text-white tracking-[-0.02em]">Messages</h1>

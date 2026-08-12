@@ -252,6 +252,27 @@ export function useConversations() {
     return !error;
   }, [user, fetchConversations]);
 
+  const archiveConversationForMe = useCallback(async (conversationId: string): Promise<boolean> => {
+    if (!user) return false;
+    const { error } = await supabase.rpc('archive_conversation_for_me', { p_conversation_id: conversationId });
+    if (!error) await fetchConversations();
+    return !error;
+  }, [user, fetchConversations]);
+
+  const archiveConversationForEveryone = useCallback(async (conversationId: string): Promise<boolean> => {
+    if (!user) return false;
+    const { error } = await supabase.rpc('archive_conversation_for_everyone', { p_conversation_id: conversationId });
+    if (!error) await fetchConversations();
+    return !error;
+  }, [user, fetchConversations]);
+
+  const leaveConversation = useCallback(async (conversationId: string): Promise<boolean> => {
+    if (!user) return false;
+    const { error } = await supabase.rpc('leave_conversation', { p_conversation_id: conversationId });
+    if (!error) await fetchConversations();
+    return !error;
+  }, [user, fetchConversations]);
+
   return {
     conversations,
     loading,
@@ -266,5 +287,8 @@ export function useConversations() {
     addGroupConversationMembers,
     updateGroupConversationPhoto,
     discardEmptyConversation,
+    archiveConversationForMe,
+    archiveConversationForEveryone,
+    leaveConversation,
   };
 }

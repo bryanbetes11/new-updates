@@ -328,9 +328,23 @@ function EventConversationAvatar({ eventId, name }: { eventId: string; name: str
   );
 }
 
-function ConvItem({ conv, selected, myUserId, draft, onSelect }: {
-  conv: Conversation; selected: boolean; myUserId: string; draft: string; onSelect: () => void;
+function ConvItem({ conv, selected, myUserId, draft, onSelect, onLongPress }: {
+  conv: Conversation; selected: boolean; myUserId: string; draft: string; onSelect: () => void; onLongPress: () => void;
 }) {
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTriggered = useRef(false);
+  const clearPress = () => {
+    if (pressTimer.current) clearTimeout(pressTimer.current);
+    pressTimer.current = null;
+  };
+  const startPress = () => {
+    clearPress();
+    longPressTriggered.current = false;
+    pressTimer.current = setTimeout(() => {
+      longPressTriggered.current = true;
+      onLongPress();
+    }, 520);
+  };
   const name = getConvName(conv, myUserId);
   const lastContent = conv.last_message ? previewContent(conv.last_message.content) : 'No messages yet';
   const isMyLast = conv.last_message?.sender_id === myUserId;
@@ -339,9 +353,25 @@ function ConvItem({ conv, selected, myUserId, draft, onSelect }: {
   return (
     <button
       type="button"
-      onClick={onSelect}
+      onClick={() => {
+        if (longPressTriggered.current) {
+          longPressTriggered.current = false;
+          return;
+        }
+        onSelect();
+      }}
+      onPointerDown={startPress}
+      onPointerUp={clearPress}
+      onPointerCancel={clearPress}
+      onPointerLeave={clearPress}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        clearPress();
+        onLongPress();
+      }}
       aria-pressed={selected}
-      className={`flex min-h-16 w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-400/70 ${
+      style={{ WebkitTouchCallout: 'none' }}
+      className={`select-none touch-pan-y flex min-h-16 w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-400/70 ${
         selected
           ? 'bg-emerald-50 dark:bg-emerald-500/[0.1]'
           : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.04]'
@@ -747,13 +777,12 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
     const rect = el.getBoundingClientRect();
     const viewport = window.visualViewport;
     const viewportWidth = viewport?.width ?? window.innerWidth;
-    const viewportHeight = viewport?.height ?? window.innerHeight;
     const viewportOffsetLeft = viewport?.offsetLeft ?? 0;
     const viewportOffsetTop = viewport?.offsetTop ?? 0;
     const composerTop = rect.top - viewportOffsetTop;
     const width = Math.min(Math.max(rect.width + 56, 260), viewportWidth - 16);
     const left = Math.min(Math.max(rect.left - viewportOffsetLeft, 8), viewportWidth - width - 8);
-    const bottom = Math.max(8, viewportHeight - composerTop + 6);
+    const bottom = Math.max(8, window.innerHeight - rect.top + 8);
     const maxHeight = Math.min(224, Math.max(112, composerTop - 16));
     setEditableDropdownRect({ bottom, left, width, maxHeight });
   }, []);
@@ -1601,7 +1630,7 @@ function ConvInfoPanel({
   return (
     <div className="flex flex-col h-full bg-[#f5f5f7] dark:bg-[#0d0d0f]">
       {/* Header */}
-      <div className="relative z-20 shrink-0 flex items-center gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+40px)] sm:pt-[calc(env(safe-area-inset-top)+12px)] bg-white dark:bg-[#111013] border-b border-gray-100 dark:border-white/[0.06] lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96 lg:pt-4">
+      <div className="relative z-20 shrink-0 flex items-center gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+25px)] sm:pt-[calc(env(safe-area-inset-top)+12px)] bg-white dark:bg-[#111013] border-b border-gray-100 dark:border-white/[0.06] lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96 lg:pt-4">
         <button
           onClick={() => {
             if (infoView !== 'main') {
@@ -2504,7 +2533,7 @@ function EventDetailPanel({ eventId, onClose, onViewFullEvent }: {
     <div className="flex flex-col h-full bg-gray-50 dark:bg-[#0d0d0f]">
       {/* Header — padded below the status bar on iOS/Android */}
       <div
-        className="relative z-20 flex items-center justify-between gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+40px)] sm:pt-[calc(env(safe-area-inset-top)+12px)] bg-white dark:bg-[#111013] border-b border-gray-200/60 dark:border-white/[0.06] shrink-0 lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96 lg:pt-4"
+        className="relative z-20 flex items-center justify-between gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+25px)] sm:pt-[calc(env(safe-area-inset-top)+12px)] bg-white dark:bg-[#111013] border-b border-gray-200/60 dark:border-white/[0.06] shrink-0 lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96 lg:pt-4"
       >
         <button
           onClick={onClose}
@@ -2708,6 +2737,7 @@ function ChatWindow({
   const scrollRef = useRef<HTMLDivElement>(null);
   const chatHeaderRef = useRef<HTMLDivElement>(null);
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const messageBubbleRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const msgLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draggedMessageId = useRef<string | null>(null);
   const atBottomRef = useRef(true);
@@ -2948,9 +2978,12 @@ function ChatWindow({
         top: Math.max(0, el.offsetTop - scroller.clientHeight / 2 + el.clientHeight / 2),
         behavior: 'smooth',
       });
-      el.style.transition = 'background-color 0.4s ease';
-      el.style.backgroundColor = 'rgba(16,185,129,0.12)';
-      setTimeout(() => { el.style.backgroundColor = ''; }, 1600);
+      const bubble = messageBubbleRefs.current[id];
+      bubble?.animate([
+        { boxShadow: '0 0 0 0 rgba(16,185,129,0)' },
+        { boxShadow: '0 0 0 3px rgba(16,185,129,0.7)' },
+        { boxShadow: '0 0 0 0 rgba(16,185,129,0)' },
+      ], { duration: 1500, easing: 'ease-out' });
     }, 250);
   }, []);
 
@@ -3039,7 +3072,7 @@ function ChatWindow({
     <div className="relative flex flex-col h-full min-h-0 overflow-hidden bg-white dark:bg-[#111013]">
       <div ref={chatHeaderRef} className="relative z-20 shrink-0 bg-white dark:bg-[#111013] lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96">
         {/* Header */}
-        <div className="flex items-center gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+40px)] sm:pt-[calc(env(safe-area-inset-top)+12px)] border-b border-gray-100 dark:border-white/[0.06] lg:pt-4">
+        <div className="flex items-center gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+25px)] sm:pt-[calc(env(safe-area-inset-top)+12px)] border-b border-gray-100 dark:border-white/[0.06] lg:pt-4">
           <button
             onClick={onBack}
             className="lg:hidden shrink-0 h-8 w-8 flex items-center justify-center rounded-full text-gray-500 dark:text-white/40 hover:bg-gray-100 dark:hover:bg-white/[0.07] transition-colors"
@@ -3227,6 +3260,7 @@ function ChatWindow({
 
                     {/* Message bubble */}
                     <motion.div
+                      ref={el => { messageBubbleRefs.current[msg.id] = el; }}
                       drag="x"
                       dragDirectionLock
                       dragSnapToOrigin
@@ -3887,13 +3921,16 @@ function useDisableChatEdgeBackSwipe(active: boolean) {
 export function Messages() {
   const { conversationId: paramConvId } = useParams<{ conversationId?: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, isLeader } = useAuth();
+  const { toast } = useToast();
 
   const isDesktop = useIsDesktop();
   const [selectedConvId, setSelectedConvId] = useState<string | null>(paramConvId ?? null);
   const [search, setSearch] = useState('');
   const [newMsgOpen, setNewMsgOpen] = useState(false);
   const [draftRevision, setDraftRevision] = useState(0);
+  const [conversationActions, setConversationActions] = useState<Conversation | null>(null);
+  const [conversationActionBusy, setConversationActionBusy] = useState(false);
 
   const {
     conversations,
@@ -3909,6 +3946,9 @@ export function Messages() {
     addGroupConversationMembers,
     updateGroupConversationPhoto,
     discardEmptyConversation,
+    archiveConversationForMe,
+    archiveConversationForEveryone,
+    leaveConversation,
   } = useConversations();
   useMessagesKeyboardInset(Boolean(selectedConvId));
   useDisableChatEdgeBackSwipe(!isDesktop && Boolean(selectedConvId));
@@ -3969,6 +4009,21 @@ export function Messages() {
     if (id) selectConversation(id);
   };
 
+  const finishConversationAction = async (action: () => Promise<boolean>, successMessage: string) => {
+    if (!conversationActions || conversationActionBusy) return;
+    setConversationActionBusy(true);
+    const affectedId = conversationActions.id;
+    const ok = await action();
+    setConversationActionBusy(false);
+    if (!ok) return toast('error', 'That chat action could not be completed.');
+    setConversationActions(null);
+    if (selectedConvId === affectedId) {
+      setSelectedConvId(null);
+      navigate('/messages', { replace: true });
+    }
+    toast('success', successMessage);
+  };
+
   const mobileChatIsOpen = Boolean(selectedConvId);
   const showConversationList = isDesktop || !mobileChatIsOpen;
   const showChatPane = isDesktop || mobileChatIsOpen;
@@ -4022,7 +4077,7 @@ export function Messages() {
         >
         {/* List header */}
         <div
-          className="relative z-20 shrink-0 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+40px)] sm:pt-[max(env(safe-area-inset-top),1rem)] lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96 lg:pt-4"
+          className="relative z-20 shrink-0 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+25px)] sm:pt-[max(env(safe-area-inset-top),1rem)] lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96 lg:pt-4"
         >
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-[20px] font-bold text-gray-900 dark:text-white tracking-[-0.02em]">Messages</h1>
@@ -4071,6 +4126,7 @@ export function Messages() {
               myUserId={myUserId}
               draft={draftRevision >= 0 ? readMessageDraft(myUserId, c.id) : ''}
               onSelect={() => selectConversation(c.id)}
+              onLongPress={() => setConversationActions(c)}
             />
           ))}
         </div>
@@ -4169,6 +4225,30 @@ export function Messages() {
         onCreateEventChat={handleNewEventChat}
         currentUserId={myUserId}
       />
+      <Modal open={Boolean(conversationActions)} onClose={() => !conversationActionBusy && setConversationActions(null)} title="Chat Options" size="sm" mobileView="dialog">
+        {conversationActions && (
+          <div className="space-y-2 p-1">
+            <p className="mb-4 truncate text-sm font-semibold text-gray-900 dark:text-white">{getConvName(conversationActions, myUserId)}</p>
+            <button type="button" disabled={conversationActionBusy} onClick={() => finishConversationAction(() => archiveConversationForMe(conversationActions.id), 'Chat archived for you.')} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold hover:bg-gray-100 disabled:opacity-50 dark:hover:bg-white/[0.06]"><Pin className="h-4 w-4 text-emerald-500" /> Archive for Me</button>
+            {conversationActions.type === 'group' && conversationActions.created_by !== myUserId && (
+              <button type="button" disabled={conversationActionBusy} onClick={() => finishConversationAction(() => leaveConversation(conversationActions.id), 'You left the chat.')} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold hover:bg-gray-100 disabled:opacity-50 dark:hover:bg-white/[0.06]"><LogOut className="h-4 w-4 text-amber-500" /> Leave Chat</button>
+            )}
+            {isLeader && (
+              <button type="button" disabled={conversationActionBusy} onClick={() => finishConversationAction(() => archiveConversationForEveryone(conversationActions.id), 'Chat archived for everyone.')} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold hover:bg-gray-100 disabled:opacity-50 dark:hover:bg-white/[0.06]"><Pin className="h-4 w-4 text-amber-500" /> Archive for Everyone</button>
+            )}
+            {conversationActions.type !== 'event' && conversationActions.created_by === myUserId && (
+              <button type="button" disabled={conversationActionBusy} onClick={async () => {
+                setConversationActionBusy(true);
+                const ok = conversationActions.type === 'group' ? await deleteConversationAsCreator(conversationActions.id) : await requestDeleteConversation(conversationActions.id);
+                setConversationActionBusy(false);
+                if (!ok) return toast('error', 'Could not delete this chat.');
+                setConversationActions(null);
+                toast('success', conversationActions.type === 'group' ? 'Chat deleted.' : 'Delete request sent.');
+              }} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold text-red-500 hover:bg-red-500/10 disabled:opacity-50"><Trash2 className="h-4 w-4" /> Delete Chat</button>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

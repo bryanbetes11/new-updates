@@ -16,6 +16,7 @@ import { useConversations, type Conversation } from '../hooks/useConversations';
 import { useMessages, type Message } from '../hooks/useMessages';
 import { supabase } from '../lib/supabase';
 import { Avatar } from '../components/Avatar';
+import { EventArtwork } from '../components/EventArtwork';
 import { Modal } from '../components/Modal';
 import { MentionTextarea } from '../components/MentionTextarea';
 
@@ -254,6 +255,79 @@ function writeMessageDraft(userId: string, conversationId: string, value: string
   }));
 }
 
+type EventConversationArtworkData = {
+  title: string | null;
+  eventType: string | null;
+  songs: Array<{
+    title: string | null;
+    artist: string | null;
+    youtube_url: string | null;
+  }>;
+};
+
+type EventConversationArtworkSongRow = {
+  position: number | null;
+  songs: EventConversationArtworkData['songs'][number] | null;
+};
+
+const eventConversationArtworkCache = new Map<string, EventConversationArtworkData>();
+
+function EventConversationAvatar({ eventId, name }: { eventId: string; name: string }) {
+  const [artwork, setArtwork] = useState<EventConversationArtworkData | null>(
+    () => eventConversationArtworkCache.get(eventId) ?? null,
+  );
+
+  useEffect(() => {
+    const cached = eventConversationArtworkCache.get(eventId);
+    if (cached) {
+      setArtwork(cached);
+      return;
+    }
+
+    let cancelled = false;
+    Promise.all([
+      supabase
+        .from('events')
+        .select('title, event_type')
+        .eq('id', eventId)
+        .maybeSingle(),
+      supabase
+        .from('setlists')
+        .select('setlist_songs(position, songs(title, artist, youtube_url))')
+        .eq('event_id', eventId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]).then(([eventResult, setlistResult]) => {
+      if (cancelled) return;
+      const event = eventResult.data as { title?: string | null; event_type?: string | null } | null;
+      const setlist = setlistResult.data as { setlist_songs?: EventConversationArtworkSongRow[] | null } | null;
+      const nextArtwork: EventConversationArtworkData = {
+        title: event?.title ?? name,
+        eventType: event?.event_type ?? null,
+        songs: [...(setlist?.setlist_songs ?? [])]
+          .sort((a, b) => (a.position ?? 999) - (b.position ?? 999))
+          .map(item => item.songs)
+          .filter((song): song is EventConversationArtworkData['songs'][number] => Boolean(song))
+          .slice(0, 4),
+      };
+      eventConversationArtworkCache.set(eventId, nextArtwork);
+      setArtwork(nextArtwork);
+    });
+
+    return () => { cancelled = true; };
+  }, [eventId, name]);
+
+  return (
+    <EventArtwork
+      eventType={artwork?.eventType}
+      title={artwork?.title ?? name}
+      songs={artwork?.songs ?? []}
+      className="h-10 w-10 rounded-full"
+    />
+  );
+}
+
 function ConvItem({ conv, selected, myUserId, draft, onSelect }: {
   conv: Conversation; selected: boolean; myUserId: string; draft: string; onSelect: () => void;
 }) {
@@ -274,12 +348,16 @@ function ConvItem({ conv, selected, myUserId, draft, onSelect }: {
       }`}
     >
       <div className="relative shrink-0">
-        <Avatar
-          src={getConversationAvatarSrc(conv, myUserId)}
-          firstName={avatarName.firstName}
-          lastName={avatarName.lastName}
-          size="md"
-        />
+        {conv.type === 'event' && conv.event_id ? (
+          <EventConversationAvatar eventId={conv.event_id} name={name} />
+        ) : (
+          <Avatar
+            src={getConversationAvatarSrc(conv, myUserId)}
+            firstName={avatarName.firstName}
+            lastName={avatarName.lastName}
+            size="md"
+          />
+        )}
         {conv.unread_count > 0 && (
           <span className="absolute -top-0.5 -right-0.5 h-4 min-w-[16px] px-0.5 rounded-full bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center">
             {conv.unread_count > 9 ? '9+' : conv.unread_count}
@@ -3188,13 +3266,18 @@ function ChatWindow({
                       } ${msg.is_pinned ? 'ring-1 ring-amber-400/50' : ''}`}
                     >
                       {msg.reply_preview && (
-                        <div
-                          className={`mb-1.5 min-w-0 rounded-xl border-l-2 px-2.5 py-1.5 text-[11px] leading-snug ${
+                        <button
+                          type="button"
+                          aria-label={`Go to original message from ${msg.reply_preview.sender_name}`}
+                          className={`mb-1.5 block w-full min-w-0 rounded-xl border-l-2 px-2.5 py-1.5 text-left text-[11px] leading-snug transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 ${
                             isMe
-                              ? 'border-white/70 bg-black/10 text-white/75'
-                              : 'border-emerald-500 bg-black/[0.035] text-gray-500 dark:bg-black/20 dark:text-white/50'
+                              ? 'border-white/70 bg-black/10 text-white/75 hover:bg-black/15'
+                              : 'border-emerald-500 bg-black/[0.035] text-gray-500 hover:bg-black/[0.06] dark:bg-black/20 dark:text-white/50 dark:hover:bg-black/30'
                           }`}
-                          onClick={event => event.stopPropagation()}
+                          onClick={event => {
+                            event.stopPropagation();
+                            if (msg.reply_to) scrollToMessage(msg.reply_to);
+                          }}
                         >
                           <p className={`mb-0.5 truncate text-[10px] font-semibold ${isMe ? 'text-white/90' : 'text-emerald-600 dark:text-emerald-400'}`}>
                             {msg.reply_preview.sender_name}
@@ -3210,7 +3293,7 @@ function ChatWindow({
                           >
                             {replyPreviewContent(msg.reply_preview.content)}
                           </p>
-                        </div>
+                        </button>
                       )}
                       {content.type === 'image' ? (
                         <img

@@ -63,6 +63,7 @@ export function NotificationSettings() {
   const [hasDetailedReadiness, setHasDetailedReadiness] = useState(true);
   const [refreshingReadiness, setRefreshingReadiness] = useState(false);
   const [testingMemberId, setTestingMemberId] = useState<string | null>(null);
+  const [testingRuleId, setTestingRuleId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'status' | 'controls'>('status');
   const [memberView, setMemberView] = useState<'list' | 'grid'>(() => localStorage.getItem('notificationMemberView') === 'grid' ? 'grid' : 'list');
 
@@ -197,6 +198,19 @@ export function NotificationSettings() {
     window.setTimeout(refreshPushReadiness, 1200);
   };
 
+  const sendRuleTest = async (rule: Rule) => {
+    const builtIn = getBuiltInNotificationCopy(rule.type, rule.label, rule.description);
+    setTestingRuleId(rule.id);
+    const { error } = await supabase.rpc('send_notification_template_test_to_admin_dev', {
+      p_rule_type: rule.type,
+      p_title: rule.template_title ?? builtIn.title,
+      p_body: rule.template_body ?? builtIn.body,
+    });
+    setTestingRuleId(null);
+    if (error) toast('error', 'Could not send the template test to Admin Dev');
+    else toast('success', 'Test sent to Admin Dev using the current title and message');
+  };
+
   if (!canManageNotifications) return null;
   if (loading) return <div className="flex min-h-64 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-emerald-600" /></div>;
 
@@ -300,7 +314,7 @@ export function NotificationSettings() {
                       </select>
                     </label>
                   </div>
-                  <NotificationCopyEditor rule={rule} patchRule={patchRule} />
+                  <NotificationCopyEditor rule={rule} patchRule={patchRule} testing={testingRuleId === rule.id} onTest={() => sendRuleTest(rule)} />
                 </div>
               </details>
             ))}
@@ -424,13 +438,18 @@ function PushReadinessPanel({
 function NotificationCopyEditor({
   rule,
   patchRule,
+  testing,
+  onTest,
 }: {
   rule: Rule;
   patchRule: (id: string, patch: Partial<Rule>) => void;
+  testing: boolean;
+  onTest: () => void;
 }) {
   const builtIn = getBuiltInNotificationCopy(rule.type, rule.label, rule.description);
   const hasCustomTitle = rule.template_title !== null;
   const hasCustomBody = rule.template_body !== null;
+  const availableValues = Array.from(new Set(`${builtIn.title} ${builtIn.body}`.match(/\[[^\]]+\]/g) || []));
 
   return (
     <div className="space-y-3">
@@ -465,10 +484,19 @@ function NotificationCopyEditor({
           className={`mt-1.5 w-full resize-none rounded-xl border px-3 py-2 text-sm text-gray-900 dark:text-white ${hasCustomBody ? 'border-emerald-300 bg-emerald-50/50 dark:border-emerald-400/30 dark:bg-emerald-400/[0.06]' : 'border-gray-200 bg-white dark:border-white/10 dark:bg-white/[0.05]'}`}
         />
       </label>
+      {availableValues.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-gray-400 dark:text-white/35">
+          <span className="mr-1 font-bold uppercase tracking-wide">Values for this alert</span>
+          {availableValues.map(value => <code key={value} className="rounded-md bg-gray-100 px-1.5 py-1 font-bold text-gray-600 dark:bg-white/[0.06] dark:text-white/55">{value}</code>)}
+        </div>
+      )}
       <p className="text-[11px] leading-4 text-gray-400 dark:text-white/30">
         {hasCustomTitle || hasCustomBody ? 'Custom wording will replace the built-in wording after you save. ' : 'This is the wording ServeSync currently builds automatically. '}
         Values in brackets are filled from the event or member involved. Audience: {rule.target_roles.join(', ') || 'Applicable members'}.
       </p>
+      <button type="button" onClick={onTest} disabled={testing} className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.08] px-4 py-2.5 text-xs font-black text-emerald-700 transition hover:bg-emerald-500/[0.14] disabled:opacity-60 dark:text-emerald-300">
+        {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Send test to Admin Dev
+      </button>
     </div>
   );
 }

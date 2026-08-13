@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { Building2, Copy, Loader2, Mail, Plus, Shield, Trash2 } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -8,6 +9,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { PageLoader } from '../../components/LoadingSpinner';
 import { sortRolesLeadershipFirst } from '../../components/RoleBadge';
 import type { OrganizationInvitation } from '../../types';
+import { Modal } from '../../components/Modal';
 
 function formatStatus(status: string | null | undefined) {
   if (!status) return 'Exempt / not active';
@@ -15,11 +17,14 @@ function formatStatus(status: string | null | undefined) {
 }
 
 export function OrganizationSettings() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { organization, roles, isOrgAdmin, refreshProfile } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [savingOrg, setSavingOrg] = useState(false);
   const [creatingInvite, setCreatingInvite] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
   const [deletingInviteId, setDeletingInviteId] = useState<string | null>(null);
   const [orgForm, setOrgForm] = useState({
     name: '',
@@ -35,6 +40,13 @@ export function OrganizationSettings() {
   const billingRestricted = billingStatus === 'past_due' || billingStatus === 'suspended';
 
   const roleOptions = useMemo(() => sortRolesLeadershipFirst(roles), [roles]);
+
+  useEffect(() => {
+    const state = location.state as { openModal?: string } | null;
+    if (state?.openModal !== 'invite-people') return;
+    setShowInviteModal(true);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate]);
 
   const fetchInvitations = useCallback(async () => {
     if (!organization?.id) {
@@ -413,6 +425,46 @@ export function OrganizationSettings() {
       <div className="max-w-5xl mx-auto px-1 sm:px-2 pt-6 sm:pt-8">
         {content}
       </div>
+      <Modal open={showInviteModal} onClose={() => setShowInviteModal(false)} title="Invite People" size="lg">
+        <div className="space-y-5">
+          <div>
+            <label htmlFor="quick-invite-email" className="mb-1.5 block text-[11px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35">Invite Email</label>
+            <input
+              id="quick-invite-email"
+              type="email"
+              value={inviteForm.email}
+              onChange={e => setInviteForm(prev => ({ ...prev, email: e.target.value }))}
+              className="input-field min-h-11 text-sm"
+              placeholder="member@example.com"
+              disabled={billingRestricted}
+              autoFocus
+            />
+          </div>
+          <div>
+            <p className="mb-2 text-[11px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35">Assign Roles</p>
+            <div className="flex flex-wrap gap-2">
+              {roleOptions.map(role => {
+                const selected = inviteForm.role_ids.includes(role.id);
+                return (
+                  <button key={role.id} type="button" onClick={() => handleToggleInviteRole(role.id)} disabled={billingRestricted} className={`inline-flex min-h-11 items-center rounded-xl px-3 text-xs font-medium ring-1 transition-all ${selected ? 'bg-emerald-500/15 text-emerald-500 ring-emerald-500/35' : 'bg-white dark:bg-white/[0.05] text-gray-600 dark:text-white/55 ring-gray-200 dark:ring-white/10'}`}>
+                    {role.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <label className="flex min-h-11 items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+            <input type="checkbox" checked={inviteForm.is_admin} onChange={e => setInviteForm(prev => ({ ...prev, is_admin: e.target.checked }))} className="h-4 w-4 accent-emerald-500" disabled={billingRestricted} />
+            Grant church-admin access
+          </label>
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={() => setShowInviteModal(false)} className="btn-secondary">Cancel</button>
+            <button type="button" onClick={async () => { await handleCreateInvite(); }} disabled={creatingInvite || billingRestricted} className="btn-primary">
+              {creatingInvite ? <><Loader2 className="h-4 w-4 animate-spin" /> Creating...</> : <><Plus className="h-4 w-4" /> Create Invite</>}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

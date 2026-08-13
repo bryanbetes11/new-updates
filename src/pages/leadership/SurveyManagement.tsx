@@ -484,7 +484,7 @@ export function SurveyManagement() {
 
   return (
     <div className="page-container page-bottom-pad">
-      <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6 lg:py-9">
+      <div className="app-content-shell space-y-6 py-5 lg:py-9">
         <header className="overflow-hidden rounded-[2rem] border border-emerald-200/70 bg-emerald-50 p-6 dark:border-white/[0.08] dark:bg-[#07110d] sm:p-8">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
             <div>

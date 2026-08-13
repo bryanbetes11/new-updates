@@ -321,8 +321,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const roleNames = userRoles.map(ur => ur.roles?.name || '');
   const hasOrganization = Boolean(profile?.org_id && organization);
   const isOrgAdmin = profile?.is_org_admin ?? false;
+  const platformOwnerEmails = new Set([
+    'bryanbetes11@gmail.com',
+    'fwd.bryanashleybetes@gmail.com',
+    'bryanashleybetes@gmail.com',
+  ]);
   const isPlatformOwner = [profile?.email, user?.email]
-    .some(email => (email || '').toLowerCase() === 'bryanbetes11@gmail.com');
+    .some(email => platformOwnerEmails.has((email || '').trim().toLowerCase()));
   const isLeader = roleNames.some(n => ['Admin', 'Admin Coordinator', 'Music Director', 'Stage Director', 'Production Director', 'Setlist Coordinator'].includes(n));
   const isAdmin = roleNames.includes('Admin');
   const isAdminCoordinator = roleNames.includes('Admin Coordinator');

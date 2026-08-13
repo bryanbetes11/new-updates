@@ -1,3 +1,5 @@
+import { useLocation } from 'react-router-dom';
+
 function SkeletonBlock({ className = '' }: { className?: string }) {
   return <div className={`skeleton ${className}`} />;
 }
@@ -10,9 +12,130 @@ export function LoadingSpinner({ className = 'h-8 w-8' }: { className?: string }
   );
 }
 
+type LoaderCopy = {
+  eyebrow: string;
+  title: string;
+  description: string;
+  steps: [string, string, string];
+};
+
+function getLoaderCopy(pathname: string): LoaderCopy {
+  if (pathname === '/dashboard') return {
+    eyebrow: 'Opening Home',
+    title: 'Preparing your team board.',
+    description: 'Gathering your assignments, upcoming events, and ministry updates.',
+    steps: ['Checking assignments', 'Loading events', 'Almost ready'],
+  };
+  if (pathname.startsWith('/events/')) return {
+    eyebrow: 'Opening Event',
+    title: 'Preparing the event workspace.',
+    description: 'Bringing together the schedule, assignments, setlist, and team details.',
+    steps: ['Loading event', 'Syncing the team', 'Opening workspace'],
+  };
+  if (pathname === '/events') return {
+    eyebrow: 'Opening Events',
+    title: 'Lining up the calendar.',
+    description: 'Gathering services, meetings, assignments, and upcoming ministry dates.',
+    steps: ['Loading events', 'Checking schedules', 'Almost ready'],
+  };
+  if (pathname.startsWith('/announcements/')) return {
+    eyebrow: 'Opening News',
+    title: 'Preparing this update.',
+    description: 'Loading the announcement, reactions, and team conversation.',
+    steps: ['Loading update', 'Checking replies', 'Almost ready'],
+  };
+  if (pathname === '/announcements') return {
+    eyebrow: 'Opening News',
+    title: 'Gathering the latest updates.',
+    description: 'Bringing together announcements, urgent notices, and team responses.',
+    steps: ['Loading updates', 'Checking unread news', 'Almost ready'],
+  };
+  if (['/library', '/songs', '/sets', '/videos'].some(path => pathname.startsWith(path))) return {
+    eyebrow: 'Opening Library',
+    title: 'Preparing your ministry resources.',
+    description: 'Gathering songs, setlists, videos, and the latest library changes.',
+    steps: ['Loading resources', 'Syncing the library', 'Almost ready'],
+  };
+  if (pathname.startsWith('/messages')) return {
+    eyebrow: 'Opening Chat',
+    title: 'Bringing your conversations together.',
+    description: 'Loading team messages, recent replies, and conversation details.',
+    steps: ['Loading messages', 'Checking replies', 'Almost ready'],
+  };
+  if (pathname === '/profile') return {
+    eyebrow: 'Opening Profile',
+    title: 'Preparing your ministry profile.',
+    description: 'Loading your roles, activity, availability, and account details.',
+    steps: ['Loading profile', 'Checking roles', 'Almost ready'],
+  };
+  if (pathname === '/notifications') return {
+    eyebrow: 'Opening Notifications',
+    title: 'Checking what needs your attention.',
+    description: 'Gathering recent alerts, reminders, and ministry updates.',
+    steps: ['Loading alerts', 'Checking unread items', 'Almost ready'],
+  };
+  if (pathname === '/my-assignments') return {
+    eyebrow: 'Opening Assignments',
+    title: 'Preparing your serving schedule.',
+    description: 'Gathering assigned events, roles, and upcoming responsibilities.',
+    steps: ['Loading assignments', 'Checking events', 'Almost ready'],
+  };
+  if (pathname === '/leadership/accountability') return {
+    eyebrow: 'Opening Accountability',
+    title: 'Reviewing ministry accountability.',
+    description: 'Gathering attendance, offense levels, and open conduct records.',
+    steps: ['Loading attendance', 'Checking records', 'Almost ready'],
+  };
+  if (pathname === '/leadership/team') return {
+    eyebrow: 'Opening Team Roster',
+    title: 'Gathering your ministry team.',
+    description: 'Loading members, roles, access, and current ministry status.',
+    steps: ['Loading members', 'Checking roles', 'Almost ready'],
+  };
+  if (pathname === '/leadership/setlists') return {
+    eyebrow: 'Opening Setlist Queue',
+    title: 'Preparing setlists for review.',
+    description: 'Gathering submitted proposals, deadlines, and event details.',
+    steps: ['Loading proposals', 'Checking deadlines', 'Almost ready'],
+  };
+  if (pathname === '/leadership/notifications') return {
+    eyebrow: 'Opening Notification Settings',
+    title: 'Preparing team notification controls.',
+    description: 'Loading delivery settings, subscriptions, and member readiness.',
+    steps: ['Loading settings', 'Checking subscriptions', 'Almost ready'],
+  };
+  if (pathname === '/leadership/surveys' || pathname === '/reflection') return {
+    eyebrow: 'Opening Reflections',
+    title: 'Preparing ministry reflections.',
+    description: 'Loading campaigns, participation, responses, and results.',
+    steps: ['Loading campaign', 'Checking responses', 'Almost ready'],
+  };
+  if (['/leadership/leave', '/leadership/swaps', '/request-leave', '/unavailable-members'].includes(pathname)) return {
+    eyebrow: 'Opening Team Requests',
+    title: 'Checking availability and requests.',
+    description: 'Gathering leave, swaps, availability, and upcoming team changes.',
+    steps: ['Loading requests', 'Checking availability', 'Almost ready'],
+  };
+  if (pathname.startsWith('/leadership')) return {
+    eyebrow: 'Opening Leadership',
+    title: 'Preparing the ministry overview.',
+    description: 'Gathering team health, current queues, and leadership updates.',
+    steps: ['Loading ministry health', 'Checking queues', 'Almost ready'],
+  };
+  return {
+    eyebrow: 'ServeSync is opening',
+    title: 'Warming up the team board.',
+    description: 'Gathering schedules, messages, and setlists so your ministry team lands in the right place.',
+    steps: ['Checking your session', 'Syncing updates', 'Almost ready'],
+  };
+}
+
 export function PageLoader() {
+  const { pathname } = useLocation();
+  const copy = getLoaderCopy(pathname);
+
   return (
-    <div className="page-loader-shell relative isolate -mx-4 flex items-center justify-center overflow-hidden bg-[#f5f5f7] px-6 py-10 text-gray-950 animate-fade-in dark:bg-[#050806] dark:text-white sm:-mx-6 lg:-mx-8">
+    <div className="page-loader-shell relative isolate -mx-4 flex items-center justify-center overflow-hidden bg-[#f5f5f7] px-6 py-10 text-gray-950 animate-fade-in dark:bg-[#050806] dark:text-white sm:-mx-6 lg:-mx-8" aria-live="polite" aria-busy="true">
       <div className="absolute inset-0 -z-20 bg-[radial-gradient(circle_at_50%_28%,rgba(34,197,94,0.22),transparent_34%),linear-gradient(180deg,#f7fff9_0%,#f4f5f7_52%,#eefbf3_100%)] dark:bg-[radial-gradient(circle_at_50%_25%,rgba(34,197,94,0.22),transparent_32%),radial-gradient(circle_at_50%_84%,rgba(16,185,129,0.12),transparent_36%),linear-gradient(180deg,#050806_0%,#09120c_55%,#030504_100%)]" />
       <div className="pointer-events-none absolute inset-x-0 top-0 z-0 h-20 bg-gradient-to-b from-[#f5f5f7] via-[#f5f5f7]/70 to-transparent dark:from-[#141414] dark:via-[#141414]/45" />
       <div className="pointer-events-none absolute inset-y-0 left-0 z-0 w-24 bg-gradient-to-r from-[#f5f5f7] via-[#f5f5f7]/55 to-transparent dark:from-[#141414] dark:via-[#141414]/35" />
@@ -43,18 +166,18 @@ export function PageLoader() {
 
         <div className="space-y-3">
           <p className="text-[10px] font-mono font-bold uppercase tracking-[0.34em] text-emerald-600 dark:text-emerald-300/80">
-            ServeSync is opening
+            {copy.eyebrow}
           </p>
           <h1 className="text-3xl font-black tracking-[-0.055em] text-gray-950 dark:text-white sm:text-4xl">
-            Warming up the team board.
+            {copy.title}
           </h1>
           <p className="mx-auto max-w-sm text-sm leading-6 text-gray-500 dark:text-white/45">
-            Gathering schedules, messages, and setlists so your ministry team lands in the right place.
+            {copy.description}
           </p>
         </div>
 
         <div className="mx-auto mt-7 flex max-w-sm flex-wrap items-center justify-center gap-2">
-          {['Checking your session', 'Syncing updates', 'Almost ready'].map((label, index) => (
+          {copy.steps.map((label, index) => (
             <span
               key={label}
               className="inline-flex items-center gap-2 rounded-full border border-emerald-500/15 bg-white/70 px-3 py-1.5 text-[11px] font-semibold text-gray-600 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/[0.05] dark:text-white/55"

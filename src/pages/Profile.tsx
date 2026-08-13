@@ -243,7 +243,7 @@ export function Profile() {
   ];
 
   return (
-    <div className="page-container page-bottom-pad relative">
+    <div className="profile-page-scroll page-container page-bottom-pad relative">
       {/* Ambient page glow — sits behind everything */}
       <div
         className="pointer-events-none absolute -top-32 left-1/2 -translate-x-1/2 w-[600px] h-[600px] opacity-50 dark:opacity-30"

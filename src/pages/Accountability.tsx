@@ -11,7 +11,7 @@ export function Accountability() {
 
   return (
     <div className="page-container page-bottom-pad">
-      <div className="relative mx-auto max-w-2xl px-4 pb-6 pt-4 sm:px-6 sm:pt-5 lg:max-w-6xl lg:px-8 xl:max-w-[1560px]">
+      <div className="app-content-shell relative pb-6 pt-4 sm:pt-5">
         <div className="space-y-5 sm:space-y-6">
           <LeadershipHeroCard
             tone="amber"

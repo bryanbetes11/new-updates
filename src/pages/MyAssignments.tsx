@@ -122,7 +122,7 @@ export function MyAssignments() {
   return (
     <>
     <div className="page-container page-bottom-pad">
-      <div className="max-w-2xl lg:max-w-3xl mx-auto px-4 sm:px-5 lg:px-6 py-6 sm:py-8 space-y-6">
+      <div className="app-content-shell space-y-6 pb-6 pt-4 sm:pt-5">
 
         {/* Header */}
         <div className="animate-fade-in">

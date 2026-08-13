@@ -257,6 +257,7 @@ export function EventDetail() {
   const [editForm, setEditForm] = useState({ title: '', description: '', event_type: '', event_date: '', start_time: '', end_time: '', song_leader_id: '', linked_event_id: '' });
   const [savingEventEdit, setSavingEventEdit] = useState(false);
   const [savingLifecycleOverride, setSavingLifecycleOverride] = useState(false);
+  const [lifecycleConfirmOverride, setLifecycleConfirmOverride] = useState<EventLifecycleOverride | null>(null);
   const [lifecycleNow, setLifecycleNow] = useState(() => new Date());
   const [sundayServices, setSundayServices] = useState<Event[]>([]);
   const [attendance, setAttendance] = useState<EventAttendance | null>(null);
@@ -1574,7 +1575,7 @@ export function EventDetail() {
   };
 
   const handleLifecycleOverride = async (override: EventLifecycleOverride) => {
-    if (!id || !user || !isPlatformOwner || savingLifecycleOverride) return;
+    if (!id || !user || !isPlatformOwner || (!heroIsPast && !heroScheduleEnded) || savingLifecycleOverride) return;
 
     setSavingLifecycleOverride(true);
     const overrideMetadata = {
@@ -1597,6 +1598,7 @@ export function EventDetail() {
     }
 
     setEvent(updatedEvent as Event);
+    setLifecycleConfirmOverride(null);
     setShowEventActionsMenu(false);
     toast('success', override === 'completed'
       ? 'Event moved to Past events'
@@ -2622,9 +2624,12 @@ const openLyricsModal = (ss: SetlistSong) => {
                                     Edit event
                                   </button>
                                 )}
-                                {isPlatformOwner && (
+                                {isPlatformOwner && (heroIsPast || heroScheduleEnded) && (
                                   <button
-                                    onClick={() => handleLifecycleOverride(heroIsPast ? 'upcoming' : 'completed')}
+                                    onClick={() => {
+                                      setShowEventActionsMenu(false);
+                                      setLifecycleConfirmOverride(heroIsPast ? 'upcoming' : 'completed');
+                                    }}
                                     disabled={savingLifecycleOverride}
                                     className="flex min-h-11 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[13px] font-semibold text-white/80 transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] disabled:opacity-50"
                                     role="menuitem"
@@ -5308,6 +5313,32 @@ const openLyricsModal = (ss: SetlistSong) => {
               <button onClick={() => setShowDeleteEvent(false)} className="btn-secondary">Cancel</button>
               <button onClick={handleDeleteEvent} disabled={deleting} className="btn-danger">
                 {deleting ? 'Deleting...' : 'Delete Event'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+
+        <Modal
+          open={lifecycleConfirmOverride !== null}
+          onClose={() => !savingLifecycleOverride && setLifecycleConfirmOverride(null)}
+          title={lifecycleConfirmOverride === 'upcoming' ? 'Move Event to Upcoming?' : 'Move Event to Past?'}
+          size="sm"
+        >
+          <div className="space-y-4">
+            <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+              {lifecycleConfirmOverride === 'upcoming'
+                ? `Move “${event.title}” back to Upcoming events?`
+                : `Confirm that “${event.title}” is finished and move it to Past events. This will open its post-event observations.`}
+            </p>
+            <div className="flex justify-end gap-3">
+              <button type="button" onClick={() => setLifecycleConfirmOverride(null)} disabled={savingLifecycleOverride} className="btn-secondary">Cancel</button>
+              <button
+                type="button"
+                onClick={() => lifecycleConfirmOverride && handleLifecycleOverride(lifecycleConfirmOverride)}
+                disabled={savingLifecycleOverride}
+                className="btn-primary"
+              >
+                {savingLifecycleOverride ? 'Moving…' : (lifecycleConfirmOverride === 'upcoming' ? 'Move to Upcoming' : 'Move to Past')}
               </button>
             </div>
           </div>

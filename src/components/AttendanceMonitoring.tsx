@@ -462,7 +462,7 @@ export function AttendanceMonitoring() {
         </div>
       </div>
 
-      <div className="space-y-2 xl:hidden">
+      <div className="grid gap-2 md:grid-cols-2 xl:hidden">
         {filteredAndSorted.map(m => {
           const info = offenseLevelInfo[m.offense_level] || offenseLevelInfo[0];
           const isExpanded = expandedMember === m.user_id;
@@ -470,7 +470,7 @@ export function AttendanceMonitoring() {
             ? Math.round(((m.present_count + m.late_count) / m.events_assigned) * 100)
             : 0;
           return (
-            <div key={m.user_id} className="card">
+            <div key={m.user_id} className="card self-start">
               <button
                 onClick={() => setExpandedMember(isExpanded ? null : m.user_id)}
                 className="flex min-h-16 w-full items-center gap-3 p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500"
@@ -530,7 +530,7 @@ export function AttendanceMonitoring() {
           );
         })}
         {filteredAndSorted.length === 0 && (
-          <div className="rounded-lg border border-dashed border-gray-200 py-8 text-center dark:border-gray-800">
+          <div className="rounded-lg border border-dashed border-gray-200 py-8 text-center dark:border-gray-800 md:col-span-2">
             <Search className="mx-auto h-6 w-6 text-gray-300 dark:text-gray-600" />
             <p className="mt-2 text-sm text-gray-400">No members match these filters</p>
           </div>

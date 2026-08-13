@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import {
   Megaphone, Plus, Eye, AlertTriangle, AlertCircle,
@@ -82,23 +82,13 @@ export function Announcements() {
   const { user, isLeader } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
   const [announcements, setAnnouncements] = useState<AnnouncementWithBlocks[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [isDesktop, setIsDesktop] = useState(() => typeof window === 'undefined' ? true : window.matchMedia('(min-width: 1024px)').matches);
   const [emojiPickerId, setEmojiPickerId] = useState<string | null>(null);
   const [newsFilter, setNewsFilter] = useState<NewsFilter>('all');
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const mediaQuery = window.matchMedia('(min-width: 1024px)');
-    const update = () => setIsDesktop(mediaQuery.matches);
-
-    update();
-    mediaQuery.addEventListener('change', update);
-    return () => mediaQuery.removeEventListener('change', update);
-  }, []);
 
   const openCreateAnnouncement = () => {
     const shouldUseDesktopModal = typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches;
@@ -111,6 +101,13 @@ export function Announcements() {
     setShowCreate(false);
     navigate('/announcements/new');
   };
+
+  useEffect(() => {
+    const state = location.state as { openModal?: string } | null;
+    if (state?.openModal !== 'announce') return;
+    setShowCreate(true);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate]);
 
   const fetchAnnouncements = useCallback(async () => {
     setLoadError(null);
@@ -254,7 +251,18 @@ export function Announcements() {
   const getPreviewText = (a: AnnouncementWithBlocks) => {
     const blocks = a.content_blocks;
     const text = blocks && blocks.length > 0 ? blocks.find(b => b.type === 'text')?.content || '' : a.content;
-    return text.replace(/\s+/g, ' ').trim();
+    return text
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+      .replace(/```[\s\S]*?```/g, ' ')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/(\*\*|__)(.*?)\1/g, '$2')
+      .replace(/~~(.*?)~~/g, '$1')
+      .replace(/\*([^*]+)\*/g, '$1')
+      .replace(/^\s{0,3}(?:#{1,6}|>|[-+])\s+/gm, '')
+      .replace(/\\([\\`*_[\]{}()#+\-.!>])/g, '$1')
+      .replace(/\s+/g, ' ')
+      .trim();
   };
 
   const firstImageUrl = (a: AnnouncementWithBlocks) => a.content_blocks?.find(b => b.type === 'image')?.content || null;
@@ -264,7 +272,7 @@ export function Announcements() {
   return (
     <div className="page-container page-bottom-pad relative min-h-screen overflow-hidden bg-[#050505] text-white">
       <div className="pointer-events-none fixed inset-0 -z-10 bg-[#050505]" />
-      <div className="relative max-w-2xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 pb-6 space-y-5 sm:space-y-6">
+      <div className="app-content-shell relative space-y-4 pb-6 pt-4 sm:pt-5">
 
         <motion.div
           initial={{ opacity: 0, y: 10, filter: 'blur(4px)' }}
@@ -351,7 +359,7 @@ export function Announcements() {
                 >
                   {(isPinned || a.priority !== 'normal') && (
                     <div
-                      className="absolute bottom-3 left-0 top-3 w-1 rounded-r-full"
+                      className="absolute bottom-2 left-0 top-2 w-1 rounded-r-full"
                       style={{ backgroundColor: a.priority === 'urgent' ? '#ef4444' : isPinned ? '#1ed760' : '#f59e0b' }}
                     />
                   )}
@@ -359,9 +367,9 @@ export function Announcements() {
                   <div className="relative">
                     {/* Main clickable body */}
                     <button type="button" className="w-full text-left" onClick={() => navigate(`/announcements/${a.id}`)}>
-                      <div className="grid gap-3 px-4 py-4 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-5 sm:px-5 lg:px-6">
+                      <div className="grid gap-3 px-3 py-3 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-4 sm:px-4 lg:px-5">
                         <div className="flex items-start gap-3 sm:contents">
-                          <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md bg-[linear-gradient(135deg,rgba(30,215,96,0.36),rgba(245,158,11,0.24)),#181818] ring-1 ring-white/[0.08] sm:h-20 sm:w-20">
+                          <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md bg-[linear-gradient(135deg,rgba(30,215,96,0.36),rgba(245,158,11,0.24)),#181818] ring-1 ring-white/[0.08] sm:h-16 sm:w-16">
                             {thumbnail ? (
                               <>
                                 <img src={thumbnail} alt="" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" />
@@ -396,13 +404,13 @@ export function Announcements() {
                                 <span className="inline-flex items-center rounded-full bg-[#1ed760] px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.1em] text-black">New</span>
                               )}
                             </div>
-                            <p className="mt-1.5 text-[1rem] font-black leading-tight text-white sm:text-[1.12rem]">
+                            <p className="mt-1 text-[0.95rem] font-black leading-tight text-white sm:text-[1rem]">
                               {a.title}
                             </p>
-                            <p className="mt-1 line-clamp-2 text-[13px] leading-5 text-white/48 sm:line-clamp-1">
+                            <p className="mt-0.5 line-clamp-1 text-[12px] leading-5 text-white/48">
                               {getPreviewText(a)}
                             </p>
-                            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-white/32">
+                            <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-semibold text-white/32">
                               <div className="flex min-w-0 items-center gap-1.5">
                                 <Avatar src={a.profiles?.avatar_url} firstName={a.profiles?.first_name || '?'} lastName={a.profiles?.last_name} size="xs" />
                                 <span className="truncate text-white/48">{a.profiles?.first_name}</span>
@@ -430,13 +438,13 @@ export function Announcements() {
                     </button>
 
                     {/* Reaction row */}
-                    <div className="flex flex-wrap items-center gap-1.5 px-4 pb-4 sm:px-5 lg:px-6">
+                    <div className="flex flex-wrap items-center gap-1.5 px-3 pb-3 sm:px-4 lg:px-5">
                       {reactionGroups.map(r => (
                         <button
                           key={r.emoji}
                           type="button"
                           onClick={e => handleReact(e, a.id, r.emoji)}
-                          className={`inline-flex min-h-11 items-center gap-1 rounded-full px-3 text-xs font-bold transition-all active:scale-[0.95] ${
+                          className={`inline-flex h-9 items-center gap-1 rounded-full px-3 text-xs font-bold transition-all active:scale-[0.95] ${
                             r.users.includes(user?.id || '')
                               ? 'bg-[#1ed760]/20 text-[#7cffaa] ring-1 ring-[#1ed760]/30'
                               : 'bg-white/[0.055] text-white/52 ring-1 ring-white/[0.05] hover:bg-white/[0.09]'
@@ -452,7 +460,7 @@ export function Announcements() {
                         <button
                           type="button"
                           onClick={e => { e.stopPropagation(); setEmojiPickerId(emojiPickerId === a.id ? null : a.id); }}
-                          className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/[0.055] text-xs text-white/35 ring-1 ring-white/[0.05] transition-colors hover:bg-white/[0.09]"
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.055] text-xs text-white/35 ring-1 ring-white/[0.05] transition-colors hover:bg-white/[0.09]"
                           aria-label="Add a reaction"
                           aria-expanded={emojiPickerId === a.id}
                           aria-haspopup="menu"
@@ -490,7 +498,7 @@ export function Announcements() {
                         <button
                           type="button"
                           onClick={e => handlePin(e, a)}
-                          className={`ml-auto inline-flex h-11 items-center gap-1.5 rounded-full px-3.5 text-[11px] font-black transition-all ${
+                          className={`ml-auto inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[11px] font-black transition-all ${
                             isPinned
                               ? 'bg-[#1ed760]/20 text-[#7cffaa]'
                               : 'bg-white/[0.055] text-white/42 ring-1 ring-white/[0.05] hover:bg-white/[0.09] hover:text-white/70'
@@ -512,7 +520,7 @@ export function Announcements() {
       </div>
 
       {/* ── Create Modal ──────────────────────────────── */}
-      <Modal open={showCreate && isDesktop} onClose={() => setShowCreate(false)} title="Creating Announcement" size="lg">
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Creating Announcement" size="lg">
         <AnnouncementComposerForm
           onCancel={() => setShowCreate(false)}
           onSuccess={async () => {

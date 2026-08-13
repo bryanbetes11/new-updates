@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Layers3,
+  LayoutDashboard,
   MessageCircle,
   Music2,
   Plus,
@@ -826,6 +827,19 @@ export function Navigation({
     `${profile?.first_name || ""} ${profile?.last_name || ""}`.trim();
 
   const useDockedMobileNav = mobileNavStyle === "docked";
+  const bottomNavItems: Array<NavItem & { tabletPortraitOnly?: boolean }> =
+    isLeader || isOrgAdmin
+      ? [
+          ...mobileNavItems,
+          {
+            path: "/leadership/overview",
+            label: "Leadership",
+            icon: ShieldNavIcon,
+            exact: true,
+            tabletPortraitOnly: true,
+          },
+        ]
+      : mobileNavItems;
   const hideMobileChrome = mobileChromeHidden && !mobileOpen;
   const hideBottomMobileNav = hideMobileChrome;
   const mobileMenuTranslateX = mobileOpen
@@ -1043,6 +1057,14 @@ export function Navigation({
   ];
 
   const leadershipMenuItems: typeof baseProfileMenuItems = [
+    {
+      icon: LayoutDashboard,
+      label: "Overview",
+      desc: "Leadership tools at a glance",
+      path: "/leadership/overview",
+      show: isLeader || isOrgAdmin,
+      color: "#10b981",
+    },
     {
       icon: ListChecks,
       label: "Approve Setlist",
@@ -2260,7 +2282,7 @@ export function Navigation({
                 </>
               )}
 
-              {mobileNavItems.map((item) => {
+              {bottomNavItems.map((item) => {
                 const active = isActive(item);
                 const Icon = item.icon;
                 const badge = getBadgeCount(item);
@@ -2283,7 +2305,7 @@ export function Navigation({
                     data-mobile-nav-item="true"
                     data-active={active ? "true" : "false"}
                     aria-current={active ? "page" : undefined}
-                    className={`relative flex flex-1 min-w-[44px] flex-col items-center justify-center gap-0.5 ${useDockedMobileNav ? "h-[56px] pt-1" : "h-12"}`}
+                    className={`relative flex flex-1 min-w-[44px] flex-col items-center justify-center gap-0.5 ${item.tabletPortraitOnly ? "tablet-portrait-nav-item" : ""} ${useDockedMobileNav ? "h-[56px] pt-1" : "h-12"}`}
                     style={{
                       WebkitTapHighlightColor: "transparent",
                       color: navItemColor,

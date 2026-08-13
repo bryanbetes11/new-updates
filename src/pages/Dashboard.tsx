@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { motion, type Variants } from 'framer-motion';
-import { Calendar, Music, ChevronRight, Megaphone, Trash2, ListChecks, ArrowLeftRight, Check, X, RefreshCw, Heart, MoreHorizontal, Edit3, Upload, UserPlus, MessageCircle, UserX, ClipboardCheck, Shield } from 'lucide-react';
+import { Calendar, Music, ChevronRight, Megaphone, Trash2, ListChecks, ArrowLeftRight, Check, X, RefreshCw, Heart, MoreHorizontal, Upload, UserPlus, MessageCircle, UserX, ClipboardCheck, Shield } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -984,12 +984,12 @@ export function Dashboard() {
   ];
   const weekSongs = songsThisWeek.length > 0 ? songsThisWeek : activeHubFilter === 'all' ? fallbackSongsThisWeek : [];
   const quickActions = [
-    { label: 'Create Set', icon: ListChecks, path: '/sets' },
-    { label: 'Schedule Event', icon: Calendar, path: '/events' },
-    { label: 'Add Song', icon: Music, path: '/songs' },
-    { label: 'Upload Video', icon: Upload, path: '/videos' },
-    { label: 'New Announcement', icon: Megaphone, path: '/announcements/new' },
-    { label: 'Invite People', icon: UserPlus, path: '/leadership/team' },
+    { label: 'Create Set', icon: ListChecks, path: '/sets', modal: 'create-set' },
+    { label: 'Schedule Event', icon: Calendar, path: '/events', modal: 'schedule-event' },
+    { label: 'Add Song', icon: Music, path: '/songs', modal: 'add-song' },
+    { label: 'Upload Video', icon: Upload, path: '/videos', modal: 'upload-video' },
+    { label: 'Announce', icon: Megaphone, path: '/announcements', modal: 'announce' },
+    { label: 'Invite People', icon: UserPlus, path: '/leadership/church', modal: 'invite-people' },
   ];
   const hubFilters: { id: DashboardHubFilter; label: string }[] = [
     { id: 'all', label: 'All' },
@@ -1070,13 +1070,10 @@ export function Dashboard() {
       >
 
         <motion.section variants={item} className="space-y-4">
-            <div className="hidden items-center justify-between lg:flex">
+            <div className="hidden items-center lg:flex">
               <h1 className="text-[2.4rem] font-black leading-none text-white" style={{ letterSpacing: '-0.055em' }}>
                 {greeting}, {displayName}
               </h1>
-              <button className="flex items-center gap-2 rounded-full px-3 py-2 text-[13px] font-semibold text-white/70 transition-colors hover:bg-white/[0.06] hover:text-white">
-                Customize <Edit3 className="h-4 w-4" />
-              </button>
             </div>
 
             <div className="flex gap-2 overflow-x-auto no-scrollbar lg:mt-5" role="group" aria-label="Dashboard filters">
@@ -1408,7 +1405,7 @@ export function Dashboard() {
         <motion.section variants={item} className="grid min-w-0 gap-5 xl:grid-cols-[1.95fr_1fr]">
               <section className="min-w-0 self-start lg:flex lg:flex-col lg:rounded-[0.75rem] lg:border lg:border-white/[0.08] lg:bg-[#181818] lg:p-4 lg:shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)]">
                 <div className="mb-3 flex items-center justify-between">
-                  <h2 className="text-[18px] font-black text-white">Upcoming events</h2>
+                  <h2 className="text-[18px] font-black text-white">Upcoming Events</h2>
                   <button onClick={() => navigate('/events')} className="-mr-2 inline-flex min-h-11 items-center px-2 text-[12px] font-bold text-[#22c55e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e]">See all</button>
                 </div>
                 <div className="flex snap-x gap-3 overflow-x-auto pb-1 no-scrollbar lg:hidden" style={{ WebkitOverflowScrolling: 'touch' }}>
@@ -1490,7 +1487,7 @@ export function Dashboard() {
 
               <section className={`${reviewSets.length === 0 ? 'hidden lg:block' : ''} w-full min-w-0 max-w-full overflow-hidden rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-3 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)] sm:p-4`}>
                 <div className="mb-3 flex items-center justify-between">
-                  <h2 className="min-w-0 truncate text-[18px] font-black text-white">Setlists awaiting approval</h2>
+                  <h2 className="min-w-0 truncate text-[18px] font-black text-white">Setlists Awaiting Approval</h2>
                   <button onClick={() => navigate(isLeader ? '/leadership/setlists' : '/events')} className="-mr-2 ml-1 inline-flex min-h-11 shrink-0 items-center px-2 text-[12px] font-bold text-[#22c55e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] sm:ml-3">
                     {isLeader ? 'Review queue' : 'See events'}
                   </button>
@@ -1542,12 +1539,12 @@ export function Dashboard() {
               </section>
         </motion.section>
 
-        <motion.section variants={item} className="hidden grid-cols-4 gap-5 lg:grid">
+        <motion.section variants={item} className="dashboard-summary-grid hidden grid-cols-2 gap-5 md:grid lg:grid-cols-4">
           <section className="rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-4 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)]">
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Music className="h-4 w-4 text-[#22c55e]" />
-                <h2 className="text-[15px] font-black text-white">My assignments</h2>
+                <h2 className="text-[15px] font-black text-white">My Assignments</h2>
               </div>
               <button onClick={() => navigate('/my-assignments')} className="text-[11px] font-bold text-[#22c55e]">All</button>
             </div>
@@ -1578,14 +1575,14 @@ export function Dashboard() {
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <UserX className="h-4 w-4 text-[#22c55e]" />
-                <h2 className="text-[15px] font-black text-white">Team availability</h2>
+                <h2 className="text-[15px] font-black text-white">Team Availability</h2>
               </div>
               <button onClick={() => navigate('/request-leave')} className="text-[11px] font-bold text-[#22c55e]">Open</button>
             </div>
             {teamAvailabilityRows.length > 0 ? (
               <div className="space-y-2">
                 {teamAvailabilityRows.map((member) => {
-                  const memberName = member.profiles?.nickname || `${member.profiles?.first_name || ''} ${member.profiles?.last_name || ''}`.trim() || 'Team member';
+                  const memberName = `${member.profiles?.first_name || ''} ${member.profiles?.last_name || ''}`.trim() || member.profiles?.nickname || 'Team member';
                   const dateLabel = member.unavailable_date || member.start_date;
                   return (
                     <button
@@ -1612,7 +1609,7 @@ export function Dashboard() {
           <section className="rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-4 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)]">
             <div className="mb-4 flex items-center gap-2">
               <Shield className="h-4 w-4 text-[#22c55e]" />
-              <h2 className="text-[15px] font-black text-white">Leadership queue</h2>
+              <h2 className="text-[15px] font-black text-white">Leadership Queue</h2>
             </div>
             <div className="grid grid-cols-2 gap-2">
               {[
@@ -1632,7 +1629,7 @@ export function Dashboard() {
           <section className="rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-4 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)]">
             <div className="mb-4 flex items-center gap-2">
               <ClipboardCheck className="h-4 w-4 text-[#22c55e]" />
-              <h2 className="text-[15px] font-black text-white">Daily verse</h2>
+              <h2 className="text-[15px] font-black text-white">Daily Verse</h2>
             </div>
             <div className="flex min-h-[104px] flex-col justify-center rounded-[0.55rem] bg-white/[0.045] px-3 py-3">
               <p className="line-clamp-4 text-[13px] font-bold leading-relaxed text-white/88">"{todayVerse.text}"</p>
@@ -1641,9 +1638,9 @@ export function Dashboard() {
           </section>
         </motion.section>
 
-        <motion.section variants={item} className="lg:hidden">
+        <motion.section variants={item} className="md:hidden">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-[18px] font-black text-white">Songs this week</h2>
+            <h2 className="text-[18px] font-black text-white">Songs This Week</h2>
             <button onClick={() => navigate('/songs')} className="-mr-2 inline-flex min-h-11 items-center px-2 text-[12px] font-bold text-[#22c55e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e]">See all</button>
           </div>
           <div className="flex snap-x gap-3 overflow-x-auto pb-1 no-scrollbar" style={{ WebkitOverflowScrolling: 'touch' }}>
@@ -1667,10 +1664,10 @@ export function Dashboard() {
           </div>
         </motion.section>
 
-        <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.75fr)] xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,0.8fr)]">
+        <div className="grid min-w-0 gap-5 md:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.75fr)] lg:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.75fr)] xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,0.8fr)]">
           <motion.section variants={item} className="min-w-0 overflow-hidden rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-3 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)] sm:p-4 lg:rounded-[1rem]">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-[18px] font-black text-white">Recent announcements</h2>
+              <h2 className="text-[18px] font-black text-white">Recent Announcements</h2>
               <button onClick={() => navigate('/announcements')} className="-mr-2 inline-flex min-h-11 items-center px-2 text-[12px] font-bold text-[#22c55e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e]">See all</button>
             </div>
             <div className="divide-y divide-white/[0.07]">
@@ -1699,15 +1696,15 @@ export function Dashboard() {
             </div>
           </motion.section>
 
-          <motion.section variants={item} className="hidden min-w-0 rounded-[1rem] border border-white/[0.08] bg-[#181818] p-4 lg:block">
-            <h2 className="mb-4 text-[18px] font-black text-white">Quick actions</h2>
+          <motion.section variants={item} className="hidden min-w-0 rounded-[1rem] border border-white/[0.08] bg-[#181818] p-4 md:block">
+            <h2 className="mb-4 text-[18px] font-black text-white">Quick Actions</h2>
             <div className="grid grid-cols-2 gap-2">
               {quickActions.map((action) => {
                 const Icon = action.icon;
                 return (
                   <button
                     key={action.label}
-                    onClick={() => navigate(action.path)}
+                    onClick={() => navigate(action.path, { state: { openModal: action.modal } })}
                     className="flex h-20 flex-col items-center justify-center gap-2 rounded-[0.55rem] border border-white/[0.06] bg-[#242424] text-center transition-colors hover:bg-[#303030]"
                   >
                     <Icon className="h-6 w-6 text-[#22c55e]" />

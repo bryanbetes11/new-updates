@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Bell, BellOff } from 'lucide-react';
+import { Bell, BellOff, Check, Loader2, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -7,7 +7,7 @@ import { isIosDevice, isStandalonePwa } from '../lib/device';
 import { VAPID_PUBLIC_KEY } from '../lib/push';
 
 interface PushNotificationSettingProps {
-  surface?: 'profile' | 'drawer';
+  surface?: 'profile' | 'drawer' | 'compact';
 }
 
 function urlBase64ToUint8Array(base64String: string) {
@@ -186,6 +186,36 @@ export function PushNotificationSetting({ surface = 'profile' }: PushNotificatio
     : typeof window !== 'undefined' && !('PushManager' in window) && isIosDevice() && !isStandalonePwa()
       ? 'Add to Home Screen to enable'
       : 'Allow alerts for assignments and messages';
+
+  if (surface === 'compact') {
+    return (
+      <button
+        type="button"
+        onClick={pushEnabled ? undefined : togglePush}
+        disabled={pushLoading || pushEnabled}
+        className={`relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors disabled:cursor-default ${
+          pushEnabled
+            ? 'bg-[#22c55e]/15 text-[#4ade80]'
+            : 'bg-white/[0.07] text-white/50 hover:bg-white/[0.11] hover:text-white disabled:opacity-55'
+        }`}
+        aria-label={pushEnabled ? 'Push notifications enabled' : 'Enable push notifications'}
+        title={pushEnabled ? 'Notifications enabled' : 'Enable notifications'}
+      >
+        {pushLoading ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <>
+            <Bell className="h-4 w-4" />
+            <span className={`absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full ring-2 ring-[#171717] ${
+              pushEnabled ? 'bg-[#22c55e] text-black' : 'bg-zinc-600 text-white'
+            }`}>
+              {pushEnabled ? <Check className="h-2.5 w-2.5" strokeWidth={3} /> : <X className="h-2.5 w-2.5" strokeWidth={3} />}
+            </span>
+          </>
+        )}
+      </button>
+    );
+  }
 
   const isDrawer = surface === 'drawer';
 

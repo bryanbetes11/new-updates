@@ -192,6 +192,13 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   const ownerFilter = new URLSearchParams(location.search).get('owner');
   const showMyCreatedSets = !isSongsOnly && ownerFilter === 'me';
 
+  useEffect(() => {
+    const state = location.state as { openModal?: string } | null;
+    if (state?.openModal === 'add-song' && isSongsOnly) setShowWebImport(true);
+    if (state?.openModal === 'create-set' && !isSongsOnly) setShowImport(true);
+    if (state?.openModal) window.history.replaceState({}, document.title, location.pathname + location.search);
+  }, [isSongsOnly, location.pathname, location.search, location.state]);
+
   const fetchData = async () => {
     const [setlistRes, songsRes, songLeadersRes] = await Promise.all([
       supabase
@@ -1387,6 +1394,19 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                   </div>
                 </div>
                 <p className="text-xs text-gray-400 text-center">{Math.round(importProgress.totalSongs ? (importProgress.songsDone / importProgress.totalSongs) * 100 : 0)}% complete — please don't close this window</p>
+              </div>
+            ) : importData.length === 0 ? (
+              <div className="flex flex-col items-center gap-4 py-8 text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/12 text-emerald-500">
+                  <Upload className="h-6 w-6" />
+                </div>
+                <div>
+                  <p className="font-bold text-gray-900 dark:text-white">Choose a set spreadsheet</p>
+                  <p className="mt-1 text-sm text-gray-500 dark:text-white/45">Upload an Excel or CSV file to create and review imported sets.</p>
+                </div>
+                <button type="button" onClick={() => fileRef.current?.click()} className="btn-primary min-h-11">
+                  <Upload className="h-4 w-4" /> Choose File
+                </button>
               </div>
             ) : (
               <>

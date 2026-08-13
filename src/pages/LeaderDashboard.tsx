@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { format, parseISO, startOfToday } from 'date-fns';
 import { motion } from 'framer-motion';
 import {
-  Shield, AlertTriangle, ClipboardCheck, UserX, ChevronRight,
+  Shield, AlertTriangle, UserX, ChevronRight,
   AlertCircle, Users, ArrowLeftRight, ListMusic, CalendarCheck, CheckCircle2
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -65,7 +65,9 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
   const unread = useUnreadCounts();
   const [loading, setLoading] = useState(true);
   const [recentOffenses, setRecentOffenses] = useState<RecentOffense[]>([]);
+  const [offenseCount, setOffenseCount] = useState(0);
   const [disciplineAlerts, setDisciplineAlerts] = useState<DisciplineAlert[]>([]);
+  const [disciplineCount, setDisciplineCount] = useState(0);
   const [pendingSetlists, setPendingSetlists] = useState<Setlist[]>([]);
   const [upcomingUnavailable, setUpcomingUnavailable] = useState<UserAvailability[]>([]);
   const [suspendedMembers, setSuspendedMembers] = useState<{ id: string; first_name: string; last_name: string; avatar_url: string | null; ministry_status: string }[]>([]);
@@ -82,7 +84,7 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
       const [offensesRes, disciplineRes, setlistsRes, unavailableRes, suspendedRes, pendingLeaveRes] = await Promise.all([
         supabase.rpc('get_all_members_attendance_stats', { p_year: currentYear, p_quarter: currentQuarter }),
         supabase.from('discipline_records')
-          .select('*, profile:user_id(id, first_name, last_name, nickname, avatar_url)')
+          .select('*, profile:user_id(id, first_name, last_name, nickname, avatar_url)', { count: 'exact' })
           .in('status', ['open', 'verbal_warning', 'counselling', 'suspension'])
           .order('created_at', { ascending: false })
           .limit(5),
@@ -107,8 +109,11 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
       ]);
 
       const offenseData = (offensesRes.data || []) as RecentOffense[];
-      setRecentOffenses(offenseData.filter(m => m.offense_level > 0).slice(0, 6));
+      const membersWithOffenses = offenseData.filter(m => m.offense_level > 0);
+      setOffenseCount(membersWithOffenses.length);
+      setRecentOffenses(membersWithOffenses.slice(0, 6));
       setDisciplineAlerts((disciplineRes.data || []) as DisciplineAlert[]);
+      setDisciplineCount(disciplineRes.count || 0);
       setPendingSetlists((setlistsRes.data || []) as Setlist[]);
       setUpcomingUnavailable((unavailableRes.data || []) as UserAvailability[]);
       setSuspendedMembers((suspendedRes.data || []) as typeof suspendedMembers);
@@ -133,45 +138,6 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
     );
   }
 
-  const widgets = [
-    {
-      label: 'With Offenses',
-      value: recentOffenses.length,
-      icon: AlertTriangle,
-      urgent: recentOffenses.length > 0,
-      tone: { bg: 'bg-red-50 dark:bg-red-500/[0.12]', text: 'text-red-600 dark:text-red-400', dot: '#ef4444' },
-      neutral: { bg: 'bg-emerald-50 dark:bg-emerald-500/[0.10]', text: 'text-emerald-600 dark:text-emerald-400', dot: '#22c55e' },
-      onClick: () => navigate('/leadership/accountability?tab=attendance'),
-    },
-    {
-      label: 'Discipline Open',
-      value: disciplineAlerts.length,
-      icon: Shield,
-      urgent: disciplineAlerts.length > 0,
-      tone: { bg: 'bg-orange-50 dark:bg-orange-500/[0.12]', text: 'text-orange-600 dark:text-orange-400', dot: '#f97316' },
-      neutral: { bg: 'bg-emerald-50 dark:bg-emerald-500/[0.10]', text: 'text-emerald-600 dark:text-emerald-400', dot: '#22c55e' },
-      onClick: () => navigate('/leadership/discipline'),
-    },
-    {
-      label: 'Pending Leave',
-      value: pendingLeave,
-      icon: UserX,
-      urgent: pendingLeave > 0,
-      tone: { bg: 'bg-amber-50 dark:bg-amber-500/[0.12]', text: 'text-amber-600 dark:text-amber-400', dot: '#f59e0b' },
-      neutral: { bg: 'bg-gray-100 dark:bg-white/[0.06]', text: 'text-gray-500 dark:text-white/45', dot: 'rgba(156,163,175,0.7)' },
-      onClick: () => navigate('/leadership/leave'),
-    },
-    {
-      label: 'Setlists to Review',
-      value: pendingSetlists.length,
-      icon: ClipboardCheck,
-      urgent: pendingSetlists.length > 0,
-      tone: { bg: 'bg-sky-50 dark:bg-sky-500/[0.12]', text: 'text-sky-600 dark:text-sky-400', dot: '#0ea5e9' },
-      neutral: { bg: 'bg-gray-100 dark:bg-white/[0.06]', text: 'text-gray-500 dark:text-white/45', dot: 'rgba(156,163,175,0.7)' },
-      onClick: () => navigate('/library'),
-    },
-  ];
-
   function SectionLabel({ index, children, action }: { index: string; children: React.ReactNode; action?: React.ReactNode }) {
     return (
       <div className="flex items-end justify-between mb-3 px-0.5">
@@ -193,7 +159,7 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
         initial={{ opacity: 0, y: 12, filter: 'blur(4px)' }}
         animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
         transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-        className="relative rounded-3xl overflow-hidden bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06]"
+        className="relative overflow-hidden rounded-3xl border border-gray-200/80 bg-white dark:border-white/[0.08] dark:bg-[#151817]"
         style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -12px rgba(15,23,42,0.10)' }}
       >
         <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.12] to-transparent" />
@@ -263,7 +229,7 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.42, delay: 0.04, ease: [0.16, 1, 0.3, 1] }}
-            className="overflow-hidden rounded-[1.6rem] border border-gray-200/80 bg-white dark:border-white/[0.07] dark:bg-white/[0.025]"
+            className="overflow-hidden rounded-[1.6rem] border border-gray-200/80 bg-white dark:border-white/[0.08] dark:bg-[#151817]"
           >
             <div className="border-b border-gray-100 px-5 py-4 dark:border-white/[0.06]">
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-300">Leadership Overview</p>
@@ -272,12 +238,12 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
             </div>
             <div className="grid gap-px bg-gray-100 dark:bg-white/[0.06] sm:grid-cols-2 xl:grid-cols-3">
               {[
-                { label: 'Leave Queue', description: 'Pending requests and approved upcoming leave', value: unread.pendingLeave, valueLabel: 'pending', icon: CalendarCheck, path: '/leadership/leave', tone: 'text-amber-600 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/[0.10]' },
+                { label: 'Leave Queue', description: 'Pending requests and approved upcoming leave', value: pendingLeave, valueLabel: 'pending', icon: CalendarCheck, path: '/leadership/leave', tone: 'text-amber-600 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/[0.10]' },
                 { label: 'Setlist Queue', description: 'Proposals waiting for leadership review', value: unread.pendingSetlists, valueLabel: 'to review', icon: ListMusic, path: '/leadership/setlists', tone: 'text-emerald-600 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-500/[0.10]' },
                 { label: 'Swap Requests', description: 'Coverage changes awaiting approval', value: unread.pendingSwaps, valueLabel: 'pending', icon: ArrowLeftRight, path: '/leadership/swaps', tone: 'text-sky-600 dark:text-sky-300 bg-sky-50 dark:bg-sky-500/[0.10]' },
-                { label: 'Team Roster', description: 'Members, roles, and account access', icon: Users, path: '/leadership/team', tone: 'text-fuchsia-600 dark:text-fuchsia-300 bg-fuchsia-50 dark:bg-fuchsia-500/[0.10]' },
+                { label: 'Accountability', description: 'Attendance concerns and open ministry records', value: offenseCount, valueLabel: 'with offenses', secondaryValue: disciplineCount, secondaryValueLabel: 'discipline open', icon: AlertTriangle, path: '/leadership/accountability', tone: 'text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/[0.10]' },
                 { label: 'Ministry Reflections', description: 'Campaign progress, feedback, and results', icon: CheckCircle2, path: '/leadership/surveys', tone: 'text-teal-600 dark:text-teal-300 bg-teal-50 dark:bg-teal-500/[0.10]' },
-                { label: 'Conduct', description: 'Attendance concerns and open ministry records', icon: AlertTriangle, path: '/leadership/discipline', tone: 'text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/[0.10]' },
+                { label: 'Team Roster', description: 'Members, roles, and account access', icon: Users, path: '/leadership/team', tone: 'text-fuchsia-600 dark:text-fuchsia-300 bg-fuchsia-50 dark:bg-fuchsia-500/[0.10]' },
               ].map(area => {
                 const Icon = area.icon;
                 return (
@@ -285,7 +251,7 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
                     key={area.label}
                     type="button"
                     onClick={() => navigate(area.path)}
-                    className="group flex min-h-[8.25rem] items-start gap-3 bg-white p-4 text-left transition-colors hover:bg-gray-50 dark:bg-[#0b0d0c] dark:hover:bg-white/[0.045]"
+                    className="group flex min-h-[8.25rem] items-start gap-3 bg-white p-4 text-left transition-colors hover:bg-gray-50 dark:bg-[#111513] dark:hover:bg-[#19201d]"
                   >
                     <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${area.tone}`}>
                       <Icon className="h-[18px] w-[18px]" />
@@ -297,8 +263,15 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
                       </span>
                       <span className="mt-1 block text-xs leading-5 text-gray-500 dark:text-white/42">{area.description}</span>
                       {'value' in area && typeof area.value === 'number' && (
-                        <span className={`mt-3 inline-flex items-center rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${area.value > 0 ? area.tone : 'bg-gray-100 text-gray-500 dark:bg-white/[0.06] dark:text-white/40'}`}>
-                          {area.value} {area.valueLabel}
+                        <span className="mt-3 flex flex-wrap gap-1.5">
+                          <span className={`inline-flex items-center rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${area.value > 0 ? area.tone : 'bg-gray-100 text-gray-500 dark:bg-white/[0.06] dark:text-white/40'}`}>
+                            {area.value} {area.valueLabel}
+                          </span>
+                          {'secondaryValue' in area && typeof area.secondaryValue === 'number' && (
+                            <span className={`inline-flex items-center rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${area.secondaryValue > 0 ? area.tone : 'bg-gray-100 text-gray-500 dark:bg-white/[0.06] dark:text-white/40'}`}>
+                              {area.secondaryValue} {area.secondaryValueLabel}
+                            </span>
+                          )}
                         </span>
                       )}
                     </span>
@@ -309,87 +282,9 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
           </motion.section>
         )}
 
-        {/* Metric widgets */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-          className="grid grid-cols-2 sm:grid-cols-4 gap-3"
-        >
-          {widgets.map(w => {
-            const t = w.urgent ? w.tone : w.neutral;
-            return (
-              <button
-                key={w.label}
-                onClick={w.onClick}
-                className="group relative rounded-3xl p-4 text-left bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] hover:border-gray-300 dark:hover:border-white/[0.1] hover:-translate-y-0.5 transition-all duration-200 active:scale-[0.98] overflow-hidden"
-                style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 4px 14px -8px rgba(15,23,42,0.08)' }}
-              >
-                <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.05] dark:via-white/[0.08] to-transparent" />
-                <div className={`inline-flex items-center justify-center h-9 w-9 rounded-2xl mb-3 ${t.bg}`}>
-                  <w.icon className={`h-4 w-4 ${t.text}`} />
-                </div>
-                <p className={`text-[26px] font-black leading-none tabular-nums ${w.urgent ? t.text : 'text-gray-900 dark:text-white'}`} style={{ letterSpacing: '-0.04em' }}>{w.value}</p>
-                <p className="text-[11px] text-gray-500 dark:text-white/45 mt-2 font-medium">{w.label}</p>
-              </button>
-            );
-          })}
-        </motion.div>
-
         {/* Main grid */}
         <div className="grid gap-4 lg:grid-cols-2">
-          <DashCard index="01" title="Attendance Alerts" icon={AlertTriangle} iconColor="text-amber-500"
-            badge={recentOffenses.length}
-            linkLabel="Full Report"
-            onLink={() => navigate('/leadership/accountability?tab=attendance')}
-          >
-            <div className="divide-y divide-black/[0.03] dark:divide-white/[0.04]">
-              {recentOffenses.length === 0 ? (
-                <p className="px-5 py-8 text-center text-[13px] text-gray-400 dark:text-white/30">All members in good standing</p>
-              ) : (
-                recentOffenses.map(m => (
-                  <div key={m.user_id} className="flex items-center gap-3 px-5 py-3">
-                    <Avatar src={m.avatar_url} firstName={m.first_name} lastName={m.last_name} size="sm" className="ring-1 ring-black/[0.06] dark:ring-white/[0.08]" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-bold text-gray-900 dark:text-white truncate" style={{ letterSpacing: '-0.01em' }}>{m.first_name} {m.last_name}</p>
-                      <p className="text-[11px] font-mono text-gray-400 dark:text-white/30 mt-0.5 tracking-wide">{m.late_count}L · {m.absent_count}A</p>
-                    </div>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-lg font-bold ${offenseColors[m.offense_level] || ''}`}>{offenseLabels[m.offense_level]}</span>
-                  </div>
-                ))
-              )}
-            </div>
-          </DashCard>
-
-          <DashCard index="02" title="Open Discipline" icon={Shield} iconColor="text-red-500"
-            badge={disciplineAlerts.length}
-            linkLabel="View All"
-            onLink={() => navigate('/leadership/discipline')}
-          >
-            <div className="divide-y divide-black/[0.03] dark:divide-white/[0.04]">
-              {disciplineAlerts.length === 0 ? (
-                <p className="px-5 py-8 text-center text-[13px] text-gray-400 dark:text-white/30">No open discipline records</p>
-              ) : (
-                disciplineAlerts.map(d => {
-                  const sCfg = statusConfig[d.status] || statusConfig.open;
-                  return (
-                    <button key={d.id} onClick={() => navigate('/leadership/discipline')}
-                      className="w-full flex items-center gap-3 px-5 py-3 hover:bg-gray-50/60 dark:hover:bg-white/[0.02] transition-colors text-left"
-                    >
-                      {d.profile && <Avatar src={d.profile.avatar_url} firstName={d.profile.first_name} lastName={d.profile.last_name} size="sm" className="ring-1 ring-black/[0.06] dark:ring-white/[0.08]" />}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-bold text-gray-900 dark:text-white truncate" style={{ letterSpacing: '-0.01em' }}>{d.title}</p>
-                        {d.profile && <p className="text-[11px] text-gray-400 dark:text-white/30 mt-0.5">{d.profile.first_name} {d.profile.last_name}</p>}
-                      </div>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-lg font-bold shrink-0 ${sCfg.color}`}>{sCfg.label}</span>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </DashCard>
-
-          <DashCard index="03" title="Upcoming Unavailable" icon={UserX} iconColor="text-orange-500"
+          <DashCard index="01" title="Upcoming Unavailable" icon={UserX} iconColor="text-orange-500"
             badge={upcomingUnavailable.length}
             linkLabel="View All"
             onLink={() => navigate('/unavailable-members')}
@@ -414,6 +309,57 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
                       <p className="text-[11px] text-gray-500 dark:text-white/40 truncate mt-0.5">{ua.reason || 'No reason given'}</p>
                     </div>
                   </div>
+                  );
+                })
+              )}
+            </div>
+          </DashCard>
+
+          <DashCard index="02" title="Attendance Alerts" icon={AlertTriangle} iconColor="text-amber-500"
+            badge={offenseCount}
+            linkLabel="Full Report"
+            onLink={() => navigate('/leadership/accountability?tab=attendance')}
+          >
+            <div className="divide-y divide-black/[0.03] dark:divide-white/[0.04]">
+              {recentOffenses.length === 0 ? (
+                <p className="px-5 py-8 text-center text-[13px] text-gray-400 dark:text-white/30">All members in good standing</p>
+              ) : (
+                recentOffenses.map(m => (
+                  <div key={m.user_id} className="flex items-center gap-3 px-5 py-3">
+                    <Avatar src={m.avatar_url} firstName={m.first_name} lastName={m.last_name} size="sm" className="ring-1 ring-black/[0.06] dark:ring-white/[0.08]" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-bold text-gray-900 dark:text-white truncate" style={{ letterSpacing: '-0.01em' }}>{m.first_name} {m.last_name}</p>
+                      <p className="text-[11px] font-mono text-gray-400 dark:text-white/30 mt-0.5 tracking-wide">{m.late_count}L · {m.absent_count}A</p>
+                    </div>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-lg font-bold ${offenseColors[m.offense_level] || ''}`}>{offenseLabels[m.offense_level]}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </DashCard>
+
+          <DashCard index="03" title="Open Discipline" icon={Shield} iconColor="text-red-500"
+            badge={disciplineAlerts.length}
+            linkLabel="View All"
+            onLink={() => navigate('/leadership/discipline')}
+          >
+            <div className="divide-y divide-black/[0.03] dark:divide-white/[0.04]">
+              {disciplineAlerts.length === 0 ? (
+                <p className="px-5 py-8 text-center text-[13px] text-gray-400 dark:text-white/30">No open discipline records</p>
+              ) : (
+                disciplineAlerts.map(d => {
+                  const sCfg = statusConfig[d.status] || statusConfig.open;
+                  return (
+                    <button key={d.id} onClick={() => navigate('/leadership/discipline')}
+                      className="w-full flex items-center gap-3 px-5 py-3 hover:bg-gray-50/60 dark:hover:bg-white/[0.02] transition-colors text-left"
+                    >
+                      {d.profile && <Avatar src={d.profile.avatar_url} firstName={d.profile.first_name} lastName={d.profile.last_name} size="sm" className="ring-1 ring-black/[0.06] dark:ring-white/[0.08]" />}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-bold text-gray-900 dark:text-white truncate" style={{ letterSpacing: '-0.01em' }}>{d.title}</p>
+                        {d.profile && <p className="text-[11px] text-gray-400 dark:text-white/30 mt-0.5">{d.profile.first_name} {d.profile.last_name}</p>}
+                      </div>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-lg font-bold shrink-0 ${sCfg.color}`}>{sCfg.label}</span>
+                    </button>
                   );
                 })
               )}
@@ -477,7 +423,7 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
 
   return (
     <div className="page-container page-bottom-pad">
-      <div className="max-w-5xl mx-auto px-1 sm:px-2 pt-6 sm:pt-8">
+      <div className="app-content-shell pt-4 sm:pt-5">
         {inner}
       </div>
     </div>

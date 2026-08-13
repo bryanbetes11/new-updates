@@ -90,7 +90,7 @@ export function RequestLeave() {
 
   return (
     <div className="page-container page-bottom-pad overflow-hidden">
-      <div className="max-w-2xl lg:max-w-6xl xl:max-w-[1560px] mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-5 space-y-5 sm:space-y-6">
+      <div className="app-content-shell space-y-5 pt-4 sm:space-y-6 sm:pt-5">
 
         {/* ── Availability Command Center ──────────────── */}
         <motion.section

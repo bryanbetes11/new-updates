@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { format, parseISO, startOfToday, isBefore } from 'date-fns';
-import { AlertTriangle, UserX, ChevronRight, Trash2, Calendar } from 'lucide-react';
+import { AlertTriangle, UserX, ChevronRight, Trash2, Calendar, Users } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -8,13 +8,16 @@ import { PageLoader } from '../components/LoadingSpinner';
 import { Modal } from '../components/Modal';
 import { Avatar } from '../components/Avatar';
 import { EmptyState } from '../components/EmptyState';
-import type { UserAvailability } from '../types';
+import type { Profile, UserAvailability } from '../types';
+
+type TeamMemberSummary = Pick<Profile, 'id' | 'first_name' | 'last_name' | 'avatar_url'>;
 
 export function UnavailableMembers() {
   const { user, isProductionDirector } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [unavailableMembers, setUnavailableMembers] = useState<UserAvailability[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMemberSummary[]>([]);
   const [selectedUnavailability, setSelectedUnavailability] = useState<UserAvailability | null>(null);
   const [showDelete, setShowDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -22,15 +25,25 @@ export function UnavailableMembers() {
 
   const loadUnavailableMembers = async () => {
     setLoadError(null);
-    const { data, error } = await supabase
-      .from('user_availability')
-      .select('*, profiles!user_availability_user_id_fkey(first_name, last_name, nickname, avatar_url)')
-      .eq('status', 'approved')
-      .order('created_at', { ascending: true });
-    if (error) {
+    const [availabilityResult, membersResult] = await Promise.all([
+      supabase
+        .from('user_availability')
+        .select('*, profiles!user_availability_user_id_fkey(first_name, last_name, nickname, avatar_url)')
+        .eq('status', 'approved')
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('profiles')
+        .select('id, first_name, last_name, avatar_url')
+        .eq('is_onboarded', true)
+        .eq('ministry_status', 'active')
+        .order('first_name')
+        .order('last_name'),
+    ]);
+    if (availabilityResult.error || membersResult.error) {
       setLoadError('We could not load team availability. Check your connection and try again.');
     } else {
-      setUnavailableMembers((data || []) as UserAvailability[]);
+      setUnavailableMembers((availabilityResult.data || []) as UserAvailability[]);
+      setTeamMembers((membersResult.data || []) as TeamMemberSummary[]);
     }
     setLoading(false);
   };
@@ -82,6 +95,10 @@ export function UnavailableMembers() {
     return d ? isBefore(parseISO(d), today) : false;
   });
   const uniqueUpcomingCount = new Set(upcoming.map(u => u.user_id)).size;
+  const leaveCountByMember = unavailableMembers.reduce<Record<string, number>>((counts, leave) => {
+    counts[leave.user_id] = (counts[leave.user_id] || 0) + 1;
+    return counts;
+  }, {});
 
   const DateChip = ({ date, dim = false }: { date: string | null; dim?: boolean }) => {
     if (!date) return (
@@ -135,7 +152,7 @@ export function UnavailableMembers() {
   );
 
   return (
-    <div className="page-container page-bottom-pad">
+    <div className="profile-page-scroll page-container page-bottom-pad">
       <div className="px-4 sm:px-5 lg:px-6 pt-5 sm:pt-7 pb-4 space-y-5">
 
         <div className="animate-fade-in" style={{ animationFillMode: 'both' }}>
@@ -150,6 +167,35 @@ export function UnavailableMembers() {
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5">
             Approved leave requests from your team
           </p>
+        </div>
+
+        <div className="card overflow-hidden animate-slide-up" style={{ animationFillMode: 'both' }}>
+          <div className="flex items-center gap-2.5 border-b border-black/[0.04] px-4 py-3.5 dark:border-white/[0.05] sm:px-5">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-500/15">
+              <Users className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <span className="flex-1 text-[13px] font-bold text-gray-900 dark:text-white">All Members</span>
+            <span className="badge-gray">{teamMembers.length}</span>
+          </div>
+          <div className="grid divide-y divide-black/[0.04] dark:divide-white/[0.05] md:grid-cols-2 md:divide-x md:[&>*:nth-child(2)]:border-t-0">
+            {teamMembers.map(member => {
+              const leaveCount = leaveCountByMember[member.id] || 0;
+              return (
+                <div key={member.id} className="flex min-w-0 items-center gap-3 px-4 py-3 sm:px-5">
+                  <Avatar src={member.avatar_url} firstName={member.first_name} lastName={member.last_name} size="sm" />
+                  <p className="min-w-0 flex-1 truncate text-[13px] font-semibold text-gray-900 dark:text-white">
+                    {member.first_name} {member.last_name}
+                  </p>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${leaveCount > 0 ? 'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300' : 'bg-black/[0.04] text-gray-500 dark:bg-white/[0.06] dark:text-white/40'}`}
+                    aria-label={`${leaveCount} total approved leave records for ${member.first_name} ${member.last_name}`}
+                  >
+                    {leaveCount} {leaveCount === 1 ? 'leave' : 'leaves'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         <div

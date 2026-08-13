@@ -3,7 +3,6 @@ import {
   useEffect,
   useLayoutEffect,
   type CSSProperties,
-  type WheelEvent as ReactWheelEvent,
 } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -20,51 +19,6 @@ import {
   shouldUseAppleTouchFeedback,
   triggerHaptic,
 } from "../lib/haptics";
-
-const scrollableOverflowValues = new Set(["auto", "scroll", "overlay"]);
-const nativeWheelScrollSelectors = [
-  "[data-modal-body]",
-  "[data-mobile-menu-scroll]",
-  ".messages-scroll-area",
-  ".service-mode-chart-scroll",
-  ".service-mode-edit-scroll",
-].join(",");
-const wheelContainmentSelectors = [
-  "[data-modal-sheet]",
-  ".chat-container",
-  ".service-mode-overlay",
-].join(",");
-
-function canScrollElementWithWheel(element: HTMLElement, deltaY: number) {
-  const style = window.getComputedStyle(element);
-  if (!scrollableOverflowValues.has(style.overflowY)) return false;
-  if (element.scrollHeight <= element.clientHeight + 1) return false;
-
-  const atTop = element.scrollTop <= 0;
-  const atBottom =
-    element.scrollTop + element.clientHeight >= element.scrollHeight - 1;
-  return (deltaY < 0 && !atTop) || (deltaY > 0 && !atBottom);
-}
-
-function hasNativeWheelScroller(target: HTMLElement | null, deltaY: number) {
-  if (target?.closest(wheelContainmentSelectors)) return true;
-
-  let element = target;
-  while (
-    element &&
-    element !== document.body &&
-    element !== document.documentElement
-  ) {
-    if (
-      element.matches(nativeWheelScrollSelectors) &&
-      canScrollElementWithWheel(element, deltaY)
-    )
-      return true;
-    if (canScrollElementWithWheel(element, deltaY)) return true;
-    element = element.parentElement;
-  }
-  return false;
-}
 
 export function Layout() {
   const { user } = useAuth();
@@ -138,6 +92,7 @@ export function Layout() {
   const isRequestLeavePage = location.pathname === "/request-leave";
   const isNotificationsPage = location.pathname === "/notifications";
   const isProfilePage = location.pathname === "/profile";
+  const isUnavailableMembersPage = location.pathname === "/unavailable-members";
   const isLeadershipPage = location.pathname.startsWith("/leadership");
   const isWideShellPage =
     isDashboardPage ||
@@ -162,13 +117,7 @@ export function Layout() {
     pointerEvents: shouldShiftForMobileMenu ? "none" : undefined,
     "--desktop-sidebar-width": `${desktopSidebarWidth}px`,
   } as CSSProperties;
-  const shouldAllowNativePullRefresh =
-    isDashboardPage ||
-    isEventsPage ||
-    isEventDetail ||
-    isAnnouncementsPage ||
-    isAnnouncementDetail ||
-    isLeadershipPage;
+  const shouldAllowNativePullRefresh = (isWideShellPage || isUnavailableMembersPage) && !isMessagesPage;
 
   useEffect(() => {
     rememberRoute(
@@ -205,29 +154,6 @@ export function Layout() {
     window.addEventListener("scroll", clampHorizontalScroll, { passive: true });
     return () => window.removeEventListener("scroll", clampHorizontalScroll);
   }, []);
-
-  const handlePageWheelCapture = (event: ReactWheelEvent<HTMLElement>) => {
-    if (event.defaultPrevented) return;
-    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-
-    const target = event.target instanceof HTMLElement ? event.target : null;
-    if (hasNativeWheelScroller(target, event.deltaY)) return;
-
-    const scrollingElement =
-      document.scrollingElement || document.documentElement;
-    const maxScroll = Math.max(
-      0,
-      scrollingElement.scrollHeight - window.innerHeight,
-    );
-    if (maxScroll <= 0) return;
-
-    const currentTop = scrollingElement.scrollTop;
-    const nextTop = Math.min(maxScroll, Math.max(0, currentTop + event.deltaY));
-    if (nextTop === currentTop) return;
-
-    event.preventDefault();
-    scrollingElement.scrollTop = nextTop;
-  };
 
   useEffect(() => {
     if (!shouldShiftForMobileMenu) return;
@@ -383,7 +309,6 @@ export function Layout() {
       )}
 
       <motion.main
-        onWheelCapture={handlePageWheelCapture}
         animate={{
           marginLeft: 0,
           width: "100%",

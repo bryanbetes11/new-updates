@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { format, parseISO, startOfDay, subWeeks, previousSunday, addDays, subDays, differenceInDays, eachDayOfInterval } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { motion } from 'framer-motion';
-import { Calendar, Plus, Search, Filter, Users, Trash2, CalendarOff, AlertCircle, Clock, X, PartyPopper, Heart, Sparkles, List, CheckCircle, MoreVertical } from 'lucide-react';
+import { Calendar, Plus, Search, Filter, Users, Trash2, CalendarOff, AlertCircle, Clock, X, PartyPopper, Heart, Sparkles, List, CheckCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -329,8 +329,11 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
 }) {
   const { user, isPlatformOwner } = useAuth();
   const { toast } = useToast();
-  const [showLifecycleMenu, setShowLifecycleMenu] = useState(false);
+  const [showLifecycleConfirm, setShowLifecycleConfirm] = useState(false);
   const [savingLifecycle, setSavingLifecycle] = useState(false);
+  const longPressTimerRef = useRef<number | null>(null);
+  const longPressTriggeredRef = useRef(false);
+  const longPressOriginRef = useRef<{ x: number; y: number } | null>(null);
   const dayEntries = calendarEntries.filter(e => e.date === event.event_date && e.type === 'leave');
   const songLeader = songLeaderMap?.[event.id];
   const setlistInfo = setlistInfoMap?.[event.id];
@@ -345,13 +348,42 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
     : null;
   const pendingReviewMessage = pendingReviewAge ? getSetlistPendingMessage(pendingReviewAge, false) : null;
   const scheduleHasEnded = hasEventScheduleEnded(event, now);
+  const canManageLifecycle = isPlatformOwner && (isPast || scheduleHasEnded);
+
+  const cancelLongPress = () => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  useEffect(() => () => cancelLongPress(), []);
+
+  const startLongPress = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!canManageLifecycle || !window.matchMedia('(max-width: 767px)').matches) return;
+    cancelLongPress();
+    longPressTriggeredRef.current = false;
+    longPressOriginRef.current = { x: event.clientX, y: event.clientY };
+    longPressTimerRef.current = window.setTimeout(() => {
+      longPressTriggeredRef.current = true;
+      setShowLifecycleConfirm(true);
+      longPressTimerRef.current = null;
+      if ('vibrate' in navigator) navigator.vibrate(35);
+    }, 600);
+  };
+
+  const handleLongPressMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const origin = longPressOriginRef.current;
+    if (!origin) return;
+    if (Math.hypot(event.clientX - origin.x, event.clientY - origin.y) > 10) cancelLongPress();
+  };
 
   // Visual urgency states (only when proposal is missing)
   const showOverdueStyle = isOverdue && !hasApprovedSetlist && !isPast && !scheduleHasEnded;
   const showDueSoonStyle = isDueSoon && !hasApprovedSetlist && !isPast && !scheduleHasEnded;
 
   const handleLifecycleChange = async () => {
-    if (!user || !isPlatformOwner || savingLifecycle) return;
+    if (!user || !isPlatformOwner || (!isPast && !scheduleHasEnded) || savingLifecycle) return;
 
     setSavingLifecycle(true);
     const nextOverride = isPast ? 'upcoming' : 'completed';
@@ -373,7 +405,7 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
       return;
     }
 
-    setShowLifecycleMenu(false);
+    setShowLifecycleConfirm(false);
     onLifecycleChange?.(updatedEvent as Event);
     toast('success', isPast ? 'Event moved to Upcoming' : 'Event moved to Past events');
   };
@@ -381,8 +413,20 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
   return (
     <div className="relative">
       <button
-        onClick={() => onEventClick(event.id)}
-        className={`touch-action-pan-y group relative flex min-h-[5.5rem] w-full items-center gap-3 bg-transparent px-0 py-3 text-left transition-colors hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#22c55e] ${isPlatformOwner ? 'pr-11' : ''}`}
+        onClick={() => {
+          if (longPressTriggeredRef.current) {
+            longPressTriggeredRef.current = false;
+            return;
+          }
+          onEventClick(event.id);
+        }}
+        onPointerDown={startLongPress}
+        onPointerUp={cancelLongPress}
+        onPointerCancel={cancelLongPress}
+        onPointerLeave={cancelLongPress}
+        onPointerMove={handleLongPressMove}
+        onContextMenu={event => { if (canManageLifecycle) event.preventDefault(); }}
+        className={`touch-action-pan-y group relative flex min-h-[5.5rem] w-full items-center gap-3 bg-transparent px-0 py-3 text-left transition-colors hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#22c55e] ${canManageLifecycle ? 'select-none' : ''}`}
         style={{ opacity: isPast ? 0.62 : 1 }}
       >
       {setlistInfo?.songCount ? (
@@ -455,9 +499,11 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
       </div>
 
       <div className="flex shrink-0 items-center gap-2 lg:gap-3">
-        <span className={`hidden rounded-full border px-4 py-2 text-[12px] font-bold lg:inline-flex ${hasApprovedSetlist ? 'border-[#22c55e]/20 bg-[#22c55e]/10 text-[#22c55e]' : setlistInfo?.status === 'pending_review' ? 'border-amber-400/20 bg-amber-400/10 text-amber-300' : 'border-white/[0.08] text-white/62'}`}>
-          {hasApprovedSetlist ? 'Ready' : setlistInfo?.status === 'pending_review' ? 'Pending review' : 'No songs yet'}
-        </span>
+        {!canManageLifecycle && (
+          <span className={`hidden rounded-full border px-4 py-2 text-[12px] font-bold lg:inline-flex ${hasApprovedSetlist ? 'border-[#22c55e]/20 bg-[#22c55e]/10 text-[#22c55e]' : setlistInfo?.status === 'pending_review' ? 'border-amber-400/20 bg-amber-400/10 text-amber-300' : 'border-white/[0.08] text-white/62'}`}>
+            {hasApprovedSetlist ? 'Ready' : setlistInfo?.status === 'pending_review' ? 'Pending review' : 'No songs yet'}
+          </span>
+        )}
         <EventDateChip
           date={event.event_date}
           dim={!!isPast}
@@ -467,38 +513,38 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
       </div>
       </button>
 
-      {isPlatformOwner && (
-        <div className="absolute right-0 top-3 z-20">
-          <button
-            type="button"
-            onClick={() => setShowLifecycleMenu(open => !open)}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full text-white/48 transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e]"
-            aria-label="Event status actions"
-            aria-expanded={showLifecycleMenu}
-          >
-            <MoreVertical className="h-4 w-4" />
-          </button>
-          {showLifecycleMenu && (
-            <div className="absolute right-0 top-11 z-30 w-60 rounded-xl border border-white/[0.1] bg-[#181818] p-1.5 shadow-2xl shadow-black/60">
-              <button
-                type="button"
-                onClick={handleLifecycleChange}
-                disabled={savingLifecycle}
-                className="w-full rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] disabled:opacity-50"
-              >
-                <span className="block text-[13px] font-black text-white">
-                  {isPast ? 'Move to Upcoming' : 'Move to Past events'}
-                </span>
-                {!isPast && (
-                  <span className="mt-0.5 block text-[11px] font-semibold text-white/42">
-                    Opens post-event observations
-                  </span>
-                )}
-              </button>
-            </div>
-          )}
-        </div>
+      {canManageLifecycle && (
+        <button
+          type="button"
+          onClick={() => setShowLifecycleConfirm(true)}
+          className="absolute right-[5.5rem] top-1/2 z-20 hidden min-h-9 -translate-y-1/2 items-center gap-1.5 rounded-full border border-emerald-400/25 bg-[#10251a] px-3 text-[11px] font-black text-emerald-300 shadow-lg shadow-black/40 transition-colors hover:bg-[#173523] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] md:inline-flex lg:right-[6rem]"
+          aria-label={isPast ? 'Move event to Upcoming' : 'Move event to Past events'}
+        >
+          {isPast ? <Calendar className="h-3.5 w-3.5" /> : <CheckCircle className="h-3.5 w-3.5" />}
+          <span>{isPast ? 'Move to Upcoming' : 'Move to Past'}</span>
+        </button>
       )}
+
+      <Modal
+        open={showLifecycleConfirm}
+        onClose={() => !savingLifecycle && setShowLifecycleConfirm(false)}
+        title={isPast ? 'Move Event to Upcoming?' : 'Move Event to Past?'}
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+            {isPast
+              ? `Move “${songLeader || event.title}” back to Upcoming events?`
+              : `Confirm that “${songLeader || event.title}” is finished and move it to Past events. This will open its post-event observations.`}
+          </p>
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={() => setShowLifecycleConfirm(false)} disabled={savingLifecycle} className="btn-secondary">Cancel</button>
+            <button type="button" onClick={handleLifecycleChange} disabled={savingLifecycle} className="btn-primary">
+              {savingLifecycle ? 'Moving…' : (isPast ? 'Move to Upcoming' : 'Move to Past')}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -860,7 +906,7 @@ export function Events() {
     const s = localStorage.getItem('eventsActiveTab'); return (s === 'upcoming' || s === 'past') ? s : 'upcoming';
   });
   const [desktopView, setDesktopView] = useState<'list' | 'calendar'>(() => {
-    const storedView = sessionStorage.getItem('eventsDesktopView');
+    const storedView = localStorage.getItem('eventsView') ?? sessionStorage.getItem('eventsDesktopView');
     return storedView === 'calendar' ? 'calendar' : 'list';
   });
   const [form, setForm] = useState<EventFormState>(() => createEmptyEventForm());
@@ -993,8 +1039,9 @@ export function Events() {
 
   useEffect(() => { fetchEvents(); }, [fetchEvents]);
   useEffect(() => {
-    const state = location.state as { deletedEventId?: string; refreshEventsAt?: number } | null;
-    if (!state?.deletedEventId && !state?.refreshEventsAt) return;
+    const state = location.state as { deletedEventId?: string; refreshEventsAt?: number; openModal?: string } | null;
+    if (state?.openModal === 'schedule-event') openCreateEvent();
+    if (!state?.deletedEventId && !state?.refreshEventsAt && !state?.openModal) return;
 
     const deletedEventId = state.deletedEventId;
     if (deletedEventId) {
@@ -1016,7 +1063,7 @@ export function Events() {
     navigate(location.pathname, { replace: true, state: null });
   }, [fetchEvents, location.key, location.pathname, location.state, navigate]);
   useEffect(() => { localStorage.setItem('eventsActiveTab', activeTab); }, [activeTab]);
-  useEffect(() => { sessionStorage.setItem('eventsDesktopView', desktopView); }, [desktopView]);
+  useEffect(() => { localStorage.setItem('eventsView', desktopView); }, [desktopView]);
   useEffect(() => {
     const refreshLifecycle = () => setLifecycleNow(new Date());
     const interval = window.setInterval(refreshLifecycle, 30_000);
@@ -1221,7 +1268,7 @@ export function Events() {
                   onClick={() => setActiveTab(tab)}
                   aria-pressed={active}
                   className={`relative z-10 inline-flex h-11 shrink-0 touch-manipulation items-center justify-center gap-2 rounded-full px-4 text-[12px] font-black transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] focus-visible:ring-offset-2 focus-visible:ring-offset-[#050505] ${
-                    desktopView === 'calendar' ? 'lg:hidden' : ''
+                    desktopView === 'calendar' ? 'md:hidden' : ''
                   } ${
                     active
                       ? 'bg-[#22c55e] text-black'
@@ -1241,7 +1288,7 @@ export function Events() {
             })}
             <span
               className={`hidden h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-[#22c55e] px-4 text-[12px] font-black text-black ${
-                desktopView === 'calendar' ? 'lg:inline-flex' : ''
+                desktopView === 'calendar' ? 'md:inline-flex' : ''
               }`}
             >
               All events
@@ -1282,7 +1329,7 @@ export function Events() {
               className="w-full sm:w-48"
               icon={<Filter className="h-4 w-4" />}
             />
-            <div className="hidden shrink-0 items-center gap-1 rounded-[0.7rem] bg-white/[0.07] p-1 lg:flex">
+            <div className="hidden shrink-0 items-center gap-1 rounded-[0.7rem] bg-white/[0.07] p-1 md:flex">
               {([
                 { value: 'list' as const, label: 'List', icon: List },
                 { value: 'calendar' as const, label: 'Calendar', icon: Calendar },
@@ -1331,7 +1378,7 @@ export function Events() {
         ) : (
           <>
             {desktopView === 'calendar' ? (
-              <motion.div {...fadeUp(0.1)} className="hidden lg:block">
+              <motion.div {...fadeUp(0.1)} className="hidden md:block">
                 <CalendarGrid
                   events={calendarEvents}
                   calendarEntries={calendarEntries}
@@ -1355,7 +1402,7 @@ export function Events() {
                 />
               </motion.div>
             )}
-            <div className="touch-action-pan-y lg:hidden">
+            <div className={`touch-action-pan-y ${desktopView === 'calendar' ? 'md:hidden' : 'lg:hidden'}`}>
               <EventList events={filtered} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={id => navigate(`/events/${id}`)} onLifecycleChange={handleEventLifecycleChange} showPast={activeTab === 'past'} animateItems={false} />
             </div>
           </>

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { motion } from 'framer-motion';
-import { PlayCircle, Plus, Search, ExternalLink, Film, CreditCard as Edit2, Trash2, MoreVertical, X, MessageCircle, Send, Loader2, Bell, BellOff } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { PlayCircle, Plus, Search, ExternalLink, Film, CreditCard as Edit2, Trash2, MoreVertical, X, MessageCircle, Send, Loader2, Bell, BellOff, List, LayoutGrid } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -121,6 +122,8 @@ async function fetchYouTubeMetadata(url: string): Promise<YouTubeMetadata> {
 }
 
 export function VideosTab() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { user, organization, isProductionDirector } = useAuth();
   const { toast } = useToast();
   const [videos, setVideos] = useState<Video[]>([]);
@@ -128,6 +131,9 @@ export function VideosTab() {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [visibleCount, setVisibleCount] = useState(VIDEOS_PER_PAGE);
+  const [desktopView, setDesktopView] = useState<'list' | 'grid'>(() => {
+    return localStorage.getItem('videosDesktopView') === 'grid' ? 'grid' : 'list';
+  });
   const [showCreate, setShowCreate] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
@@ -146,6 +152,13 @@ export function VideosTab() {
   const [createNotifyMembers, setCreateNotifyMembers] = useState(false);
   const [showPlayer, setShowPlayer] = useState(false);
   const [playerUnavailable, setPlayerUnavailable] = useState(false);
+
+  useEffect(() => {
+    const state = location.state as { openModal?: string } | null;
+    if (state?.openModal !== 'upload-video') return;
+    setShowCreate(true);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate]);
   const [comments, setComments] = useState<VideoComment[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [commentContent, setCommentContent] = useState('');
@@ -165,6 +178,10 @@ export function VideosTab() {
   };
 
   useEffect(() => { fetchVideos(); }, []);
+
+  useEffect(() => {
+    localStorage.setItem('videosDesktopView', desktopView);
+  }, [desktopView]);
 
   useEffect(() => {
     setVisibleCount(VIDEOS_PER_PAGE);
@@ -491,7 +508,7 @@ export function VideosTab() {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-        className="flex flex-col sm:flex-row gap-2"
+        className="flex flex-col gap-2 sm:flex-row"
       >
         <div className="relative flex-1">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
@@ -508,6 +525,26 @@ export function VideosTab() {
             </button>
           )}
         </div>
+        <div className="hidden h-12 shrink-0 items-center rounded-full border border-white/[0.08] bg-white/[0.055] p-1 md:flex" role="group" aria-label="Video layout">
+          <button
+            type="button"
+            onClick={() => setDesktopView('list')}
+            aria-label="List view"
+            aria-pressed={desktopView === 'list'}
+            className={`inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors ${desktopView === 'list' ? 'bg-[#1ed760] text-black' : 'text-white/55 hover:bg-white/[0.08] hover:text-white'}`}
+          >
+            <List className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setDesktopView('grid')}
+            aria-label="Grid view"
+            aria-pressed={desktopView === 'grid'}
+            className={`inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors ${desktopView === 'grid' ? 'bg-[#1ed760] text-black' : 'text-white/55 hover:bg-white/[0.08] hover:text-white'}`}
+          >
+            <LayoutGrid className="h-4 w-4" />
+          </button>
+        </div>
       </motion.div>
 
       {filtered.length === 0 ? (
@@ -523,7 +560,7 @@ export function VideosTab() {
             variants={containerVariants}
             initial="hidden"
             animate="show"
-            className="overflow-visible border-y border-white/[0.08]"
+            className={`overflow-visible ${desktopView === 'grid' ? 'md:grid md:grid-cols-2 md:gap-4' : 'border-y border-white/[0.08]'}`}
           >
             {visibleVideos.map(video => {
               const thumb = video.thumbnail_url || getYouTubeThumb(video.video_url);
@@ -533,11 +570,11 @@ export function VideosTab() {
                 <motion.div
                   key={video.id}
                   variants={itemVariants}
-                  className="group relative border-b border-white/[0.075] transition-colors duration-200 last:border-b-0 hover:bg-white/[0.045]"
+                  className={`group relative transition-colors duration-200 hover:bg-white/[0.045] ${desktopView === 'grid' ? 'md:overflow-hidden md:rounded-2xl md:border md:border-white/[0.08] md:bg-white/[0.025]' : 'border-b border-white/[0.075] last:border-b-0'}`}
                 >
-                  <button type="button" onClick={() => openVideo(video)} className="grid w-full gap-3 px-4 py-4 text-left sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-5 sm:px-5 lg:px-6">
-                    <div className="flex items-start gap-3 sm:contents">
-                      <div className="relative h-16 w-28 shrink-0 overflow-hidden rounded-md bg-white/[0.055] ring-1 ring-white/[0.08] sm:h-20 sm:w-36">
+                  <button type="button" onClick={() => openVideo(video)} className={`grid w-full gap-3 px-4 py-4 text-left sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-5 sm:px-5 lg:px-6 ${desktopView === 'grid' ? 'md:block md:!p-0' : ''}`}>
+                    <div className={`flex items-start gap-3 sm:contents ${desktopView === 'grid' ? 'md:block' : ''}`}>
+                      <div className={`relative h-16 w-28 shrink-0 overflow-hidden rounded-md bg-white/[0.055] ring-1 ring-white/[0.08] sm:h-20 sm:w-36 ${desktopView === 'grid' ? 'md:aspect-video md:!h-auto md:!w-full md:rounded-none md:ring-0' : ''}`}>
                       {thumb ? (
                         <img
                           src={thumb}
@@ -558,7 +595,7 @@ export function VideosTab() {
                         </div>
                       </div>
 
-                      <div className="min-w-0 flex-1">
+                      <div className={`min-w-0 flex-1 ${desktopView === 'grid' ? 'md:p-5' : ''}`}>
                         <div className="flex flex-wrap items-center gap-1.5">
                           <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.1em] ${catColor}`}>
                             {video.category}
@@ -579,7 +616,7 @@ export function VideosTab() {
                       </div>
                     </div>
 
-                    <div className="hidden items-center gap-2 justify-self-end text-white/26 sm:flex">
+                    <div className={`hidden items-center gap-2 justify-self-end text-white/26 sm:flex ${desktopView === 'grid' ? 'md:hidden' : ''}`}>
                       <span className="text-[11px] font-bold uppercase tracking-[0.12em] opacity-0 transition-opacity group-hover:opacity-100">
                         Open
                       </span>

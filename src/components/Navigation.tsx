@@ -798,7 +798,7 @@ export function Navigation({
           },
         ]
       : []),
-    ...(isOrgAdmin
+    ...(isOrgAdmin || isPlatformOwner
       ? [
           {
             path: "/leadership/notifications",
@@ -1113,7 +1113,7 @@ export function Navigation({
       label: "Notification Controls",
       desc: "Manage organization alerts",
       path: "/leadership/notifications",
-      show: isOrgAdmin,
+      show: isOrgAdmin || isPlatformOwner,
       color: "#10b981",
     },
     {

@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import {
-  Activity, Users, LogOut, Shield, BookOpen, Video, Calendar, ChevronRight, ListChecks, RefreshCw, Plus, Trash2, Eye, EyeOff, UserPlus, Sparkles, Layers3, LayoutDashboard, CheckCircle2, ArrowLeftRight, AlertTriangle,
+  Activity, Users, LogOut, Shield, BookOpen, Video, Calendar, ChevronRight, ListChecks, RefreshCw, Plus, Trash2, Eye, EyeOff, UserPlus, Sparkles, Layers3, LayoutDashboard, CheckCircle2, ArrowLeftRight, AlertTriangle, BellRing,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -167,6 +167,7 @@ export function More() {
     { icon: ArrowLeftRight, label: 'Approve Swaps', desc: 'Review swap requests', path: '/leadership/swaps', show: isLeader, action: null, badge: unread.pendingSwaps, color: '#0ea5e9', badgeVariant: 'red' as const },
     { icon: AlertTriangle, label: 'Conduct', desc: 'Discipline and records', path: '/leadership/discipline', show: isLeader || !!canManageDiscipline, action: null, badge: 0, color: '#f97316' },
     { icon: Users, label: 'Team', desc: 'Manage team members', path: '/leadership/team', show: isLeader || isOrgAdmin, action: null, badge: 0, color: '#8b5cf6' },
+    { icon: BellRing, label: 'Notification Controls', desc: 'Manage organization alerts', path: '/leadership/notifications', show: isOrgAdmin || isPlatformOwner, action: null, badge: 0, color: '#10b981' },
   ].filter(item => item.show);
 
   const displayName = profile?.nickname || `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim();

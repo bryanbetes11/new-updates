@@ -56,7 +56,9 @@ export function NotificationSettings() {
   const [settings, setSettings] = useState<SystemSettings>({ push_delivery_enabled: true, default_timezone: 'Asia/Manila' });
   const [rules, setRules] = useState<Rule[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [savingSection, setSavingSection] = useState<string | null>(null);
+  const [settingsDirty, setSettingsDirty] = useState(false);
+  const [dirtyCategories, setDirtyCategories] = useState<Set<string>>(() => new Set());
   const [pushReadiness, setPushReadiness] = useState<PushReadinessMember[]>([]);
   const [hasDetailedReadiness, setHasDetailedReadiness] = useState(true);
   const [refreshingReadiness, setRefreshingReadiness] = useState(false);
@@ -123,7 +125,51 @@ export function NotificationSettings() {
   }, {}), [rules]);
 
   const patchRule = (id: string, patch: Partial<Rule>) => {
-    setRules(current => current.map(rule => rule.id === id ? { ...rule, ...patch } : rule));
+    setRules(current => current.map(rule => {
+      if (rule.id !== id) return rule;
+      setDirtyCategories(categories => new Set(categories).add(rule.category));
+      return { ...rule, ...patch };
+    }));
+  };
+
+  const saveSettings = async () => {
+    if (!profile?.org_id || !user) return;
+    setSavingSection('settings');
+    const { error } = await supabase.from('notification_system_settings').update({
+      ...settings,
+      updated_by: user.id,
+    }).eq('org_id', profile.org_id);
+    setSavingSection(null);
+    if (error) toast('error', 'Notification settings could not be saved');
+    else {
+      setSettingsDirty(false);
+      toast('success', 'Notification settings saved');
+    }
+  };
+
+  const saveCategory = async (category: string, categoryRules: Rule[]) => {
+    if (!user) return;
+    setSavingSection(category);
+    const results = await Promise.all(categoryRules.map(rule => supabase.from('notification_rules').update({
+      enabled: rule.enabled,
+      required: rule.required,
+      in_app_enabled: rule.in_app_enabled,
+      push_enabled: rule.push_enabled,
+      priority: rule.priority,
+      template_title: rule.template_title || null,
+      template_body: rule.template_body || null,
+      updated_by: user.id,
+    }).eq('id', rule.id)));
+    setSavingSection(null);
+    if (results.some(result => result.error)) toast('error', `${categoryLabels[category] || category} changes could not be saved`);
+    else {
+      setDirtyCategories(categories => {
+        const next = new Set(categories);
+        next.delete(category);
+        return next;
+      });
+      toast('success', `${categoryLabels[category] || category} changes saved`);
+    }
   };
 
   const refreshPushReadiness = async () => {
@@ -149,29 +195,6 @@ export function NotificationSettings() {
     }
     toast('success', `Notification test sent to ${member.first_name}`);
     window.setTimeout(refreshPushReadiness, 1200);
-  };
-
-  const save = async () => {
-    if (!profile?.org_id || !user) return;
-    setSaving(true);
-    const settingsPromise = supabase.from('notification_system_settings').update({
-      ...settings,
-      updated_by: user.id,
-    }).eq('org_id', profile.org_id);
-    const rulePromises = rules.map(rule => supabase.from('notification_rules').update({
-      enabled: rule.enabled,
-      required: rule.required,
-      in_app_enabled: rule.in_app_enabled,
-      push_enabled: rule.push_enabled,
-      priority: rule.priority,
-      template_title: rule.template_title || null,
-      template_body: rule.template_body || null,
-      updated_by: user.id,
-    }).eq('id', rule.id));
-    const results = await Promise.all([settingsPromise, ...rulePromises]);
-    setSaving(false);
-    if (results.some(result => result.error)) toast('error', 'Some notification controls could not be saved');
-    else toast('success', 'Notification controls saved');
   };
 
   if (!canManageNotifications) return null;
@@ -223,11 +246,11 @@ export function NotificationSettings() {
         <div className="grid gap-4 border-t border-gray-100 px-5 py-5 dark:border-white/[0.06] sm:grid-cols-2 sm:px-6">
           <label className="flex items-center justify-between gap-4 rounded-2xl bg-gray-50 px-4 py-3 dark:bg-white/[0.035]">
             <span><span className="block text-sm font-bold text-gray-900 dark:text-white">Send push alerts</span><span className="text-xs text-gray-500 dark:text-white/40">Master switch for the organization</span></span>
-            <input type="checkbox" checked={settings.push_delivery_enabled} onChange={event => setSettings(current => ({ ...current, push_delivery_enabled: event.target.checked }))} className="h-5 w-5 accent-emerald-600" />
+            <input type="checkbox" checked={settings.push_delivery_enabled} onChange={event => { setSettings(current => ({ ...current, push_delivery_enabled: event.target.checked })); setSettingsDirty(true); }} className="h-5 w-5 accent-emerald-600" />
           </label>
           <label className="rounded-2xl bg-gray-50 px-4 py-3 dark:bg-white/[0.035]">
             <span className="block text-xs font-bold uppercase tracking-wide text-gray-400 dark:text-white/35">Default timezone</span>
-            <select value={settings.default_timezone} onChange={event => setSettings(current => ({ ...current, default_timezone: event.target.value }))} className="mt-1 w-full bg-transparent text-sm font-bold text-gray-900 outline-none dark:text-white">
+            <select value={settings.default_timezone} onChange={event => { setSettings(current => ({ ...current, default_timezone: event.target.value })); setSettingsDirty(true); }} className="mt-1 w-full bg-transparent text-sm font-bold text-gray-900 outline-none dark:text-white">
               <option value="Asia/Manila">Philippines (Asia/Manila)</option>
               <option value="Asia/Singapore">Singapore (Asia/Singapore)</option>
               <option value="UTC">UTC</option>
@@ -236,15 +259,23 @@ export function NotificationSettings() {
             </select>
           </label>
         </div>
+        {settingsDirty && (
+          <div className="flex justify-end border-t border-gray-100 px-5 py-3 dark:border-white/[0.06] sm:px-6">
+            <button type="button" onClick={saveSettings} disabled={savingSection === 'settings'} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white transition hover:bg-emerald-700 disabled:opacity-60">
+              {savingSection === 'settings' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save changes
+            </button>
+          </div>
+        )}
       </section>
 
       {Object.entries(groupedRules).map(([category, categoryRules]) => (
-        <section key={category} className="overflow-hidden rounded-[1.7rem] border border-gray-200/80 bg-white shadow-sm dark:border-white/[0.06] dark:bg-white/[0.025]">
-          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4 dark:border-white/[0.06]">
+        <details key={category} className="group/category overflow-hidden rounded-[1.7rem] border border-gray-200/80 bg-white shadow-sm dark:border-white/[0.06] dark:bg-white/[0.025]">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 marker:content-none">
             <h3 className="text-[13px] font-black uppercase tracking-[0.15em] text-gray-700 dark:text-white/70">{categoryLabels[category] || category}</h3>
-            <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-black text-gray-500 dark:bg-white/[0.06] dark:text-white/40">{categoryRules.length} alerts</span>
-          </div>
-          <div className="divide-y divide-gray-100 dark:divide-white/[0.05]">
+            <span className="ml-auto rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-black text-gray-500 dark:bg-white/[0.06] dark:text-white/40">{categoryRules.length} alerts</span>
+            <ChevronDown className="h-4 w-4 shrink-0 text-gray-400 transition-transform group-open/category:rotate-180" />
+          </summary>
+          <div className="divide-y divide-gray-100 border-t border-gray-100 dark:divide-white/[0.05] dark:border-white/[0.06]">
             {categoryRules.map(rule => (
               <details key={rule.id} className="group px-5 py-4">
                 <summary className="flex cursor-pointer list-none items-center gap-3">
@@ -273,13 +304,16 @@ export function NotificationSettings() {
                 </div>
               </details>
             ))}
+            {dirtyCategories.has(category) && (
+              <div className="flex justify-end px-5 py-3">
+                <button type="button" onClick={() => saveCategory(category, categoryRules)} disabled={savingSection === category} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white transition hover:bg-emerald-700 disabled:opacity-60">
+                  {savingSection === category ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save changes
+                </button>
+              </div>
+            )}
           </div>
-        </section>
+        </details>
       ))}
-
-      <button type="button" onClick={save} disabled={saving} className="sticky bottom-5 z-10 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3.5 text-sm font-black text-white shadow-xl shadow-emerald-700/20 transition hover:bg-emerald-700 disabled:opacity-60">
-        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save notification controls
-      </button>
       </>}
     </div>
   );
@@ -310,28 +344,28 @@ function PushReadinessPanel({
 
   return (
     <section>
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-4">
-        <div className="flex items-center gap-3">
+      <div className="flex items-start justify-between gap-3 pb-4">
+        <div className="flex min-w-0 items-center gap-3">
           <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-600 dark:bg-sky-400/10 dark:text-sky-300">
             <Smartphone className="h-5 w-5" />
           </span>
-          <div>
+          <div className="min-w-0">
             <h3 className="text-sm font-black text-gray-950 dark:text-white">Member Notification Status</h3>
             <p className="mt-0.5 text-xs text-gray-500 dark:text-white/40">Current push-notification readiness for active members, across all ServeSync features.</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center rounded-full border border-gray-200 p-1 dark:border-white/10">
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="hidden items-center rounded-full border border-gray-200 p-1 dark:border-white/10 sm:flex">
             <button type="button" onClick={() => onViewChange('list')} aria-label="List view" aria-pressed={view === 'list'} className={`flex h-8 w-8 items-center justify-center rounded-full ${view === 'list' ? 'bg-emerald-500 text-black' : 'text-white/55'}`}><List className="h-4 w-4" /></button>
             <button type="button" onClick={() => onViewChange('grid')} aria-label="Grid view" aria-pressed={view === 'grid'} className={`flex h-8 w-8 items-center justify-center rounded-full ${view === 'grid' ? 'bg-emerald-500 text-black' : 'text-white/55'}`}><LayoutGrid className="h-4 w-4" /></button>
           </div>
-          <button type="button" onClick={onRefresh} disabled={refreshing} className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 px-3 py-2 text-xs font-black text-gray-600 transition hover:bg-gray-50 disabled:opacity-60 dark:border-white/10 dark:text-white/60 dark:hover:bg-white/[0.05]">
+          <button type="button" onClick={onRefresh} disabled={refreshing} aria-label="Refresh member notification status" className="inline-flex h-10 items-center gap-1.5 rounded-full border border-gray-200 px-3 text-xs font-black text-gray-600 transition hover:bg-gray-50 disabled:opacity-60 dark:border-white/10 dark:text-white/60 dark:hover:bg-white/[0.05]">
             <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} /> <span className="hidden sm:inline">Refresh</span>
           </button>
         </div>
       </div>
 
-      <div className="grid gap-3 border-y border-gray-100 py-4 dark:border-white/[0.06] sm:grid-cols-2">
+      <div className="grid grid-cols-2 gap-3 border-y border-gray-100 py-4 dark:border-white/[0.06]">
         <div className="flex items-center gap-3 rounded-2xl bg-emerald-50 px-4 py-3 dark:bg-emerald-400/[0.07]">
           <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-300" />
           <div><p className="text-lg font-black text-emerald-800 dark:text-emerald-200">{readyCount}</p><p className="text-xs font-bold text-emerald-700/65 dark:text-emerald-200/55">Ready for push</p></div>
@@ -349,7 +383,7 @@ function PushReadinessPanel({
         </div>
       )}
 
-      <div className={`mt-4 ${view === 'list' ? 'overflow-hidden rounded-2xl border border-gray-200/80 bg-white divide-y divide-gray-100 dark:border-white/[0.06] dark:bg-white/[0.025] dark:divide-white/[0.05]' : 'grid gap-3 sm:grid-cols-2 lg:grid-cols-3'}`}>
+      <div className={`mt-4 grid gap-3 ${view === 'list' ? 'sm:block sm:overflow-hidden sm:rounded-2xl sm:border sm:border-gray-200/80 sm:bg-white sm:divide-y sm:divide-gray-100 sm:dark:border-white/[0.06] sm:dark:bg-white/[0.025] sm:dark:divide-white/[0.05]' : 'sm:grid-cols-2 lg:grid-cols-3'}`}>
         {onboarded.map(member => {
           const name = `${member.first_name || ''} ${member.last_name || ''}`.trim() || member.email;
           const lastSuccess = member.last_push_sent_at
@@ -361,7 +395,7 @@ function PushReadinessPanel({
               : `Ready · ${member.subscription_count} device${member.subscription_count === 1 ? '' : 's'}`
             : member.preference_enabled ? 'No registered device' : 'Push preference disabled';
           return (
-            <div key={member.user_id} className={`flex flex-wrap items-center gap-3 ${view === 'list' ? 'px-5 py-3.5' : 'rounded-2xl border border-gray-200/80 bg-white p-4 dark:border-white/[0.06] dark:bg-white/[0.025]'}`}>
+            <div key={member.user_id} className={`flex flex-wrap items-center gap-3 rounded-2xl border border-gray-200/80 bg-white p-4 dark:border-white/[0.06] dark:bg-white/[0.025] ${view === 'list' ? 'sm:rounded-none sm:border-0 sm:bg-transparent sm:px-5 sm:py-3.5 sm:dark:bg-transparent' : ''}`}>
               <span className={`h-2.5 w-2.5 rounded-full ${member.push_ready ? 'bg-emerald-500' : 'bg-amber-500'}`} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-black text-gray-950 dark:text-white">{name}</p>

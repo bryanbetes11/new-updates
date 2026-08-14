@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { format, parseISO } from 'date-fns';
+import { format, formatDistanceToNow, parseISO } from 'date-fns';
 import { motion, type Variants } from 'framer-motion';
-import { Calendar, Music, ChevronRight, Megaphone, Trash2, ListChecks, ArrowLeftRight, Check, X, RefreshCw, Heart, MoreHorizontal, Upload, UserPlus, MessageCircle, UserX, ClipboardCheck, Shield } from 'lucide-react';
+import { Calendar, Music, ChevronRight, Megaphone, Trash2, ListChecks, ArrowLeftRight, Check, X, RefreshCw, Heart, MoreHorizontal, Upload, UserPlus, MessageCircle, UserX, ClipboardCheck, Shield, AlertCircle, CheckCircle2, type LucideIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -12,7 +12,10 @@ import { formatTime12Hour } from '../lib/timeFormat';
 import { Modal } from '../components/Modal';
 import { EventArtwork } from '../components/EventArtwork';
 import { SongArtwork } from '../components/SongArtwork';
+import { Avatar } from '../components/Avatar';
 import { hasArtworkArtist } from '../lib/songArtworkEligibility';
+import { getEventPreparationHighlight, type EventPreparationHighlight, type EventPreparationInput } from '../lib/eventPreparation';
+import { isSetlistMeaningfullyCreated } from '../lib/setlistPersistence';
 import type { Event, EventAssignment, Setlist, Announcement, UserAvailability, SwapRequest } from '../types';
 
 const verses = [
@@ -47,7 +50,6 @@ type DashboardSongLeaderAssignment = {
   event_id: string;
   profiles?: DashboardLeaderProfile | DashboardLeaderProfile[] | null;
 };
-type DashboardAnnouncementCard = Pick<Announcement, 'id' | 'title' | 'content' | 'created_at'>;
 type DashboardSongArtwork = {
   id: string;
   song_id?: string | null;
@@ -73,7 +75,13 @@ type DashboardArtworkSongRecord = {
 };
 type DashboardSetlistArtwork = {
   event_id?: string | null;
+  status?: string | null;
   setlist_songs?: DashboardSongArtwork[] | null;
+};
+type DashboardPreparationAssignment = {
+  event_id: string;
+  status: EventAssignment['status'];
+  roles?: { name?: string | null } | Array<{ name?: string | null }> | null;
 };
 type DashboardWeekSong = {
   key: string;
@@ -87,12 +95,24 @@ type PendingReviewSetlist = Setlist & {
   setlist_songs?: Array<DashboardSongArtwork>;
 };
 
+type DashboardDataSection = 'events' | 'assignments' | 'setlists' | 'announcements' | 'availability';
+
+type DashboardAttentionItem = {
+  id: string;
+  title: string;
+  detail: string;
+  path: string;
+  icon: LucideIcon;
+  urgent?: boolean;
+};
+
 type DashboardSnapshot = {
   cachedAt: number;
   upcomingEvents: Event[];
   eventLeaderMap: Record<string, string>;
   eventArtworkMap: Record<string, string[]>;
   eventArtworkSongsMap: Record<string, DashboardSongArtwork[]>;
+  eventPreparationSourceMap: Record<string, EventPreparationInput>;
   myAssignments: EventAssignment[];
   pendingSetlists: PendingReviewSetlist[];
   recentAnnouncements: Announcement[];
@@ -164,11 +184,12 @@ function SwapOutcomeBoard({
   );
 }
 
-async function withDashboardTimeout<T>(request: PromiseLike<T>, fallback: T, label: string): Promise<T> {
+async function withDashboardTimeout<T>(request: PromiseLike<T>, fallback: T, label: string, onFailure?: () => void): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<T>((resolve) => {
     timeoutId = setTimeout(() => {
       console.warn(`[Dashboard] ${label} timed out; rendering with fallback data.`);
+      onFailure?.();
       resolve(fallback);
     }, DASHBOARD_REQUEST_TIMEOUT_MS);
   });
@@ -177,10 +198,106 @@ async function withDashboardTimeout<T>(request: PromiseLike<T>, fallback: T, lab
     return await Promise.race([Promise.resolve(request), timeout]);
   } catch (error) {
     console.error(`[Dashboard] ${label} failed:`, error);
+    onFailure?.();
     return fallback;
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
   }
+}
+
+function DashboardEmptyState({
+  icon: Icon,
+  title,
+  description,
+  actionLabel,
+  onAction,
+  compact = false,
+}: {
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  compact?: boolean;
+}) {
+  return (
+    <div className={`flex w-full flex-col items-center justify-center text-center ${compact ? 'px-3 py-5' : 'px-5 py-8'}`}>
+      <span className="flex h-10 w-10 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.05] text-[#22c55e]">
+        <Icon className="h-5 w-5" />
+      </span>
+      <p className="mt-3 text-[13px] font-black text-white">{title}</p>
+      <p className="mt-1 max-w-[280px] text-[11px] font-semibold leading-relaxed text-white/45">{description}</p>
+      {actionLabel && onAction ? (
+        <button
+          type="button"
+          onClick={onAction}
+          className="mt-3 inline-flex min-h-9 items-center justify-center rounded-full border border-[#22c55e]/25 bg-[#22c55e]/10 px-4 text-[11px] font-black text-[#22c55e] transition-colors hover:bg-[#22c55e]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e]"
+        >
+          {actionLabel}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function DashboardAttentionPanel({
+  items,
+  onNavigate,
+  className = '',
+}: {
+  items: DashboardAttentionItem[];
+  onNavigate: (path: string) => void;
+  className?: string;
+}) {
+  return (
+    <section className={`rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-4 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)] ${className}`}>
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <AlertCircle className="h-4 w-4 shrink-0 text-[#22c55e]" />
+          <div className="min-w-0">
+            <h2 className="text-[15px] font-black text-white">Needs Your Attention</h2>
+            <p className="mt-0.5 text-[10px] font-semibold text-white/38">Only actions that still need a response</p>
+          </div>
+        </div>
+        {items.length > 0 ? (
+          <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-[#22c55e] px-2 text-[10px] font-black text-black">{items.length}</span>
+        ) : null}
+      </div>
+      {items.length > 0 ? (
+        <div className="space-y-1.5">
+          {items.map((attentionItem) => {
+            const Icon = attentionItem.icon;
+            return (
+              <button
+                key={attentionItem.id}
+                type="button"
+                onClick={() => onNavigate(attentionItem.path)}
+                className="group flex w-full items-center gap-2.5 rounded-[0.55rem] bg-white/[0.045] px-3 py-2.5 text-left transition-colors hover:bg-white/[0.075] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e]"
+              >
+                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${attentionItem.urgent ? 'bg-amber-300/10 text-amber-200' : 'bg-[#22c55e]/10 text-[#22c55e]'}`}>
+                  <Icon className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[11px] font-black text-white">{attentionItem.title}</span>
+                  <span className="mt-0.5 block truncate text-[10px] font-semibold text-white/42">{attentionItem.detail}</span>
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-white/35 transition-transform group-hover:translate-x-0.5" />
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="rounded-[0.55rem] bg-white/[0.045]">
+          <DashboardEmptyState
+            icon={CheckCircle2}
+            title="You're all caught up"
+            description="New confirmations and approvals will appear here."
+            compact
+          />
+        </div>
+      )}
+    </section>
+  );
 }
 
 function getManilaTodayKey(date = new Date()) {
@@ -345,6 +462,7 @@ export function Dashboard() {
   const [eventLeaderMap, setEventLeaderMap] = useState<Record<string, string>>(() => cachedDashboard?.eventLeaderMap || {});
   const [eventArtworkMap, setEventArtworkMap] = useState<Record<string, string[]>>(() => cachedDashboard?.eventArtworkMap || {});
   const [eventArtworkSongsMap, setEventArtworkSongsMap] = useState<Record<string, DashboardSongArtwork[]>>(() => cachedDashboard?.eventArtworkSongsMap || {});
+  const [eventPreparationSourceMap, setEventPreparationSourceMap] = useState<Record<string, EventPreparationInput>>(() => cachedDashboard?.eventPreparationSourceMap || {});
   const [myAssignments, setMyAssignments] = useState<EventAssignment[]>(() => cachedDashboard?.myAssignments || []);
   const [pendingSetlists, setPendingSetlists] = useState<PendingReviewSetlist[]>(() => cachedDashboard?.pendingSetlists || []);
   const [recentAnnouncements, setRecentAnnouncements] = useState<Announcement[]>(() => cachedDashboard?.recentAnnouncements || []);
@@ -365,6 +483,7 @@ export function Dashboard() {
   const [pullRefreshDistance, setPullRefreshDistance] = useState(0);
   const [isRefreshingApp, setIsRefreshingApp] = useState(false);
   const [activeHubFilter, setActiveHubFilter] = useState<DashboardHubFilter>('all');
+  const [dashboardLoadIssues, setDashboardLoadIssues] = useState<Set<DashboardDataSection>>(() => new Set());
   const pullRefreshDistanceRef = useRef(0);
   const refreshInFlightRef = useRef(false);
 
@@ -442,6 +561,8 @@ export function Dashboard() {
     if (!silent) setLoading(true);
 
     try {
+      const loadIssues = new Set<DashboardDataSection>();
+      const markIssue = (section: DashboardDataSection) => () => loadIssues.add(section);
       const emptyList = {
         data: [],
         error: null,
@@ -454,11 +575,13 @@ export function Dashboard() {
           supabase.from('events').select('*').gte('event_date', today).order('event_date').limit(12),
           emptyList,
           'Upcoming events',
+          markIssue('events'),
         ),
         withDashboardTimeout(
           supabase.from('event_assignments').select('*, events(*), roles(*)').eq('user_id', user.id).order('created_at', { ascending: false }),
           emptyList,
           'My assignments',
+          markIssue('assignments'),
         ),
         withDashboardTimeout(
           supabase
@@ -468,16 +591,19 @@ export function Dashboard() {
             .order('created_at', { ascending: false }),
           emptyList,
           'Pending setlists',
+          markIssue('setlists'),
         ),
         withDashboardTimeout(
           supabase.from('announcements').select('*, profiles!announcements_created_by_fkey(first_name, last_name)').order('created_at', { ascending: false }).limit(3),
           emptyList,
           'Recent announcements',
+          markIssue('announcements'),
         ),
         withDashboardTimeout(
           supabase.from('user_availability').select('*, profiles!user_availability_user_id_fkey(first_name, last_name, nickname, avatar_url)').eq('status', 'approved').or(`unavailable_date.gte.${today},end_date.gte.${today}`).order('created_at', { ascending: true }),
           emptyList,
           'Unavailable members',
+          markIssue('availability'),
         ),
         isLeader
           ? withDashboardTimeout(
@@ -497,6 +623,13 @@ export function Dashboard() {
           'Dashboard member names',
         ),
       ]);
+
+      if (eventsRes.error) loadIssues.add('events');
+      if (assignRes.error) loadIssues.add('assignments');
+      if (setlistsRes.error) loadIssues.add('setlists');
+      if (announcementsRes.error) loadIssues.add('announcements');
+      if (unavailableRes.error) loadIssues.add('availability');
+      setDashboardLoadIssues(new Set(loadIssues));
 
       const events = ((eventsRes.data || []) as Event[]).slice().sort(compareEventsByDateTime);
       setUpcomingEvents(events);
@@ -546,6 +679,7 @@ export function Dashboard() {
         eventLeaderMap: leaderMap,
         eventArtworkMap: previousSnapshot?.eventArtworkMap || {},
         eventArtworkSongsMap: previousSnapshot?.eventArtworkSongsMap || {},
+        eventPreparationSourceMap: previousSnapshot?.eventPreparationSourceMap || {},
         myAssignments: upcomingAssignments,
         pendingSetlists: (setlistsRes.data || []) as PendingReviewSetlist[],
         recentAnnouncements: (announcementsRes.data || []) as Announcement[],
@@ -564,18 +698,58 @@ export function Dashboard() {
           .flatMap(event => [event.id, event.linked_event_id])
           .filter((id): id is string => Boolean(id))
       ));
-      const eventSetlistsRes = artworkEventIds.length > 0
-        ? await withDashboardTimeout(
-            supabase
-              .from('setlists')
-              .select('event_id, setlist_songs(id, song_id, position, youtube_url, songs(id, title, artist, youtube_url))')
-              .in('event_id', artworkEventIds),
-            emptyList,
-            'Dashboard event song artwork',
-          )
-        : emptyList;
+      const [eventSetlistsRes, preparationAssignmentsRes] = artworkEventIds.length > 0
+        ? await Promise.all([
+            withDashboardTimeout(
+              supabase
+                .from('setlists')
+                .select('event_id, status, setlist_songs(id, song_id, position, youtube_url, songs(id, title, artist, youtube_url))')
+                .in('event_id', artworkEventIds),
+              emptyList,
+              'Dashboard event song artwork',
+              markIssue('setlists'),
+            ),
+            withDashboardTimeout(
+              supabase
+                .from('event_assignments')
+                .select('event_id, status, roles(name)')
+                .in('event_id', artworkEventIds),
+              emptyList,
+              'Dashboard event preparation assignments',
+              markIssue('assignments'),
+            ),
+          ])
+        : [emptyList, emptyList];
+
+      if (eventSetlistsRes.error) loadIssues.add('setlists');
+      if (preparationAssignmentsRes.error) loadIssues.add('assignments');
+      setDashboardLoadIssues(new Set(loadIssues));
 
       const eventSetlistRows = (eventSetlistsRes.data || []) as DashboardSetlistArtwork[];
+      const preparationSourceMap = events.reduce<Record<string, EventPreparationInput>>((map, event) => {
+        map[event.id] = {
+          assignmentCount: 0,
+          teamAssignmentCount: 0,
+          pendingAssignmentCount: 0,
+          declinedAssignmentCount: 0,
+          setlistStatuses: [],
+        };
+        return map;
+      }, {});
+      ((preparationAssignmentsRes.data || []) as DashboardPreparationAssignment[]).forEach((assignment) => {
+        const preparation = preparationSourceMap[assignment.event_id];
+        if (!preparation) return;
+        const assignmentRole = Array.isArray(assignment.roles) ? assignment.roles[0] : assignment.roles;
+        preparation.assignmentCount += 1;
+        if (assignmentRole?.name !== 'Song Leader') preparation.teamAssignmentCount = (preparation.teamAssignmentCount || 0) + 1;
+        if (assignment.status === 'pending') preparation.pendingAssignmentCount += 1;
+        if (assignment.status === 'declined') preparation.declinedAssignmentCount += 1;
+      });
+      eventSetlistRows.forEach((setlist) => {
+        const preparation = setlist.event_id ? preparationSourceMap[setlist.event_id] : undefined;
+        if (preparation && setlist.status && isSetlistMeaningfullyCreated(setlist)) preparation.setlistStatuses.push(setlist.status);
+      });
+      setEventPreparationSourceMap(preparationSourceMap);
       const artworkSongIds = Array.from(new Set(
         eventSetlistRows.flatMap((setlist) =>
           (setlist.setlist_songs || [])
@@ -637,6 +811,7 @@ export function Dashboard() {
         eventLeaderMap: leaderMap,
         eventArtworkMap: artworkByEventId,
         eventArtworkSongsMap: artworkSongsByEventId,
+        eventPreparationSourceMap: preparationSourceMap,
         myAssignments: upcomingAssignments,
         pendingSetlists: (setlistsRes.data || []) as PendingReviewSetlist[],
         recentAnnouncements: (announcementsRes.data || []) as Announcement[],
@@ -910,12 +1085,7 @@ export function Dashboard() {
     return 'Good evening';
   })();
 
-  const fallbackEvents: DashboardEventCard[] = [
-    { title: 'Sunday Morning Service', event_date: '2025-06-22', start_time: '09:00:00', event_type: 'Sunday Service', location: 'Main Auditorium', id: 'sample-1' },
-    { title: 'Youth Night', event_date: '2025-06-20', start_time: '19:00:00', event_type: 'Friday Service', location: 'Main Auditorium', id: 'sample-2' },
-    { title: 'Sunday Evening Service', event_date: '2025-06-22', start_time: '18:00:00', event_type: 'Sunday Service', location: 'Main Auditorium', id: 'sample-3' },
-  ];
-  const displayEvents: DashboardEventCard[] = (upcomingEvents.length > 0 ? upcomingEvents : fallbackEvents)
+  const displayEvents: DashboardEventCard[] = upcomingEvents
     .slice(0, 12)
     .map(event => ({ ...event, location: (event as { location?: string }).location }));
   const assignedEventIds = new Set(myAssignments.map(assignment => assignment.event_id));
@@ -950,12 +1120,7 @@ export function Dashboard() {
   const filteredAssignments = filterAssignmentsForHub(myAssignments);
   const assignmentRows = filteredAssignments.slice(0, 3);
   const reviewSets = filterSetlistsForHub(pendingSetlists).slice(0, 4);
-  const fallbackAnnouncements: DashboardAnnouncementCard[] = [
-    { id: 'sample-ann-1', title: 'Leadership Meeting this Saturday', content: 'We will be discussing service flow, volunteer updates, and upcoming events.', created_at: new Date().toISOString() },
-    { id: 'sample-ann-2', title: 'New Training: In-Ear Monitor Basics', content: 'Join us this Sunday after the morning service at the Media Room.', created_at: new Date().toISOString() },
-    { id: 'sample-ann-3', title: 'Song Requests Open', content: "Submit your song requests for next month's setlists.", created_at: new Date().toISOString() },
-  ];
-  const announcementRows = ((recentAnnouncements.length > 0 ? recentAnnouncements : fallbackAnnouncements)
+  const announcementRows = (recentAnnouncements
     .filter(announcement => activeHubFilter !== 'week' || isThisWeekDate(announcement.created_at?.slice(0, 10)))
   ).slice(0, 3);
   const teamAvailabilityRows = filterAvailabilityForHub(unavailableMembers).slice(0, 3);
@@ -977,12 +1142,48 @@ export function Dashboard() {
     });
     return songs;
   }, []).slice(0, 12);
-  const fallbackSongsThisWeek: DashboardWeekSong[] = [
-    { key: 'graves-into-gardens', title: 'Graves Into Gardens', artist: 'Elevation Worship', song: { id: 'fallback-graves', songs: { title: 'Graves Into Gardens', artist: 'Elevation Worship' } } },
-    { key: 'holy-forever', title: 'Holy Forever', artist: 'Bethel Music', song: { id: 'fallback-holy', songs: { title: 'Holy Forever', artist: 'Bethel Music' } } },
-    { key: 'great-are-you-lord', title: 'Great Are You Lord', artist: 'All Sons & Daughters', song: { id: 'fallback-great', songs: { title: 'Great Are You Lord', artist: 'All Sons & Daughters' } } },
-  ];
-  const weekSongs = songsThisWeek.length > 0 ? songsThisWeek : activeHubFilter === 'all' ? fallbackSongsThisWeek : [];
+  const weekSongs = songsThisWeek;
+  const pendingAssignmentCount = myAssignments.filter(assignment => assignment.status === 'pending').length;
+  const attentionItems: DashboardAttentionItem[] = [
+    ...(pendingAssignmentCount > 0 ? [{
+      id: 'pending-assignments',
+      title: `Confirm ${pendingAssignmentCount} assignment${pendingAssignmentCount === 1 ? '' : 's'}`,
+      detail: 'Let your leaders know you can serve',
+      path: '/my-assignments?status=pending',
+      icon: AlertCircle,
+      urgent: true,
+    }] : []),
+    ...((isLeader || isOrgAdmin) && pendingSetlists.length > 0 ? [{
+      id: 'pending-setlists',
+      title: `Review ${pendingSetlists.length} setlist${pendingSetlists.length === 1 ? '' : 's'}`,
+      detail: 'Submitted and waiting for approval',
+      path: '/leadership/setlists',
+      icon: ListChecks,
+    }] : []),
+    ...((isLeader || isOrgAdmin) && pendingLeaveCount > 0 ? [{
+      id: 'pending-leave',
+      title: `Review ${pendingLeaveCount} leave request${pendingLeaveCount === 1 ? '' : 's'}`,
+      detail: 'Availability approval is pending',
+      path: '/leadership/leave',
+      icon: UserX,
+    }] : []),
+    ...((isLeader || isOrgAdmin) && leadershipSwapRequests.length > 0 ? [{
+      id: 'pending-swaps',
+      title: `Review ${leadershipSwapRequests.length} agreed swap${leadershipSwapRequests.length === 1 ? '' : 's'}`,
+      detail: 'Final leadership approval is needed',
+      path: '/leadership/swaps',
+      icon: ArrowLeftRight,
+    }] : []),
+  ].slice(0, 4);
+  const getPreparationForEvent = (event: DashboardEventCard) => {
+    const source = eventPreparationSourceMap[event.id];
+    if (!source || dashboardLoadIssues.has('assignments') || dashboardLoadIssues.has('setlists')) return null;
+    return getEventPreparationHighlight(event, source);
+  };
+  const preparationTone = (tone: EventPreparationHighlight['tone']) => {
+    if (tone === 'danger') return 'text-rose-200';
+    return 'text-amber-200';
+  };
   const quickActions = [
     { label: 'Create Set', icon: ListChecks, path: '/sets', modal: 'create-set' },
     { label: 'Schedule Event', icon: Calendar, path: '/events', modal: 'schedule-event' },
@@ -1410,17 +1611,25 @@ export function Dashboard() {
                 </div>
                 <div className="flex snap-x gap-3 overflow-x-auto pb-1 no-scrollbar lg:hidden" style={{ WebkitOverflowScrolling: 'touch' }}>
                   {filteredDisplayEvents.length === 0 ? (
-                    <p className="w-full rounded-[0.55rem] bg-white/[0.045] px-3 py-6 text-center text-[12px] font-semibold text-white/45">
-                      No events match this filter.
-                    </p>
+                    <div className="w-full rounded-[0.55rem] bg-white/[0.045]">
+                      <DashboardEmptyState
+                        icon={dashboardLoadIssues.has('events') ? AlertCircle : Calendar}
+                        title={dashboardLoadIssues.has('events') ? 'Unable to load events' : activeHubFilter === 'all' ? 'No upcoming events' : 'No matching events'}
+                        description={dashboardLoadIssues.has('events') ? 'Check your connection and try loading the dashboard again.' : activeHubFilter === 'all' ? 'New services and ministry dates will appear here once scheduled.' : 'Nothing scheduled matches this dashboard filter.'}
+                        actionLabel={dashboardLoadIssues.has('events') ? 'Try again' : activeHubFilter === 'all' && (isLeader || isOrgAdmin) ? 'Schedule event' : activeHubFilter !== 'all' ? 'Show all' : undefined}
+                        onAction={dashboardLoadIssues.has('events') ? () => loadDashboardData() : activeHubFilter === 'all' && (isLeader || isOrgAdmin) ? () => navigate('/events', { state: { openModal: 'schedule-event' } }) : activeHubFilter !== 'all' ? () => setActiveHubFilter('all') : undefined}
+                        compact
+                      />
+                    </div>
                   ) : filteredDisplayEvents.map((event) => {
                     const eventTitle = eventLeaderMap[event.id] || event.title;
                     const artworkUrls = eventArtworkMap[event.id] || [];
                     const artworkSongs = eventArtworkSongsMap[event.id] || [];
+                    const preparation = getPreparationForEvent(event);
                     return (
                       <button
                         key={event.id}
-                        onClick={() => navigate(event.id.startsWith('sample') ? '/events' : `/events/${event.id}`)}
+                        onClick={() => navigate(`/events/${event.id}`)}
                         className="min-w-[132px] max-w-[132px] snap-start text-left"
                       >
                         <div className="relative">
@@ -1434,6 +1643,16 @@ export function Dashboard() {
                           <span className="absolute left-2 top-2 rounded bg-white px-1.5 py-0.5 text-[7px] font-black uppercase text-black">
                             {format(parseISO(event.event_date), 'MMM dd')}
                           </span>
+                          {preparation ? (
+                            <span
+                              className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/70 to-transparent px-2 pb-1.5 pt-5"
+                              title={preparation.detail}
+                            >
+                              <span className={`block truncate text-[8px] font-bold ${preparationTone(preparation.tone)}`}>
+                                {preparation.label}
+                              </span>
+                            </span>
+                          ) : null}
                         </div>
                         <p className="mt-2 line-clamp-2 text-[12px] font-bold leading-tight text-white">{eventTitle}</p>
                         <p className="mt-0.5 truncate text-[11px] font-semibold text-white/50">
@@ -1445,18 +1664,25 @@ export function Dashboard() {
                 </div>
                 <div className="hidden space-y-2 lg:block">
                   {dashboardUpcomingEvents.length === 0 ? (
-                    <p className="rounded-[0.55rem] bg-white/[0.045] px-3 py-8 text-center text-[12px] font-semibold text-white/45">
-                      No events match this filter.
-                    </p>
+                    <div className="rounded-[0.55rem] bg-white/[0.045]">
+                      <DashboardEmptyState
+                        icon={dashboardLoadIssues.has('events') ? AlertCircle : Calendar}
+                        title={dashboardLoadIssues.has('events') ? 'Unable to load events' : activeHubFilter === 'all' ? 'No upcoming events' : 'No matching events'}
+                        description={dashboardLoadIssues.has('events') ? 'Check your connection and try loading the dashboard again.' : activeHubFilter === 'all' ? 'New services and ministry dates will appear here once scheduled.' : 'Nothing scheduled matches this dashboard filter.'}
+                        actionLabel={dashboardLoadIssues.has('events') ? 'Try again' : activeHubFilter === 'all' && (isLeader || isOrgAdmin) ? 'Schedule event' : activeHubFilter !== 'all' ? 'Show all' : undefined}
+                        onAction={dashboardLoadIssues.has('events') ? () => loadDashboardData() : activeHubFilter === 'all' && (isLeader || isOrgAdmin) ? () => navigate('/events', { state: { openModal: 'schedule-event' } }) : activeHubFilter !== 'all' ? () => setActiveHubFilter('all') : undefined}
+                      />
+                    </div>
                   ) : dashboardUpcomingEvents.map((event) => {
                     const isAssignedToEvent = assignedEventIds.has(event.id);
                     const eventTitle = eventLeaderMap[event.id] || event.title;
                     const artworkUrls = eventArtworkMap[event.id] || [];
                     const artworkSongs = eventArtworkSongsMap[event.id] || [];
+                    const preparation = getPreparationForEvent(event);
                     return (
                     <button
                       key={event.id}
-                      onClick={() => navigate(event.id.startsWith('sample') ? '/events' : `/events/${event.id}`)}
+                      onClick={() => navigate(`/events/${event.id}`)}
                       className="group flex w-full items-center gap-3 rounded-[0.55rem] bg-[#242424] p-2.5 text-left transition-colors hover:bg-[#2d2d2d]"
                     >
                       <EventArtwork
@@ -1468,7 +1694,10 @@ export function Dashboard() {
                       />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-[14px] font-black text-white">{eventTitle}</p>
-                        <p className="mt-1 truncate text-[12px] font-semibold text-white/58">{event.event_type} · {event.start_time ? formatTime12Hour(event.start_time) : 'TBA'}</p>
+                        <p className="mt-1 truncate text-[12px] font-semibold text-white/58" title={preparation?.detail}>
+                          {event.event_type} · {event.start_time ? formatTime12Hour(event.start_time) : 'TBA'}
+                          {preparation ? <span className={preparationTone(preparation.tone)}> · {preparation.label}</span> : null}
+                        </p>
                       </div>
                       <div className="w-12 shrink-0 text-center">
                         <p className="text-[11px] font-black uppercase leading-none text-[#22c55e]">{format(parseISO(event.event_date), 'EEE')}</p>
@@ -1527,16 +1756,20 @@ export function Dashboard() {
                       );
                     })
                   ) : (
-                    <div className="flex max-w-[280px] flex-col items-center justify-center text-center">
-                      <ListChecks className="mx-auto h-8 w-8 text-[#22c55e]" />
-                      <p className="mt-4 text-[14px] font-black text-white">No setlists awaiting approval</p>
-                      <p className="mx-auto mt-2 max-w-[250px] text-[11px] font-semibold leading-relaxed text-white/45">
-                        Submitted setlists will appear here for the whole team. Leaders can approve them from the event review controls.
-                      </p>
-                    </div>
+                    <DashboardEmptyState
+                      icon={dashboardLoadIssues.has('setlists') ? AlertCircle : ListChecks}
+                      title={dashboardLoadIssues.has('setlists') ? 'Unable to load setlists' : 'No setlists awaiting approval'}
+                      description={dashboardLoadIssues.has('setlists') ? 'Check your connection and try loading this section again.' : 'Submitted setlists will appear here when leadership review is needed.'}
+                      actionLabel={dashboardLoadIssues.has('setlists') ? 'Try again' : undefined}
+                      onAction={dashboardLoadIssues.has('setlists') ? () => loadDashboardData() : undefined}
+                    />
                   )}
                 </div>
               </section>
+        </motion.section>
+
+        <motion.section variants={item} className="md:hidden">
+          <DashboardAttentionPanel items={attentionItems} onNavigate={navigate} />
         </motion.section>
 
         <motion.section variants={item} className="dashboard-summary-grid hidden grid-cols-2 gap-5 md:grid lg:grid-cols-4">
@@ -1567,7 +1800,16 @@ export function Dashboard() {
                 ))}
               </div>
             ) : (
-              <p className="rounded-[0.55rem] bg-white/[0.045] px-3 py-5 text-[12px] font-semibold text-white/45">No current assignments.</p>
+              <div className="rounded-[0.55rem] bg-white/[0.045]">
+                <DashboardEmptyState
+                  icon={dashboardLoadIssues.has('assignments') ? AlertCircle : CheckCircle2}
+                  title={dashboardLoadIssues.has('assignments') ? 'Unable to load assignments' : 'No current assignments'}
+                  description={dashboardLoadIssues.has('assignments') ? 'Check your connection and try again.' : 'Your next serving schedule will appear here.'}
+                  actionLabel={dashboardLoadIssues.has('assignments') ? 'Try again' : undefined}
+                  onAction={dashboardLoadIssues.has('assignments') ? () => loadDashboardData() : undefined}
+                  compact
+                />
+              </div>
             )}
           </section>
 
@@ -1590,9 +1832,13 @@ export function Dashboard() {
                       onClick={() => setSelectedUnavailability(member)}
                       className="flex w-full items-center gap-3 rounded-[0.55rem] bg-white/[0.045] px-3 py-2.5 text-left transition-colors hover:bg-white/[0.075]"
                     >
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-[11px] font-black text-amber-200">
-                        {memberName.slice(0, 1)}
-                      </span>
+                      <Avatar
+                        src={member.profiles?.avatar_url}
+                        firstName={member.profiles?.first_name || member.profiles?.nickname || 'Team'}
+                        lastName={member.profiles?.last_name}
+                        size="sm"
+                        className="ring-1 ring-white/10"
+                      />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[12px] font-black text-white">{memberName}</span>
                         <span className="mt-0.5 block truncate text-[11px] font-semibold text-white/45">{dateLabel ? format(parseISO(dateLabel), 'MMM d') : 'Upcoming'}</span>
@@ -1602,29 +1848,20 @@ export function Dashboard() {
                 })}
               </div>
             ) : (
-              <p className="rounded-[0.55rem] bg-white/[0.045] px-3 py-5 text-[12px] font-semibold text-white/45">Everyone is currently available.</p>
+              <div className="rounded-[0.55rem] bg-white/[0.045]">
+                <DashboardEmptyState
+                  icon={dashboardLoadIssues.has('availability') ? AlertCircle : CheckCircle2}
+                  title={dashboardLoadIssues.has('availability') ? 'Unable to load availability' : 'Everyone is currently available'}
+                  description={dashboardLoadIssues.has('availability') ? 'Check your connection and try again.' : 'Approved leave dates will appear here.'}
+                  actionLabel={dashboardLoadIssues.has('availability') ? 'Try again' : undefined}
+                  onAction={dashboardLoadIssues.has('availability') ? () => loadDashboardData() : undefined}
+                  compact
+                />
+              </div>
             )}
           </section>
 
-          <section className="rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-4 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)]">
-            <div className="mb-4 flex items-center gap-2">
-              <Shield className="h-4 w-4 text-[#22c55e]" />
-              <h2 className="text-[15px] font-black text-white">Leadership Queue</h2>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { label: 'Setlists', value: pendingSetlists.length, path: '/leadership/setlists' },
-                { label: 'Leave', value: pendingLeaveCount, path: '/leadership/leave' },
-                { label: 'Swaps', value: (isLeader || isOrgAdmin) ? leadershipSwapRequests.length : incomingSwapRequests.length, path: '/leadership/swaps' },
-                { label: 'Pending', value: stats.pending, path: '/my-assignments?status=pending' },
-              ].map(queue => (
-                <button key={queue.label} onClick={() => navigate(queue.path)} className="rounded-[0.55rem] bg-white/[0.045] px-3 py-3 text-left transition-colors hover:bg-white/[0.075]">
-                  <span className="block text-[22px] font-black leading-none text-white">{queue.value}</span>
-                  <span className="mt-1 block text-[10px] font-black uppercase tracking-[0.12em] text-white/40">{queue.label}</span>
-                </button>
-              ))}
-            </div>
-          </section>
+          <DashboardAttentionPanel items={attentionItems} onNavigate={navigate} />
 
           <section className="rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-4 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)]">
             <div className="mb-4 flex items-center gap-2">
@@ -1645,9 +1882,16 @@ export function Dashboard() {
           </div>
           <div className="flex snap-x gap-3 overflow-x-auto pb-1 no-scrollbar" style={{ WebkitOverflowScrolling: 'touch' }}>
             {weekSongs.length === 0 ? (
-              <p className="w-full rounded-[0.55rem] bg-white/[0.045] px-3 py-6 text-center text-[12px] font-semibold text-white/45">
-                No songs are scheduled for this filter.
-              </p>
+              <div className="w-full rounded-[0.55rem] bg-white/[0.045]">
+                <DashboardEmptyState
+                  icon={dashboardLoadIssues.has('events') || dashboardLoadIssues.has('setlists') ? AlertCircle : Music}
+                  title={dashboardLoadIssues.has('events') || dashboardLoadIssues.has('setlists') ? 'Unable to load scheduled songs' : 'No songs scheduled'}
+                  description={dashboardLoadIssues.has('events') || dashboardLoadIssues.has('setlists') ? 'Check your connection and try loading the dashboard again.' : activeHubFilter === 'all' ? 'Songs from upcoming event setlists will appear here.' : 'No scheduled songs match this dashboard filter.'}
+                  actionLabel={dashboardLoadIssues.has('events') || dashboardLoadIssues.has('setlists') ? 'Try again' : activeHubFilter !== 'all' ? 'Show all' : undefined}
+                  onAction={dashboardLoadIssues.has('events') || dashboardLoadIssues.has('setlists') ? () => loadDashboardData() : activeHubFilter !== 'all' ? () => setActiveHubFilter('all') : undefined}
+                  compact
+                />
+              </div>
             ) : weekSongs.map((song) => (
               <a
                 key={song.key}
@@ -1672,11 +1916,17 @@ export function Dashboard() {
             </div>
             <div className="divide-y divide-white/[0.07]">
               {announcementRows.length === 0 ? (
-                <p className="py-8 text-center text-[12px] font-semibold text-white/45">No announcements match this filter.</p>
+                <DashboardEmptyState
+                  icon={dashboardLoadIssues.has('announcements') ? AlertCircle : Megaphone}
+                  title={dashboardLoadIssues.has('announcements') ? 'Unable to load announcements' : recentAnnouncements.length === 0 ? 'No announcements yet' : 'No matching announcements'}
+                  description={dashboardLoadIssues.has('announcements') ? 'Check your connection and try loading this section again.' : recentAnnouncements.length === 0 ? 'Important ministry updates will appear here when they are posted.' : 'No recent announcements match this dashboard filter.'}
+                  actionLabel={dashboardLoadIssues.has('announcements') ? 'Try again' : recentAnnouncements.length === 0 && (isLeader || isOrgAdmin) ? 'Create announcement' : activeHubFilter !== 'all' ? 'Show all' : undefined}
+                  onAction={dashboardLoadIssues.has('announcements') ? () => loadDashboardData() : recentAnnouncements.length === 0 && (isLeader || isOrgAdmin) ? () => navigate('/announcements', { state: { openModal: 'announce' } }) : activeHubFilter !== 'all' ? () => setActiveHubFilter('all') : undefined}
+                />
               ) : announcementRows.map((a, index) => (
                 <button
                   key={a.id}
-                  onClick={() => navigate(a.id?.startsWith?.('sample') ? '/announcements' : `/announcements/${a.id}`)}
+                  onClick={() => navigate(`/announcements/${a.id}`)}
                   className="group flex w-full min-w-0 items-center gap-3 py-3 text-left"
                 >
                   <span className={`relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[0.55rem] bg-gradient-to-br ${index === 0 ? 'from-emerald-400 via-green-800 to-black text-[#22c55e]' : index === 1 ? 'from-violet-300 via-violet-800 to-black text-violet-200' : 'from-sky-300 via-sky-800 to-black text-sky-100'}`}>
@@ -1689,7 +1939,7 @@ export function Dashboard() {
                     <span className="block truncate text-[13px] font-black text-white">{a.title}</span>
                     <span className="mt-1 block max-w-full truncate text-[12px] font-semibold text-white/55">{a.content}</span>
                   </span>
-                  <span className="shrink-0 text-[11px] font-semibold text-white/46">{index === 0 ? '2h ago' : index === 1 ? '6h ago' : '1d ago'}</span>
+                  <span className="shrink-0 text-[11px] font-semibold text-white/46">{formatDistanceToNow(parseISO(a.created_at), { addSuffix: true })}</span>
                   <MoreHorizontal className="h-5 w-5 shrink-0 text-white/58" />
                 </button>
               ))}

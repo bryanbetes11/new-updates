@@ -25,6 +25,7 @@ import { describeSetlistReviewAge, getSetlistPendingMessage } from '../lib/setli
 import { getSingleLyricsAutofill, normalizeLyricsInputForSave, normalizeLyricsSearchResults, type LyricsSearchResult } from '../lib/lyricsSearch';
 import { getEventAssignmentKey, prepareEventAssignmentBatch, type EventAssignmentDraft } from '../lib/eventAssignmentBatch';
 import { hasEventScheduleEnded, isEventCompleted, type EventLifecycleOverride } from '../lib/eventLifecycle';
+import { isSetlistMeaningfullyCreated } from '../lib/setlistPersistence';
 
 import type { Event, EventAssignment, Setlist, SetlistSong, Song, ServiceFormat, SetlistCheckReport, PostEventObservation, PostEventObservationCategory, PostEventObservationStatus } from '../types';
 import { inferServiceFormat, SERVICE_FORMAT_LABELS } from '../lib/setlistCheckerEngine';
@@ -230,7 +231,6 @@ export function EventDetail() {
   const [memberRoles, setMemberRoles] = useState<{ user_id: string; role_id: string }[]>([]);
   const [setlist, setSetlist] = useState<Setlist | null>(null);
   const [setlistSongs, setSetlistSongs] = useState<SetlistSong[]>([]);
-  const [creatingSetlist, setCreatingSetlist] = useState(false);
   const [linkedSetlist, setLinkedSetlist] = useState<Setlist | null>(null);
   const [linkedSetlistSongs, setLinkedSetlistSongs] = useState<SetlistSong[]>([]);
   const [linkedServiceEvent, setLinkedServiceEvent] = useState<Event | null>(null);
@@ -623,7 +623,7 @@ export function EventDetail() {
       } else {
         setPostEventObservationReplies((observationRepliesRes.data || []) as unknown as PostEventObservationReply[]);
       }
-      if (setlistRes.data) {
+      if (setlistRes.data && isSetlistMeaningfullyCreated(setlistRes.data)) {
         setSetlist(setlistRes.data);
         setSetlistSongs(setlistRes.data.setlist_songs || []);
 
@@ -1306,59 +1306,8 @@ export function EventDetail() {
     }
   };
 
-  const handleCreateSetlist = async () => {
-    if (!id || !user || creatingSetlist) return;
-    setCreatingSetlist(true);
-    try {
-      const fmt = serviceFormat || (event ? inferServiceFormat(event.event_type) : 'custom');
-
-      // Setlists predate a database uniqueness constraint on event_id. Reuse
-      // an existing row so retries and older duplicate taps remain idempotent.
-      const { data: existing, error: existingError } = await supabase
-        .from('setlists')
-        .select('*, setlist_songs(*, songs(*))')
-        .eq('event_id', id)
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle();
-
-      if (existingError) {
-        toast('error', existingError.message);
-        return;
-      }
-
-      if (existing) {
-        setSetlist(existing as Setlist);
-        setSetlistSongs((existing.setlist_songs || []) as SetlistSong[]);
-        if (existing.service_format) setServiceFormat(existing.service_format as ServiceFormat);
-        toast('success', 'Setlist ready');
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('setlists')
-        .insert({ event_id: id, created_by: user.id, service_format: fmt })
-        .select('*')
-        .single();
-
-      if (error) {
-        toast('error', error.message);
-        return;
-      }
-
-      // Render the newly-created setlist immediately instead of waiting for a
-      // second round-trip that can briefly return the pre-insert empty state.
-      setSetlist(data as Setlist);
-      setSetlistSongs([]);
-      setServiceFormat(fmt);
-      toast('success', 'Setlist created');
-      void fetchAll();
-    } catch (error) {
-      console.error('Failed to create setlist:', error);
-      toast('error', getErrorMessage(error, 'Could not create the setlist'));
-    } finally {
-      setCreatingSetlist(false);
-    }
+  const handleCreateSetlist = () => {
+    setShowSetlist(true);
   };
 
   const handleServiceFormatChange = async (fmt: ServiceFormat) => {
@@ -1438,13 +1387,47 @@ export function EventDetail() {
   };
 
   const handleAddSongToSetlist = async (songId: string, category: string, youtubeUrl: string, performedKey: string) => {
-    if (!setlist) return null;
+    if (!id || !user) return null;
+    let targetSetlist = setlist;
+
+    if (!targetSetlist) {
+      const fmt = serviceFormat || (event ? inferServiceFormat(event.event_type) : 'custom');
+      const { data: existing, error: existingError } = await supabase
+        .from('setlists')
+        .select('*')
+        .eq('event_id', id)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingError) {
+        toast('error', existingError.message);
+        return null;
+      }
+
+      if (existing) {
+        targetSetlist = existing as Setlist;
+      } else {
+        const { data: created, error: createError } = await supabase
+          .from('setlists')
+          .insert({ event_id: id, created_by: user.id, service_format: fmt })
+          .select('*')
+          .single();
+
+        if (createError || !created) {
+          toast('error', createError?.message || 'Failed to start the setlist');
+          return null;
+        }
+        targetSetlist = created as Setlist;
+      }
+    }
+
     const nextPosition = setlistSongs.length + 1;
     const { data, error } = await withSaveTimeout(
       supabase
         .from('setlist_songs')
         .insert({
-          setlist_id: setlist.id,
+          setlist_id: targetSetlist.id,
           song_id: songId,
           position: nextPosition,
           song_category: category,
@@ -1461,9 +1444,11 @@ export function EventDetail() {
     }
 
     const insertedSong = data as SetlistSong;
+    setSetlist(targetSetlist);
+    if (targetSetlist.service_format) setServiceFormat(targetSetlist.service_format as ServiceFormat);
     setSetlistSongs(prev => [...prev, insertedSong].sort((a, b) => a.position - b.position));
 
-    if (setlist.status === 'approved') {
+    if (targetSetlist.status === 'approved') {
       await markSetlistNeedsReapproval();
     } else {
       toast('success', 'Song added');
@@ -1661,16 +1646,14 @@ export function EventDetail() {
       setShowAddSong(false);
       toast('success', 'Song created');
 
-      if (setlist) {
-        setSelectedSongForConfig(createdSong.id);
-        setSongConfig({
-          category: '',
-          youtube_url: createdSong.youtube_url || '',
-          performed_key: createdSong.song_key || '',
-          artist: createdSong.artist || '',
-        });
-        setShowSongConfig(true);
-      }
+      setSelectedSongForConfig(createdSong.id);
+      setSongConfig({
+        category: '',
+        youtube_url: createdSong.youtube_url || '',
+        performed_key: createdSong.song_key || '',
+        artist: createdSong.artist || '',
+      });
+      setShowSongConfig(true);
 
       fetchAll();
     } catch (error) {
@@ -3329,11 +3312,10 @@ const openLyricsModal = (ss: SetlistSong) => {
                   <button
                     type="button"
                     onClick={handleCreateSetlist}
-                    disabled={creatingSetlist}
-                    className="btn-primary disabled:cursor-wait disabled:opacity-70"
+                    className="btn-primary"
                   >
-                    {creatingSetlist ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                    {creatingSetlist ? 'Creating…' : 'Create Setlist'}
+                    <Plus className="h-4 w-4" />
+                    Create Setlist
                   </button>
                 </div>
               )}
@@ -4564,6 +4546,13 @@ const openLyricsModal = (ss: SetlistSong) => {
                 </p>
               )}
             </div>
+            <button
+              type="button"
+              onClick={() => { setShowSetlist(false); setShowAddSong(true); }}
+              className="btn-secondary w-full"
+            >
+              <Plus className="h-4 w-4" /> Create New Song
+            </button>
           </div>
         </Modal>
 

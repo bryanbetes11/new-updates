@@ -72,6 +72,28 @@ export type SurveyGateState = {
   participation: SurveyParticipation;
 };
 
+type SurveyParticipationRow = SurveyParticipation & {
+  survey_campaigns?: SurveyCampaign | SurveyCampaign[] | null;
+};
+
+function getParticipationCampaign(row: SurveyParticipationRow) {
+  return (Array.isArray(row.survey_campaigns)
+    ? row.survey_campaigns[0]
+    : row.survey_campaigns) || null;
+}
+
+export function isSurveyParticipationActive(
+  campaign: SurveyCampaign,
+  participation: SurveyParticipation,
+  now = new Date(),
+) {
+  if (!campaign.blocker_enabled) return false;
+  if (campaign.status === "paused" || campaign.status === "closed") return false;
+  if (campaign.status === "draft" && !participation.is_test) return false;
+  if (campaign.starts_at && new Date(campaign.starts_at) > now) return false;
+  return true;
+}
+
 export function parseSurveyRating(value: string): number | null {
   return /^(?:[1-5]|3\.5)$/.test(value) ? Number(value) : null;
 }
@@ -92,26 +114,44 @@ export async function getActiveSurveyGate(
     .limit(5);
   if (error) throw error;
 
-  for (const row of data || []) {
-    const campaign = (
-      Array.isArray(row.survey_campaigns)
-        ? row.survey_campaigns[0]
-        : row.survey_campaigns
-    ) as SurveyCampaign | null;
-    if (
-      !campaign ||
-      !campaign.blocker_enabled ||
-      (campaign.status === "draft" && !row.is_test) ||
-      campaign.status === "paused" ||
-      campaign.status === "closed"
-    )
-      continue;
-    if (campaign.starts_at && new Date(campaign.starts_at) > now) continue;
-    const participation = row as unknown as SurveyParticipation;
+  for (const rawRow of data || []) {
+    const row = rawRow as unknown as SurveyParticipationRow;
+    const campaign = getParticipationCampaign(row);
+    const participation = row as SurveyParticipation;
+    if (!campaign || !isSurveyParticipationActive(campaign, participation, now)) continue;
     const temporaryAccessActive =
       participation.temporary_access_until &&
       new Date(participation.temporary_access_until) > now;
     if (!temporaryAccessActive) return { campaign, participation };
+  }
+  return null;
+}
+
+export async function getActiveTemporarySurveyAccess(
+  userId: string,
+): Promise<SurveyParticipation | null> {
+  const now = new Date();
+  const { data, error } = await supabase
+    .from("survey_participations")
+    .select("*, survey_campaigns(*)")
+    .eq("user_id", userId)
+    .is("submitted_at", null)
+    .order("created_at", {
+      referencedTable: "survey_campaigns",
+      ascending: false,
+    })
+    .limit(5);
+  if (error) throw error;
+
+  for (const rawRow of data || []) {
+    const row = rawRow as unknown as SurveyParticipationRow;
+    const campaign = getParticipationCampaign(row);
+    const participation = row as SurveyParticipation;
+    if (!campaign || !isSurveyParticipationActive(campaign, participation, now)) continue;
+    if (
+      participation.temporary_access_until &&
+      new Date(participation.temporary_access_until) > now
+    ) return participation;
   }
   return null;
 }

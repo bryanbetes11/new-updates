@@ -2,8 +2,11 @@ import { useEffect, useState } from "react";
 import { ArrowRight, Clock3 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { supabase } from "../lib/supabase";
-import { formatSurveyTime, type SurveyParticipation } from "../lib/survey";
+import {
+  formatSurveyTime,
+  getActiveTemporarySurveyAccess,
+  type SurveyParticipation,
+} from "../lib/survey";
 
 export function SurveyAccessBanner() {
   const { user } = useAuth();
@@ -14,26 +17,17 @@ export function SurveyAccessBanner() {
 
   useEffect(() => {
     let active = true;
-    if (!user || location.pathname === "/reflection") return;
-    supabase
-      .from("survey_participations")
-      .select("*,survey_campaigns!inner(status,starts_at)")
-      .eq("user_id", user.id)
-      .is("submitted_at", null)
-      .order("created_at", {
-        ascending: false,
-        referencedTable: "survey_campaigns",
+    if (!user || location.pathname === "/reflection") {
+      setParticipation(null);
+      return;
+    }
+    getActiveTemporarySurveyAccess(user.id)
+      .then((result) => {
+        if (active) setParticipation(result);
       })
-      .limit(1)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (
-          active &&
-          data?.temporary_access_until &&
-          new Date(data.temporary_access_until) > new Date()
-        )
-          setParticipation(data as SurveyParticipation);
-        else if (active) setParticipation(null);
+      .catch((error) => {
+        console.error("[Survey] Unable to check temporary access:", error);
+        if (active) setParticipation(null);
       });
     return () => {
       active = false;

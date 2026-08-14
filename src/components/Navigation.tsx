@@ -283,11 +283,13 @@ export function Navigation({
     user,
     isLeader,
     isOrgAdmin,
+    isAdmin,
     isProductionDirector,
     isMusicDirector,
     isStageDirector,
     isAdminCoordinator,
     isPlatformOwner,
+    capabilities,
     canApproveLeave,
     profile,
     signOut,
@@ -339,11 +341,6 @@ export function Navigation({
     (item: NavItem) => {
       if (item.path === "/library") {
         return ["/library", "/songs", "/sets"].some((p) =>
-          location.pathname.startsWith(p),
-        );
-      }
-      if (item.path === "/more") {
-        return ["/more", "/profile", "/notifications"].some((p) =>
           location.pathname.startsWith(p),
         );
       }
@@ -766,20 +763,20 @@ export function Navigation({
         ? { badgeKey: "pendingLeave" as const, badgeColor: "red" as const }
         : {}),
     },
-    ...(isLeader
+    ...(isLeader || capabilities.review_setlists || capabilities.approve_swaps
       ? [
-          {
+          ...(isLeader || capabilities.review_setlists ? [{
             path: "/leadership/setlists",
             label: "Setlist Queue",
             icon: SetsNavIcon,
             tone: "from-emerald-500/85 via-teal-900 to-black",
-          },
-          {
+          }] : []),
+          ...(isLeader || capabilities.approve_swaps ? [{
             path: "/leadership/swaps",
             label: "Swap Requests",
             icon: SwapsNavIcon,
             tone: "from-cyan-500/85 via-blue-900 to-black",
-          },
+          }] : []),
         ]
       : []),
     ...(isLeader || isOrgAdmin
@@ -798,13 +795,23 @@ export function Navigation({
           },
         ]
       : []),
-    ...(isOrgAdmin || isPlatformOwner
+    ...(isOrgAdmin || isPlatformOwner || capabilities.manage_notifications
       ? [
           {
             path: "/leadership/notifications",
             label: "Notification Controls",
             icon: NotificationNavIcon,
             tone: "from-emerald-500/85 via-teal-900 to-black",
+          },
+        ]
+      : []),
+    ...(isOrgAdmin || isPlatformOwner || isAdmin
+      ? [
+          {
+            path: "/activity-log",
+            label: "Activity History",
+            icon: Activity,
+            tone: "from-sky-500/85 via-blue-900 to-black",
           },
         ]
       : []),
@@ -1019,7 +1026,7 @@ export function Navigation({
       label: "Activity Log",
       desc: "Church activity",
       path: "/activity-log",
-      show: isPlatformOwner,
+      show: isPlatformOwner || isOrgAdmin || isAdmin,
       color: "#0ea5e9",
     },
     {
@@ -1070,7 +1077,7 @@ export function Navigation({
       label: "Approve Setlist",
       desc: "Review submitted setlists",
       path: "/leadership/setlists",
-      show: isLeader,
+      show: isLeader || capabilities.review_setlists,
       badge: unread.pendingSetlists,
       color: "#16a34a",
     },
@@ -1088,7 +1095,7 @@ export function Navigation({
       label: "Approve Swaps",
       desc: "Review swap requests",
       path: "/leadership/swaps",
-      show: isLeader,
+      show: isLeader || capabilities.approve_swaps,
       badge: unread.pendingSwaps,
       color: "#0ea5e9",
     },
@@ -1097,7 +1104,7 @@ export function Navigation({
       label: "Team",
       desc: "Manage team members",
       path: "/leadership/team",
-      show: isLeader || isOrgAdmin,
+      show: isLeader || isOrgAdmin || capabilities.manage_members,
       color: "#8b5cf6",
     },
     {
@@ -1105,7 +1112,7 @@ export function Navigation({
       label: "Accountability",
       desc: "Review attendance and conduct",
       path: "/leadership/accountability",
-      show: isLeader || isOrgAdmin,
+      show: isLeader || isOrgAdmin || capabilities.manage_accountability,
       color: "#f59e0b",
     },
     {
@@ -1113,8 +1120,16 @@ export function Navigation({
       label: "Notification Controls",
       desc: "Manage organization alerts",
       path: "/leadership/notifications",
-      show: isOrgAdmin || isPlatformOwner,
+      show: isOrgAdmin || isPlatformOwner || capabilities.manage_notifications,
       color: "#10b981",
+    },
+    {
+      icon: Activity,
+      label: "Activity History",
+      desc: "Review church activity",
+      path: "/activity-log",
+      show: isOrgAdmin || isPlatformOwner || isAdmin,
+      color: "#0ea5e9",
     },
     {
       icon: CheckCircle2,

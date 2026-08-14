@@ -218,19 +218,17 @@ export function SurveyManagement() {
   const openTestModal = async () => {
     if (!selected) return;
     setWorking(true);
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id,first_name,last_name,nickname,email")
-      .eq("org_id", selected.org_id)
-      .eq("is_onboarded", true)
-      .eq("ministry_status", "active")
-      .order("first_name");
+    const [{ data, error }, { data: inclusionRows }] = await Promise.all([
+      supabase.from("profiles").select("id,first_name,last_name,nickname,email").eq("org_id", selected.org_id).eq("is_onboarded", true).eq("ministry_status", "active").order("first_name"),
+      supabase.from('organization_member_settings').select('user_id, include_in_surveys').eq('org_id', selected.org_id),
+    ]);
     setWorking(false);
     if (error) {
       toast("error", error.message);
       return;
     }
-    const available = (data || []).map((profile) => {
+    const excluded = new Set((inclusionRows || []).filter(row => !row.include_in_surveys).map(row => row.user_id));
+    const available = (data || []).filter(profile => !excluded.has(profile.id)).map((profile) => {
       const fullName = `${profile.first_name || ""} ${profile.last_name || ""}`.trim();
       return {
         id: profile.id,

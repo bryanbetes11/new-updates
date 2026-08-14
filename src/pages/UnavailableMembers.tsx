@@ -25,7 +25,7 @@ export function UnavailableMembers() {
 
   const loadUnavailableMembers = async () => {
     setLoadError(null);
-    const [availabilityResult, membersResult] = await Promise.all([
+    const [availabilityResult, membersResult, inclusionResult] = await Promise.all([
       supabase
         .from('user_availability')
         .select('*, profiles!user_availability_user_id_fkey(first_name, last_name, nickname, avatar_url)')
@@ -38,12 +38,14 @@ export function UnavailableMembers() {
         .eq('ministry_status', 'active')
         .order('first_name')
         .order('last_name'),
+      supabase.from('organization_member_settings').select('user_id, include_in_assignments'),
     ]);
     if (availabilityResult.error || membersResult.error) {
       setLoadError('We could not load team availability. Check your connection and try again.');
     } else {
       setUnavailableMembers((availabilityResult.data || []) as UserAvailability[]);
-      setTeamMembers((membersResult.data || []) as TeamMemberSummary[]);
+      const excluded = new Set((inclusionResult.data || []).filter(row => !row.include_in_assignments).map(row => row.user_id));
+      setTeamMembers(((membersResult.data || []) as TeamMemberSummary[]).filter(member => !excluded.has(member.id)));
     }
     setLoading(false);
   };

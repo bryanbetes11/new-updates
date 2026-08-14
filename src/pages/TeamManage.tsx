@@ -20,6 +20,23 @@ interface MemberWithRoles extends Profile {
   user_roles: UserRole[];
 }
 
+interface MemberSettings {
+  org_id: string;
+  user_id: string;
+  include_in_attendance: boolean;
+  include_in_surveys: boolean;
+  include_in_assignments: boolean;
+  exclusion_reason: string | null;
+  capabilities: Record<string, boolean>;
+}
+
+const capabilityOptions = [
+  ['approve_leave', 'Approve leave'], ['approve_swaps', 'Approve swaps'],
+  ['review_setlists', 'Review setlists'], ['manage_members', 'Manage members'],
+  ['manage_accountability', 'Manage accountability'], ['manage_notifications', 'Manage notifications'],
+  ['archive_events', 'Archive events'],
+] as const;
+
 interface MemberAuthAudit {
   profile_id: string;
   email: string;
@@ -75,7 +92,7 @@ interface TeamManageProps {
 }
 
 export function TeamManage({ embedded }: TeamManageProps = {}) {
-  const { roles, isLeader, isOrgAdmin, canManageMembers, user } = useAuth();
+  const { roles, isLeader, isOrgAdmin, isPlatformOwner, canManageMembers, user, profile } = useAuth();
   const { toast } = useToast();
   const [members, setMembers] = useState<MemberWithRoles[]>([]);
   const [loading, setLoading] = useState(true);
@@ -91,6 +108,8 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
   const [saving, setSaving] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [authAudit, setAuthAudit] = useState<Record<string, MemberAuthAudit>>({});
+  const [memberSettings, setMemberSettings] = useState<Record<string, MemberSettings>>({});
+  const [savingSettingsId, setSavingSettingsId] = useState<string | null>(null);
   const [resetConfirmMember, setResetConfirmMember] = useState<MemberWithRoles | null>(null);
   const [sendingReset, setSendingReset] = useState(false);
   const [removeConfirmMember, setRemoveConfirmMember] = useState<MemberWithRoles | null>(null);
@@ -104,6 +123,11 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
       .select('*, user_roles(*, roles(*))')
       .order('first_name');
     setMembers((data || []) as MemberWithRoles[]);
+    const { data: settingsData } = await supabase.from('organization_member_settings').select('*');
+    setMemberSettings(((settingsData || []) as MemberSettings[]).reduce<Record<string, MemberSettings>>((map, item) => {
+      map[item.user_id] = item;
+      return map;
+    }, {}));
 
     const leaderRoleIds = roles.filter(r => r.is_leadership).map(r => r.id);
     const leaders = (data || []).filter((m: MemberWithRoles) =>
@@ -190,6 +214,36 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
     if (error) { toast('error', `Failed to save: ${error.message}`); return; }
     toast('success', 'Member updated');
     setEditingMember(null);
+    fetchMembers();
+  };
+
+  const defaultMemberSettings = (member: MemberWithRoles): MemberSettings => ({
+    org_id: member.org_id || profile?.org_id || '', user_id: member.id,
+    include_in_attendance: member.ministry_status === 'active', include_in_surveys: member.ministry_status === 'active',
+    include_in_assignments: member.ministry_status === 'active', exclusion_reason: null, capabilities: {},
+  });
+
+  const patchMemberSettings = (member: MemberWithRoles, patch: Partial<MemberSettings>) => {
+    setMemberSettings(current => ({ ...current, [member.id]: { ...(current[member.id] || defaultMemberSettings(member)), ...patch } }));
+  };
+
+  const saveMemberAccess = async (member: MemberWithRoles) => {
+    const settings = memberSettings[member.id] || defaultMemberSettings(member);
+    if (!settings.org_id) return;
+    setSavingSettingsId(member.id);
+    const { error } = await supabase.from('organization_member_settings').upsert({ ...settings, updated_by: user?.id }, { onConflict: 'org_id,user_id' });
+    setSavingSettingsId(null);
+    if (error) { toast('error', `Access settings could not be saved: ${error.message}`); return; }
+    toast('success', `${member.first_name}'s access and inclusion settings were saved`);
+  };
+
+  const setAdministrator = async (member: MemberWithRoles, enabled: boolean) => {
+    if (member.id === user?.id && !enabled) { toast('info', 'You cannot remove your own administrator access.'); return; }
+    setSavingSettingsId(member.id);
+    const { error } = await supabase.from('profiles').update({ is_org_admin: enabled }).eq('id', member.id);
+    setSavingSettingsId(null);
+    if (error) { toast('error', `Administrator access could not be updated: ${error.message}`); return; }
+    toast('success', enabled ? `${member.first_name} is now an administrator` : `Administrator access removed from ${member.first_name}`);
     fetchMembers();
   };
 
@@ -354,6 +408,7 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
               const audit = authAudit[member.id];
               const authStatus = audit?.auth_status;
               const authCfg = authStatus ? authStatusConfig[authStatus] : null;
+              const accessSettings = memberSettings[member.id] || defaultMemberSettings(member);
               const resetDisabled =
                 !member.email ||
                 authStatus === 'missing_auth_account' ||
@@ -609,6 +664,27 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                                     </button>
                                   )}
                                 </div>
+                              </div>
+                            )}
+
+                            {(isOrgAdmin || isPlatformOwner) && (
+                              <div className="rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.035] p-4">
+                                <div className="flex items-start justify-between gap-4">
+                                  <div><p className="text-xs font-black uppercase tracking-[0.12em] text-emerald-600 dark:text-emerald-400">Access & inclusion</p><p className="mt-1 text-xs text-gray-500 dark:text-white/45">Control what this member can manage and where they appear.</p></div>
+                                  <button type="button" onClick={() => saveMemberAccess(member)} disabled={savingSettingsId === member.id} className="btn-primary min-h-10 shrink-0 text-xs"><Save className="h-3.5 w-3.5" /> Save</button>
+                                </div>
+                                <label className="mt-4 flex items-center justify-between rounded-xl border border-amber-400/20 bg-amber-400/[0.06] p-3">
+                                  <span><span className="block text-sm font-black text-gray-900 dark:text-white">Administrator</span><span className="mt-0.5 block text-xs text-gray-500 dark:text-white/45">Full organization access</span></span>
+                                  <input type="checkbox" checked={member.is_org_admin} disabled={member.id === user?.id || savingSettingsId === member.id} onChange={event => setAdministrator(member, event.target.checked)} className="h-5 w-5 accent-amber-500" />
+                                </label>
+                                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                                  {capabilityOptions.map(([key, label]) => <label key={key} className="flex items-center justify-between rounded-xl bg-white/70 px-3 py-2.5 text-xs font-bold text-gray-700 dark:bg-white/[0.04] dark:text-white/75"><span>{label}</span><input type="checkbox" checked={Boolean(accessSettings.capabilities[key])} onChange={event => patchMemberSettings(member, { capabilities: { ...accessSettings.capabilities, [key]: event.target.checked } })} className="h-4 w-4 accent-emerald-500" /></label>)}
+                                </div>
+                                <p className="mt-4 text-[10px] font-black uppercase tracking-[0.12em] text-gray-400">Included in</p>
+                                <div className="mt-2 grid grid-cols-3 gap-2">
+                                  {([['include_in_attendance', 'Attendance'], ['include_in_surveys', 'Surveys'], ['include_in_assignments', 'Assignments']] as const).map(([key, label]) => <label key={key} className="flex min-w-0 flex-col items-center gap-2 rounded-xl bg-white/70 p-3 text-center text-[11px] font-bold text-gray-700 dark:bg-white/[0.04] dark:text-white/70"><input type="checkbox" checked={accessSettings[key]} onChange={event => patchMemberSettings(member, { [key]: event.target.checked })} className="h-4 w-4 accent-emerald-500" /><span>{label}</span></label>)}
+                                </div>
+                                {(!accessSettings.include_in_attendance || !accessSettings.include_in_surveys || !accessSettings.include_in_assignments) && <input value={accessSettings.exclusion_reason || ''} onChange={event => patchMemberSettings(member, { exclusion_reason: event.target.value })} className="input-field mt-3" placeholder="Reason for exclusion (for example: Pastor / exempt)" />}
                               </div>
                             )}
 

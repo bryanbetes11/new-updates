@@ -100,10 +100,10 @@ export function AttendanceMonitoring() {
   const fetchStats = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
-    const { data, error } = await supabase.rpc('get_all_members_attendance_stats', {
-      p_year: selectedYear,
-      p_quarter: selectedQuarter,
-    });
+    const [{ data, error }, { data: inclusionRows }] = await Promise.all([
+      supabase.rpc('get_all_members_attendance_stats', { p_year: selectedYear, p_quarter: selectedQuarter }),
+      supabase.from('organization_member_settings').select('user_id, include_in_attendance'),
+    ]);
 
     if (error) {
       setLoadError('Attendance records could not be loaded. Check your connection and try again.');
@@ -112,7 +112,8 @@ export function AttendanceMonitoring() {
       return;
     }
 
-    setStats(data || []);
+    const excluded = new Set((inclusionRows || []).filter(row => !row.include_in_attendance).map(row => row.user_id));
+    setStats((data || []).filter((member: MemberStats) => !excluded.has(member.user_id)));
     setLoading(false);
   }, [selectedYear, selectedQuarter, toast]);
 

@@ -27,6 +27,7 @@ interface AuthContextValue {
   canApproveLeave: boolean;
   canManageDiscipline: boolean;
   canManageMembers: boolean;
+  capabilities: Record<string, boolean>;
   signUp: (email: string, password: string, firstName: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -100,6 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [userRoles, setUserRoles] = useState<UserRole[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
+  const [capabilities, setCapabilities] = useState<Record<string, boolean>>({});
   const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>(() => readSavedAccounts());
   const [loading, setLoading] = useState(true);
   const activeUserIdRef = useRef<string | null>(null);
@@ -110,6 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null);
     setOrganization(null);
     setUserRoles([]);
+    setCapabilities({});
   };
 
   const fetchProfile = async (userId: string) => {
@@ -160,6 +163,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUserRoles(data || []);
   };
 
+  const fetchCapabilities = async (userId: string) => {
+    const { data } = await withAuthTimeout(
+      supabase.from('organization_member_settings').select('capabilities').eq('user_id', userId).maybeSingle(),
+      { data: null, error: null },
+      'Member capabilities request',
+    );
+    setCapabilities((data?.capabilities || {}) as Record<string, boolean>);
+  };
+
   const fetchRoles = async () => {
     const { data, error } = await withAuthTimeout(
       supabase
@@ -196,6 +208,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [profileData] = await Promise.all([
       fetchProfile(userId),
       fetchUserRoles(userId),
+      fetchCapabilities(userId),
       fetchRoles(),
     ]);
     await fetchOrganization(profileData?.org_id);
@@ -204,7 +217,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshProfile = async () => {
     if (user) {
-      const [profileData] = await Promise.all([fetchProfile(user.id), fetchUserRoles(user.id)]);
+      const [profileData] = await Promise.all([fetchProfile(user.id), fetchUserRoles(user.id), fetchCapabilities(user.id)]);
       await fetchOrganization(profileData?.org_id);
       syncSavedAccount(session, profileData);
     }
@@ -335,9 +348,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isMusicDirector = roleNames.includes('Music Director');
   const isStageDirector = roleNames.includes('Stage Director');
   const isSetlistCoordinator = roleNames.includes('Setlist Coordinator');
-  const canApproveLeave = isAdmin || isProductionDirector || isMusicDirector || isAdminCoordinator;
-  const canManageDiscipline = isAdmin || isProductionDirector || isMusicDirector || isAdminCoordinator;
-  const canManageMembers = isAdmin || isProductionDirector;
+  const canApproveLeave = isOrgAdmin || isPlatformOwner || capabilities.approve_leave || isAdmin || isProductionDirector || isMusicDirector || isAdminCoordinator;
+  const canManageDiscipline = isOrgAdmin || isPlatformOwner || capabilities.manage_accountability || isAdmin || isProductionDirector || isMusicDirector || isAdminCoordinator;
+  const canManageMembers = isOrgAdmin || isPlatformOwner || capabilities.manage_members || isAdmin || isProductionDirector;
 
   const signUp = async (email: string, password: string, firstName: string) => {
     const normalizedEmail = normalizeAuthEmail(email);
@@ -482,7 +495,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         savedAccounts,
         hasOrganization, isOrgAdmin, isPlatformOwner,
         isLeader, isAdmin, isAdminCoordinator, isProductionDirector, isMusicDirector, isStageDirector, isSetlistCoordinator,
-        canApproveLeave, canManageDiscipline, canManageMembers,
+        canApproveLeave, canManageDiscipline, canManageMembers, capabilities,
         signUp, signIn, signOut, addSavedAccount, switchAccount, forgetSavedAccount, refreshProfile,
       }}
     >

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { motion } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { PlayCircle, Plus, Search, ExternalLink, Film, CreditCard as Edit2, Trash2, MoreVertical, X, MessageCircle, Send, Loader2, Bell, BellOff, List, LayoutGrid } from 'lucide-react';
+import { PlayCircle, Plus, Search, ExternalLink, Film, CreditCard as Edit2, Trash2, MoreVertical, X, MessageCircle, Send, Loader2, Bell, BellOff, List, LayoutGrid, Eye } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -10,6 +10,7 @@ import { Modal } from '../../components/Modal';
 import { Select } from '../../components/Select';
 import { EmptyState } from '../../components/EmptyState';
 import type { Video } from '../../types';
+import { cacheSnapshot, loadSnapshot, loadSyncedPreference, saveSyncedPreference } from '../../lib/syncedPreferences';
 
 const categories = ['General', 'Worship', 'Tutorial', 'Sermon', 'Conference', 'Other'];
 const VIDEOS_PER_PAGE = 20;
@@ -39,6 +40,14 @@ interface VideoComment {
   user_id: string;
   content: string;
   created_at: string;
+  profiles?: { first_name: string; last_name: string; avatar_url: string | null } | null;
+}
+
+interface VideoViewer {
+  user_id: string;
+  first_viewed_at: string;
+  last_viewed_at: string;
+  view_count: number;
   profiles?: { first_name: string; last_name: string; avatar_url: string | null } | null;
 }
 
@@ -127,7 +136,12 @@ export function VideosTab() {
   const { user, organization, isProductionDirector } = useAuth();
   const { toast } = useToast();
   const [videos, setVideos] = useState<Video[]>([]);
+  const [viewCounts, setViewCounts] = useState<Record<string, number>>({});
+  const [viewers, setViewers] = useState<VideoViewer[]>([]);
+  const [viewersVideo, setViewersVideo] = useState<Video | null>(null);
+  const [viewersLoading, setViewersLoading] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [visibleCount, setVisibleCount] = useState(VIDEOS_PER_PAGE);
@@ -169,19 +183,57 @@ export function VideosTab() {
   });
 
   const fetchVideos = async () => {
-    const { data } = await supabase
+    setLoading(true);
+    setLoadError('');
+    const { data, error } = await supabase
       .from('videos')
-      .select('*, profiles(first_name, last_name)')
+      .select('*')
       .order('created_at', { ascending: false });
-    setVideos(data || []);
+    if (error) {
+      const snapshot = loadSnapshot<Video[]>('videos');
+      if (snapshot) {
+        setVideos(snapshot.value);
+        setLoadError('Showing the last saved copy while the video library reconnects.');
+      } else {
+        setVideos([]);
+        setLoadError('The video library could not be loaded. Please try again.');
+      }
+    } else {
+      const baseVideos = (data || []) as Video[];
+      const uploaderIds = [...new Set(baseVideos.map(video => video.uploaded_by).filter(Boolean))];
+      const { data: uploaders } = uploaderIds.length
+        ? await supabase.from('profiles').select('id, first_name, last_name').in('id', uploaderIds)
+        : { data: [] };
+      const uploaderMap = new Map((uploaders || []).map(profile => [profile.id, profile]));
+      const hydratedVideos = baseVideos.map(video => ({ ...video, profiles: uploaderMap.get(video.uploaded_by) } as Video));
+      setVideos(hydratedVideos);
+      cacheSnapshot('videos', hydratedVideos);
+
+      // Viewer analytics are intentionally non-blocking: the library remains usable
+      // even if this newer table is unavailable or its policy is still refreshing.
+      const { data: viewRows, error: viewError } = await supabase.from('video_views').select('video_id');
+      if (!viewError) {
+        setViewCounts((viewRows || []).reduce<Record<string, number>>((counts, row) => {
+          counts[row.video_id] = (counts[row.video_id] || 0) + 1;
+          return counts;
+        }, {}));
+      }
+    }
     setLoading(false);
   };
 
-  useEffect(() => { fetchVideos(); }, []);
+  useEffect(() => { void fetchVideos(); }, [organization?.id]);
+
+  useEffect(() => {
+    void loadSyncedPreference<'list' | 'grid'>(user?.id, 'videos.view').then(value => {
+      if (value === 'list' || value === 'grid') setDesktopView(value);
+    });
+  }, [user?.id]);
 
   useEffect(() => {
     localStorage.setItem('videosDesktopView', desktopView);
-  }, [desktopView]);
+    void saveSyncedPreference(user?.id, 'videos.view', desktopView);
+  }, [desktopView, user?.id]);
 
   useEffect(() => {
     setVisibleCount(VIDEOS_PER_PAGE);
@@ -271,6 +323,22 @@ export function VideosTab() {
     setShowPlayer(true);
     setCommentContent('');
     void fetchComments(video.id);
+    void supabase.rpc('record_video_view', { p_video_id: video.id }).then(() => {
+      setViewCounts(current => ({ ...current, [video.id]: Math.max(1, current[video.id] || 0) }));
+    });
+  };
+
+  const openViewers = async (video: Video, event: React.SyntheticEvent) => {
+    event.preventDefault(); event.stopPropagation();
+    setViewersVideo(video); setViewersLoading(true);
+    const { data, error } = await supabase
+      .from('video_views')
+      .select('user_id, first_viewed_at, last_viewed_at, view_count, profiles!video_views_user_id_fkey(first_name, last_name, avatar_url)')
+      .eq('video_id', video.id)
+      .order('last_viewed_at', { ascending: false });
+    setViewersLoading(false);
+    if (error) { toast('error', 'Viewer history could not be loaded.'); setViewers([]); return; }
+    setViewers((data || []) as unknown as VideoViewer[]);
   };
 
   useEffect(() => {
@@ -547,7 +615,16 @@ export function VideosTab() {
         </div>
       </motion.div>
 
-      {filtered.length === 0 ? (
+      {loadError && (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-amber-400/20 bg-amber-400/[0.08] px-4 py-3 text-sm text-amber-200">
+          <span>{loadError}</span>
+          <button type="button" onClick={() => void fetchVideos()} className="shrink-0 rounded-full bg-white/10 px-3 py-1.5 text-xs font-black hover:bg-white/15">Retry</button>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex min-h-52 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-emerald-400" /></div>
+      ) : filtered.length === 0 ? (
         <EmptyState
           icon={<Film className="h-8 w-8" />}
           title="No videos found"
@@ -612,6 +689,9 @@ export function VideosTab() {
                             {video.profiles?.first_name} {video.profiles?.last_name}
                           </span>
                           <span className="font-mono whitespace-nowrap">{format(parseISO(video.created_at), 'MMM d, yyyy')}</span>
+                          <span role="button" tabIndex={0} onClick={event => openViewers(video, event)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') openViewers(video, event); }} className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-white/48 transition hover:bg-white/10 hover:text-white" aria-label={`See who viewed ${video.title}`}>
+                            <Eye className="h-3.5 w-3.5" /> {viewCounts[video.id] || 0}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -690,6 +770,22 @@ export function VideosTab() {
       )}
 
       {/* Create modal */}
+      <Modal open={Boolean(viewersVideo)} onClose={() => { setViewersVideo(null); setViewers([]); }} title="Viewed by">
+        <div className="space-y-3">
+          <div><p className="font-black text-gray-900 dark:text-white">{viewersVideo?.title}</p><p className="mt-1 text-xs text-gray-500 dark:text-white/45">Only members who opened this video appear here.</p></div>
+          {viewersLoading ? <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-emerald-500" /></div> : viewers.length === 0 ? (
+            <p className="rounded-2xl bg-gray-50 px-4 py-8 text-center text-sm text-gray-500 dark:bg-white/[0.04] dark:text-white/45">No one has viewed this video yet.</p>
+          ) : viewers.map(viewer => {
+            const name = `${viewer.profiles?.first_name || ''} ${viewer.profiles?.last_name || ''}`.trim() || 'Team member';
+            return <div key={viewer.user_id} className="flex items-center gap-3 rounded-2xl border border-gray-200 p-3 dark:border-white/10">
+              {viewer.profiles?.avatar_url ? <img src={viewer.profiles.avatar_url} alt="" className="h-10 w-10 rounded-full object-cover" /> : <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/15 text-sm font-black text-emerald-500">{name.charAt(0)}</div>}
+              <div className="min-w-0 flex-1"><p className="truncate text-sm font-black text-gray-900 dark:text-white">{name}</p><p className="mt-0.5 text-xs text-gray-500 dark:text-white/45">Last viewed {format(parseISO(viewer.last_viewed_at), 'MMM d, yyyy · h:mm a')}</p></div>
+              {viewer.view_count > 1 && <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-black text-gray-600 dark:bg-white/10 dark:text-white/60">{viewer.view_count}×</span>}
+            </div>;
+          })}
+        </div>
+      </Modal>
+
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Add YouTube Videos">
         <form onSubmit={handleCreate} className="space-y-4">
           <div>

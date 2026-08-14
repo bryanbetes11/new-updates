@@ -11,6 +11,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { BillingStatusBanner } from "./BillingStatusBanner";
 import { PushReadinessBanner } from "./PushReadinessBanner";
 import { SurveyAccessBanner } from "./SurveyAccessBanner";
+import { ConnectionStatus } from "./ConnectionStatus";
 import { buildAppRoute, rememberRoute } from "../lib/navigationHistory";
 import { supabase } from "../lib/supabase";
 import {
@@ -93,6 +94,7 @@ export function Layout() {
   const isNotificationsPage = location.pathname === "/notifications";
   const isProfilePage = location.pathname === "/profile";
   const isUnavailableMembersPage = location.pathname === "/unavailable-members";
+  const isActivityLogPage = location.pathname === "/activity-log";
   const isLeadershipPage = location.pathname.startsWith("/leadership");
   const isWideShellPage =
     isDashboardPage ||
@@ -107,6 +109,7 @@ export function Layout() {
     isRequestLeavePage ||
     isNotificationsPage ||
     isProfilePage ||
+    isActivityLogPage ||
     isLeadershipPage;
   const hideNavMobile = staticHideNav || isAnnouncementDetail;
   const shouldShiftForMobileMenu =
@@ -117,7 +120,9 @@ export function Layout() {
     pointerEvents: shouldShiftForMobileMenu ? "none" : undefined,
     "--desktop-sidebar-width": `${desktopSidebarWidth}px`,
   } as CSSProperties;
-  const shouldAllowNativePullRefresh = (isWideShellPage || isUnavailableMembersPage) && !isMessagesPage;
+  const shouldAllowNativePullRefresh =
+    (isWideShellPage || isUnavailableMembersPage || isActivityLogPage) &&
+    !isMessagesPage;
 
   useEffect(() => {
     rememberRoute(
@@ -295,6 +300,7 @@ export function Layout() {
 
   return (
     <div className="min-h-screen bg-[#050505]">
+      <ConnectionStatus />
       {user && !staticHideNav && (
         <Navigation
           hideMobile={hideNavMobile}
@@ -318,7 +324,7 @@ export function Layout() {
             : "none",
         }}
         transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
-        className={`desktop-sidebar-main ${isEventDetail ? "event-detail-main" : "overflow-x-hidden"} ${isMessagesPage ? "box-border flex flex-col min-h-[100dvh] overflow-hidden bg-white dark:bg-[#111013] lg:fixed lg:inset-0 lg:h-[100dvh]" : ""}`}
+        className={`desktop-sidebar-main ${isEventDetail ? "event-detail-main" : "overflow-x-clip"} ${isMessagesPage ? "box-border flex flex-col min-h-[100dvh] overflow-hidden bg-white dark:bg-[#111013] lg:fixed lg:inset-0 lg:h-[100dvh]" : ""}`}
         style={mainStyle}
       >
         {isMessagesPage ? (

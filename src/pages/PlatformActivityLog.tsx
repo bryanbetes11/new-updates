@@ -19,10 +19,10 @@ import {
   User,
   Users,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { PageLoader } from '../components/LoadingSpinner';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import { useSmartBack } from '../lib/navigationHistory';
 import { withRequestTimeout } from '../lib/requestTimeout';
 import { supabase } from '../lib/supabase';
 import type { ActivityLog } from '../types';
@@ -104,9 +104,10 @@ function changedFields(log: ActivityLog) {
 }
 
 export function PlatformActivityLog() {
-  const { isPlatformOwner, organization, profile } = useAuth();
+  const { isPlatformOwner, isOrgAdmin, isAdmin, organization, profile } = useAuth();
+  const canViewActivity = isPlatformOwner || isOrgAdmin || isAdmin;
   const { toast } = useToast();
-  const navigate = useNavigate();
+  const smartBack = useSmartBack('/leadership/overview');
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -174,13 +175,13 @@ export function PlatformActivityLog() {
   }, [churchId, toast]);
 
   useEffect(() => {
-    if (!isPlatformOwner) return;
+    if (!canViewActivity) return;
     document.title = 'Activity Log - ServeSync';
     loadLogs();
-  }, [isPlatformOwner, loadLogs]);
+  }, [canViewActivity, loadLogs]);
 
   useEffect(() => {
-    if (!isPlatformOwner || !churchId) return;
+    if (!canViewActivity || !churchId) return;
 
     const refreshVisibleLog = () => {
       if (document.visibilityState === 'visible') {
@@ -199,7 +200,7 @@ export function PlatformActivityLog() {
       window.removeEventListener('pageshow', refreshVisibleLog);
       document.removeEventListener('visibilitychange', refreshVisibleLog);
     };
-  }, [churchId, isPlatformOwner, loadLogs]);
+  }, [canViewActivity, churchId, loadLogs]);
 
   const counts = useMemo(() => {
     const next: Record<string, number> = { all: logs.length };
@@ -216,13 +217,13 @@ export function PlatformActivityLog() {
     });
   }, [activeCategory, logs]);
 
-  if (!isPlatformOwner) {
+  if (!canViewActivity) {
     return (
       <div className="page-container page-bottom-pad">
-        <div className="max-w-4xl mx-auto px-4 pt-8">
+        <div className="app-content-shell pt-4">
           <div className="rounded-3xl border border-gray-200 bg-white p-6 text-center dark:border-white/[0.06] dark:bg-white/[0.025]">
             <h1 className="text-xl font-bold text-gray-900 dark:text-white">Access Restricted</h1>
-            <p className="mt-2 text-sm text-gray-500 dark:text-white/45">This log is only available to the platform owner.</p>
+            <p className="mt-2 text-sm text-gray-500 dark:text-white/45">This log is available to church administrators.</p>
           </div>
         </div>
       </div>
@@ -232,18 +233,18 @@ export function PlatformActivityLog() {
   if (loading) return <PageLoader />;
 
   return (
-    <div className="page-container page-bottom-pad overflow-hidden">
+    <div className="page-container page-bottom-pad touch-action-pan-y">
       <motion.div
         variants={container}
         initial="initial"
         animate="animate"
-        className="max-w-3xl mx-auto px-4 sm:px-5 lg:px-6 pt-3 sm:pt-5 space-y-4"
+        className="relative mx-auto w-full max-w-2xl touch-action-pan-y space-y-3 px-4 py-4 sm:px-6 md:max-w-[860px] md:px-8 lg:max-w-6xl xl:max-w-[1560px]"
       >
         <motion.section
           variants={item}
-          className="relative overflow-hidden rounded-[1.75rem] border border-sky-200/70 bg-[linear-gradient(135deg,#eff6ff_0%,#ffffff_52%,#f8fafc_100%)] p-5 shadow-[0_24px_80px_-46px_rgba(2,132,199,0.5)] dark:border-white/[0.08] dark:bg-[linear-gradient(135deg,#08121b_0%,#0d1117_52%,#080a0f_100%)] sm:p-6"
+          className="relative overflow-hidden rounded-2xl border border-sky-200/70 bg-[linear-gradient(135deg,#eff6ff_0%,#ffffff_52%,#f8fafc_100%)] p-4 shadow-[0_20px_55px_-42px_rgba(2,132,199,0.5)] dark:border-white/[0.08] dark:bg-[linear-gradient(135deg,#08121b_0%,#0d1117_52%,#080a0f_100%)]"
         >
-          <div className="relative flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <div className="flex items-center gap-2.5">
                 <span className="relative flex h-1.5 w-1.5">
@@ -254,26 +255,26 @@ export function PlatformActivityLog() {
                   Church activity
                 </p>
               </div>
-              <h1 className="mt-3 text-[2.1rem] font-black leading-none text-gray-950 dark:text-white sm:text-[2.8rem]">
+              <h1 className="mt-2 text-2xl font-black leading-none text-gray-950 dark:text-white sm:text-3xl">
                 Activity Log
               </h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600 dark:text-white/52">
+              <p className="mt-1.5 max-w-2xl text-xs leading-5 text-gray-600 dark:text-white/52 sm:text-sm">
                 {logs.length} recent action{logs.length === 1 ? '' : 's'} for {organization?.name || 'your church'}.
               </p>
             </div>
 
-            <div className="grid w-full grid-cols-2 gap-2.5 sm:w-auto">
+            <div className="grid w-full grid-cols-2 gap-2 sm:w-auto">
               <button
-                onClick={() => navigate('/more')}
-                className="h-11 px-4 rounded-2xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] text-sm font-semibold text-gray-700 dark:text-white/70 hover:bg-gray-50 dark:hover:bg-white/[0.08] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                onClick={smartBack}
+                className="flex h-10 items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 text-xs font-bold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white/70 dark:hover:bg-white/[0.08]"
               >
                 <ArrowLeft className="h-4 w-4" />
-                More
+                Back
               </button>
               <button
                 onClick={() => loadLogs('refresh', { notifyOnError: true })}
                 disabled={refreshing}
-                className="h-11 px-4 rounded-2xl border border-sky-200 dark:border-sky-500/20 bg-sky-50 dark:bg-sky-500/[0.08] text-sm font-semibold text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-500/[0.14] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                className="flex h-10 items-center justify-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 text-xs font-bold text-sky-700 transition-all hover:bg-sky-100 active:scale-[0.98] dark:border-sky-500/20 dark:bg-sky-500/[0.08] dark:text-sky-300 dark:hover:bg-sky-500/[0.14]"
               >
                 {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 Refresh
@@ -289,7 +290,7 @@ export function PlatformActivityLog() {
               aria-label="Activity category"
               value={activeCategory}
               onChange={event => setActiveCategory(event.target.value)}
-              className="h-12 w-full appearance-none rounded-2xl border border-gray-200 bg-white pl-11 pr-4 text-sm font-bold text-gray-800 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-500/10 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-white"
+              className="h-10 w-full appearance-none rounded-xl border border-gray-200 bg-white pl-11 pr-4 text-xs font-bold text-gray-800 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-500/10 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-white"
             >
               {categoryOptions.map(option => (
                 <option key={option} value={option}>
@@ -309,7 +310,7 @@ export function PlatformActivityLog() {
           </motion.div>
         )}
 
-        <motion.section variants={item} className="space-y-3">
+        <motion.section variants={item} className="space-y-2">
           {visibleLogs.map(log => {
             const meta = categoryMeta[log.category as CategoryKey] || categoryMeta.system;
             const Icon = meta.icon;
@@ -318,15 +319,15 @@ export function PlatformActivityLog() {
               <motion.article
                 key={log.id}
                 variants={item}
-                className="rounded-[26px] border border-gray-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_28px_-20px_rgba(15,23,42,0.16)] dark:border-white/[0.06] dark:bg-white/[0.025] sm:p-5"
+                className="rounded-2xl border border-gray-200 bg-white p-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_24px_-20px_rgba(15,23,42,0.14)] dark:border-white/[0.06] dark:bg-white/[0.025]"
               >
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between">
                   <div className="flex min-w-0 gap-3">
                     <div
-                      className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl"
+                      className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
                       style={{ backgroundColor: `${meta.color}18`, color: meta.color }}
                     >
-                      <Icon className="h-5 w-5" />
+                      <Icon className="h-4 w-4" />
                     </div>
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
@@ -337,10 +338,10 @@ export function PlatformActivityLog() {
                           {formatAction(log.action)}
                         </span>
                       </div>
-                      <h2 className="mt-2 text-[15px] font-black leading-snug text-gray-950 dark:text-white">
+                      <h2 className="mt-1.5 text-sm font-black leading-snug text-gray-950 dark:text-white">
                         {log.summary}
                       </h2>
-                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-white/40">
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-500 dark:text-white/40">
                         <span>{log.actor_name || 'System'}</span>
                         {log.org_name && <span>{log.org_name}</span>}
                         {log.target_user_name && log.target_user_name !== log.actor_name && <span>Target: {log.target_user_name}</span>}
@@ -357,7 +358,7 @@ export function PlatformActivityLog() {
                 </div>
 
                 {(fields.length > 0 || log.metadata?.from_status || log.metadata?.to_status || log.metadata?.from_date || log.metadata?.to_date) && (
-                  <div className="mt-4 flex flex-wrap gap-2 border-t border-gray-100 pt-3 dark:border-white/[0.06]">
+                  <div className="mt-3 flex flex-wrap gap-1.5 border-t border-gray-100 pt-2.5 dark:border-white/[0.06]">
                     {fields.map(field => (
                       <span key={field} className="rounded-full bg-gray-50 px-2.5 py-1 text-[11px] font-semibold text-gray-500 dark:bg-white/[0.035] dark:text-white/38">
                         {fieldLabel(field)}

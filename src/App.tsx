@@ -106,9 +106,6 @@ const Notifications = lazy(() =>
     default: Notifications,
   })),
 );
-const More = lazy(() =>
-  import("./pages/More").then(({ More }) => ({ default: More })),
-);
 const Messages = lazy(() =>
   import("./pages/Messages").then(({ Messages }) => ({ default: Messages })),
 );
@@ -369,7 +366,7 @@ export default function App() {
                         path="/messages/:conversationId?"
                         element={<Messages />}
                       />
-                      <Route path="/more" element={<More />} />
+                      <Route path="/more" element={<Navigate to="/dashboard" replace />} />
                       <Route
                         path="/leadership"
                         element={<Navigate to="/leadership/overview" replace />}

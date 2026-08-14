@@ -13,7 +13,7 @@ export function ProtectedRoute() {
   const isSuspended = hasOrganization && !isPlatformOwner && billingStatus === 'suspended';
 
   if (isSuspended) {
-    const allowedCommon = ['/profile', '/more', '/change-password'];
+    const allowedCommon = ['/profile', '/change-password'];
     const allowedAdmin = ['/leadership/billing'];
     const isAllowedCommon = allowedCommon.some(path => location.pathname.startsWith(path));
     const isAllowedAdmin = isOrgAdmin && allowedAdmin.some(path => location.pathname.startsWith(path));

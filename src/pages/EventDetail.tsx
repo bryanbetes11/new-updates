@@ -62,6 +62,21 @@ interface PostEventObservationReply {
   profiles?: { first_name: string; last_name: string; avatar_url: string | null } | null;
 }
 
+interface EventTeamTemplateMember {
+  id: string;
+  role_id: string;
+  user_id: string | null;
+  position: number;
+}
+
+interface EventTeamTemplate {
+  id: string;
+  name: string;
+  description: string;
+  updated_at: string;
+  event_team_template_members: EventTeamTemplateMember[];
+}
+
 const MANILA_TIMEZONE = 'Asia/Manila';
 
 function getManilaTodayKey(date = new Date()) {
@@ -82,6 +97,8 @@ const serviceSongPanelTransition = { type: 'spring' as const, stiffness: 380, da
 const serviceSwipeOffsets = [-1, 0, 1] as const;
 const EVENT_CHART_OPEN_STORAGE_PREFIX = 'servesync:event-chart:open-song-id';
 const SONG_READY_DAYS = 90;
+const ALL_MEMBERS_USER_ID = '__all_active_members__';
+const MULTIPLE_MEMBERS_USER_ID = '__multiple_members__';
 
 const POST_EVENT_CATEGORIES: Array<{ value: PostEventObservationCategory; label: string }> = [
   { value: 'sound', label: 'Sound' },
@@ -194,7 +211,7 @@ export function EventDetail() {
   const location = useLocation();
   const smartBack = useSmartBack('/events');
 
-  const { user, roles, userRoles, isLeader, isProductionDirector, isPlatformOwner } = useAuth();
+  const { user, roles, userRoles, organization, isLeader, isOrgAdmin, isAdmin, isAdminCoordinator, isProductionDirector, isPlatformOwner } = useAuth();
   const { toast } = useToast();
 
   const isMissingSetlistSubmissionTableError = useCallback((message?: string | null) => {
@@ -209,7 +226,7 @@ export function EventDetail() {
 
   const [event, setEvent] = useState<Event | null>(null);
   const [assignments, setAssignments] = useState<EventAssignment[]>([]);
-  const [members, setMembers] = useState<{ id: string; first_name: string; last_name: string }[]>([]);
+  const [members, setMembers] = useState<{ id: string; first_name: string; last_name: string; ministry_status: string }[]>([]);
   const [memberRoles, setMemberRoles] = useState<{ user_id: string; role_id: string }[]>([]);
   const [setlist, setSetlist] = useState<Setlist | null>(null);
   const [setlistSongs, setSetlistSongs] = useState<SetlistSong[]>([]);
@@ -230,7 +247,12 @@ export function EventDetail() {
   const [selectedSongForConfig, setSelectedSongForConfig] = useState<string | null>(null);
   const [songConfig, setSongConfig] = useState({ category: '', youtube_url: '', performed_key: '', artist: '' });
   const [assignmentDrafts, setAssignmentDrafts] = useState<AssignmentDraftRow[]>(() => [createAssignmentDraftRow()]);
+  const [multiMemberSelections, setMultiMemberSelections] = useState<Record<string, string[]>>({});
   const [assigningBatch, setAssigningBatch] = useState(false);
+  const [teamTemplates, setTeamTemplates] = useState<EventTeamTemplate[]>([]);
+  const [selectedTeamTemplateId, setSelectedTeamTemplateId] = useState('');
+  const [teamTemplateName, setTeamTemplateName] = useState('');
+  const [savingTeamTemplate, setSavingTeamTemplate] = useState(false);
   const [removingAssignmentId, setRemovingAssignmentId] = useState<string | null>(null);
   const [newSong, setNewSong] = useState({ title: '', artist: '', song_key: '', duration: '', youtube_url: '' });
   const [newSongError, setNewSongError] = useState('');
@@ -553,11 +575,12 @@ export function EventDetail() {
   const fetchAll = useCallback(async () => {
     if (!id) return;
     try {
-      const [eventRes, assignRes, membersRes, memberRolesRes, setlistRes, songsRes, allSetlistsRes, sundayServicesRes, convRes, observationsRes, observationRepliesRes] = await Promise.all([
+      const [eventRes, assignRes, membersRes, memberRolesRes, memberSettingsRes, setlistRes, songsRes, allSetlistsRes, sundayServicesRes, convRes, observationsRes, observationRepliesRes] = await Promise.all([
         supabase.from('events').select('*').eq('id', id).maybeSingle(),
         supabase.from('event_assignments').select('*, events(*), profiles(first_name, last_name, gender, avatar_url), roles(name)').eq('event_id', id),
-        supabase.from('profiles').select('id, first_name, last_name'),
+        supabase.from('profiles').select('id, first_name, last_name, ministry_status').eq('ministry_status', 'active'),
         supabase.from('user_roles').select('user_id, role_id'),
+        supabase.from('organization_member_settings').select('user_id, include_in_assignments'),
         supabase
           .from('setlists')
           .select('*, setlist_songs(*, songs(*))')
@@ -583,7 +606,10 @@ export function EventDetail() {
       setEventConversationId(convRes.data?.id ?? null);
       setEvent(eventRes.data);
       setAssignments(assignRes.data || []);
-      setMembers(membersRes.data || []);
+      const assignmentExcludedIds = new Set((memberSettingsRes.data || [])
+        .filter(setting => !setting.include_in_assignments)
+        .map(setting => setting.user_id));
+      setMembers((membersRes.data || []).filter(member => !assignmentExcludedIds.has(member.id)));
       setMemberRoles(memberRolesRes.data || []);
       if (observationsRes.error) {
         console.error('Failed to load post-event observations:', observationsRes.error);
@@ -959,9 +985,57 @@ export function EventDetail() {
     assignmentDrafts,
     assignments.map(assignment => ({ user_id: assignment.user_id, role_id: assignment.role_id })),
   );
+  const allMembersRoleIds = new Set(roles.filter(role => role.name === 'All Members').map(role => role.id));
+  const backupVocalsRoleIds = new Set(roles.filter(role => role.name === 'Backup Vocals').map(role => role.id));
+  const specificallyAssignedUserIds = new Set([
+    ...assignments.map(assignment => assignment.user_id),
+    ...assignmentBatch.assignments
+      .filter(assignment => assignment.user_id !== ALL_MEMBERS_USER_ID)
+      .map(assignment => assignment.user_id),
+  ]);
+  const expandedEventAssignments = assignmentBatch.assignments.flatMap(assignment => {
+    if (!allMembersRoleIds.has(assignment.role_id) || assignment.user_id !== ALL_MEMBERS_USER_ID) return [assignment];
+    return members
+      .filter(member => !specificallyAssignedUserIds.has(member.id))
+      .map(member => ({ role_id: assignment.role_id, user_id: member.id }));
+  }).flatMap(assignment => {
+    if (!backupVocalsRoleIds.has(assignment.role_id) || assignment.user_id !== MULTIPLE_MEMBERS_USER_ID) return [assignment];
+    const draft = assignmentDrafts.find(row => row.role_id === assignment.role_id && row.user_id === MULTIPLE_MEMBERS_USER_ID);
+    return (draft ? multiMemberSelections[draft.id] || [] : [])
+      .filter(userId => !assignments.some(existing => existing.user_id === userId && existing.role_id === assignment.role_id))
+      .map(userId => ({ role_id: assignment.role_id, user_id: userId }));
+  });
+  const hasEmptyMultiSelection = assignmentDrafts.some(row => (
+    backupVocalsRoleIds.has(row.role_id) && (multiMemberSelections[row.id]?.length || 0) === 0
+  ));
+
+  const canManageTeamTemplates = isOrgAdmin || isPlatformOwner || isAdmin || isAdminCoordinator;
+
+  const fetchTeamTemplates = useCallback(async () => {
+    if (!canManageTeamTemplates) return;
+    const { data, error } = await supabase
+      .from('event_team_templates')
+      .select('id, name, description, updated_at, event_team_template_members(id, role_id, user_id, position)')
+      .order('name');
+    if (error) {
+      console.error('Failed to load event team templates:', error);
+      return;
+    }
+    setTeamTemplates((data || []).map(template => ({
+      ...template,
+      event_team_template_members: [...(template.event_team_template_members || [])].sort((a, b) => a.position - b.position),
+    })) as EventTeamTemplate[]);
+  }, [canManageTeamTemplates]);
+
+  useEffect(() => {
+    if (showAssign) void fetchTeamTemplates();
+  }, [fetchTeamTemplates, showAssign]);
 
   const openAssignModal = () => {
     setAssignmentDrafts([createAssignmentDraftRow()]);
+    setMultiMemberSelections({});
+    setSelectedTeamTemplateId('');
+    setTeamTemplateName('');
     setShowAssign(true);
   };
 
@@ -969,6 +1043,7 @@ export function EventDetail() {
     if (assigningBatch) return;
     setShowAssign(false);
     setAssignmentDrafts([createAssignmentDraftRow()]);
+    setMultiMemberSelections({});
   };
 
   const addAssignmentDraft = () => {
@@ -978,15 +1053,128 @@ export function EventDetail() {
   const updateAssignmentDraft = (rowId: string, field: 'role_id' | 'user_id', value: string) => {
     setAssignmentDrafts(current => current.map(row => {
       if (row.id !== rowId) return row;
-      if (field === 'role_id') return { ...row, role_id: value, user_id: '' };
+      if (field === 'role_id') {
+        const selectedRole = roles.find(role => role.id === value);
+        setMultiMemberSelections(selections => {
+          const next = { ...selections };
+          delete next[rowId];
+          return next;
+        });
+        return {
+          ...row,
+          role_id: value,
+          user_id: selectedRole?.name === 'All Members'
+            ? ALL_MEMBERS_USER_ID
+            : selectedRole?.name === 'Backup Vocals'
+              ? MULTIPLE_MEMBERS_USER_ID
+              : '',
+        };
+      }
       return { ...row, user_id: value };
     }));
   };
 
   const removeAssignmentDraft = (rowId: string) => {
+    setMultiMemberSelections(selections => {
+      const next = { ...selections };
+      delete next[rowId];
+      return next;
+    });
     setAssignmentDrafts(current => current.length === 1
       ? [createAssignmentDraftRow()]
       : current.filter(row => row.id !== rowId));
+  };
+
+  const toggleMultiMember = (rowId: string, userId: string) => {
+    setMultiMemberSelections(current => {
+      const selected = current[rowId] || [];
+      return {
+        ...current,
+        [rowId]: selected.includes(userId)
+          ? selected.filter(id => id !== userId)
+          : [...selected, userId],
+      };
+    });
+  };
+
+  const applyTeamTemplate = (templateId: string) => {
+    setSelectedTeamTemplateId(templateId);
+    const template = teamTemplates.find(item => item.id === templateId);
+    if (!template) {
+      setTeamTemplateName('');
+      setAssignmentDrafts([createAssignmentDraftRow()]);
+      return;
+    }
+    setTeamTemplateName(template.name);
+    if (template.event_team_template_members.length === 0) {
+      setAssignmentDrafts([createAssignmentDraftRow()]);
+      setMultiMemberSelections({});
+      return;
+    }
+
+    const nextDrafts: AssignmentDraftRow[] = [];
+    const nextMultiSelections: Record<string, string[]> = {};
+    const backupGroups = new Map<string, EventTeamTemplateMember[]>();
+    template.event_team_template_members.forEach(member => {
+      if (backupVocalsRoleIds.has(member.role_id)) {
+        backupGroups.set(member.role_id, [...(backupGroups.get(member.role_id) || []), member]);
+        return;
+      }
+      nextDrafts.push({
+        id: `assignment-draft-${++assignmentDraftSequence}`,
+        role_id: member.role_id,
+        user_id: member.user_id || ALL_MEMBERS_USER_ID,
+      });
+    });
+    backupGroups.forEach((templateMembers, roleId) => {
+      const row = { id: `assignment-draft-${++assignmentDraftSequence}`, role_id: roleId, user_id: MULTIPLE_MEMBERS_USER_ID };
+      nextDrafts.push(row);
+      nextMultiSelections[row.id] = templateMembers.flatMap(member => member.user_id ? [member.user_id] : []);
+    });
+    setAssignmentDrafts(nextDrafts);
+    setMultiMemberSelections(nextMultiSelections);
+  };
+
+  const getCompleteTemplateMembers = () => assignmentDrafts
+    .filter(row => row.role_id && row.user_id)
+    .flatMap((row, position) => {
+      if (row.user_id === MULTIPLE_MEMBERS_USER_ID) {
+        return (multiMemberSelections[row.id] || []).map(userId => ({ role_id: row.role_id, user_id: userId, position }));
+      }
+      return [{
+        role_id: row.role_id,
+        user_id: row.user_id === ALL_MEMBERS_USER_ID ? '' : row.user_id,
+        position,
+      }];
+    });
+
+  const saveTeamTemplate = async (mode: 'create' | 'update') => {
+    if (!user || !organization || savingTeamTemplate) return;
+    const name = teamTemplateName.trim();
+    const templateMembers = getCompleteTemplateMembers();
+    if (!name) { toast('info', 'Enter a template name first'); return; }
+    if (templateMembers.length === 0) { toast('info', 'Add at least one complete role and member'); return; }
+    if (assignmentDrafts.some(row => !row.role_id || !row.user_id)) { toast('info', 'Complete or remove every row before saving'); return; }
+    if (hasEmptyMultiSelection) { toast('info', 'Select at least one Backup Vocalist before saving'); return; }
+
+    setSavingTeamTemplate(true);
+    try {
+      if (mode === 'update' && !selectedTeamTemplateId) { toast('info', 'Select a template to update'); return; }
+      const { data: templateId, error } = await supabase.rpc('save_event_team_template', {
+        p_template_id: mode === 'update' ? selectedTeamTemplateId : null,
+        p_name: name,
+        p_members: templateMembers,
+      });
+      if (error || !templateId) throw error || new Error('The template was not saved.');
+      setSelectedTeamTemplateId(templateId);
+      toast('success', mode === 'create' ? 'Team template created' : 'Team template updated');
+      await fetchTeamTemplates();
+    } catch (error) {
+      console.error('Failed to save team template:', error);
+      toast('error', getErrorMessage(error, 'Could not save the team template'));
+    } finally {
+      setSavingTeamTemplate(false);
+    }
   };
 
   const getEligibleAssignmentMembers = (roleId: string, rowId: string) => {
@@ -1005,6 +1193,19 @@ export function EventDetail() {
     ));
   };
 
+  const getAvailableAssignmentRoles = (rowId: string, currentRoleId: string) => {
+    const unavailableRoleIds = new Set([
+      ...assignments.map(assignment => assignment.role_id),
+      ...assignmentDrafts
+        .filter(row => row.id !== rowId && row.role_id)
+        .map(row => row.role_id),
+    ]);
+
+    return roles.filter(role => (
+      !role.is_leadership && (role.id === currentRoleId || !unavailableRoleIds.has(role.id))
+    ));
+  };
+
   const handleAssign = async () => {
     if (!id || assigningBatch) return;
 
@@ -1016,14 +1217,22 @@ export function EventDetail() {
       toast('info', 'Remove duplicate team assignments before continuing');
       return;
     }
+    if (hasEmptyMultiSelection) {
+      toast('info', 'Select at least one Backup Vocalist');
+      return;
+    }
     if (assignmentBatch.assignments.length === 0) return;
+    if (expandedEventAssignments.length === 0) {
+      toast('info', 'Every active member is already assigned to this event');
+      return;
+    }
 
     setAssigningBatch(true);
     try {
       const { data, error } = await withSaveTimeout(
         supabase
           .from('event_assignments')
-          .insert(assignmentBatch.assignments.map(assignment => ({ event_id: id, ...assignment })))
+          .insert(expandedEventAssignments.map(assignment => ({ event_id: id, ...assignment })))
           .select('id')
       );
 
@@ -1031,12 +1240,12 @@ export function EventDetail() {
         toast('error', error.message);
         return;
       }
-      if ((data?.length || 0) !== assignmentBatch.assignments.length) {
+      if ((data?.length || 0) !== expandedEventAssignments.length) {
         toast('error', 'Some assignments could not be added. Please try again.');
         return;
       }
 
-      const count = assignmentBatch.assignments.length;
+      const count = expandedEventAssignments.length;
       toast('success', count === 1 ? 'Member assigned' : `${count} team assignments added`);
       setShowAssign(false);
       setAssignmentDrafts([createAssignmentDraftRow()]);
@@ -4082,19 +4291,53 @@ const openLyricsModal = (ss: SetlistSong) => {
           closeOnEscape={!assigningBatch}
         >
           <div className="space-y-4">
+            {canManageTeamTemplates && (
+              <section className="space-y-3 rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.055] p-3.5">
+                <div>
+                  <p className="text-sm font-black text-gray-900 dark:text-white">Team template</p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-white/45">Admins and Admin Coordinators can reuse a team, then change any member for this event.</p>
+                </div>
+                <Select
+                  value={selectedTeamTemplateId}
+                  onChange={applyTeamTemplate}
+                  options={teamTemplates.map(template => ({ value: template.id, label: template.name }))}
+                  placeholder={teamTemplates.length ? 'Select a saved team' : 'No saved teams yet'}
+                />
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input
+                    value={teamTemplateName}
+                    onChange={event => setTeamTemplateName(event.target.value)}
+                    className="input-field min-h-11 flex-1"
+                    maxLength={80}
+                    placeholder="Template name, e.g. Sunday Team A"
+                  />
+                  <button type="button" onClick={() => void saveTeamTemplate('create')} disabled={savingTeamTemplate} className="btn-secondary min-h-11 whitespace-nowrap">
+                    {savingTeamTemplate ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Save New
+                  </button>
+                  {selectedTeamTemplateId && (
+                    <button type="button" onClick={() => void saveTeamTemplate('update')} disabled={savingTeamTemplate} className="btn-secondary min-h-11 whitespace-nowrap">
+                      Update Template
+                    </button>
+                  )}
+                </div>
+              </section>
+            )}
+
             <div className="flex items-start justify-between gap-3 rounded-2xl bg-gray-50 px-3.5 py-3 ring-1 ring-black/[0.04] dark:bg-white/[0.035] dark:ring-white/[0.06]">
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-gray-800 dark:text-white/90">Build the team in one batch</p>
                 <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-white/45">Add as many role and member pairs as you need, then assign everyone together.</p>
               </div>
               <span className="shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-500/15 dark:text-emerald-300">
-                {assignmentBatch.assignments.length} ready
+                {expandedEventAssignments.length} ready
               </span>
             </div>
 
             <div className="max-h-[48dvh] space-y-3 overflow-y-auto pr-1 scrollbar-thin">
               {assignmentDrafts.map((row, index) => {
                 const eligibleMembers = getEligibleAssignmentMembers(row.role_id, row.id);
+                const isAllMembersRole = roles.find(role => role.id === row.role_id)?.name === 'All Members';
+                const isBackupVocalsRole = roles.find(role => role.id === row.role_id)?.name === 'Backup Vocals';
                 return (
                   <div
                     key={row.id}
@@ -4122,22 +4365,40 @@ const openLyricsModal = (ss: SetlistSong) => {
                         <Select
                           value={row.role_id}
                           onChange={value => updateAssignmentDraft(row.id, 'role_id', value)}
-                          options={roles.filter(role => !role.is_leadership).map(role => ({ value: role.id, label: role.name }))}
+                          options={getAvailableAssignmentRoles(row.id, row.role_id).map(role => ({ value: role.id, label: role.name }))}
                           placeholder="Select role"
                         />
                       </div>
                       <div className="min-w-0">
                         <label className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-white/55">Member</label>
-                        <Select
-                          value={row.user_id}
-                          onChange={value => updateAssignmentDraft(row.id, 'user_id', value)}
-                          options={eligibleMembers.map(member => ({ value: member.id, label: `${member.first_name} ${member.last_name}` }))}
-                          placeholder={row.role_id ? 'Select member' : 'Pick role first'}
-                        />
+                        {isBackupVocalsRole ? (
+                          <div className="max-h-44 space-y-1 overflow-y-auto rounded-xl border border-gray-200 bg-gray-50 p-2 dark:border-white/10 dark:bg-white/[0.035]">
+                            {eligibleMembers.length === 0 ? (
+                              <p className="px-2 py-3 text-center text-xs text-gray-500 dark:text-white/40">No eligible Backup Vocalists available</p>
+                            ) : eligibleMembers.map(member => {
+                              const checked = (multiMemberSelections[row.id] || []).includes(member.id);
+                              return (
+                                <label key={member.id} className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-gray-700 hover:bg-white dark:text-white/75 dark:hover:bg-white/[0.06]">
+                                  <input type="checkbox" checked={checked} onChange={() => toggleMultiMember(row.id, member.id)} className="h-4 w-4 accent-emerald-500" />
+                                  <span className="min-w-0 flex-1 truncate">{member.first_name} {member.last_name}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <Select
+                            value={row.user_id}
+                            onChange={value => updateAssignmentDraft(row.id, 'user_id', value)}
+                            options={isAllMembersRole
+                              ? [{ value: ALL_MEMBERS_USER_ID, label: `All active members (${expandedEventAssignments.length})` }]
+                              : eligibleMembers.map(member => ({ value: member.id, label: `${member.first_name} ${member.last_name}` }))}
+                            placeholder={row.role_id ? 'Select member' : 'Pick role first'}
+                          />
+                        )}
                       </div>
                     </div>
 
-                    {row.role_id && eligibleMembers.length === 0 && !row.user_id && (
+                    {row.role_id && !isAllMembersRole && !isBackupVocalsRole && eligibleMembers.length === 0 && !row.user_id && (
                       <p className="mt-2 text-xs font-medium text-amber-600 dark:text-amber-300">Everyone with this role is already assigned, or no member has it yet.</p>
                     )}
                   </div>
@@ -4165,13 +4426,13 @@ const openLyricsModal = (ss: SetlistSong) => {
               <button
                 type="button"
                 onClick={handleAssign}
-                disabled={assigningBatch || assignmentBatch.assignments.length === 0 || assignmentBatch.incompleteCount > 0 || assignmentBatch.duplicateCount > 0}
+                disabled={assigningBatch || assignmentBatch.assignments.length === 0 || assignmentBatch.incompleteCount > 0 || assignmentBatch.duplicateCount > 0 || hasEmptyMultiSelection}
                 className="btn-primary min-w-28"
               >
                 {assigningBatch
                   ? 'Assigning...'
-                  : assignmentBatch.assignments.length > 1
-                  ? `Assign all (${assignmentBatch.assignments.length})`
+                  : expandedEventAssignments.length > 1
+                  ? `Assign all (${expandedEventAssignments.length})`
                   : 'Assign member'}
               </button>
             </div>

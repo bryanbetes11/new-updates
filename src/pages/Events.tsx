@@ -21,6 +21,7 @@ import { CalendarGrid } from '../components/CalendarGrid';
 import type { Event } from '../types';
 import { hasArtworkArtist } from '../lib/songArtworkEligibility';
 import { hasEventScheduleEnded, isEventCompleted } from '../lib/eventLifecycle';
+import { loadSyncedPreference, saveSyncedPreference } from '../lib/syncedPreferences';
 
 const eventTypes = ['Sunday Service', 'Prayer Meeting', 'LGTF (Midweek)', 'Rehearsals', 'Online Devotion', 'Equipping', 'Revamp Session', 'Youth Recharge', 'Custom'];
 
@@ -1063,7 +1064,15 @@ export function Events() {
     navigate(location.pathname, { replace: true, state: null });
   }, [fetchEvents, location.key, location.pathname, location.state, navigate]);
   useEffect(() => { localStorage.setItem('eventsActiveTab', activeTab); }, [activeTab]);
-  useEffect(() => { localStorage.setItem('eventsView', desktopView); }, [desktopView]);
+  useEffect(() => {
+    void loadSyncedPreference<'list' | 'calendar'>(user?.id, 'events.view').then(value => {
+      if (value === 'list' || value === 'calendar') setDesktopView(value);
+    });
+  }, [user?.id]);
+  useEffect(() => {
+    localStorage.setItem('eventsView', desktopView);
+    void saveSyncedPreference(user?.id, 'events.view', desktopView);
+  }, [desktopView, user?.id]);
   useEffect(() => {
     const refreshLifecycle = () => setLifecycleNow(new Date());
     const interval = window.setInterval(refreshLifecycle, 30_000);

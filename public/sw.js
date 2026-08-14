@@ -1,5 +1,6 @@
 const serviceWorkerVersion = new URL(self.location.href).searchParams.get('v') || 'unversioned';
 const appShellCacheName = `servesync-app-shell-${serviceWorkerVersion}`;
+const appAssetCacheName = `servesync-assets-${serviceWorkerVersion}`;
 
 function askClientVisibility(client) {
   return new Promise(resolve => {
@@ -119,6 +120,19 @@ self.addEventListener('fetch', function(event) {
         }
       })()
     );
+    return;
+  }
+
+  const requestUrl = new URL(event.request.url);
+  if (event.request.method === 'GET' && requestUrl.origin === self.location.origin) {
+    event.respondWith((async function() {
+      const cache = await caches.open(appAssetCacheName);
+      const cached = await cache.match(event.request);
+      if (cached) return cached;
+      const response = await fetch(event.request);
+      if (response.ok) await cache.put(event.request, response.clone());
+      return response;
+    })());
   }
 });
 
@@ -137,7 +151,7 @@ self.addEventListener('activate', function(event) {
       self.clients.claim(),
       caches.keys().then(keys => Promise.all(
         keys
-          .filter(key => key.startsWith('servesync-app-shell-') && key !== appShellCacheName)
+          .filter(key => (key.startsWith('servesync-app-shell-') && key !== appShellCacheName) || (key.startsWith('servesync-assets-') && key !== appAssetCacheName))
           .map(key => caches.delete(key))
       )),
     ])

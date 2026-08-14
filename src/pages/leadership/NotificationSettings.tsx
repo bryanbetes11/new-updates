@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, BellRing, CheckCircle2, ChevronDown, LayoutGrid, List, Loader2, RefreshCw, RotateCcw, Save, Send, ShieldAlert, Smartphone } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { loadSyncedPreference, saveSyncedPreference } from '../../lib/syncedPreferences';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getBuiltInNotificationCopy } from '../../lib/notificationCopy';
@@ -49,9 +50,32 @@ const categoryLabels: Record<string, string> = {
   requests: 'Requests', members: 'People & roles', accountability: 'Accountability', system: 'System',
 };
 
+const notificationPreviewValues: Record<string, string> = {
+  role: 'Song Leader', event: 'Sunday Service', 'event date': 'August 16, 2026', date: 'August 16, 2026',
+  'start time': '7:30 AM', member: 'Bro. Bryan Betes', 'song leader': 'Bro. Bryan Betes', count: '3',
+  'offense level': '2nd Offense', quarter: 'Q3 2026', 'next action': 'Leadership follow-up',
+  'review notes': 'Please update the final song order.', category: 'Audio', status: 'Open',
+  'due date': 'August 18, 2026', 'due status': 'due tomorrow', 'announcement title': 'Weekend Ministry Update',
+  'announcement content': "Please review this weekend's schedule in ServeSync.", video: 'Sunday Service Recording',
+  'video title': 'Sunday Service Recording', 'video description': 'The latest service recording is ready to watch.',
+  conversation: 'Sunday Service Team', 'organization name': 'MCJC Church', sender: 'Bro. Bryan Betes',
+  'message preview': 'Please check the updated serving schedule.', reason: 'School event',
+  'their assignment': 'Song Leader · 7:30 AM', 'your assignment': 'Guitar · 7:30 AM',
+  'ministry role': 'Song Leader', 'conduct record': 'Attendance follow-up',
+};
+
+function renderNotificationPreview(value: string) {
+  return Object.entries(notificationPreviewValues).reduce((result, [key, sample]) => {
+    const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return result
+      .replace(new RegExp(`\\[${escaped}\\]`, 'gi'), sample)
+      .replace(new RegExp(`\\{\\{${escaped.replace(/ /g, '_')}\\}\\}`, 'gi'), sample);
+  }, value);
+}
+
 export function NotificationSettings() {
-  const { user, profile, organization, isOrgAdmin, isPlatformOwner } = useAuth();
-  const canManageNotifications = isOrgAdmin || isPlatformOwner;
+  const { user, profile, organization, isOrgAdmin, isPlatformOwner, capabilities } = useAuth();
+  const canManageNotifications = isOrgAdmin || isPlatformOwner || capabilities.manage_notifications;
   const { toast } = useToast();
   const [settings, setSettings] = useState<SystemSettings>({ push_delivery_enabled: true, default_timezone: 'Asia/Manila' });
   const [rules, setRules] = useState<Rule[]>([]);
@@ -63,6 +87,7 @@ export function NotificationSettings() {
   const [hasDetailedReadiness, setHasDetailedReadiness] = useState(true);
   const [refreshingReadiness, setRefreshingReadiness] = useState(false);
   const [testingMemberId, setTestingMemberId] = useState<string | null>(null);
+  const [remindingMemberId, setRemindingMemberId] = useState<string | null>(null);
   const [testingRuleId, setTestingRuleId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'status' | 'controls'>('status');
   const [memberView, setMemberView] = useState<'list' | 'grid'>(() => localStorage.getItem('notificationMemberView') === 'grid' ? 'grid' : 'list');
@@ -118,7 +143,15 @@ export function NotificationSettings() {
     return () => { active = false; };
   }, [canManageNotifications, profile?.org_id, toast]);
 
-  useEffect(() => { localStorage.setItem('notificationMemberView', memberView); }, [memberView]);
+  useEffect(() => {
+    void loadSyncedPreference<'list' | 'grid'>(user?.id, 'notifications.memberView').then(value => {
+      if (value === 'list' || value === 'grid') setMemberView(value);
+    });
+  }, [user?.id]);
+  useEffect(() => {
+    localStorage.setItem('notificationMemberView', memberView);
+    void saveSyncedPreference(user?.id, 'notifications.memberView', memberView);
+  }, [memberView, user?.id]);
 
   const groupedRules = useMemo(() => rules.reduce<Record<string, Rule[]>>((groups, rule) => {
     (groups[rule.category] ||= []).push(rule);
@@ -198,6 +231,14 @@ export function NotificationSettings() {
     window.setTimeout(refreshPushReadiness, 1200);
   };
 
+  const sendSetupReminder = async (member: PushReadinessMember) => {
+    setRemindingMemberId(member.user_id);
+    const { error } = await supabase.rpc('send_notification_setup_reminder', { p_user_id: member.user_id });
+    setRemindingMemberId(null);
+    if (error) { toast('error', 'The setup reminder could not be sent'); return; }
+    toast('success', `Setup reminder sent to ${member.first_name}`);
+  };
+
   const sendRuleTest = async (rule: Rule) => {
     const builtIn = getBuiltInNotificationCopy(rule.type, rule.label, rule.description);
     setTestingRuleId(rule.id);
@@ -238,11 +279,13 @@ export function NotificationSettings() {
           members={pushReadiness}
           refreshing={refreshingReadiness}
           testingMemberId={testingMemberId}
+          remindingMemberId={remindingMemberId}
           hasDetailedReadiness={hasDetailedReadiness}
           view={memberView}
           onViewChange={setMemberView}
           onRefresh={refreshPushReadiness}
           onTest={sendPushTest}
+          onRemind={sendSetupReminder}
         />
       )}
 
@@ -314,7 +357,7 @@ export function NotificationSettings() {
                       </select>
                     </label>
                   </div>
-                  <NotificationCopyEditor rule={rule} patchRule={patchRule} testing={testingRuleId === rule.id} onTest={() => sendRuleTest(rule)} />
+                  <NotificationCopyEditor rule={rule} organizationName={organization?.name || 'MCJC Church'} patchRule={patchRule} testing={testingRuleId === rule.id} onTest={() => sendRuleTest(rule)} />
                 </div>
               </details>
             ))}
@@ -337,20 +380,24 @@ function PushReadinessPanel({
   members,
   refreshing,
   testingMemberId,
+  remindingMemberId,
   hasDetailedReadiness,
   view,
   onViewChange,
   onRefresh,
   onTest,
+  onRemind,
 }: {
   members: PushReadinessMember[];
   refreshing: boolean;
   testingMemberId: string | null;
+  remindingMemberId: string | null;
   hasDetailedReadiness: boolean;
   view: 'list' | 'grid';
   onViewChange: (view: 'list' | 'grid') => void;
   onRefresh: () => void;
   onTest: (member: PushReadinessMember) => void;
+  onRemind: (member: PushReadinessMember) => void;
 }) {
   const onboarded = members.filter(member => member.is_onboarded && member.ministry_status === 'active');
   const readyCount = onboarded.filter(member => member.push_ready).length;
@@ -416,7 +463,7 @@ function PushReadinessPanel({
                 <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-white/40">{statusText} · {lastSuccess}</p>
                 <p className="mt-0.5 truncate text-[11px] text-gray-400 dark:text-white/30">{member.email}</p>
               </div>
-              {hasDetailedReadiness && (
+              {hasDetailedReadiness && member.push_ready && (
                 <button
                   type="button"
                   onClick={() => onTest(member)}
@@ -427,6 +474,7 @@ function PushReadinessPanel({
                   Test
                 </button>
               )}
+              {!member.push_ready && <button type="button" onClick={() => onRemind(member)} disabled={remindingMemberId === member.user_id} className="inline-flex items-center gap-1.5 rounded-full bg-amber-400/15 px-3 py-2 text-[11px] font-black text-amber-700 transition hover:bg-amber-400/25 disabled:opacity-50 dark:text-amber-300">{remindingMemberId === member.user_id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BellRing className="h-3.5 w-3.5" />} Remind</button>}
             </div>
           );
         })}
@@ -437,11 +485,13 @@ function PushReadinessPanel({
 
 function NotificationCopyEditor({
   rule,
+  organizationName,
   patchRule,
   testing,
   onTest,
 }: {
   rule: Rule;
+  organizationName: string;
   patchRule: (id: string, patch: Partial<Rule>) => void;
   testing: boolean;
   onTest: () => void;
@@ -450,6 +500,8 @@ function NotificationCopyEditor({
   const hasCustomTitle = rule.template_title !== null;
   const hasCustomBody = rule.template_body !== null;
   const availableValues = Array.from(new Set(`${builtIn.title} ${builtIn.body}`.match(/\[[^\]]+\]/g) || []));
+  const previewTitle = renderNotificationPreview(rule.template_title ?? builtIn.title);
+  const previewBody = renderNotificationPreview(rule.template_body ?? builtIn.body);
 
   return (
     <div className="space-y-3">
@@ -494,6 +546,21 @@ function NotificationCopyEditor({
         {hasCustomTitle || hasCustomBody ? 'Custom wording will replace the built-in wording after you save. ' : 'This is the wording ServeSync currently builds automatically. '}
         Values in brackets are filled from the event or member involved. Audience: {rule.target_roles.join(', ') || 'Applicable members'}.
       </p>
+      <div className="space-y-2 rounded-2xl border border-white/10 bg-gradient-to-br from-zinc-700 via-zinc-800 to-black p-3 shadow-inner">
+        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/45">Live push preview</p>
+        <div className="flex items-start gap-3 rounded-[1.15rem] border border-white/15 bg-white/[0.13] p-3 text-white shadow-xl backdrop-blur-xl">
+          <img src="/apple-touch-icon.png" alt="" className="h-10 w-10 shrink-0 rounded-xl bg-black object-cover" />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start gap-2">
+              <p className="min-w-0 flex-1 text-[13px] font-black leading-4">{previewTitle} <span className="font-semibold text-white/65">from {organizationName}</span></p>
+              <span className="shrink-0 text-[10px] text-white/50">now</span>
+            </div>
+            <p className="mt-1 text-[12px] leading-4 text-white/85">{previewBody}</p>
+            <p className="mt-1 text-[10px] font-semibold text-white/45">from ServeSync</p>
+          </div>
+        </div>
+        <p className="text-[10px] leading-4 text-white/40">Sample values are used only for this preview and the Admin Dev test.</p>
+      </div>
       <button type="button" onClick={onTest} disabled={testing} className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.08] px-4 py-2.5 text-xs font-black text-emerald-700 transition hover:bg-emerald-500/[0.14] disabled:opacity-60 dark:text-emerald-300">
         {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Send test to Admin Dev
       </button>

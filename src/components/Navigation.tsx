@@ -1608,7 +1608,13 @@ export function Navigation({
               aria-label="Profile menu"
             >
               <div className="border-b border-white/[0.08] p-3">
-                <div className="flex items-center gap-3 rounded-[0.75rem] bg-white/[0.045] p-2.5">
+                <button
+                  type="button"
+                  onClick={() => handleNav("/profile")}
+                  className="group flex w-full items-center gap-3 rounded-[0.75rem] bg-white/[0.045] p-2.5 text-left transition-colors hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70"
+                  role="menuitem"
+                  aria-label="Open profile"
+                >
                   <Avatar
                     src={profile?.avatar_url}
                     firstName={profile?.first_name || "?"}
@@ -1624,27 +1630,6 @@ export function Navigation({
                       {profile?.email}
                     </p>
                   </div>
-                </div>
-              </div>
-
-              <div className="p-2">
-                <button
-                  type="button"
-                  onClick={() => handleNav("/profile")}
-                  className="group flex w-full items-center gap-3 rounded-[0.7rem] px-3 py-2.5 text-left transition-colors hover:bg-white/[0.07]"
-                  role="menuitem"
-                >
-                  <span className="flex h-9 w-9 items-center justify-center rounded-[0.65rem] bg-emerald-500/14 text-emerald-300">
-                    <User className="h-[18px] w-[18px]" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[13px] font-black text-white">
-                      Profile
-                    </span>
-                    <span className="mt-0.5 block text-[11px] font-semibold text-white/42">
-                      Account and personal settings
-                    </span>
-                  </span>
                   <ChevronRight className="h-4 w-4 text-white/28 transition-colors group-hover:text-white/72" />
                 </button>
               </div>

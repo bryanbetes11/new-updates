@@ -300,6 +300,9 @@ export function Navigation({
   } = useAuth();
   const { toast } = useToast();
   const unread = useUnreadCounts();
+  const switchableSavedAccounts = savedAccounts.filter(
+    (account) => account.userId !== user?.id,
+  );
 
   const [mobileNavStyle, setMobileNavStyle] = useState<MobileNavStyle>(
     getStoredMobileNavStyle,
@@ -1630,6 +1633,9 @@ export function Navigation({
                       {profile?.email}
                     </p>
                   </div>
+                  <span className="rounded-full bg-emerald-400/[0.13] px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-emerald-200">
+                    Current
+                  </span>
                   <ChevronRight className="h-4 w-4 text-white/28 transition-colors group-hover:text-white/72" />
                 </button>
               </div>
@@ -1655,10 +1661,10 @@ export function Navigation({
                 </div>
 
                 <div className="max-h-52 space-y-1 overflow-y-auto pr-1">
-                  {savedAccounts.length === 0 ? (
+                  {switchableSavedAccounts.length === 0 ? (
                     <div className="rounded-[0.7rem] border border-white/[0.08] bg-white/[0.035] px-3 py-2.5">
                       <p className="text-[12px] font-semibold text-white/55">
-                        No saved accounts yet.
+                        No other saved accounts yet.
                       </p>
                       <button
                         type="button"
@@ -1669,8 +1675,7 @@ export function Navigation({
                       </button>
                     </div>
                   ) : (
-                    savedAccounts.map((account) => {
-                      const isCurrent = account.userId === user?.id;
+                    switchableSavedAccounts.map((account) => {
                       const isSwitching = switchingAccountId === account.userId;
                       return (
                         <div
@@ -1693,27 +1698,17 @@ export function Navigation({
                               {account.email}
                             </p>
                           </div>
-                          {isCurrent ? (
-                            <span className="rounded-full bg-emerald-400/[0.13] px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-emerald-200">
-                              Current
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleSwitchAccount(account.userId)
-                              }
-                              disabled={
-                                isSwitching || switchingAccountId !== null
-                              }
-                              className="flex h-8 items-center justify-center gap-1.5 rounded-full bg-emerald-400/[0.13] px-2.5 text-[10px] font-black text-emerald-200 transition-colors hover:bg-emerald-400/[0.20] disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              <RefreshCw
-                                className={`h-3.5 w-3.5 ${isSwitching ? "animate-spin" : ""}`}
-                              />
-                              Switch
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleSwitchAccount(account.userId)}
+                            disabled={isSwitching || switchingAccountId !== null}
+                            className="flex h-8 items-center justify-center gap-1.5 rounded-full bg-emerald-400/[0.13] px-2.5 text-[10px] font-black text-emerald-200 transition-colors hover:bg-emerald-400/[0.20] disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <RefreshCw
+                              className={`h-3.5 w-3.5 ${isSwitching ? "animate-spin" : ""}`}
+                            />
+                            Switch
+                          </button>
                         </div>
                       );
                     })

@@ -226,6 +226,17 @@ function ChatEventReferenceCard({ reference, eventSongs, isMe, onOpenSetlist }: 
   const isSetlist = reference.reference === 'setlist';
   const isSong = reference.reference === 'song';
   const isObservation = reference.reference === 'observation';
+  const setlistSongs = isSetlist
+    ? (reference.setlistSongs?.length
+      ? reference.setlistSongs
+      : eventSongs.map(item => ({
+        id: item.id,
+        title: item.title,
+        artist: item.artist,
+        key: item.performed_key || item.song_key,
+        youtubeUrl: item.youtube_url,
+      })))
+    : [];
   const destination = isObservation
     ? `/events/${reference.eventId}?addObservation=1`
     : `/events/${reference.eventId}`;
@@ -275,13 +286,8 @@ function ChatEventReferenceCard({ reference, eventSongs, isMe, onOpenSetlist }: 
           {isSetlist && (
             <>
               <span className="mt-1 block text-[11px] font-semibold text-emerald-600 dark:text-emerald-300">
-                {reference.songCount ?? 0} {(reference.songCount ?? 0) === 1 ? 'song' : 'songs'}
+                {setlistSongs.length || reference.songCount || 0} {(setlistSongs.length || reference.songCount || 0) === 1 ? 'song' : 'songs'}
               </span>
-              {reference.songTitles && reference.songTitles.length > 0 && (
-                <span className="mt-1 block truncate text-[11px] text-gray-500 dark:text-white/45">
-                  {reference.songTitles.join(' · ')}
-                </span>
-              )}
             </>
           )}
           {!isSong && !isSetlist && (
@@ -291,6 +297,28 @@ function ChatEventReferenceCard({ reference, eventSongs, isMe, onOpenSetlist }: 
           )}
         </span>
       </span>
+      {isSetlist && setlistSongs.length > 0 && (
+        <span className="block border-t border-gray-100 px-3.5 py-1.5 dark:border-white/[0.06]">
+          {setlistSongs.map((song, index) => (
+            <span key={`${song.id}-${index}`} className="flex min-w-0 items-center gap-2 py-1.5">
+              <span className="w-4 shrink-0 text-right text-[10px] font-bold tabular-nums text-gray-300 dark:text-white/25">
+                {index + 1}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[12px] font-semibold leading-tight text-gray-800 dark:text-white/90">{song.title}</span>
+                {song.artist && (
+                  <span className="mt-0.5 block truncate text-[10px] leading-tight text-gray-400 dark:text-white/35">{song.artist}</span>
+                )}
+              </span>
+              {song.key && (
+                <span className="shrink-0 rounded-md bg-gray-100 px-1.5 py-0.5 text-[9px] font-bold text-gray-500 dark:bg-white/[0.06] dark:text-white/45">
+                  {song.key}
+                </span>
+              )}
+            </span>
+          ))}
+        </span>
+      )}
       <span className="flex items-center justify-between border-t border-gray-100 px-3.5 py-2 text-[11px] font-bold text-emerald-600 dark:border-white/[0.06] dark:text-emerald-300">
         {action}
         <ChevronRight className="h-3.5 w-3.5" />

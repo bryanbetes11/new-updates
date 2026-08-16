@@ -38,6 +38,10 @@ assert.equal(eventReference?.eventId, event.id);
 const setlistReference = parseChatEventReference(JSON.parse(createChatEventReference('setlist', event)));
 assert.equal(setlistReference?.songCount, 2);
 assert.deepEqual(setlistReference?.songTitles, ['Forever', 'I Speak Jesus']);
+assert.deepEqual(setlistReference?.setlistSongs, [
+  { id: 'song-1', title: 'Forever', artist: 'Chris Tomlin', key: 'D', youtubeUrl: null },
+  { id: 'song-2', title: 'I Speak Jesus', artist: 'Charity Gayle', key: 'A', youtubeUrl: null },
+]);
 
 const songReference = parseChatEventReference(JSON.parse(createChatEventReference('song', event, event.songs[0])));
 assert.equal(songReference?.song?.title, 'Forever');

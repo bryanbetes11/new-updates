@@ -9,6 +9,13 @@ export type ChatEventReference = {
   eventType: string | null;
   songCount?: number;
   songTitles?: string[];
+  setlistSongs?: Array<{
+    id: string;
+    title: string;
+    artist: string | null;
+    key: string | null;
+    youtubeUrl?: string | null;
+  }>;
   song?: {
     id: string;
     title: string;
@@ -96,6 +103,13 @@ export function createChatEventReference(
   if (reference === 'setlist') {
     payload.songCount = event.songs.length;
     payload.songTitles = event.songs.slice(0, 4).map(item => item.title);
+    payload.setlistSongs = event.songs.map(item => ({
+      id: item.id,
+      title: item.title,
+      artist: item.artist,
+      key: item.performed_key || item.song_key,
+      youtubeUrl: item.youtube_url || null,
+    }));
   }
 
   if (reference === 'song' && song) {
@@ -147,6 +161,21 @@ export function parseChatEventReference(value: unknown): ChatEventReference | nu
   if (typeof candidate.songCount === 'number') parsed.songCount = candidate.songCount;
   if (Array.isArray(candidate.songTitles)) {
     parsed.songTitles = candidate.songTitles.filter((title): title is string => typeof title === 'string').slice(0, 4);
+  }
+
+  if (Array.isArray(candidate.setlistSongs)) {
+    parsed.setlistSongs = candidate.setlistSongs.flatMap(value => {
+      if (!value || typeof value !== 'object') return [];
+      const song = value as Record<string, unknown>;
+      if (typeof song.id !== 'string' || typeof song.title !== 'string') return [];
+      return [{
+        id: song.id,
+        title: song.title,
+        artist: typeof song.artist === 'string' ? song.artist : null,
+        key: typeof song.key === 'string' ? song.key : null,
+        youtubeUrl: typeof song.youtubeUrl === 'string' ? song.youtubeUrl : null,
+      }];
+    }).slice(0, 50);
   }
 
   if (candidate.song && typeof candidate.song === 'object') {

@@ -6,7 +6,7 @@ import {
   ArrowLeft, Send, ImageIcon, X, Pin, CornerUpLeft, Camera,
   MessageCircle, Plus, Search, Trash2, MoreHorizontal, ChevronRight, Check,
   CalendarDays, Music2, Copy, Paperclip, FileText, Download, ExternalLink, UserPlus,
-  Calendar, Clock, LogOut,
+  Calendar, Clock, LogOut, PlayCircle,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { formatTime12Hour } from '../lib/timeFormat';
@@ -240,17 +240,67 @@ function ChatEventReferenceCard({ reference, eventSongs, isMe, onOpenSetlist }: 
   const destination = isObservation
     ? `/events/${reference.eventId}?addObservation=1`
     : `/events/${reference.eventId}`;
-  const label = isSetlist
-    ? 'Event setlist'
-    : isSong
-      ? 'Setlist song'
-      : isObservation
-        ? 'Post-event observation'
-        : 'Event reference';
-  const action = isObservation ? 'Add observation' : isSong ? 'Open setlist' : isSetlist ? 'View setlist' : 'View event';
+  const label = isSong
+    ? 'Setlist song'
+    : isObservation
+      ? 'Post-event observation'
+      : 'Event reference';
+  const action = isObservation ? 'Add observation' : isSong ? 'Open setlist' : 'View event';
 
   if (isSong && reference.messageText) {
     return <InlineSongReference reference={reference} eventSongs={eventSongs} isMe={isMe} />;
+  }
+
+  if (isSetlist) {
+    return (
+      <div className="w-[min(18rem,72vw)] overflow-hidden rounded-2xl border border-gray-200/80 bg-white text-left text-gray-900 shadow-sm dark:border-white/[0.08] dark:bg-[#1b1b1e] dark:text-white">
+        <div className="flex items-start gap-3 p-3.5">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300">
+            <Music2 className="h-5 w-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[9px] font-black uppercase tracking-[0.16em] text-gray-400 dark:text-white/35">Event setlist</span>
+            <span className="mt-1 block truncate text-[14px] font-bold leading-tight">{reference.eventTitle}</span>
+            <span className="mt-1 block text-[11px] font-semibold text-emerald-600 dark:text-emerald-300">
+              {setlistSongs.length || reference.songCount || 0} {(setlistSongs.length || reference.songCount || 0) === 1 ? 'song' : 'songs'}
+            </span>
+          </span>
+        </div>
+        {setlistSongs.length > 0 && (
+          <div className="border-t border-gray-100 px-2.5 py-1.5 dark:border-white/[0.06]">
+            {setlistSongs.map((song, index) => (
+              <div key={`${song.id}-${index}`} className="flex min-w-0 items-center gap-2 rounded-xl px-1 py-1.5 transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.035]">
+                <span className="w-4 shrink-0 text-right text-[10px] font-bold tabular-nums text-gray-300 dark:text-white/25">
+                  {index + 1}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[12px] font-semibold leading-tight text-gray-800 dark:text-white/90">{song.title}</span>
+                  {song.artist && (
+                    <span className="mt-0.5 block truncate text-[10px] leading-tight text-gray-400 dark:text-white/35">{song.artist}</span>
+                  )}
+                </span>
+                {song.key && (
+                  <span className="shrink-0 rounded-md bg-gray-100 px-1.5 py-0.5 text-[9px] font-bold text-gray-500 dark:bg-white/[0.06] dark:text-white/45">
+                    {song.key}
+                  </span>
+                )}
+                <a
+                  href={getSongYoutubeTarget(song)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={event => event.stopPropagation()}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-red-500 transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/70 dark:text-red-400 dark:hover:bg-red-500/10 dark:hover:text-red-300"
+                  aria-label={`Open ${song.title} on YouTube`}
+                  title={`Open ${song.title} on YouTube`}
+                >
+                  <PlayCircle className="h-4 w-4" />
+                </a>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -258,7 +308,7 @@ function ChatEventReferenceCard({ reference, eventSongs, isMe, onOpenSetlist }: 
       type="button"
       onClick={event => {
         event.stopPropagation();
-        if (isSong || isSetlist) onOpenSetlist(reference.song?.id);
+        if (isSong) onOpenSetlist(reference.song?.id);
         else navigate(destination);
       }}
       className="block w-[min(18rem,72vw)] overflow-hidden rounded-2xl border border-gray-200/80 bg-white text-left text-gray-900 shadow-sm transition-transform hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 dark:border-white/[0.08] dark:bg-[#1b1b1e] dark:text-white"
@@ -271,7 +321,7 @@ function ChatEventReferenceCard({ reference, eventSongs, isMe, onOpenSetlist }: 
               ? 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-300'
               : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300'
         }`}>
-          {isSong || isSetlist ? <Music2 className="h-5 w-5" /> : isObservation ? <MessageCircle className="h-5 w-5" /> : <CalendarDays className="h-5 w-5" />}
+          {isSong ? <Music2 className="h-5 w-5" /> : isObservation ? <MessageCircle className="h-5 w-5" /> : <CalendarDays className="h-5 w-5" />}
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-[9px] font-black uppercase tracking-[0.16em] text-gray-400 dark:text-white/35">{label}</span>
@@ -283,42 +333,13 @@ function ChatEventReferenceCard({ reference, eventSongs, isMe, onOpenSetlist }: 
               {[reference.song.artist, reference.song.key ? `Key ${reference.song.key}` : null].filter(Boolean).join(' · ')}
             </span>
           )}
-          {isSetlist && (
-            <>
-              <span className="mt-1 block text-[11px] font-semibold text-emerald-600 dark:text-emerald-300">
-                {setlistSongs.length || reference.songCount || 0} {(setlistSongs.length || reference.songCount || 0) === 1 ? 'song' : 'songs'}
-              </span>
-            </>
-          )}
-          {!isSong && !isSetlist && (
+          {!isSong && (
             <span className="mt-1 block text-[11px] text-gray-500 dark:text-white/45">
               {format(parseISO(reference.eventDate), 'EEE, MMM d, yyyy')}{reference.eventType ? ` · ${reference.eventType}` : ''}
             </span>
           )}
         </span>
       </span>
-      {isSetlist && setlistSongs.length > 0 && (
-        <span className="block border-t border-gray-100 px-3.5 py-1.5 dark:border-white/[0.06]">
-          {setlistSongs.map((song, index) => (
-            <span key={`${song.id}-${index}`} className="flex min-w-0 items-center gap-2 py-1.5">
-              <span className="w-4 shrink-0 text-right text-[10px] font-bold tabular-nums text-gray-300 dark:text-white/25">
-                {index + 1}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[12px] font-semibold leading-tight text-gray-800 dark:text-white/90">{song.title}</span>
-                {song.artist && (
-                  <span className="mt-0.5 block truncate text-[10px] leading-tight text-gray-400 dark:text-white/35">{song.artist}</span>
-                )}
-              </span>
-              {song.key && (
-                <span className="shrink-0 rounded-md bg-gray-100 px-1.5 py-0.5 text-[9px] font-bold text-gray-500 dark:bg-white/[0.06] dark:text-white/45">
-                  {song.key}
-                </span>
-              )}
-            </span>
-          ))}
-        </span>
-      )}
       <span className="flex items-center justify-between border-t border-gray-100 px-3.5 py-2 text-[11px] font-bold text-emerald-600 dark:border-white/[0.06] dark:text-emerald-300">
         {action}
         <ChevronRight className="h-3.5 w-3.5" />
@@ -2948,7 +2969,7 @@ function EventDiscussionCard({ eventId, onOpen, onDetailsLoaded }: {
   if (!details) return null;
 
   return (
-    <div className="shrink-0 border-b border-emerald-100 dark:border-emerald-500/10 bg-emerald-50/70 dark:bg-emerald-500/[0.06] px-4 py-3">
+    <div className="hidden shrink-0 border-b border-emerald-100 bg-emerald-50/70 px-4 py-3 dark:border-emerald-500/10 dark:bg-emerald-500/[0.06] lg:block">
       <button
         onClick={onOpen}
         className="w-full text-left rounded-2xl bg-white dark:bg-[#161619] border border-emerald-100 dark:border-emerald-500/15 px-3.5 py-3 shadow-sm shadow-emerald-900/5"
@@ -3625,6 +3646,21 @@ function ChatWindow({
               </p>
             )}
           </button>
+          {conv.type === 'event' && conv.event_id && (
+            <button
+              type="button"
+              onClick={() => {
+                setEventPanelMode('event');
+                setFocusedSetlistSongId(null);
+                setShowEventDetail(true);
+              }}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 transition-colors hover:bg-emerald-500/15 active:scale-95 dark:bg-emerald-500/[0.12] dark:text-emerald-300 lg:hidden"
+              aria-label="Open event information"
+              title="Event information"
+            >
+              <CalendarDays className="h-4.5 w-4.5" style={{ width: '18px', height: '18px' }} />
+            </button>
+          )}
         </div>
 
         {latestPinnedMessage && (

@@ -136,6 +136,13 @@ const mobileNavItems: NavItem[] = [
     badgeColor: "red",
   },
   {
+    path: "/messages",
+    label: "Chat",
+    icon: MessageIcon,
+    badgeKey: "messages",
+    badgeColor: "red",
+  },
+  {
     path: "/announcements",
     label: "News",
     icon: NewsIcon,
@@ -143,13 +150,6 @@ const mobileNavItems: NavItem[] = [
     badgeColor: "blue",
   },
   { path: "/library", label: "Library", icon: LibraryNavIcon },
-  {
-    path: "/messages",
-    label: "Chat",
-    icon: MessageIcon,
-    badgeKey: "messages",
-    badgeColor: "red",
-  },
 ];
 
 const sidebarMainItems: NavItem[] = [

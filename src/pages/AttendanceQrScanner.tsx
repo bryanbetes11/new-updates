@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { format } from 'date-fns';
 import { Camera, CheckCircle2, Loader2, QrCode, RotateCcw, ShieldCheck } from 'lucide-react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import QrScanner from 'qr-scanner';
 import { EventArtwork } from '../components/EventArtwork';
@@ -78,6 +79,7 @@ export function AttendanceQrScanner() {
   const navigate = useNavigate();
   const { user, isOrgAdmin, isPlatformOwner } = useAuth();
   const { toast } = useToast();
+  const prefersReducedMotion = useReducedMotion();
   const canUsePilot = isOrgAdmin || isPlatformOwner;
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const scannerRef = useRef<QrScanner | null>(null);
@@ -91,6 +93,7 @@ export function AttendanceQrScanner() {
   const [events, setEvents] = useState<EligibleAttendanceEvent[] | null>(null);
   const [checkingIn, setCheckingIn] = useState<string | null>(null);
   const [result, setResult] = useState<CheckinResult | null>(null);
+  const [showScanSuccess, setShowScanSuccess] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
   const stopScanner = useCallback(() => {
@@ -153,6 +156,7 @@ export function AttendanceQrScanner() {
     setSessionToken(data?.session_token || '');
     setScanMode(mode);
     setEvents(enrichedEvents);
+    setShowScanSuccess(true);
   }, [canUsePilot, stopScanner, toast]);
 
   const startScanner = useCallback(async () => {
@@ -186,6 +190,15 @@ export function AttendanceQrScanner() {
     return () => window.clearInterval(interval);
   }, [events]);
 
+  useEffect(() => {
+    if (!showScanSuccess) return;
+    const timeout = window.setTimeout(
+      () => setShowScanSuccess(false),
+      prefersReducedMotion ? 450 : 1400,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [prefersReducedMotion, showScanSuccess]);
+
   const recordCheckin = async (eventId: string) => {
     if (!scanMode || (scanMode === 'live' ? !sessionToken : !scanToken)) return;
     setCheckingIn(eventId);
@@ -207,6 +220,7 @@ export function AttendanceQrScanner() {
   };
 
   const reset = () => {
+    setShowScanSuccess(false);
     setResult(null);
     setScanToken('');
     setSessionToken('');
@@ -223,6 +237,74 @@ export function AttendanceQrScanner() {
     <div className="page-container page-bottom-pad">
       <div className="app-content-shell mx-auto max-w-xl">
         <div className="mb-4"><div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-emerald-500"><QrCode className="h-4 w-4" /> Church attendance</div><h1 className="mt-2 text-2xl font-black">Scan to check in</h1><p className="mt-1 text-sm text-gray-500">Only events you are scheduled for appear after the church QR is verified.</p></div>
+
+        {createPortal(
+          <AnimatePresence>
+            {showScanSuccess && (
+              <motion.div
+                role="status"
+                aria-live="polite"
+                className="fixed inset-0 z-[120] flex min-h-[100dvh] items-center justify-center overflow-hidden bg-[#020403]/95 px-6 text-white"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: prefersReducedMotion ? 0.08 : 0.2 }}
+              >
+                <motion.div
+                  className="pointer-events-none absolute h-72 w-72 rounded-full bg-emerald-400/20 blur-3xl"
+                  initial={prefersReducedMotion ? false : { scale: 0.35, opacity: 0 }}
+                  animate={{ scale: prefersReducedMotion ? 1 : 1.35, opacity: [0, 0.9, 0.5] }}
+                  transition={{ duration: prefersReducedMotion ? 0.1 : 1.15, ease: 'easeOut' }}
+                />
+                <div className="relative flex flex-col items-center text-center">
+                  <div className="relative flex h-32 w-32 items-center justify-center">
+                    {!prefersReducedMotion && (
+                      <motion.span
+                        className="absolute inset-0 rounded-full border border-emerald-300/55"
+                        initial={{ scale: 0.55, opacity: 0.9 }}
+                        animate={{ scale: 1.55, opacity: 0 }}
+                        transition={{ duration: 1, ease: 'easeOut' }}
+                      />
+                    )}
+                    <motion.span
+                      className="flex h-24 w-24 items-center justify-center rounded-full border border-emerald-300/35 bg-emerald-400/15 text-emerald-300 shadow-[0_0_70px_-12px_rgba(52,211,153,0.9),inset_0_1px_0_rgba(255,255,255,0.28)] backdrop-blur-xl"
+                      initial={prefersReducedMotion ? false : { scale: 0.35, rotate: -14, opacity: 0 }}
+                      animate={{ scale: 1, rotate: 0, opacity: 1 }}
+                      transition={{ type: 'spring', stiffness: 360, damping: 19, delay: 0.08 }}
+                    >
+                      <ShieldCheck className="h-12 w-12" strokeWidth={2.3} />
+                    </motion.span>
+                  </div>
+                  <motion.p
+                    className="mt-4 text-xs font-black uppercase tracking-[0.28em] text-emerald-300"
+                    initial={prefersReducedMotion ? false : { y: 10, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: prefersReducedMotion ? 0 : 0.28, duration: 0.3 }}
+                  >
+                    QR locked in
+                  </motion.p>
+                  <motion.h2
+                    className="mt-3 text-3xl font-black tracking-tight"
+                    initial={prefersReducedMotion ? false : { y: 14, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: prefersReducedMotion ? 0 : 0.38, duration: 0.35 }}
+                  >
+                    Your schedule is ready
+                  </motion.h2>
+                  <motion.p
+                    className="mt-2 text-sm font-medium text-white/50"
+                    initial={prefersReducedMotion ? false : { opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: prefersReducedMotion ? 0 : 0.5, duration: 0.3 }}
+                  >
+                    Choose your event, then tap Check In.
+                  </motion.p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body,
+        )}
 
         {result ? createPortal(
           <section className="fixed inset-0 z-[100] flex min-h-[100dvh] flex-col bg-[#050505] px-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-[calc(2rem+env(safe-area-inset-top))] text-white">
@@ -251,8 +333,8 @@ export function AttendanceQrScanner() {
           </section>,
           document.body,
         ) : events !== null ? (
-          <section className="card p-5">
-            <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-500"><ShieldCheck className="h-5 w-5" /></span><div><h2 className="font-bold">Church QR verified</h2><p className="text-xs text-gray-500">{scanMode === 'pilot' ? 'Admin test mode' : 'Secure session expires in five minutes'} · review your event, then tap Check In.</p></div></div>
+          <section className="pb-2">
+            <div className="flex items-center gap-3 px-1"><span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-500"><ShieldCheck className="h-5 w-5" /></span><div><h2 className="font-bold">Church QR verified</h2><p className="text-xs text-gray-500">{scanMode === 'pilot' ? 'Admin test mode' : 'Secure session expires in five minutes'} · review your event, then tap Check In.</p></div></div>
             <div className="mt-4 rounded-xl bg-emerald-500/10 px-3 py-2.5 text-xs font-semibold leading-relaxed text-emerald-500">
               Scanning does not record attendance. Your check-in is submitted only when you tap the Check In button.
             </div>
@@ -319,10 +401,12 @@ export function AttendanceQrScanner() {
               <div className="absolute inset-x-0 bottom-5 text-center"><span className="rounded-full bg-black/65 px-4 py-2 text-xs font-semibold text-white backdrop-blur">Point at the church QR code</span></div>
               {(validating || !scanning) && !cameraError && <div className="absolute inset-0 flex items-center justify-center bg-black/45"><Loader2 className="h-8 w-8 animate-spin text-white" /></div>}
             </div>
-            <div className="p-4">
-              {cameraError && <div className="mb-3 rounded-xl bg-amber-500/10 p-3 text-sm text-amber-500">{cameraError}</div>}
-              {cameraError && <button type="button" className="btn-secondary mt-2 min-h-11 w-full" onClick={() => void startScanner()}><Camera className="h-4 w-4" /> Try camera again</button>}
-            </div>
+            {cameraError && (
+              <div className="p-4">
+                <div className="mb-3 rounded-xl bg-amber-500/10 p-3 text-sm text-amber-500">{cameraError}</div>
+                <button type="button" className="btn-secondary mt-2 min-h-11 w-full" onClick={() => void startScanner()}><Camera className="h-4 w-4" /> Try camera again</button>
+              </div>
+            )}
           </section>
         )}
       </div>

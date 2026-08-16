@@ -1,14 +1,14 @@
 # Attendance Event Grid Design QA
 
-- Source visual truth: `C:/Users/Bryan/AppData/Local/Temp/codex-clipboard-74b3d0dc-4bea-4e71-ac70-d38fee946410.png`
+- Source visual truths: `C:/Users/Bryan/AppData/Local/Temp/codex-clipboard-f614c007-bff0-44a9-8209-a9fd66f481ed.png` (verified event grid) and `C:/Users/Bryan/AppData/Local/Temp/codex-clipboard-d0bcb64b-b8e4-4b13-b2c7-dee4f5a84dbd.png` (live scanner)
 - Implementation route: `http://127.0.0.1:5174/attendance/scan`
 - Intended viewport: 430 x 932 CSS px, mobile, dark theme
-- Source pixels: 298 x 209; implementation screenshot: unavailable
+- Source pixels: 945 x 2048; implementation screenshot: unavailable
 - State: church QR verified, upcoming and open scheduled attendance events
 
 ## Full-view comparison evidence
 
-The source image was opened and used to define the two-column near-square artwork grid, top-left date badge, bottom-left status overlay, compact title/time hierarchy, and tight black-card rhythm. The implementation route is running locally, but the event-grid state is gated behind a physical QR scan and the selected in-app Browser could not be programmatically advanced through that camera-only state in this turn.
+The verified-state source shows the event grid constrained inside a large rounded card with 20px internal padding; the implementation removes that outer surface so the grid can use the full content width. The scanner source also shows an empty grey actions strip beneath the camera; the implementation now renders that area only when a camera error exists. The event-grid state remains gated behind a physical QR scan, so the selected in-app Browser could not be programmatically advanced through that camera-only state in this turn.
 
 ## Focused-region comparison evidence
 
@@ -17,14 +17,14 @@ Blocked: a rendered event-grid screenshot could not be captured without scanning
 ## Required fidelity surfaces
 
 - Fonts and typography: compact 13px extra-bold event titles, 11px metadata, and 9–10px overlay labels mirror the reference hierarchy while using ServeSync's existing type system.
-- Spacing and layout rhythm: two equal mobile columns, 12px horizontal gap, 20px row gap, square artwork, and compact metadata preserve the reference density.
+- Spacing and layout rhythm: the outer card and its 20px inset are removed; two equal mobile columns now use the full page content width with a 12px gap, 20px row rhythm, square artwork, and compact metadata.
 - Colors and visual tokens: existing dark surfaces and event gradients are retained; green communicates check-in availability and amber communicates a future opening window.
 - Image quality and asset fidelity: the existing `EventArtwork` component supplies real four-cover setlist collages and event-type gradient fallbacks without placeholder art.
 - Copy and content: attendance-specific date, opening countdown, exact opening time, recorded status, and explicit Check In action replace the reference's response/setlist labels.
 
 ## Findings
 
-- [Blocked] No browser-rendered screenshot of the QR-verified event grid is available for a same-state visual comparison. The camera-only attendance policy correctly prevents using a saved QR image as a shortcut.
+- [Blocked] No post-change browser-rendered screenshot of the QR-verified event grid is available for a same-state visual comparison. The camera-only attendance policy correctly prevents using a saved QR image as a shortcut.
 
 ## Comparison history
 

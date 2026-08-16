@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { format } from 'date-fns';
-import { Camera, CheckCircle2, ImagePlus, Loader2, QrCode, RotateCcw, ShieldCheck } from 'lucide-react';
+import { CalendarClock, Camera, CheckCircle2, Loader2, QrCode, RotateCcw, ShieldCheck } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import QrScanner from 'qr-scanner';
@@ -16,6 +16,8 @@ interface EligibleAttendanceEvent {
   ends_at: string;
   existing_status: 'present' | 'late' | 'absent' | 'excused' | null;
   checked_in_at: string | null;
+  opens_at?: string;
+  attendance_open?: boolean;
 }
 
 interface CheckinResult {
@@ -24,6 +26,17 @@ interface CheckinResult {
   status: 'present' | 'late';
   checked_in_at: string;
   pilot_only: boolean;
+}
+
+function formatTimeRemaining(opensAt: string, now: number): string {
+  const remainingMs = new Date(opensAt).getTime() - now;
+  if (remainingMs <= 0) return 'now';
+  const minutes = Math.ceil(remainingMs / 60_000);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.ceil(minutes / 60);
+  if (hours < 24) return `${hours} hr${hours === 1 ? '' : 's'}`;
+  const days = Math.ceil(hours / 24);
+  return `${days} day${days === 1 ? '' : 's'}`;
 }
 
 export function AttendanceQrScanner() {
@@ -43,6 +56,7 @@ export function AttendanceQrScanner() {
   const [events, setEvents] = useState<EligibleAttendanceEvent[] | null>(null);
   const [checkingIn, setCheckingIn] = useState<string | null>(null);
   const [result, setResult] = useState<CheckinResult | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   const stopScanner = useCallback(() => {
     scannerRef.current?.stop();
@@ -56,7 +70,7 @@ export function AttendanceQrScanner() {
     const token = parseAttendanceQrPayload(rawPayload);
     if (!token) {
       stopScanner();
-      setCameraError('That code is not a ServeSync attendance QR. Try the reusable QR from the admin test lab.');
+      setCameraError('That code is not a ServeSync attendance QR. Try the printed church QR again.');
       toast('error', 'That is not a ServeSync attendance QR code');
       return;
     }
@@ -103,7 +117,7 @@ export function AttendanceQrScanner() {
     } catch {
       scanner.destroy();
       scannerRef.current = null;
-      setCameraError('Camera access was unavailable. Allow camera permission or choose a saved QR image below.');
+      setCameraError('Camera access was unavailable. Allow camera permission, then try the live scanner again.');
     }
   }, [user, validateScan]);
 
@@ -112,18 +126,12 @@ export function AttendanceQrScanner() {
     return stopScanner;
   }, [user, events, startScanner, stopScanner]);
 
-  const scanImage = async (file: File | undefined) => {
-    if (!file) return;
-    setValidating(true);
-    try {
-      const scanResult = await QrScanner.scanImage(file, { returnDetailedScanResult: true });
-      setValidating(false);
-      await validateScan(scanResult.data);
-    } catch {
-      setValidating(false);
-      toast('error', 'No readable QR code was found in that image');
-    }
-  };
+  useEffect(() => {
+    if (events === null) return;
+    setNow(Date.now());
+    const interval = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(interval);
+  }, [events]);
 
   const recordCheckin = async (eventId: string) => {
     if (!scanMode || (scanMode === 'live' ? !sessionToken : !scanToken)) return;
@@ -152,6 +160,11 @@ export function AttendanceQrScanner() {
     setScanMode(null);
     setEvents(null);
   };
+
+  const openEvents = events?.filter((event) => scanMode === 'pilot' || event.attendance_open) || [];
+  const upcomingEvents = scanMode === 'live'
+    ? events?.filter((event) => !event.attendance_open) || []
+    : [];
 
   return (
     <div className="page-container page-bottom-pad">
@@ -190,28 +203,56 @@ export function AttendanceQrScanner() {
             <div className="mt-4 rounded-xl bg-emerald-500/10 px-3 py-2.5 text-xs font-semibold leading-relaxed text-emerald-500">
               Scanning does not record attendance. Your check-in is submitted only when you tap the Check In button.
             </div>
-            <div className="mt-5 space-y-3">
-              {events.length ? events.map((event) => (
-                <div key={event.id} className="rounded-xl border border-gray-200 p-3 dark:border-gray-800">
-                  <div>
+            {openEvents.length > 0 && (
+              <div className="mt-5 space-y-3">
+                <p className="text-xs font-black uppercase tracking-[0.14em] text-emerald-500">Ready to check in</p>
+                {openEvents.map((event) => (
+                  <div key={event.id} className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.04] p-3">
                     <p className="font-semibold">{event.title}</p>
                     <p className="mt-0.5 text-xs text-gray-500">{format(new Date(event.starts_at), 'MMM d, h:mm a')} – {format(new Date(event.ends_at), 'h:mm a')}</p>
+                    {event.existing_status ? (
+                      <div className="mt-3 flex min-h-11 items-center justify-center rounded-xl bg-emerald-500/10 px-4 text-sm font-bold capitalize text-emerald-500">Already recorded: {event.existing_status}</div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void recordCheckin(event.id)}
+                        disabled={Boolean(checkingIn)}
+                        className="btn-primary mt-3 min-h-11 w-full"
+                      >
+                        {checkingIn === event.id ? <><Loader2 className="h-4 w-4 animate-spin" /> Recording check-in…</> : <><CheckCircle2 className="h-4 w-4" /> Check In</>}
+                      </button>
+                    )}
                   </div>
-                  {event.existing_status ? (
-                    <div className="mt-3 flex min-h-11 items-center justify-center rounded-xl bg-emerald-500/10 px-4 text-sm font-bold capitalize text-emerald-500">Already recorded: {event.existing_status}</div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => void recordCheckin(event.id)}
-                      disabled={Boolean(checkingIn)}
-                      className="btn-primary mt-3 min-h-11 w-full"
-                    >
-                      {checkingIn === event.id ? <><Loader2 className="h-4 w-4 animate-spin" /> Recording check-in…</> : <><CheckCircle2 className="h-4 w-4" /> Check In</>}
-                    </button>
-                  )}
+                ))}
+              </div>
+            )}
+
+            {upcomingEvents.length > 0 && (
+              <div className="mt-5 space-y-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.14em] text-gray-500">Upcoming assignments</p>
+                  {openEvents.length === 0 && <p className="mt-1 text-xs leading-relaxed text-gray-500">Attendance is not open yet. Scan the church QR again when your event window opens.</p>}
                 </div>
-              )) : <div className="rounded-xl bg-gray-100 p-5 text-center text-sm text-gray-500 dark:bg-gray-900">{scanMode === 'pilot' ? 'No test event is accepting attendance right now.' : 'No scheduled event is accepting your attendance right now. Events appear 30 minutes before their start time.'}</div>}
-            </div>
+                {upcomingEvents.map((event) => (
+                  <div key={event.id} className="rounded-xl border border-gray-200 p-3 dark:border-gray-800">
+                    <div className="flex items-start gap-3">
+                      <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-500 dark:bg-gray-900"><CalendarClock className="h-4 w-4" /></span>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold">{event.title}</p>
+                        <p className="mt-0.5 text-xs text-gray-500">Event: {format(new Date(event.starts_at), 'EEE, MMM d · h:mm a')}</p>
+                        {event.opens_at && <p className="mt-1 text-xs font-semibold text-gray-600 dark:text-gray-300">Attendance opens {format(new Date(event.opens_at), 'EEE, MMM d · h:mm a')}</p>}
+                      </div>
+                      {event.opens_at && <span className="shrink-0 rounded-full bg-amber-500/10 px-2.5 py-1 text-[11px] font-bold text-amber-500">In {formatTimeRemaining(event.opens_at, now)}</span>}
+                    </div>
+                    {event.existing_status && <div className="mt-3 rounded-lg bg-emerald-500/10 px-3 py-2 text-center text-xs font-bold capitalize text-emerald-500">Already recorded: {event.existing_status}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {events.length === 0 && (
+              <div className="mt-5 rounded-xl bg-gray-100 p-5 text-center text-sm text-gray-500 dark:bg-gray-900">{scanMode === 'pilot' ? 'No test event is accepting attendance right now.' : 'You have no upcoming scheduled events.'}</div>
+            )}
             <button type="button" className="btn-secondary mt-4 min-h-11 w-full" onClick={reset}><RotateCcw className="h-4 w-4" /> Scan a different QR</button>
           </section>
         ) : (
@@ -224,10 +265,6 @@ export function AttendanceQrScanner() {
             </div>
             <div className="p-4">
               {cameraError && <div className="mb-3 rounded-xl bg-amber-500/10 p-3 text-sm text-amber-500">{cameraError}</div>}
-              <label className="btn-secondary flex min-h-11 w-full cursor-pointer items-center justify-center">
-                {validating ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />} Scan QR from photo
-                <input type="file" accept="image/*" className="sr-only" onChange={(event) => void scanImage(event.target.files?.[0])} />
-              </label>
               {cameraError && <button type="button" className="btn-secondary mt-2 min-h-11 w-full" onClick={() => void startScanner()}><Camera className="h-4 w-4" /> Try camera again</button>}
             </div>
           </section>

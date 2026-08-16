@@ -1,10 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useCallback, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { format, parseISO, differenceInDays, subWeeks, previousSunday, addDays, subDays } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { animate, motion, useMotionValue, AnimatePresence, type PanInfo } from 'framer-motion';
-import { ArrowLeft, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, ListOrdered, Pause, Play, Settings2, MoreHorizontal, Upload, Calendar, Loader2 } from 'lucide-react';
+import { ArrowLeft, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, ListOrdered, Pause, Play, Settings2, MoreHorizontal, Upload, Calendar, Loader2, BellRing, Eye } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -26,8 +26,10 @@ import { getSingleLyricsAutofill, normalizeLyricsInputForSave, normalizeLyricsSe
 import { getEventAssignmentKey, prepareEventAssignmentBatch, type EventAssignmentDraft } from '../lib/eventAssignmentBatch';
 import { hasEventScheduleEnded, isEventCompleted, type EventLifecycleOverride } from '../lib/eventLifecycle';
 import { isSetlistMeaningfullyCreated } from '../lib/setlistPersistence';
+import { getPendingAssignmentUserCount } from '../lib/eventAssignmentReminder';
+import { getPostEventObservationViewers } from '../lib/postEventObservationViews';
 
-import type { Event, EventAssignment, Setlist, SetlistSong, Song, ServiceFormat, SetlistCheckReport, PostEventObservation, PostEventObservationCategory, PostEventObservationStatus } from '../types';
+import type { Event, EventAssignment, Setlist, SetlistSong, Song, ServiceFormat, SetlistCheckReport, PostEventObservation, PostEventObservationCategory, PostEventObservationStatus, PostEventObservationView } from '../types';
 import { inferServiceFormat, SERVICE_FORMAT_LABELS } from '../lib/setlistCheckerEngine';
 import { SetlistReport } from '../components/setlist-checker/SetlistReport';
 import { CheckingAnimation } from '../components/setlist-checker/CheckingAnimation';
@@ -206,13 +208,105 @@ function getSongReadinessBadge(usage?: SongUsageAge) {
   };
 }
 
+const OBSERVATION_SEEN_DWELL_MS = 650;
+const OBSERVATION_SEEN_RATIO = 0.35;
+
+interface ObservationSeenCardProps {
+  observationId: string;
+  authorId: string;
+  onSeen: (observationId: string, authorId: string) => void;
+  children: ReactNode;
+}
+
+function ObservationSeenCard({ observationId, authorId, onSeen, children }: ObservationSeenCardProps) {
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const requestedViewRef = useRef(false);
+
+  useEffect(() => {
+    const card = cardRef.current;
+    if (!card || requestedViewRef.current) return;
+
+    if (typeof IntersectionObserver === 'undefined') {
+      const fallbackTimer = window.setTimeout(() => {
+        if (document.visibilityState === 'visible') {
+          requestedViewRef.current = true;
+          onSeen(observationId, authorId);
+        }
+      }, OBSERVATION_SEEN_DWELL_MS);
+      return () => window.clearTimeout(fallbackTimer);
+    }
+
+    let dwellTimer: number | null = null;
+    let sufficientlyVisible = false;
+
+    const cancelDwell = () => {
+      if (dwellTimer !== null) {
+        window.clearTimeout(dwellTimer);
+        dwellTimer = null;
+      }
+    };
+
+    const observer = new IntersectionObserver(([entry]) => {
+      sufficientlyVisible = Boolean(entry?.isIntersecting && entry.intersectionRatio >= OBSERVATION_SEEN_RATIO);
+      cancelDwell();
+      if (!sufficientlyVisible || document.visibilityState !== 'visible' || requestedViewRef.current) return;
+
+      dwellTimer = window.setTimeout(() => {
+        dwellTimer = null;
+        if (!sufficientlyVisible || document.visibilityState !== 'visible' || requestedViewRef.current) return;
+
+        requestedViewRef.current = true;
+        observer.disconnect();
+        onSeen(observationId, authorId);
+      }, OBSERVATION_SEEN_DWELL_MS);
+    }, { threshold: [OBSERVATION_SEEN_RATIO] });
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') {
+        cancelDwell();
+        return;
+      }
+
+      if (sufficientlyVisible && !requestedViewRef.current) {
+        dwellTimer = window.setTimeout(() => {
+          dwellTimer = null;
+          if (!sufficientlyVisible || document.visibilityState !== 'visible' || requestedViewRef.current) return;
+
+          requestedViewRef.current = true;
+          observer.disconnect();
+          onSeen(observationId, authorId);
+        }, OBSERVATION_SEEN_DWELL_MS);
+      }
+    };
+
+    observer.observe(card);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      cancelDwell();
+      observer.disconnect();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [authorId, observationId, onSeen]);
+
+  return (
+    <div
+      ref={cardRef}
+      data-observation-id={observationId}
+      className="rounded-2xl border border-gray-200/75 bg-white/[0.035] px-3 py-3 dark:border-white/[0.10]"
+    >
+      {children}
+    </div>
+  );
+}
+
 export function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
   const smartBack = useSmartBack('/events');
 
-  const { user, roles, userRoles, organization, isLeader, isOrgAdmin, isAdmin, isAdminCoordinator, isProductionDirector, isPlatformOwner } = useAuth();
+  const { user, profile, roles, userRoles, organization, isLeader, isOrgAdmin, isAdmin, isAdminCoordinator, isProductionDirector, isPlatformOwner } = useAuth();
   const { toast } = useToast();
 
   const isMissingSetlistSubmissionTableError = useCallback((message?: string | null) => {
@@ -254,6 +348,8 @@ export function EventDetail() {
   const [teamTemplateName, setTeamTemplateName] = useState('');
   const [savingTeamTemplate, setSavingTeamTemplate] = useState(false);
   const [removingAssignmentId, setRemovingAssignmentId] = useState<string | null>(null);
+  const [showAssignmentReminder, setShowAssignmentReminder] = useState(false);
+  const [sendingAssignmentReminder, setSendingAssignmentReminder] = useState(false);
   const [newSong, setNewSong] = useState({ title: '', artist: '', song_key: '', duration: '', youtube_url: '' });
   const [newSongError, setNewSongError] = useState('');
   const [declineReason, setDeclineReason] = useState('');
@@ -330,6 +426,9 @@ export function EventDetail() {
   const [showPastEventDetails, setShowPastEventDetails] = useState(false);
   const [postEventObservations, setPostEventObservations] = useState<PostEventObservation[]>([]);
   const [postEventObservationReplies, setPostEventObservationReplies] = useState<PostEventObservationReply[]>([]);
+  const [postEventObservationViews, setPostEventObservationViews] = useState<PostEventObservationView[]>([]);
+  const [viewingObservationId, setViewingObservationId] = useState<string | null>(null);
+  const [loadingObservationViews, setLoadingObservationViews] = useState(false);
   const [replyingToObservationId, setReplyingToObservationId] = useState<string | null>(null);
   const [observationReplyText, setObservationReplyText] = useState('');
   const [postingObservationReply, setPostingObservationReply] = useState(false);
@@ -342,12 +441,18 @@ export function EventDetail() {
   const [submittingObservation, setSubmittingObservation] = useState(false);
   const [showObservationModal, setShowObservationModal] = useState(false);
   const [updatingObservationId, setUpdatingObservationId] = useState<string | null>(null);
+  const postEventObservationViewsRef = useRef<PostEventObservationView[]>([]);
+  const pendingObservationViewsRef = useRef(new Set<string>());
   const serviceSongStageRef = useRef<HTMLDivElement | null>(null);
   const serviceSwipeAnimating = useRef(false);
   const serviceTrackAnimation = useRef<{ stop: () => void } | null>(null);
   const serviceModeEnterTimer = useRef<number | null>(null);
   const serviceModeClosing = useRef(false);
   const serviceTrackX = useMotionValue(0);
+
+  useEffect(() => {
+    postEventObservationViewsRef.current = postEventObservationViews;
+  }, [postEventObservationViews]);
 
   useEffect(() => {
     const metaThemeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
@@ -575,7 +680,7 @@ export function EventDetail() {
   const fetchAll = useCallback(async () => {
     if (!id) return;
     try {
-      const [eventRes, assignRes, membersRes, memberRolesRes, memberSettingsRes, setlistRes, songsRes, allSetlistsRes, sundayServicesRes, convRes, observationsRes, observationRepliesRes] = await Promise.all([
+      const [eventRes, assignRes, membersRes, memberRolesRes, memberSettingsRes, setlistRes, songsRes, allSetlistsRes, sundayServicesRes, convRes, observationsRes, observationRepliesRes, observationViewsRes] = await Promise.all([
         supabase.from('events').select('*').eq('id', id).maybeSingle(),
         supabase.from('event_assignments').select('*, events(*), profiles(first_name, last_name, gender, avatar_url), roles(name)').eq('event_id', id),
         supabase.from('profiles').select('id, first_name, last_name, ministry_status').eq('ministry_status', 'active'),
@@ -602,6 +707,11 @@ export function EventDetail() {
           .select('id, observation_id, user_id, content, created_at, profiles!post_event_observation_replies_user_id_fkey(first_name, last_name, avatar_url)')
           .eq('event_id', id)
           .order('created_at', { ascending: true }),
+        supabase
+          .from('post_event_observation_views')
+          .select('observation_id, user_id, viewed_at, profiles!post_event_observation_views_user_id_fkey(first_name, last_name, avatar_url)')
+          .eq('event_id', id)
+          .order('viewed_at', { ascending: false }),
       ]);
       setEventConversationId(convRes.data?.id ?? null);
       setEvent(eventRes.data);
@@ -622,6 +732,12 @@ export function EventDetail() {
         setPostEventObservationReplies([]);
       } else {
         setPostEventObservationReplies((observationRepliesRes.data || []) as unknown as PostEventObservationReply[]);
+      }
+      if (observationViewsRes.error) {
+        console.warn('Failed to load post-event observation views:', observationViewsRes.error);
+        setPostEventObservationViews([]);
+      } else {
+        setPostEventObservationViews((observationViewsRes.data || []) as unknown as PostEventObservationView[]);
       }
       if (setlistRes.data && isSetlistMeaningfullyCreated(setlistRes.data)) {
         setSetlist(setlistRes.data);
@@ -952,7 +1068,7 @@ export function EventDetail() {
       }
     }
 
-    const isAssigned = assignments.some(a => a.user_id === user.id);
+    const isAssigned = assignments.some(a => a.user_id === user.id && a.status !== 'declined');
 
     const { error } = await supabase.from('event_attendance').upsert({
       event_id: id,
@@ -960,6 +1076,10 @@ export function EventDetail() {
       status,
       checked_in_at: new Date().toISOString(),
       is_assigned: isAssigned,
+      record_source: 'member',
+      review_status: 'verified',
+      reviewed_by: null,
+      reviewed_at: null,
     }, { onConflict: 'event_id,user_id' });
 
     setAttendanceLoading(false);
@@ -1267,7 +1387,23 @@ export function EventDetail() {
   };
 
   const handleDecline = async (assignmentId: string) => {
-    await supabase.from('event_assignments').update({ status: 'declined', decline_reason: declineReason }).eq('id', assignmentId);
+    const reason = declineReason.trim();
+    if (!reason) {
+      toast('error', 'Please provide a reason for declining');
+      return;
+    }
+
+    const { error } = await supabase
+      .from('event_assignments')
+      .update({ status: 'declined', decline_reason: reason })
+      .eq('id', assignmentId);
+
+    if (error) {
+      console.error('Failed to decline assignment:', error);
+      toast('error', 'Could not decline this assignment');
+      return;
+    }
+
     dispatchBadgeCountsRefresh();
     toast('info', 'Assignment declined');
     setShowDecline(null);
@@ -1308,6 +1444,40 @@ export function EventDetail() {
 
   const handleCreateSetlist = () => {
     setShowSetlist(true);
+  };
+
+  const handleSendAssignmentReminders = async () => {
+    if (!id || sendingAssignmentReminder) return;
+
+    setSendingAssignmentReminder(true);
+    try {
+      const { data, error } = await withSaveTimeout(
+        supabase.rpc('remind_pending_event_assignments', {
+          p_event_id: id,
+          p_dry_run: false,
+        })
+      );
+
+      if (error) throw error;
+
+      const result = Array.isArray(data) ? data[0] as { pending_user_count?: number; notifications_sent?: number } | undefined : undefined;
+      const pendingCount = result?.pending_user_count ?? 0;
+      const sentCount = result?.notifications_sent ?? 0;
+
+      setShowAssignmentReminder(false);
+      if (pendingCount === 0) {
+        toast('info', 'Everyone has already responded');
+      } else if (sentCount === 0) {
+        toast('info', 'Reminders were already sent within the last hour');
+      } else {
+        toast('success', sentCount === 1 ? 'Reminder queued for 1 pending member' : `Reminders queued for ${sentCount} pending members`);
+      }
+    } catch (error) {
+      console.error('Failed to send assignment reminders:', error);
+      toast('error', getErrorMessage(error, 'Could not send assignment reminders'));
+    } finally {
+      setSendingAssignmentReminder(false);
+    }
   };
 
   const handleServiceFormatChange = async (fmt: ServiceFormat) => {
@@ -2160,6 +2330,76 @@ const openLyricsModal = (ss: SetlistSong) => {
     setPostEventObservationReplies((data || []) as unknown as PostEventObservationReply[]);
   };
 
+  const refreshPostEventObservationViews = useCallback(async () => {
+    if (!id) return [];
+
+    const { data, error } = await supabase
+      .from('post_event_observation_views')
+      .select('observation_id, user_id, viewed_at, profiles!post_event_observation_views_user_id_fkey(first_name, last_name, avatar_url)')
+      .eq('event_id', id)
+      .order('viewed_at', { ascending: false });
+
+    if (error) throw error;
+    const views = (data || []) as unknown as PostEventObservationView[];
+    postEventObservationViewsRef.current = views;
+    setPostEventObservationViews(views);
+    return views;
+  }, [id]);
+
+  const handleObservationSeen = useCallback(async (observationId: string, authorId: string) => {
+    const viewerId = user?.id;
+    if (
+      !viewerId ||
+      viewerId === authorId ||
+      pendingObservationViewsRef.current.has(observationId) ||
+      postEventObservationViewsRef.current.some(view => view.observation_id === observationId && view.user_id === viewerId)
+    ) return;
+
+    pendingObservationViewsRef.current.add(observationId);
+    try {
+      const { data: inserted, error } = await supabase.rpc('record_post_event_observation_view', {
+        p_observation_id: observationId,
+      });
+      if (error) throw error;
+
+      if (inserted) {
+        const newView: PostEventObservationView = {
+          observation_id: observationId,
+          user_id: viewerId,
+          viewed_at: new Date().toISOString(),
+          profiles: profile ? {
+            first_name: profile.first_name,
+            last_name: profile.last_name,
+            avatar_url: profile.avatar_url,
+          } : null,
+        };
+        setPostEventObservationViews(current => {
+          if (current.some(view => view.observation_id === observationId && view.user_id === viewerId)) return current;
+          const next = [newView, ...current];
+          postEventObservationViewsRef.current = next;
+          return next;
+        });
+      } else if (!postEventObservationViewsRef.current.some(view => view.observation_id === observationId && view.user_id === viewerId)) {
+        await refreshPostEventObservationViews();
+      }
+    } catch (error) {
+      console.warn('Failed to record post-event observation view:', error);
+    } finally {
+      pendingObservationViewsRef.current.delete(observationId);
+    }
+  }, [profile, refreshPostEventObservationViews, user?.id]);
+
+  const handleOpenObservationViewers = useCallback((observationId: string) => {
+    setViewingObservationId(observationId);
+    setLoadingObservationViews(true);
+    void refreshPostEventObservationViews()
+      .catch(error => {
+        console.error('Failed to refresh post-event observation viewers:', error);
+        toast('error', 'Failed to load who has seen this observation');
+      })
+      .finally(() => setLoadingObservationViews(false));
+  }, [refreshPostEventObservationViews, toast]);
+
   const handlePostObservationReply = async (observationId: string) => {
     const content = observationReplyText.trim();
     if (!id || !user || !content || postingObservationReply) return;
@@ -2288,6 +2528,8 @@ const openLyricsModal = (ss: SetlistSong) => {
       const { error } = await supabase.from('post_event_observations').delete().eq('id', observationId);
       if (error) throw error;
       setPostEventObservations(current => current.filter(observation => observation.id !== observationId));
+      setPostEventObservationViews(current => current.filter(view => view.observation_id !== observationId));
+      setViewingObservationId(current => current === observationId ? null : current);
       toast('success', 'Observation deleted');
     } catch (error) {
       toast('error', getErrorMessage(error, 'Failed to delete observation'));
@@ -2312,6 +2554,7 @@ const openLyricsModal = (ss: SetlistSong) => {
 
   const myAssignment = assignments.find(a => a.user_id === user?.id);
   const confirmedCount = assignments.filter(a => a.status === 'confirmed').length;
+  const pendingAssignmentUserCount = getPendingAssignmentUserCount(assignments);
   const songLeaderAssignment = assignments.find(a => a.roles?.name === 'Song Leader');
   const getShortLeaderName = (profile?: { first_name?: string; last_name?: string; gender?: string } | null) => {
     if (!profile?.first_name) return '';
@@ -2374,7 +2617,15 @@ const openLyricsModal = (ss: SetlistSong) => {
   const heroScheduleEnded = hasEventScheduleEnded(event, lifecycleNow);
   const postEventFeedbackOpen = heroIsPast || heroScheduleEnded;
   const canManagePostEventObservations = isLeader || isProductionDirector;
+  const canSendAssignmentReminders = isOrgAdmin || isAdmin || isPlatformOwner;
   const activePostEventObservationCount = postEventObservations.filter(observation => observation.status !== 'resolved').length;
+  const viewingObservation = postEventObservations.find(observation => observation.id === viewingObservationId) || null;
+  const viewingObservationViewers = viewingObservation
+    ? getPostEventObservationViewers(
+      postEventObservationViews.filter(view => view.observation_id === viewingObservation.id),
+      viewingObservation.author_id
+    )
+    : [];
   const heroProposalDue = event.proposal_due_date ? parseISO(event.proposal_due_date) : null;
   const heroDaysUntilDue = heroProposalDue ? differenceInDays(heroProposalDue, new Date()) : null;
   const heroHasApprovedSetlist = setlist?.status === 'approved';
@@ -3976,9 +4227,18 @@ const openLyricsModal = (ss: SetlistSong) => {
                         ? 'bg-blue-500/10 text-blue-300 ring-blue-500/15'
                         : 'bg-amber-500/10 text-amber-300 ring-amber-500/15';
                     const observationReplies = postEventObservationReplies.filter(reply => reply.observation_id === observation.id);
+                    const observationViewers = getPostEventObservationViewers(
+                      postEventObservationViews.filter(view => view.observation_id === observation.id),
+                      observation.author_id
+                    );
 
                     return (
-                      <div key={observation.id} className="rounded-2xl border border-gray-200/75 bg-white/[0.035] px-3 py-3 dark:border-white/[0.10]">
+                      <ObservationSeenCard
+                        key={observation.id}
+                        observationId={observation.id}
+                        authorId={observation.author_id}
+                        onSeen={handleObservationSeen}
+                      >
                         <div className="flex items-start gap-3">
                           <Avatar
                             src={observation.profiles?.avatar_url}
@@ -4043,32 +4303,41 @@ const openLyricsModal = (ss: SetlistSong) => {
                           </div>
                         )}
 
-                        <div className="mt-2 flex flex-wrap items-center justify-end gap-1.5 border-t border-gray-200/60 pt-2 dark:border-white/[0.06]">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setReplyingToObservationId(current => current === observation.id ? null : observation.id);
-                                setObservationReplyText('');
-                              }}
-                              className="inline-flex min-h-9 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold text-brand-600 hover:bg-brand-500/10 dark:text-brand-300"
-                            >
-                              <MessageCircle className="h-3.5 w-3.5" /> Reply{observationReplies.length > 0 ? ` (${observationReplies.length})` : ''}
-                            </button>
+                        <div className="mt-2 flex min-w-0 flex-nowrap items-center gap-1 overflow-hidden border-t border-gray-200/60 pt-2 dark:border-white/[0.06] sm:flex-wrap sm:justify-end sm:gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenObservationViewers(observation.id)}
+                            aria-label={`View who has seen this observation (${observationViewers.length})`}
+                            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white text-xs font-semibold text-gray-500 transition-colors hover:border-brand-300 hover:bg-brand-500/10 hover:text-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white/45 dark:hover:bg-white/[0.08] dark:hover:text-white/75 sm:w-auto sm:gap-1.5 sm:px-2.5"
+                          >
+                            <Eye aria-hidden="true" className="h-3.5 w-3.5" />
+                            <span className="hidden sm:inline">Seen {observationViewers.length}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReplyingToObservationId(current => current === observation.id ? null : observation.id);
+                              setObservationReplyText('');
+                            }}
+                            className="inline-flex h-9 shrink-0 items-center gap-1 rounded-full border border-gray-200 bg-white px-2 text-[11px] font-semibold text-brand-600 transition-colors hover:border-brand-300 hover:bg-brand-500/10 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-brand-300 dark:hover:bg-white/[0.08] sm:gap-1.5 sm:px-2.5 sm:text-xs"
+                          >
+                            <MessageCircle className="h-3.5 w-3.5" /> Reply{observationReplies.length > 0 ? ` (${observationReplies.length})` : ''}
+                          </button>
                           {(canManagePostEventObservations || isObservationOwner || observation.author_id === user?.id) && (<>
                             {(canManagePostEventObservations || isObservationOwner) && (
-                              <div className="relative min-w-[7.75rem]">
+                              <div className="relative min-w-0 flex-1 sm:min-w-[7.75rem] sm:flex-none">
                                 <select
                                   value={observation.status}
                                   onChange={event => handleUpdateObservationStatus(observation.id, event.target.value as PostEventObservationStatus)}
                                   disabled={updatingObservationId === observation.id}
                                   aria-label={`Update status for ${categoryLabel} observation`}
-                                  className="min-h-10 w-full appearance-none rounded-full border border-gray-200 bg-white py-2 pl-3 pr-9 text-xs font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white/70"
+                                  className="h-9 w-full appearance-none rounded-full border border-gray-200 bg-white py-1.5 pl-2.5 pr-6 text-[10px] font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white/70 sm:h-10 sm:py-2 sm:pl-3 sm:pr-9 sm:text-xs"
                                 >
                                   <option value="open">Needs action</option>
                                   <option value="monitoring">Monitoring</option>
                                   <option value="resolved">Resolved</option>
                                 </select>
-                                <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400 dark:text-white/45" />
+                                <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-2 top-1/2 h-3 w-3 -translate-y-1/2 text-gray-400 dark:text-white/45 sm:right-3 sm:h-3.5 sm:w-3.5" />
                               </div>
                             )}
                             {canManagePostEventObservations && (
@@ -4076,7 +4345,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                 type="button"
                                 onClick={() => openObservationFollowUp(observation)}
                                 disabled={updatingObservationId === observation.id}
-                                className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-700 transition-colors hover:border-brand-300 hover:text-brand-700 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white/70"
+                                className="inline-flex h-9 shrink-0 items-center gap-1 rounded-full border border-gray-200 bg-white px-2 text-[11px] font-semibold text-gray-700 transition-colors hover:border-brand-300 hover:text-brand-700 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white/70 sm:h-10 sm:gap-1.5 sm:px-3 sm:text-xs"
                               >
                                 <Calendar className="h-3.5 w-3.5" />
                                 {observation.assigned_to ? 'Edit' : 'Assign'}
@@ -4087,7 +4356,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                 type="button"
                                 onClick={() => handleDeletePostEventObservation(observation.id)}
                                 disabled={updatingObservationId === observation.id}
-                                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 transition-colors hover:border-red-400/50 hover:bg-red-500/10 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white/35"
+                                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 transition-colors hover:border-red-400/50 hover:bg-red-500/10 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white/35 sm:h-10 sm:w-10"
                                 title="Delete observation"
                                 aria-label="Delete observation"
                               >
@@ -4096,7 +4365,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                             )}
                           </>)}
                         </div>
-                      </div>
+                      </ObservationSeenCard>
                     );
                   })}
                 </div>
@@ -4125,6 +4394,28 @@ const openLyricsModal = (ss: SetlistSong) => {
                 )}
               </div>
             </div>
+            {canSendAssignmentReminders && pendingAssignmentUserCount > 0 && (
+              <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-amber-400/15 bg-amber-400/[0.07] px-3 py-2.5">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-400/10 text-amber-600 dark:text-amber-300">
+                    <BellRing className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-xs font-black text-gray-900 dark:text-white">
+                      {pendingAssignmentUserCount} {pendingAssignmentUserCount === 1 ? 'member' : 'members'} awaiting confirmation
+                    </p>
+                    <p className="truncate text-[11px] text-gray-500 dark:text-white/40">Send one reminder to each pending member</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAssignmentReminder(true)}
+                  className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-full bg-amber-400 px-3.5 text-[11px] font-black text-black transition-colors hover:bg-amber-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 focus-visible:ring-offset-2 focus-visible:ring-offset-black active:scale-[0.97]"
+                >
+                  Remind
+                </button>
+              </div>
+            )}
             {assignments.length === 0 ? (
               <p className="py-4 text-center text-sm text-gray-400">No team members assigned yet</p>
             ) : (
@@ -4217,6 +4508,110 @@ const openLyricsModal = (ss: SetlistSong) => {
         </div>
 
         )}
+
+        <Modal
+          open={Boolean(viewingObservationId)}
+          onClose={() => setViewingObservationId(null)}
+          title="Seen by"
+          size="sm"
+          mobileView="dialog"
+        >
+          <div className="space-y-3">
+            {loadingObservationViews ? (
+              <div role="status" className="flex min-h-32 items-center justify-center gap-2 text-sm text-gray-500 dark:text-white/45">
+                <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
+                Loading viewers…
+              </div>
+            ) : viewingObservationViewers.length === 0 ? (
+              <div className="py-7 text-center">
+                <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-400 dark:bg-white/[0.05] dark:text-white/30">
+                  <Eye aria-hidden="true" className="h-5 w-5" />
+                </span>
+                <p className="mt-3 text-sm font-bold text-gray-800 dark:text-white/80">No viewers yet</p>
+                <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-white/40">No one else has seen this observation yet.</p>
+              </div>
+            ) : (
+              <>
+                <p className="text-xs leading-relaxed text-gray-500 dark:text-white/45">
+                  {viewingObservationViewers.length === 1
+                    ? '1 person has seen this observation.'
+                    : `${viewingObservationViewers.length} people have seen this observation.`}
+                </p>
+                <div className="max-h-80 space-y-1.5 overflow-y-auto pr-1">
+                  {viewingObservationViewers.map(viewer => {
+                    const viewerName = `${viewer.profiles?.first_name || ''} ${viewer.profiles?.last_name || ''}`.trim() || 'Team member';
+                    return (
+                      <div key={viewer.user_id} className="flex items-center gap-3 rounded-xl bg-gray-50 px-3 py-2.5 dark:bg-white/[0.04]">
+                        <Avatar
+                          src={viewer.profiles?.avatar_url}
+                          firstName={viewer.profiles?.first_name || '?'}
+                          lastName={viewer.profiles?.last_name}
+                          size="sm"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-bold text-gray-800 dark:text-white/85">
+                            {viewerName}{viewer.user_id === user?.id ? ' (You)' : ''}
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-gray-500 dark:text-white/40">
+                            Seen {format(parseISO(viewer.viewed_at), 'MMM d, h:mm a')}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        </Modal>
+
+        <Modal
+          open={showAssignmentReminder}
+          onClose={() => !sendingAssignmentReminder && setShowAssignmentReminder(false)}
+          title="Remind Pending Members"
+          size="sm"
+          mobileView="dialog"
+          closeOnBackdrop={!sendingAssignmentReminder}
+          closeOnEscape={!sendingAssignmentReminder}
+        >
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 rounded-2xl border border-amber-400/15 bg-amber-400/[0.07] p-3.5">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-400/10 text-amber-600 dark:text-amber-300">
+                <BellRing className="h-4.5 w-4.5" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-bold leading-snug text-gray-900 dark:text-white">
+                  Send {pendingAssignmentUserCount === 1 ? 'a reminder to 1 member' : `reminders to ${pendingAssignmentUserCount} members`}?
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-white/45">
+                  Each member will receive one notification, even if they have multiple roles for this event.
+                </p>
+              </div>
+            </div>
+            <p className="text-xs leading-relaxed text-gray-500 dark:text-white/45">
+              Confirmed and declined members will not be notified. Push delivery follows each member's notification settings.
+            </p>
+            <div className="grid grid-cols-2 gap-2 border-t border-gray-200/60 pt-4 dark:border-white/[0.06]">
+              <button
+                type="button"
+                onClick={() => setShowAssignmentReminder(false)}
+                disabled={sendingAssignmentReminder}
+                className="btn-secondary min-h-11 w-full"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSendAssignmentReminders}
+                disabled={sendingAssignmentReminder || pendingAssignmentUserCount === 0}
+                className="btn-primary min-h-11 w-full disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {sendingAssignmentReminder ? <Loader2 className="h-4 w-4 animate-spin" /> : <BellRing className="h-4 w-4" />}
+                {sendingAssignmentReminder ? 'Sending...' : 'Send Reminder'}
+              </button>
+            </div>
+          </div>
+        </Modal>
 
         <Modal
           open={showObservationModal}
@@ -5213,15 +5608,47 @@ const openLyricsModal = (ss: SetlistSong) => {
           document.body
         )}
 
-        <Modal open={!!showDecline} onClose={() => setShowDecline(null)} title="Decline Assignment" size="sm">
+        <Modal
+          open={!!showDecline}
+          onClose={() => {
+            setShowDecline(null);
+            setDeclineReason('');
+          }}
+          title="Decline Assignment"
+          size="sm"
+        >
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Reason (optional)</label>
-              <textarea value={declineReason} onChange={e => setDeclineReason(e.target.value)} className="input-field h-20 resize-none" placeholder="Why are you declining?" />
+              <label htmlFor="assignment-decline-reason" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                Reason <span className="text-red-500" aria-hidden="true">*</span>
+              </label>
+              <textarea
+                id="assignment-decline-reason"
+                value={declineReason}
+                onChange={e => setDeclineReason(e.target.value)}
+                className="input-field h-20 resize-none"
+                placeholder="Why are you declining?"
+                required
+                aria-required="true"
+              />
             </div>
             <div className="flex justify-end gap-3">
-              <button onClick={() => setShowDecline(null)} className="btn-secondary">Cancel</button>
-              <button onClick={() => showDecline && handleDecline(showDecline)} className="btn-danger">Decline</button>
+              <button
+                onClick={() => {
+                  setShowDecline(null);
+                  setDeclineReason('');
+                }}
+                className="btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => showDecline && handleDecline(showDecline)}
+                disabled={!declineReason.trim()}
+                className="btn-danger disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Decline
+              </button>
             </div>
           </div>
         </Modal>

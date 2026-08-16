@@ -266,6 +266,13 @@ export interface PostEventObservation {
   assignee?: Pick<Profile, 'first_name' | 'last_name' | 'avatar_url'> | null;
 }
 
+export interface PostEventObservationView {
+  observation_id: string;
+  user_id: string;
+  viewed_at: string;
+  profiles?: Pick<Profile, 'first_name' | 'last_name' | 'avatar_url'> | null;
+}
+
 export interface EventAssignment {
   id: string;
   event_id: string;

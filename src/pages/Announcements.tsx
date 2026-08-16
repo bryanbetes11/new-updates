@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import {
   Megaphone, Plus, Eye, AlertTriangle, AlertCircle,
-  Pin, Lock, MessageCircle, Smile, ChevronRight,
+  Pin, Lock, MessageCircle, Smile, ChevronRight, Loader2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../lib/supabase';
@@ -14,7 +14,7 @@ import { AnnouncementsSkeleton } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
 import { Avatar } from '../components/Avatar';
 import { AnnouncementComposerForm } from '../components/AnnouncementComposerForm';
-import type { Announcement, AnnouncementReaction, AnnouncementPin } from '../types';
+import type { Announcement, AnnouncementReaction, AnnouncementPin, AnnouncementView } from '../types';
 import { withRequestTimeout } from '../lib/requestTimeout';
 
 type AnnouncementWithBlocks = Announcement & {
@@ -89,6 +89,9 @@ export function Announcements() {
   const [showCreate, setShowCreate] = useState(false);
   const [emojiPickerId, setEmojiPickerId] = useState<string | null>(null);
   const [newsFilter, setNewsFilter] = useState<NewsFilter>('all');
+  const [viewerAnnouncement, setViewerAnnouncement] = useState<Pick<Announcement, 'id' | 'title'> | null>(null);
+  const [announcementViewers, setAnnouncementViewers] = useState<AnnouncementView[]>([]);
+  const [loadingAnnouncementViewers, setLoadingAnnouncementViewers] = useState(false);
 
   const openCreateAnnouncement = () => {
     const shouldUseDesktopModal = typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches;
@@ -166,6 +169,7 @@ export function Announcements() {
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'announcement_reactions' }, () => fetchAnnouncements())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'announcement_pins' }, () => fetchAnnouncements())
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'announcement_pins' }, () => fetchAnnouncements())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'announcement_views' }, () => fetchAnnouncements())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [fetchAnnouncements]);
@@ -222,6 +226,34 @@ export function Announcements() {
 
     toast('success', isPinned ? 'Announcement unpinned' : 'Announcement pinned');
     fetchAnnouncements();
+  };
+
+  const handleOpenViewers = async (event: React.MouseEvent, announcement: AnnouncementWithBlocks) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setViewerAnnouncement({ id: announcement.id, title: announcement.title });
+    setAnnouncementViewers([]);
+    setLoadingAnnouncementViewers(true);
+
+    try {
+      const { data, error } = await supabase
+        .from('announcement_views')
+        .select('announcement_id, user_id, viewed_at, profiles!announcement_views_user_id_fkey(first_name, last_name, avatar_url)')
+        .eq('announcement_id', announcement.id)
+        .order('viewed_at', { ascending: false });
+
+      if (error) throw error;
+      const viewers = (data || []) as unknown as AnnouncementView[];
+      setAnnouncementViewers(viewers);
+      setAnnouncements(current => current.map(item => (
+        item.id === announcement.id ? { ...item, announcement_views: viewers } : item
+      )));
+    } catch (error) {
+      console.error('Fetch announcement viewers error:', error);
+      toast('error', 'Could not load who has seen this announcement');
+    } finally {
+      setLoadingAnnouncementViewers(false);
+    }
   };
 
   const visibleAnnouncements = announcements.filter(a => {
@@ -338,7 +370,7 @@ export function Announcements() {
             variants={containerVariants}
             initial="hidden"
             animate="show"
-            className="overflow-hidden border-y border-white/[0.08]"
+            className="space-y-1.5"
           >
             {sortedFiltered.map((a) => {
               const viewCount = a.announcement_views?.length || 0;
@@ -350,104 +382,120 @@ export function Announcements() {
               const reactionGroups = groupReactions(a.announcement_reactions || []);
               const pConfig = PRIORITY_CONFIG[a.priority as keyof typeof PRIORITY_CONFIG] ?? PRIORITY_CONFIG.normal;
               const PriorityIcon = pConfig.icon;
+              const hasStatus = isPinned || a.priority !== 'normal' || isLeadersOnly || isUnread;
 
               return (
                 <motion.div
                   key={a.id}
                   variants={itemVariants}
-                  className="group relative border-b border-white/[0.075] transition-colors duration-200 last:border-b-0 hover:bg-white/[0.045]"
+                  className="group relative overflow-hidden rounded-lg border border-white/[0.075] bg-[#101010] shadow-[0_12px_30px_-26px_rgba(0,0,0,0.95)] transition-all duration-200 hover:-translate-y-px hover:border-white/[0.13] hover:bg-[#181818] hover:shadow-[0_18px_38px_-24px_rgba(0,0,0,0.95)] focus-within:border-white/[0.16] lg:min-h-[5.5rem]"
                 >
                   {(isPinned || a.priority !== 'normal') && (
                     <div
-                      className="absolute bottom-2 left-0 top-2 w-1 rounded-r-full"
+                      className="absolute bottom-3 left-0 top-3 z-10 w-1 rounded-r-full"
                       style={{ backgroundColor: a.priority === 'urgent' ? '#ef4444' : isPinned ? '#1ed760' : '#f59e0b' }}
                     />
                   )}
 
                   <div className="relative">
                     {/* Main clickable body */}
-                    <button type="button" className="w-full text-left" onClick={() => navigate(`/announcements/${a.id}`)}>
-                      <div className="grid gap-3 px-3 py-3 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-4 sm:px-4 lg:px-5">
+                    <button
+                      type="button"
+                      className="w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1ed760]/75"
+                      onClick={() => navigate(`/announcements/${a.id}`)}
+                    >
+                      <div className="grid gap-3 px-3 pb-1 pt-2.5 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-3.5 sm:px-3.5 sm:py-3 lg:pr-[18.5rem]">
                         <div className="flex items-start gap-3 sm:contents">
-                          <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md bg-[linear-gradient(135deg,rgba(30,215,96,0.36),rgba(245,158,11,0.24)),#181818] ring-1 ring-white/[0.08] sm:h-16 sm:w-16">
+                          <div className={`relative h-[3.25rem] w-[3.25rem] shrink-0 overflow-hidden rounded-md ring-1 ring-inset ring-white/[0.09] sm:h-16 sm:w-16 ${
+                            a.priority === 'urgent'
+                              ? 'bg-[radial-gradient(circle_at_25%_20%,rgba(239,68,68,0.32),transparent_58%),#171111]'
+                              : a.priority === 'high'
+                                ? 'bg-[radial-gradient(circle_at_25%_20%,rgba(245,158,11,0.3),transparent_58%),#17140f]'
+                                : isPinned
+                                  ? 'bg-[radial-gradient(circle_at_25%_20%,rgba(30,215,96,0.3),transparent_58%),#101713]'
+                                  : 'bg-[radial-gradient(circle_at_25%_20%,rgba(30,215,96,0.22),transparent_60%),#151515]'
+                          }`}>
                             {thumbnail ? (
                               <>
                                 <img src={thumbnail} alt="" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" />
-                                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-white/10" />
+                                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-white/[0.08]" />
                               </>
                             ) : (
                               <div className="flex h-full w-full items-center justify-center text-[#1ed760]">
-                                <Megaphone className="h-6 w-6" />
+                                <Megaphone className="h-5 w-5 sm:h-6 sm:w-6" />
                               </div>
                             )}
                           </div>
 
                           <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-1.5">
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                               {isPinned && (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.14em] text-[#1ed760]">
-                                  <Pin className="h-3 w-3 fill-[#1ed760]" /> Pinned
+                                <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-[0.16em] text-[#68e895] sm:text-[10px]">
+                                  <Pin className="h-2.5 w-2.5 fill-[#1ed760] sm:h-3 sm:w-3" /> Pinned
                                 </span>
                               )}
                               {a.priority !== 'normal' && (
-                                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.1em] ${pConfig.badge}`}>
-                                  {PriorityIcon && <PriorityIcon className="h-3 w-3" />}
+                                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] sm:text-[10px] ${pConfig.badge}`}>
+                                  {PriorityIcon && <PriorityIcon className="h-2.5 w-2.5 sm:h-3 sm:w-3" />}
                                   {pConfig.label}
                                 </span>
                               )}
                               {isLeadersOnly && (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/[0.12] px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.1em] text-emerald-300 ring-1 ring-emerald-500/20">
-                                  <Lock className="h-3 w-3" /> Leaders
+                                <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-[0.13em] text-white/46 sm:text-[10px]">
+                                  <Lock className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> Leaders
                                 </span>
                               )}
                               {isUnread && (
-                                <span className="inline-flex items-center rounded-full bg-[#1ed760] px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.1em] text-black">New</span>
+                                <span className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.14em] text-[#68e895] sm:text-[10px]">
+                                  <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-[#1ed760] shadow-[0_0_10px_rgba(30,215,96,0.65)]" />
+                                  New
+                                </span>
                               )}
                             </div>
-                            <p className="mt-1 text-[0.95rem] font-black leading-tight text-white sm:text-[1rem]">
+                            <p className={`${hasStatus ? 'mt-1' : 'mt-0'} text-[0.98rem] font-black leading-[1.18] tracking-[-0.015em] text-white sm:text-[1.04rem]`}>
                               {a.title}
                             </p>
-                            <p className="mt-0.5 line-clamp-1 text-[12px] leading-5 text-white/48">
+                            <p className="mt-0.5 line-clamp-1 text-[12px] leading-5 text-white/56 sm:text-[13px]">
                               {getPreviewText(a)}
                             </p>
-                            <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-semibold text-white/32">
+                            <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] font-semibold text-white/42 sm:mt-2 sm:text-[11px]">
                               <div className="flex min-w-0 items-center gap-1.5">
                                 <Avatar src={a.profiles?.avatar_url} firstName={a.profiles?.first_name || '?'} lastName={a.profiles?.last_name} size="xs" />
-                                <span className="truncate text-white/48">{a.profiles?.first_name}</span>
+                                <span className="truncate font-bold text-white/62">{a.profiles?.first_name}</span>
                               </div>
-                              <span className="font-mono whitespace-nowrap">{format(parseISO(a.created_at), 'MMM d')}</span>
-                              <span className="flex items-center gap-1 whitespace-nowrap">
-                                <Eye className="h-3 w-3" />{viewCount}
-                              </span>
+                              <span aria-hidden="true" className="h-0.5 w-0.5 rounded-full bg-white/25" />
+                              <span className="whitespace-nowrap">{format(parseISO(a.created_at), 'MMM d')}</span>
                               {commentCount > 0 && (
-                                <span className="flex items-center gap-1 whitespace-nowrap">
-                                  <MessageCircle className="h-3 w-3" />{commentCount}
+                                <span className="flex items-center gap-1 whitespace-nowrap text-white/48">
+                                  <MessageCircle className="h-3 w-3" /> {commentCount}
                                 </span>
                               )}
                             </div>
                           </div>
                         </div>
 
-                        <div className="hidden items-center gap-2 justify-self-end text-white/26 sm:flex">
-                          <span className="text-[11px] font-bold uppercase tracking-[0.12em] opacity-0 transition-opacity group-hover:opacity-100">
+                        <div className="hidden items-center gap-2 justify-self-end text-white/28 transition-colors group-hover:text-white/60 sm:flex lg:hidden">
+                          <span className="text-[10px] font-black uppercase tracking-[0.14em] opacity-0 transition-opacity group-hover:opacity-100">
                             Open
                           </span>
-                          <ChevronRight className="h-4 w-4" />
+                          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.045] transition-colors group-hover:bg-white/[0.09]">
+                            <ChevronRight className="h-4 w-4" />
+                          </span>
                         </div>
                       </div>
                     </button>
 
                     {/* Reaction row */}
-                    <div className="flex flex-wrap items-center gap-1.5 px-3 pb-3 sm:px-4 lg:px-5">
+                    <div className="ml-[4rem] flex min-w-0 items-center gap-1.5 overflow-x-auto pb-2.5 pr-2.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:ml-[5rem] sm:pb-3 sm:pr-3.5 lg:absolute lg:right-3 lg:top-1/2 lg:z-20 lg:ml-0 lg:max-w-[17.25rem] lg:-translate-y-1/2 lg:pb-0 lg:pr-0">
                       {reactionGroups.map(r => (
                         <button
                           key={r.emoji}
                           type="button"
                           onClick={e => handleReact(e, a.id, r.emoji)}
-                          className={`inline-flex h-9 items-center gap-1 rounded-full px-3 text-xs font-bold transition-all active:scale-[0.95] ${
+                          className={`inline-flex h-11 shrink-0 items-center gap-1 rounded-full px-3 text-xs font-bold transition-all active:scale-[0.95] sm:h-9 ${
                             r.users.includes(user?.id || '')
                               ? 'bg-[#1ed760]/20 text-[#7cffaa] ring-1 ring-[#1ed760]/30'
-                              : 'bg-white/[0.055] text-white/52 ring-1 ring-white/[0.05] hover:bg-white/[0.09]'
+                              : 'bg-white/[0.055] text-white/60 ring-1 ring-white/[0.06] hover:bg-white/[0.1] hover:text-white/80'
                           }`}
                           aria-label={`${r.users.includes(user?.id || '') ? 'Remove' : 'Add'} ${r.emoji} reaction. ${r.count} total`}
                           aria-pressed={r.users.includes(user?.id || '')}
@@ -456,11 +504,11 @@ export function Announcements() {
                         </button>
                       ))}
 
-                      <div className="relative">
+                      <div className="relative shrink-0">
                         <button
                           type="button"
                           onClick={e => { e.stopPropagation(); setEmojiPickerId(emojiPickerId === a.id ? null : a.id); }}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.055] text-xs text-white/35 ring-1 ring-white/[0.05] transition-colors hover:bg-white/[0.09]"
+                          className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/[0.055] text-xs text-white/42 ring-1 ring-white/[0.06] transition-colors hover:bg-white/[0.1] hover:text-white/70 sm:h-9 sm:w-9"
                           aria-label="Add a reaction"
                           aria-expanded={emojiPickerId === a.id}
                           aria-haspopup="menu"
@@ -494,22 +542,34 @@ export function Announcements() {
                         </AnimatePresence>
                       </div>
 
-                      {isLeader && (
+                      <div className="ml-auto flex shrink-0 items-center gap-1.5 pl-1">
                         <button
                           type="button"
-                          onClick={e => handlePin(e, a)}
-                          className={`ml-auto inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[11px] font-black transition-all ${
-                            isPinned
-                              ? 'bg-[#1ed760]/20 text-[#7cffaa]'
-                              : 'bg-white/[0.055] text-white/42 ring-1 ring-white/[0.05] hover:bg-white/[0.09] hover:text-white/70'
-                          }`}
-                          aria-pressed={isPinned}
-                          aria-label={`${isPinned ? 'Unpin' : 'Pin'} ${a.title}`}
+                          onClick={event => void handleOpenViewers(event, a)}
+                          className="inline-flex h-11 min-w-12 items-center justify-center gap-1.5 rounded-full bg-white/[0.065] px-3 text-xs font-bold text-white/65 ring-1 ring-white/[0.07] transition-all hover:bg-white/[0.11] hover:text-white active:scale-[0.95] sm:h-9"
+                          aria-label={`View who has seen ${a.title} (${viewCount} total)`}
                         >
-                          <Pin className={`h-3.5 w-3.5 ${isPinned ? 'fill-[#1ed760]' : ''}`} />
-                          {isPinned ? 'Pinned' : 'Pin'}
+                          <Eye aria-hidden="true" className="h-3.5 w-3.5" />
+                          <span>{viewCount}</span>
                         </button>
-                      )}
+
+                        {isLeader && (
+                          <button
+                            type="button"
+                            onClick={e => handlePin(e, a)}
+                            className={`inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-[11px] font-black transition-all sm:h-9 ${
+                              isPinned
+                                ? 'bg-[#1ed760]/20 text-[#7cffaa]'
+                                : 'bg-white/[0.065] text-white/58 ring-1 ring-white/[0.07] hover:bg-white/[0.11] hover:text-white/82'
+                            }`}
+                            aria-pressed={isPinned}
+                            aria-label={`${isPinned ? 'Unpin' : 'Pin'} ${a.title}`}
+                          >
+                            <Pin className={`h-3.5 w-3.5 ${isPinned ? 'fill-[#1ed760]' : ''}`} />
+                            {isPinned ? 'Pinned' : 'Pin'}
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </motion.div>
@@ -518,6 +578,71 @@ export function Announcements() {
           </motion.div>
         )}
       </div>
+
+      <Modal
+        open={Boolean(viewerAnnouncement)}
+        onClose={() => {
+          setViewerAnnouncement(null);
+          setAnnouncementViewers([]);
+        }}
+        title="Who Read This"
+        size="sm"
+        mobileView="dialog"
+      >
+        <div className="space-y-3">
+          {viewerAnnouncement && (
+            <p className="line-clamp-2 text-xs font-semibold leading-relaxed text-gray-500 dark:text-white/45">
+              {viewerAnnouncement.title}
+            </p>
+          )}
+
+          {loadingAnnouncementViewers ? (
+            <div role="status" className="flex min-h-32 items-center justify-center gap-2 text-sm text-gray-500 dark:text-white/45">
+              <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
+              Loading readers…
+            </div>
+          ) : announcementViewers.length === 0 ? (
+            <div className="py-7 text-center">
+              <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-400 dark:bg-white/[0.05] dark:text-white/30">
+                <Eye aria-hidden="true" className="h-5 w-5" />
+              </span>
+              <p className="mt-3 text-sm font-bold text-gray-800 dark:text-white/80">No readers yet</p>
+              <p className="mt-1 text-xs text-gray-500 dark:text-white/40">No one has seen this announcement yet.</p>
+            </div>
+          ) : (
+            <>
+              <p className="text-xs text-gray-500 dark:text-white/45">
+                {announcementViewers.length === 1
+                  ? '1 person has seen this announcement.'
+                  : `${announcementViewers.length} people have seen this announcement.`}
+              </p>
+              <div className="max-h-80 space-y-1 overflow-y-auto pr-1">
+                {announcementViewers.map(viewer => {
+                  const viewerName = `${viewer.profiles?.first_name || ''} ${viewer.profiles?.last_name || ''}`.trim() || 'Team member';
+                  return (
+                    <div key={viewer.user_id} className="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.04]">
+                      <Avatar
+                        src={viewer.profiles?.avatar_url}
+                        firstName={viewer.profiles?.first_name || '?'}
+                        lastName={viewer.profiles?.last_name}
+                        size="sm"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
+                          {viewerName}{viewer.user_id === user?.id ? ' (You)' : ''}
+                        </p>
+                        <p className="text-[11px] text-gray-400 dark:text-white/35">
+                          {format(parseISO(viewer.viewed_at), 'MMM d, yyyy · h:mm a')}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      </Modal>
 
       {/* ── Create Modal ──────────────────────────────── */}
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Creating Announcement" size="lg">

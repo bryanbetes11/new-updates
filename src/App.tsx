@@ -66,6 +66,16 @@ const EventDetail = lazy(() =>
     default: EventDetail,
   })),
 );
+const AttendanceQrScanner = lazy(() =>
+  import("./pages/AttendanceQrScanner").then(({ AttendanceQrScanner }) => ({
+    default: AttendanceQrScanner,
+  })),
+);
+const AttendanceQrPilot = lazy(() =>
+  import("./pages/AttendanceQrPilot").then(({ AttendanceQrPilot }) => ({
+    default: AttendanceQrPilot,
+  })),
+);
 const Announcements = lazy(() =>
   import("./pages/Announcements").then(({ Announcements }) => ({
     default: Announcements,
@@ -324,6 +334,7 @@ export default function App() {
                       />
                       <Route path="/events" element={<Events />} />
                       <Route path="/events/:id" element={<EventDetail />} />
+                      <Route path="/attendance/scan" element={<AttendanceQrScanner />} />
                       <Route
                         path="/announcements"
                         element={<Announcements />}
@@ -390,6 +401,7 @@ export default function App() {
                       />
                       <Route path="/leadership/team" element={<TeamManage />} />
                       <Route path="/leadership/accountability" element={<Accountability />} />
+                      <Route path="/leadership/attendance-qr-pilot" element={<AttendanceQrPilot />} />
                       <Route
                         path="/leadership/church"
                         element={<OrganizationSettings />}

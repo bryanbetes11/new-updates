@@ -17,6 +17,7 @@ import {
   Layers3,
   LayoutDashboard,
   MessageCircle,
+  ScanLine,
   Music2,
   Plus,
   RefreshCw,
@@ -142,6 +143,13 @@ const mobileNavItems: NavItem[] = [
     badgeColor: "blue",
   },
   { path: "/library", label: "Library", icon: LibraryNavIcon },
+  {
+    path: "/messages",
+    label: "Chat",
+    icon: MessageIcon,
+    badgeKey: "messages",
+    badgeColor: "red",
+  },
 ];
 
 const sidebarMainItems: NavItem[] = [
@@ -837,19 +845,7 @@ export function Navigation({
     `${profile?.first_name || ""} ${profile?.last_name || ""}`.trim();
 
   const useDockedMobileNav = mobileNavStyle === "docked";
-  const bottomNavItems: Array<NavItem & { tabletPortraitOnly?: boolean }> =
-    isLeader || isOrgAdmin
-      ? [
-          ...mobileNavItems,
-          {
-            path: "/leadership/overview",
-            label: "Leadership",
-            icon: ShieldNavIcon,
-            exact: true,
-            tabletPortraitOnly: true,
-          },
-        ]
-      : mobileNavItems;
+  const bottomNavItems: Array<NavItem & { tabletPortraitOnly?: boolean }> = mobileNavItems;
   const hideMobileChrome = mobileChromeHidden && !mobileOpen;
   const hideBottomMobileNav = hideMobileChrome;
   const mobileMenuTranslateX = mobileOpen
@@ -1900,13 +1896,15 @@ export function Navigation({
 
           <div className="relative z-20 flex items-center gap-1">
             <NotificationBell />
-            <button
-              onClick={() => handleNav("/messages")}
-              className="flex h-10 w-10 items-center justify-center rounded-full text-white transition-colors hover:bg-white/[0.08]"
-              aria-label="Messages"
-            >
-              <MessageCircle className="h-6 w-6" />
-            </button>
+            {(isOrgAdmin || isPlatformOwner) && (
+              <button
+                onClick={() => handleNav("/attendance/scan")}
+                className="flex h-10 w-10 items-center justify-center rounded-full text-white transition-colors hover:bg-white/[0.08]"
+                aria-label="Scan attendance QR"
+              >
+                <ScanLine className="h-6 w-6" />
+              </button>
+            )}
           </div>
         </div>
       </div>

@@ -80,6 +80,10 @@ export function EventAttendanceMarking({ event }: Props) {
       excused_reason: excusedReason || null,
       checked_in_at: status === 'present' || status === 'late' ? new Date().toISOString() : null,
       updated_at: new Date().toISOString(),
+      record_source: 'leader',
+      review_status: 'verified',
+      reviewed_by: user.id,
+      reviewed_at: new Date().toISOString(),
     };
 
     if (member.attendance_id) {
@@ -166,7 +170,7 @@ export function EventAttendanceMarking({ event }: Props) {
     return (
       <div className="text-center py-10">
         <ClipboardCheck className="h-10 w-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-        <p className="text-sm text-gray-500 dark:text-gray-400">No confirmed assignments for this event</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">No scheduled members for this event</p>
       </div>
     );
   }

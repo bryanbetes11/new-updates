@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
-import { AlertTriangle, Search, Filter, Download, RotateCcw, ChevronDown, ChevronUp, History, CheckCircle, Clock, XCircle, FileCheck } from 'lucide-react';
+import { AlertTriangle, Search, Filter, Download, RotateCcw, ChevronDown, ChevronUp, History, CheckCircle, Clock, XCircle, FileCheck, QrCode } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -16,10 +17,14 @@ interface MemberStats {
   avatar_url: string | null;
   ministry_status: string;
   events_assigned: number;
+  confirmed_count: number;
+  no_response_count: number;
   present_count: number;
   late_count: number;
   absent_count: number;
   excused_count: number;
+  needs_review_count: number;
+  dependability_incidents: number;
   offense_level: number;
 }
 
@@ -29,7 +34,10 @@ interface AttendanceHistoryRow {
   event_title: string;
   event_date: string;
   event_type: string;
+  assignment_status: 'confirmed' | 'pending';
   status: string;
+  review_status: 'verified' | 'needs_review';
+  record_source: 'member' | 'leader' | 'automatic';
   checked_in_at: string | null;
   marked_at: string | null;
   excused_reason: string | null;
@@ -49,7 +57,10 @@ const statusInfo: Record<string, { icon: React.ElementType; color: string; label
   late: { icon: Clock, color: 'text-amber-600 dark:text-amber-400', label: 'Late' },
   absent: { icon: XCircle, color: 'text-red-600 dark:text-red-400', label: 'Absent' },
   excused: { icon: FileCheck, color: 'text-blue-600 dark:text-blue-400', label: 'Excused' },
+  needs_review: { icon: AlertTriangle, color: 'text-violet-600 dark:text-violet-400', label: 'Needs review' },
 };
+
+type ReviewResolution = 'present' | 'late' | 'absent' | 'excused';
 
 const ministryStatusBadge: Record<string, string> = {
   active: 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300',
@@ -66,8 +77,12 @@ function getQuarterEndDate(year: number, quarter: number): Date {
   return new Date(year, quarter * 3, 0);
 }
 
+function getVerifiedOutcomeCount(member: MemberStats): number {
+  return member.present_count + member.late_count + member.absent_count + member.excused_count;
+}
+
 export function AttendanceMonitoring() {
-  const { canManageDiscipline } = useAuth();
+  const { canManageDiscipline, isOrgAdmin, isPlatformOwner } = useAuth();
   const { toast } = useToast();
   const [stats, setStats] = useState<MemberStats[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,6 +100,10 @@ export function AttendanceMonitoring() {
   const [historyMember, setHistoryMember] = useState<MemberStats | null>(null);
   const [history, setHistory] = useState<AttendanceHistoryRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [reviewTarget, setReviewTarget] = useState<AttendanceHistoryRow | null>(null);
+  const [reviewResolution, setReviewResolution] = useState<ReviewResolution>('absent');
+  const [reviewNote, setReviewNote] = useState('');
+  const [resolvingReview, setResolvingReview] = useState(false);
 
   const currentYear = new Date().getFullYear();
   const years = [currentYear - 1, currentYear, currentYear + 1];
@@ -125,6 +144,8 @@ export function AttendanceMonitoring() {
     const { data, error } = await supabase.rpc('get_member_attendance_history', {
       p_user_id: member.user_id,
       p_limit: 30,
+      p_year: selectedYear,
+      p_quarter: selectedQuarter,
     });
     if (error) {
       toast('error', 'Failed to load attendance history');
@@ -132,6 +153,34 @@ export function AttendanceMonitoring() {
       setHistory((data || []) as AttendanceHistoryRow[]);
     }
     setHistoryLoading(false);
+  };
+
+  const handleResolveReview = async () => {
+    if (!reviewTarget || !historyMember || resolvingReview) return;
+    if (reviewResolution === 'excused' && !reviewNote.trim()) {
+      toast('error', 'Please provide a reason for an excused resolution');
+      return;
+    }
+
+    setResolvingReview(true);
+    const { error } = await supabase.rpc('resolve_attendance_review', {
+      p_event_id: reviewTarget.event_id,
+      p_user_id: historyMember.user_id,
+      p_status: reviewResolution,
+      p_note: reviewNote.trim() || null,
+    });
+
+    if (error) {
+      toast('error', 'Failed to resolve attendance review');
+      setResolvingReview(false);
+      return;
+    }
+
+    toast('success', 'Attendance review resolved');
+    setReviewTarget(null);
+    setReviewNote('');
+    setResolvingReview(false);
+    await Promise.all([openHistory(historyMember), fetchStats()]);
   };
 
   const handleSort = (column: 'name' | 'late' | 'absent' | 'offense') => {
@@ -161,20 +210,22 @@ export function AttendanceMonitoring() {
   };
 
   const handleExport = () => {
-    const headers = ['Name', 'Ministry Status', 'Events Assigned', 'Present', 'Late', 'Absent', 'Excused', 'Attendance %', 'Offense Level', 'Action Required'];
+    const headers = ['Name', 'Ministry Status', 'Finalized Schedules', 'Confirmed', 'No Response', 'Present', 'Late', 'Verified Absent', 'Excused', 'Needs Review', 'Verified Outcomes', 'Absence Incidents', 'Attendance Offense Level', 'Action Required'];
     const rows = filteredAndSorted.map(m => {
-      const attendanceRate = m.events_assigned > 0
-        ? Math.round(((m.present_count + m.late_count) / m.events_assigned) * 100)
-        : 0;
+      const verifiedOutcomes = getVerifiedOutcomeCount(m);
       return [
         `${m.first_name} ${m.last_name}`,
         m.ministry_status,
         m.events_assigned,
+        m.confirmed_count,
+        m.no_response_count,
         m.present_count,
         m.late_count,
         m.absent_count,
         m.excused_count,
-        `${attendanceRate}%`,
+        m.needs_review_count,
+        `${verifiedOutcomes}/${m.events_assigned}`,
+        m.dependability_incidents,
         offenseLevelInfo[m.offense_level]?.label || 'Unknown',
         offenseLevelInfo[m.offense_level]?.action || '',
       ];
@@ -223,12 +274,10 @@ export function AttendanceMonitoring() {
   });
 
   const summaryStats = {
-    totalEvents: Math.max(...stats.map(s => s.events_assigned), 0),
+    maxAssignments: Math.max(...stats.map(s => s.events_assigned), 0),
     membersWithOffenses: stats.filter(s => s.offense_level > 0).length,
-    averageAttendance: stats.length > 0
-      ? Math.round((stats.reduce((sum, s) => sum + s.present_count, 0) / Math.max(stats.reduce((sum, s) => sum + s.events_assigned, 0), 1)) * 100)
-      : 0,
-    suspended: stats.filter(s => s.ministry_status === 'suspended').length,
+    noResponses: stats.reduce((sum, s) => sum + s.no_response_count, 0),
+    needsReview: stats.reduce((sum, s) => sum + s.needs_review_count, 0),
   };
 
   if (loading) {
@@ -269,6 +318,11 @@ export function AttendanceMonitoring() {
           />
         </div>
         <div className="flex w-full gap-2 sm:w-auto">
+          {(isOrgAdmin || isPlatformOwner) && (
+            <Link to="/leadership/attendance-qr-pilot" className="btn-secondary min-h-11 flex-1 text-xs sm:flex-none">
+              <QrCode className="h-3.5 w-3.5" /> QR Test Lab
+            </Link>
+          )}
           <button onClick={handleExport} className="btn-secondary min-h-11 flex-1 text-xs sm:flex-none">
             <Download className="h-3.5 w-3.5" /> Export
           </button>
@@ -283,11 +337,15 @@ export function AttendanceMonitoring() {
       <div className="flex flex-col gap-2 rounded-xl border border-brand-500/20 bg-brand-500/[0.06] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-semibold text-gray-900 dark:text-white">
-            Q{selectedQuarter} {selectedYear} accountability period
+            Q{selectedQuarter} {selectedYear} dependability period
           </p>
           <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-            Late and absence totals are calculated only from this quarter. Prior-quarter attendance stays in history but does not carry into these offense levels.
+            Offense levels follow the Worship Ministry attendance policy: absences and accumulated lates count. Missed schedule responses stay visible for leader follow-up but do not create an offense.
           </p>
+          <div className="mt-2 flex flex-col gap-1 text-[11px] leading-relaxed text-gray-600 dark:text-gray-300 sm:flex-row sm:gap-4">
+            <span><strong className="font-semibold text-gray-800 dark:text-gray-100">1. Schedule response:</strong> Confirmed or no response</span>
+            <span><strong className="font-semibold text-gray-800 dark:text-gray-100">2. Attendance outcome:</strong> Present, late, absent, or excused</span>
+          </div>
         </div>
         <span className="shrink-0 text-xs font-medium text-brand-700 dark:text-brand-300">
           {isCurrentQuarter ? `Resets automatically after ${format(selectedQuarterEnd, 'MMM d, yyyy')}` : `Ended ${format(selectedQuarterEnd, 'MMM d, yyyy')}`}
@@ -299,7 +357,7 @@ export function AttendanceMonitoring() {
           { level: 'Level 1', threshold: '3 lates or 1 absence' },
           { level: 'Level 2', threshold: '6 lates or 2 absences' },
           { level: 'Level 3', threshold: '9 lates or 3 absences' },
-          { level: 'Level 4', threshold: '12 lates or 4 absences' },
+          { level: 'Level 4', threshold: '12 lates or 4+ absences' },
         ].map(rule => (
           <div key={rule.level} className="rounded-xl border border-gray-200/80 bg-white/60 px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.03]">
             <p className="text-xs font-semibold text-gray-900 dark:text-white">{rule.level}</p>
@@ -310,12 +368,12 @@ export function AttendanceMonitoring() {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="card p-4">
-          <p className="text-2xl font-bold text-gray-900 dark:text-white">{summaryStats.totalEvents}</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">Events in Quarter</p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-white">{summaryStats.maxAssignments}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">Most Assignments</p>
         </div>
         <div className="card p-4">
-          <p className="text-2xl font-bold text-gray-900 dark:text-white">{summaryStats.averageAttendance}%</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">Avg Attendance</p>
+          <p className={`text-2xl font-bold ${summaryStats.noResponses > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-white'}`}>{summaryStats.noResponses}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">No Responses</p>
         </div>
         <div className="card p-4">
           <p className={`text-2xl font-bold ${summaryStats.membersWithOffenses > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
@@ -324,10 +382,10 @@ export function AttendanceMonitoring() {
           <p className="text-xs text-gray-500 dark:text-gray-400">With Offenses</p>
         </div>
         <div className="card p-4">
-          <p className={`text-2xl font-bold ${summaryStats.suspended > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'}`}>
-            {summaryStats.suspended}
+          <p className={`text-2xl font-bold ${summaryStats.needsReview > 0 ? 'text-violet-600 dark:text-violet-400' : 'text-gray-900 dark:text-white'}`}>
+            {summaryStats.needsReview}
           </p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">Suspended</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">Needs Review</p>
         </div>
       </div>
 
@@ -382,20 +440,9 @@ export function AttendanceMonitoring() {
                     Member {sortBy === 'name' && (sortOrder === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
                   </button>
                 </th>
-                <th className="text-center px-3 py-3 text-xs font-medium text-gray-500 dark:text-gray-400">Events</th>
-                <th className="text-center px-3 py-3 text-xs font-medium text-gray-500 dark:text-gray-400">Present</th>
-                <th className="text-center px-3 py-3">
-                  <button onClick={() => handleSort('late')} className="mx-auto flex min-h-11 items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:text-gray-400">
-                    Late {sortBy === 'late' && (sortOrder === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
-                  </button>
-                </th>
-                <th className="text-center px-3 py-3">
-                  <button onClick={() => handleSort('absent')} className="mx-auto flex min-h-11 items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:text-gray-400">
-                    Absent {sortBy === 'absent' && (sortOrder === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
-                  </button>
-                </th>
-                <th className="text-center px-3 py-3 text-xs font-medium text-gray-500 dark:text-gray-400">Excused</th>
-                <th className="text-center px-3 py-3 text-xs font-medium text-gray-500 dark:text-gray-400">Rate</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Schedule response</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Attendance verified</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Needs attendance review</th>
                 <th className="text-center px-3 py-3">
                   <button onClick={() => handleSort('offense')} className="mx-auto flex min-h-11 items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:text-gray-400">
                     Status {sortBy === 'offense' && (sortOrder === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
@@ -407,9 +454,7 @@ export function AttendanceMonitoring() {
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {filteredAndSorted.map(m => {
                 const info = offenseLevelInfo[m.offense_level] || offenseLevelInfo[0];
-                const attendanceRate = m.events_assigned > 0
-                  ? Math.round(((m.present_count + m.late_count) / m.events_assigned) * 100)
-                  : 0;
+                const verifiedOutcomes = getVerifiedOutcomeCount(m);
                 return (
                   <tr key={m.user_id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                     <td className="px-4 py-3">
@@ -426,15 +471,31 @@ export function AttendanceMonitoring() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-3 py-3 text-center text-sm text-gray-600 dark:text-gray-400">{m.events_assigned}</td>
-                    <td className="px-3 py-3 text-center text-sm text-green-600 dark:text-green-400">{m.present_count}</td>
-                    <td className="px-3 py-3 text-center text-sm text-amber-600 dark:text-amber-400">{m.late_count}</td>
-                    <td className="px-3 py-3 text-center text-sm text-red-600 dark:text-red-400">{m.absent_count}</td>
-                    <td className="px-3 py-3 text-center text-sm text-blue-600 dark:text-blue-400">{m.excused_count}</td>
-                    <td className="px-3 py-3 text-center">
-                      <span className={`text-xs font-medium ${attendanceRate >= 80 ? 'text-green-600 dark:text-green-400' : attendanceRate >= 60 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>
-                        {attendanceRate}%
-                      </span>
+                    <td className="px-4 py-3">
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white">{m.events_assigned} scheduled</p>
+                      <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                        <span className="text-gray-700 dark:text-gray-300">{m.confirmed_count} confirmed</span>
+                        <span aria-hidden="true"> · </span>
+                        <span className={m.no_response_count > 0 ? 'font-semibold text-amber-600 dark:text-amber-400' : ''}>{m.no_response_count} no response</span>
+                      </p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className={`text-sm font-semibold ${verifiedOutcomes === m.events_assigned ? 'text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-white'}`}>
+                        {verifiedOutcomes} of {m.events_assigned} verified
+                      </p>
+                      <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                        {m.present_count} present · {m.late_count} late · {m.absent_count} absent · {m.excused_count} excused
+                      </p>
+                    </td>
+                    <td className="px-4 py-3">
+                      {m.needs_review_count > 0 ? (
+                        <div>
+                          <p className="text-sm font-semibold text-violet-600 dark:text-violet-400">{m.needs_review_count} assignment{m.needs_review_count === 1 ? '' : 's'}</p>
+                          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Attendance still unknown</p>
+                        </div>
+                      ) : (
+                        <span className="text-sm font-semibold text-green-600 dark:text-green-400">All reviewed</span>
+                      )}
                     </td>
                     <td className="px-3 py-3 text-center">
                       <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${info.color}`}>
@@ -446,8 +507,8 @@ export function AttendanceMonitoring() {
                       <button
                         onClick={() => openHistory(m)}
                         className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:hover:bg-gray-700 dark:hover:text-gray-300"
-                        title="View history"
-                        aria-label={`View attendance history for ${m.first_name} ${m.last_name}`}
+                        title={`View Q${selectedQuarter} ${selectedYear} history`}
+                        aria-label={`View Q${selectedQuarter} ${selectedYear} attendance history for ${m.first_name} ${m.last_name}`}
                       >
                         <History className="h-3.5 w-3.5" />
                       </button>
@@ -467,9 +528,7 @@ export function AttendanceMonitoring() {
         {filteredAndSorted.map(m => {
           const info = offenseLevelInfo[m.offense_level] || offenseLevelInfo[0];
           const isExpanded = expandedMember === m.user_id;
-          const attendanceRate = m.events_assigned > 0
-            ? Math.round(((m.present_count + m.late_count) / m.events_assigned) * 100)
-            : 0;
+          const verifiedOutcomes = getVerifiedOutcomeCount(m);
           return (
             <div key={m.user_id} className="card self-start">
               <button
@@ -485,9 +544,19 @@ export function AttendanceMonitoring() {
                       {m.offense_level > 0 && <AlertTriangle className="h-3 w-3" />}
                       {info.label}
                     </span>
-                    <span className={`text-xs font-medium ${attendanceRate >= 80 ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                      {attendanceRate}%
+                    <span className={`text-xs font-semibold ${verifiedOutcomes === m.events_assigned ? 'text-green-600 dark:text-green-400' : 'text-violet-600 dark:text-violet-400'}`}>
+                      {verifiedOutcomes} of {m.events_assigned} attendance verified
                     </span>
+                    {m.no_response_count > 0 && (
+                      <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-300">
+                        {m.no_response_count} no response
+                      </span>
+                    )}
+                    {m.needs_review_count > 0 && (
+                      <span className="rounded bg-violet-500/10 px-1.5 py-0.5 text-xs font-semibold text-violet-600 dark:text-violet-300">
+                        {m.needs_review_count} need attendance review
+                      </span>
+                    )}
                     {m.ministry_status !== 'active' && (
                       <span className={`text-xs px-1.5 py-0.5 rounded-md font-medium ${ministryStatusBadge[m.ministry_status]}`}>
                         {m.ministry_status}
@@ -499,19 +568,20 @@ export function AttendanceMonitoring() {
               </button>
               {isExpanded && (
                 <div className="px-4 pb-4 border-t border-gray-100 dark:border-gray-800 pt-3 space-y-3">
-                  <div className="grid grid-cols-5 gap-2 text-center">
-                    {[
-                      { label: 'Events', value: m.events_assigned, color: 'text-gray-700 dark:text-gray-300' },
-                      { label: 'Present', value: m.present_count, color: 'text-green-600' },
-                      { label: 'Late', value: m.late_count, color: 'text-amber-600' },
-                      { label: 'Absent', value: m.absent_count, color: 'text-red-600' },
-                      { label: 'Excused', value: m.excused_count, color: 'text-blue-600' },
-                    ].map(s => (
-                      <div key={s.label}>
-                        <p className={`text-lg font-semibold ${s.color}`}>{s.value}</p>
-                        <p className="text-[10px] text-gray-500">{s.label}</p>
-                      </div>
-                    ))}
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800/50">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">1. Schedule response</p>
+                      <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{m.events_assigned} scheduled</p>
+                      <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-300">{m.confirmed_count} confirmed · <span className={m.no_response_count > 0 ? 'font-semibold text-amber-600 dark:text-amber-400' : ''}>{m.no_response_count} no response</span></p>
+                    </div>
+                    <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800/50">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">2. Attendance outcome</p>
+                      <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{verifiedOutcomes} of {m.events_assigned} verified</p>
+                      <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-300">{m.present_count} present · {m.late_count} late · {m.absent_count} absent · {m.excused_count} excused</p>
+                      <p className={`mt-1 text-xs font-semibold ${m.needs_review_count > 0 ? 'text-violet-600 dark:text-violet-400' : 'text-green-600 dark:text-green-400'}`}>
+                        {m.needs_review_count > 0 ? `${m.needs_review_count} still need attendance review` : 'All attendance reviewed'}
+                      </p>
+                    </div>
                   </div>
                   {m.offense_level > 0 && (
                     <div className="p-2 rounded-lg bg-gray-50 dark:bg-gray-800/50">
@@ -523,7 +593,7 @@ export function AttendanceMonitoring() {
                     onClick={() => openHistory(m)}
                     className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-medium text-brand-600 transition-colors hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:text-brand-400 dark:hover:bg-brand-900/20"
                   >
-                    <History className="h-3.5 w-3.5" /> View Full History
+                    <History className="h-3.5 w-3.5" /> View Q{selectedQuarter} Details
                   </button>
                 </div>
               )}
@@ -555,17 +625,19 @@ export function AttendanceMonitoring() {
       <Modal
         open={!!historyMember}
         onClose={() => setHistoryMember(null)}
-        title={historyMember ? `${historyMember.first_name} ${historyMember.last_name} - Attendance History` : ''}
+        title={historyMember ? `${historyMember.first_name} ${historyMember.last_name} - Q${selectedQuarter} ${selectedYear}` : ''}
         size="lg"
       >
         {historyMember && (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
               {[
+                { label: 'Scheduled', value: historyMember.events_assigned, color: 'text-gray-700 dark:text-gray-200' },
+                { label: 'No response', value: historyMember.no_response_count, color: 'text-amber-600' },
+                { label: 'Verified absent', value: historyMember.absent_count, color: 'text-red-600' },
                 { label: 'Present', value: historyMember.present_count, color: 'text-green-600' },
                 { label: 'Late', value: historyMember.late_count, color: 'text-amber-600' },
-                { label: 'Absent', value: historyMember.absent_count, color: 'text-red-600' },
-                { label: 'Excused', value: historyMember.excused_count, color: 'text-blue-600' },
+                { label: 'Needs review', value: historyMember.needs_review_count, color: 'text-violet-600' },
               ].map(s => (
                 <div key={s.label} className="text-center p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl">
                   <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
@@ -573,6 +645,10 @@ export function AttendanceMonitoring() {
                 </div>
               ))}
             </div>
+
+            <p className="rounded-lg bg-brand-500/[0.07] px-3 py-2 text-xs text-brand-700 dark:text-brand-300">
+              Attendance offenses follow the written policy: accumulated lates and absences determine the level. A missed schedule response is shown for follow-up, but it does not increase the offense level. Missing attendance is automatically recorded as absent after the deadline.
+            </p>
 
             {historyLoading ? (
               <div className="flex items-center justify-center py-8">
@@ -592,16 +668,39 @@ export function AttendanceMonitoring() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{row.event_title}</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">{row.event_type}</p>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                          <span>{row.event_type}</span>
+                          {row.assignment_status === 'pending' && (
+                            <span className="rounded bg-amber-500/10 px-1.5 py-0.5 font-semibold text-amber-600 dark:text-amber-300">No confirmation</span>
+                          )}
+                          {row.record_source === 'automatic' && (
+                            <span className="rounded bg-violet-500/10 px-1.5 py-0.5 font-semibold text-violet-600 dark:text-violet-300">System inferred</span>
+                          )}
+                        </div>
                         {row.excused_reason && (
                           <p className="text-xs text-blue-600 dark:text-blue-400 truncate">Reason: {row.excused_reason}</p>
                         )}
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {sInfo && <sInfo.icon className={`h-4 w-4 ${sInfo.color}`} />}
-                        <span className={`text-xs font-medium ${sInfo?.color || 'text-gray-500'}`}>
-                          {sInfo?.label || row.status}
-                        </span>
+                      <div className="flex shrink-0 flex-col items-end gap-1.5">
+                        <div className="flex items-center gap-1.5">
+                          {sInfo && <sInfo.icon className={`h-4 w-4 ${sInfo.color}`} />}
+                          <span className={`text-xs font-medium ${sInfo?.color || 'text-gray-500'}`}>
+                            {sInfo?.label || row.status}
+                          </span>
+                        </div>
+                        {(row.review_status === 'needs_review' || (row.record_source === 'automatic' && row.status === 'absent')) && canManageDiscipline && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReviewTarget(row);
+                              setReviewResolution('absent');
+                              setReviewNote('');
+                            }}
+                            className="inline-flex min-h-9 items-center rounded-lg border border-violet-500/20 bg-violet-500/10 px-2.5 text-[11px] font-bold text-violet-700 transition-colors hover:bg-violet-500/15 dark:text-violet-300"
+                          >
+                            {row.review_status === 'needs_review' ? 'Resolve' : 'Correct'}
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -611,6 +710,61 @@ export function AttendanceMonitoring() {
 
             <div className="flex justify-end">
               <button onClick={() => setHistoryMember(null)} className="btn-secondary min-h-11">Close</button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={!!reviewTarget}
+        onClose={() => !resolvingReview && setReviewTarget(null)}
+        title="Resolve Attendance"
+        size="sm"
+      >
+        {reviewTarget && (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-violet-500/15 bg-violet-500/[0.07] p-3">
+              <p className="text-sm font-bold text-gray-900 dark:text-white">{reviewTarget.event_title}</p>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {format(parseISO(reviewTarget.event_date), 'MMM d, yyyy')} · {reviewTarget.assignment_status === 'pending' ? 'No schedule confirmation' : 'Confirmed schedule'}
+              </p>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Verified outcome</label>
+              <Select
+                value={reviewResolution}
+                onChange={value => setReviewResolution(value as ReviewResolution)}
+                options={[
+                  { value: 'present', label: 'Present' },
+                  { value: 'late', label: 'Late' },
+                  { value: 'absent', label: 'Absent' },
+                  { value: 'excused', label: 'Excused' },
+                ]}
+              />
+            </div>
+            <div>
+              <label htmlFor="attendance-review-note" className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Leader note {reviewResolution === 'excused' ? <span className="text-red-500">*</span> : <span className="text-gray-400">(optional)</span>}
+              </label>
+              <textarea
+                id="attendance-review-note"
+                value={reviewNote}
+                onChange={event => setReviewNote(event.target.value)}
+                className="input-field h-20 resize-none"
+                placeholder="Add the information used to resolve this record..."
+                required={reviewResolution === 'excused'}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2 border-t border-gray-200/70 pt-4 dark:border-white/[0.08]">
+              <button type="button" onClick={() => setReviewTarget(null)} disabled={resolvingReview} className="btn-secondary min-h-11">Cancel</button>
+              <button
+                type="button"
+                onClick={handleResolveReview}
+                disabled={resolvingReview || (reviewResolution === 'excused' && !reviewNote.trim())}
+                className="btn-primary min-h-11 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {resolvingReview ? 'Saving...' : 'Resolve'}
+              </button>
             </div>
           </div>
         )}

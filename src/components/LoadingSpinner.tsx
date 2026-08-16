@@ -277,28 +277,37 @@ export function EventsSkeleton() {
 
 export function AnnouncementsSkeleton() {
   return (
-    <div className="px-4 sm:px-5 lg:px-6 py-5 sm:py-6 page-bottom-pad space-y-4 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <SkeletonBlock className="h-7 w-40" />
-        <SkeletonBlock className="h-9 w-24 rounded-xl" />
+    <div className="app-content-shell page-bottom-pad space-y-4 pb-6 pt-4 sm:pt-5 animate-fade-in">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex gap-2 overflow-hidden">
+          {['w-[4.5rem]', 'w-24', 'w-[5.75rem]', 'w-[5.5rem]'].map(widthClass => (
+            <SkeletonBlock key={widthClass} className={`h-11 shrink-0 rounded-full ${widthClass}`} />
+          ))}
+        </div>
+        <SkeletonBlock className="h-11 w-full shrink-0 rounded-full sm:w-36" />
       </div>
-      <SkeletonBlock className="h-10 w-full rounded-xl" />
-      <div className="space-y-3">
+      <div className="space-y-1.5">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="rounded-2xl bg-white dark:bg-[#1a1a1c] ring-1 ring-black/[0.05] dark:ring-white/[0.06] p-5 space-y-3" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-            <div className="flex items-center gap-3">
-              <SkeletonBlock className="h-9 w-9 rounded-full shrink-0" />
-              <div className="flex-1 space-y-1.5">
-                <SkeletonBlock className="h-4 w-1/2" />
-                <SkeletonBlock className="h-3 w-1/3" />
+          <div key={i} className="relative overflow-hidden rounded-lg border border-gray-200/70 bg-white p-2.5 dark:border-white/[0.075] dark:bg-[#101010] sm:p-3 lg:min-h-[5.5rem] lg:pr-[18.5rem]">
+            <div className="flex items-start gap-3 sm:items-center sm:gap-4">
+              <SkeletonBlock className="h-[3.25rem] w-[3.25rem] shrink-0 rounded-md sm:h-16 sm:w-16" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <SkeletonBlock className={`h-3 rounded-full ${i === 2 ? 'w-16' : 'w-11'}`} />
+                <SkeletonBlock className={`h-[1.125rem] rounded-lg ${i % 2 === 0 ? 'w-3/5' : 'w-2/5'}`} />
+                <SkeletonBlock className="h-3 w-4/5 rounded-lg" />
+                <div className="flex items-center gap-2 pt-0.5">
+                  <SkeletonBlock className="h-5 w-5 shrink-0 rounded-full" />
+                  <SkeletonBlock className="h-3 w-16 rounded-full" />
+                  <SkeletonBlock className="h-3 w-10 rounded-full" />
+                </div>
               </div>
+              <SkeletonBlock className="hidden h-9 w-9 shrink-0 rounded-full sm:block" />
             </div>
-            <SkeletonBlock className="h-5 w-3/4" />
-            <SkeletonBlock className="h-3 w-full" />
-            <SkeletonBlock className="h-3 w-4/5" />
-            <div className="flex gap-2 pt-1">
-              <SkeletonBlock className="h-6 w-16 rounded-full" />
-              <SkeletonBlock className="h-6 w-16 rounded-full" />
+            <div className="ml-[4rem] mt-1.5 flex items-center gap-2 sm:ml-[5rem] lg:absolute lg:right-3 lg:top-1/2 lg:ml-0 lg:mt-0 lg:-translate-y-1/2">
+              <SkeletonBlock className="h-11 w-11 rounded-full sm:h-9 sm:w-9" />
+              <div className="flex-1" />
+              <SkeletonBlock className="h-11 w-12 rounded-full sm:h-9" />
+              <SkeletonBlock className="h-11 w-16 rounded-full sm:h-9" />
             </div>
           </div>
         ))}

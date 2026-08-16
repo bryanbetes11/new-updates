@@ -685,16 +685,16 @@ export function AnnouncementDetail() {
                     <button
                       type="button"
                       onClick={() => setShowViewers(true)}
-                      className="inline-flex h-11 items-center gap-1 rounded-full border border-black/[0.06] bg-white/70 px-3 text-[11px] font-semibold text-gray-500 transition-colors hover:text-amber-600 dark:border-white/[0.07] dark:bg-white/[0.04] dark:text-white/45 dark:hover:text-amber-400"
+                      className="inline-flex h-11 min-w-12 items-center justify-center gap-1 rounded-full border border-black/[0.06] bg-white/70 px-3 text-[11px] font-semibold text-gray-500 transition-colors hover:text-amber-600 dark:border-white/[0.07] dark:bg-white/[0.04] dark:text-white/45 dark:hover:text-amber-400"
                       aria-label={`View ${viewCount} readers`}
                     >
                       <Eye className="h-3 w-3" />{viewCount}
                     </button>
-                    <span className="inline-flex items-center gap-1 px-2.5 h-7 rounded-full text-[11px] font-semibold text-gray-500 dark:text-white/45 bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07]">
+                    <span className="inline-flex h-11 min-w-12 shrink-0 items-center justify-center gap-1 rounded-full border border-black/[0.06] bg-white/70 px-3 text-[11px] font-semibold text-gray-500 dark:border-white/[0.07] dark:bg-white/[0.04] dark:text-white/45">
                       <MessageCircle className="h-3 w-3" />{comments.length}
                     </span>
                     {hasPhotos && (
-                      <span className="inline-flex items-center gap-1 px-2.5 h-7 rounded-full text-[11px] font-semibold text-gray-500 dark:text-white/45 bg-white/70 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07]">
+                      <span className="inline-flex h-11 shrink-0 items-center gap-1 rounded-full border border-black/[0.06] bg-white/70 px-3 text-[11px] font-semibold text-gray-500 dark:border-white/[0.07] dark:bg-white/[0.04] dark:text-white/45">
                         <Image className="h-3 w-3" /> Photos
                       </span>
                     )}

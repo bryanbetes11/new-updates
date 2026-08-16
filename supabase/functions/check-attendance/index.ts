@@ -19,6 +19,7 @@ function secretsMatch(received: string | null, expected: string | null): boolean
 
 interface Assignment {
   user_id: string;
+  status: string;
   profiles: { first_name: string; last_name: string } | null;
 }
 
@@ -50,6 +51,8 @@ interface AttendanceInsert {
   is_assigned: boolean;
   checked_in_at: null;
   notes: string;
+  record_source: "automatic";
+  review_status: "needs_review";
 }
 
 function formatDateLong(dateStr: string): string {
@@ -71,6 +74,17 @@ function formatTime12Hour(timeValue: string): string {
   const suffix = hours >= 12 ? "PM" : "AM";
   const normalizedHour = hours % 12 || 12;
   return `${normalizedHour}:${String(minutes).padStart(2, "0")} ${suffix}`;
+}
+
+function getAccountableAssignments(event: Event): Assignment[] {
+  const scheduledByUser = new Map<string, Assignment>();
+
+  for (const assignment of event.event_assignments || []) {
+    if (assignment.status === "declined") continue;
+    scheduledByUser.set(assignment.user_id, assignment);
+  }
+
+  return Array.from(scheduledByUser.values());
 }
 
 Deno.serve(async (req: Request) => {
@@ -123,7 +137,7 @@ Deno.serve(async (req: Request) => {
         .from("events")
         .select(`
           id, title, event_date, event_type, start_time, linked_event_id,
-          event_assignments(user_id, profiles(first_name, last_name))
+          event_assignments(user_id, status, profiles(first_name, last_name))
         `)
         .eq("event_date", phToday)
         .not("start_time", "is", null);
@@ -144,7 +158,7 @@ Deno.serve(async (req: Request) => {
         const fiveMinutesBefore = new Date(eventStart.getTime() - 5 * 60 * 1000);
         const graceEndingSoon = new Date(eventStart.getTime() + 4 * 60 * 1000);
 
-        for (const assignment of event.event_assignments || []) {
+        for (const assignment of getAccountableAssignments(event)) {
           const { data: existingAttendance } = await supabase
             .from("event_attendance")
             .select("id")
@@ -240,7 +254,7 @@ Deno.serve(async (req: Request) => {
         .from("events")
         .select(`
           id, title, event_date, event_type, linked_event_id,
-          event_assignments(user_id, profiles(first_name, last_name))
+          event_assignments(user_id, status, profiles(first_name, last_name))
         `)
         .eq("event_date", targetDateStr);
 
@@ -254,7 +268,7 @@ Deno.serve(async (req: Request) => {
         const eventDisplay = isRehearsalLinked ? "Sunday Service Rehearsal" : event.title;
         const eventDateFormatted = formatDateLong(event.event_date);
 
-        for (const assignment of event.event_assignments || []) {
+        for (const assignment of getAccountableAssignments(event)) {
           const { data: existingAttendance } = await supabase
             .from("event_attendance")
             .select("id")
@@ -318,7 +332,7 @@ Deno.serve(async (req: Request) => {
         .from("events")
         .select(`
           id, title, event_date,
-          event_assignments(user_id)
+          event_assignments(user_id, status)
         `)
         .eq("event_date", twoDaysAgoStr);
 
@@ -328,7 +342,7 @@ Deno.serve(async (req: Request) => {
       const attendanceRecords: AttendanceInsert[] = [];
 
       for (const event of (events || []) as Event[]) {
-        for (const assignment of event.event_assignments || []) {
+        for (const assignment of getAccountableAssignments(event)) {
           const { data: existingAttendance } = await supabase
             .from("event_attendance")
             .select("id")
@@ -344,6 +358,8 @@ Deno.serve(async (req: Request) => {
               is_assigned: true,
               checked_in_at: null,
               notes: "Auto-marked absent (no attendance submitted)",
+              record_source: "automatic",
+              review_status: "verified",
             });
           }
         }

@@ -19,6 +19,12 @@ import { Avatar } from '../components/Avatar';
 import { EventArtwork } from '../components/EventArtwork';
 import { Modal } from '../components/Modal';
 import { MentionTextarea } from '../components/MentionTextarea';
+import {
+  createChatEventReference,
+  getChatCommandQuery,
+  parseChatEventReference,
+  type ChatEventReference,
+} from '../lib/chatEventReferences';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -56,6 +62,7 @@ type MsgContent =
   | { type: 'text'; text: string }
   | { type: 'image'; url: string }
   | { type: 'file'; url: string; name: string; size: number }
+  | ChatEventReference
   | { type: 'delete_request'; requestedBy: string; requesterName: string; requestedAt: string };
 function parseContent(content: string): MsgContent {
   const normalizeParsedContent = (value: unknown): MsgContent | null => {
@@ -63,6 +70,8 @@ function parseContent(content: string): MsgContent {
     const p = value as Record<string, unknown>;
     if (p.type === 'image' && typeof p.url === 'string') return { type: 'image', url: p.url };
     if (p.type === 'file' && typeof p.url === 'string') return { type: 'file', url: p.url, name: typeof p.name === 'string' ? p.name : 'File', size: typeof p.size === 'number' ? p.size : 0 };
+    const eventReference = parseChatEventReference(value);
+    if (eventReference) return eventReference;
     if (p.type === 'delete_request') {
       const requestedBy = typeof p.requestedBy === 'string'
         ? p.requestedBy
@@ -159,6 +168,79 @@ function renderMessageText(text: string, isMe: boolean) {
   });
 }
 
+function ChatEventReferenceCard({ reference }: { reference: ChatEventReference }) {
+  const navigate = useNavigate();
+  const isSetlist = reference.reference === 'setlist';
+  const isSong = reference.reference === 'song';
+  const isObservation = reference.reference === 'observation';
+  const destination = isObservation
+    ? `/events/${reference.eventId}?addObservation=1`
+    : `/events/${reference.eventId}`;
+  const label = isSetlist
+    ? 'Event setlist'
+    : isSong
+      ? 'Setlist song'
+      : isObservation
+        ? 'Post-event observation'
+        : 'Event reference';
+  const action = isObservation ? 'Add observation' : isSong ? 'Open setlist' : isSetlist ? 'View setlist' : 'View event';
+
+  return (
+    <button
+      type="button"
+      onClick={event => {
+        event.stopPropagation();
+        navigate(destination);
+      }}
+      className="block w-[min(18rem,72vw)] overflow-hidden rounded-2xl border border-gray-200/80 bg-white text-left text-gray-900 shadow-sm transition-transform hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 dark:border-white/[0.08] dark:bg-[#1b1b1e] dark:text-white"
+    >
+      <span className="flex items-start gap-3 p-3.5">
+        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+          isSong
+            ? 'bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-300'
+            : isObservation
+              ? 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-300'
+              : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300'
+        }`}>
+          {isSong || isSetlist ? <Music2 className="h-5 w-5" /> : isObservation ? <MessageCircle className="h-5 w-5" /> : <CalendarDays className="h-5 w-5" />}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[9px] font-black uppercase tracking-[0.16em] text-gray-400 dark:text-white/35">{label}</span>
+          <span className="mt-1 block truncate text-[14px] font-bold leading-tight">
+            {isSong ? reference.song?.title : reference.eventTitle}
+          </span>
+          {isSong && reference.song && (
+            <span className="mt-1 block truncate text-[11px] text-gray-500 dark:text-white/45">
+              {[reference.song.artist, reference.song.key ? `Key ${reference.song.key}` : null].filter(Boolean).join(' · ')}
+            </span>
+          )}
+          {isSetlist && (
+            <>
+              <span className="mt-1 block text-[11px] font-semibold text-emerald-600 dark:text-emerald-300">
+                {reference.songCount ?? 0} {(reference.songCount ?? 0) === 1 ? 'song' : 'songs'}
+              </span>
+              {reference.songTitles && reference.songTitles.length > 0 && (
+                <span className="mt-1 block truncate text-[11px] text-gray-500 dark:text-white/45">
+                  {reference.songTitles.join(' · ')}
+                </span>
+              )}
+            </>
+          )}
+          {!isSong && !isSetlist && (
+            <span className="mt-1 block text-[11px] text-gray-500 dark:text-white/45">
+              {format(parseISO(reference.eventDate), 'EEE, MMM d, yyyy')}{reference.eventType ? ` · ${reference.eventType}` : ''}
+            </span>
+          )}
+        </span>
+      </span>
+      <span className="flex items-center justify-between border-t border-gray-100 px-3.5 py-2 text-[11px] font-bold text-emerald-600 dark:border-white/[0.06] dark:text-emerald-300">
+        {action}
+        <ChevronRight className="h-3.5 w-3.5" />
+      </span>
+    </button>
+  );
+}
+
 function getConversationAvatarSrc(conv: Conversation, myId: string): string | undefined {
   if (conv.type === 'personal') {
     return getOtherMember(conv, myId)?.profile?.avatar_url ?? undefined;
@@ -187,6 +269,12 @@ function previewContent(content: string): string {
   const parsed = parseContent(content);
   if (parsed.type === 'image') return '📷 Photo';
   if (parsed.type === 'file') return `📎 ${parsed.name}`;
+  if (parsed.type === 'event_reference') {
+    if (parsed.reference === 'song') return `🎵 ${parsed.song?.title || 'Song'}`;
+    if (parsed.reference === 'setlist') return `🎶 Setlist · ${parsed.eventTitle}`;
+    if (parsed.reference === 'observation') return `📝 Post-event observation · ${parsed.eventTitle}`;
+    return `📅 ${parsed.eventTitle}`;
+  }
   if (parsed.type === 'delete_request') return 'Delete chat request';
   const text = humanizeMentions(parsed.text);
   return text.length > 60 ? text.slice(0, 60) + '…' : text;
@@ -196,6 +284,12 @@ function replyPreviewContent(content: string): string {
   const parsed = parseContent(content);
   if (parsed.type === 'image') return 'Photo';
   if (parsed.type === 'file') return parsed.name;
+  if (parsed.type === 'event_reference') {
+    if (parsed.reference === 'song') return parsed.song?.title || 'Song reference';
+    if (parsed.reference === 'setlist') return `Setlist · ${parsed.eventTitle}`;
+    if (parsed.reference === 'observation') return `Post-event observation · ${parsed.eventTitle}`;
+    return parsed.eventTitle;
+  }
   if (parsed.type === 'delete_request') return 'Delete chat request';
   return humanizeMentions(parsed.text);
 }
@@ -423,13 +517,14 @@ type EventChoice = {
   event_type: string | null;
 };
 
-function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEventChat, currentUserId }: {
+function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEventChat, currentUserId, canCreateAdminTestChat }: {
   open: boolean;
   onClose: () => void;
   onSelect: (userId: string) => void;
   onCreateGroup: (userIds: string[], groupName: string) => void;
-  onCreateEventChat: (eventId: string) => void;
+  onCreateEventChat: (eventId: string, adminOnlyTest: boolean) => Promise<boolean>;
   currentUserId: string;
+  canCreateAdminTestChat: boolean;
 }) {
   const [mode, setMode] = useState<'direct' | 'group' | 'event'>('direct');
   const [query, setQuery] = useState('');
@@ -437,6 +532,9 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [people, setPeople] = useState<Array<{ id: string; first_name: string | null; last_name: string | null; nickname: string | null; avatar_url: string | null }>>([]);
   const [events, setEvents] = useState<EventChoice[]>([]);
+  const [selectedEvent, setSelectedEvent] = useState<EventChoice | null>(null);
+  const [adminOnlyEventChat, setAdminOnlyEventChat] = useState(false);
+  const [creatingEventChat, setCreatingEventChat] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -445,6 +543,9 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
     setQuery('');
     setGroupName('');
     setSelectedIds(new Set());
+    setSelectedEvent(null);
+    setAdminOnlyEventChat(false);
+    setCreatingEventChat(false);
     Promise.all([
       supabase.from('profiles').select('id, first_name, last_name, nickname, avatar_url').order('first_name'),
       supabase.from('events').select('id, title, event_date, start_time, event_type').gte('event_date', new Date().toISOString().slice(0, 10)).order('event_date', { ascending: true }).limit(60),
@@ -535,6 +636,14 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
     onClose();
   };
 
+  const submitEventChat = async () => {
+    if (!selectedEvent || creatingEventChat) return;
+    setCreatingEventChat(true);
+    const created = await onCreateEventChat(selectedEvent.id, adminOnlyEventChat);
+    setCreatingEventChat(false);
+    if (created) onClose();
+  };
+
   return (
     <AnimatePresence>
       {open && (
@@ -564,7 +673,11 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
                     <button
                       key={option}
                       type="button"
-                      onClick={() => setMode(option)}
+                      onClick={() => {
+                        setMode(option);
+                        setSelectedEvent(null);
+                        setAdminOnlyEventChat(false);
+                      }}
                       aria-pressed={mode === option}
                       className={`h-10 rounded-xl text-[12px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 ${
                         mode === option
@@ -622,31 +735,91 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
             <div className="min-h-0 flex-1 overflow-y-auto p-2">
               {mode === 'event' ? (
                 <>
-                  {filteredEvents.length === 0 && (
-                    <p className="text-center text-[13px] text-gray-400 dark:text-white/30 py-6">No events found</p>
+                  {selectedEvent ? (
+                    <div className="space-y-3 p-2">
+                      <div className="rounded-2xl border border-gray-100 bg-gray-50 p-3 dark:border-white/[0.07] dark:bg-white/[0.035]">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300">
+                            <CalendarDays className="h-4 w-4" />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[13px] font-semibold text-gray-900 dark:text-white">{selectedEvent.title}</span>
+                            <span className="block truncate text-[11px] text-gray-400 dark:text-white/30">
+                              {new Date(selectedEvent.event_date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                              {selectedEvent.event_type ? ` · ${selectedEvent.event_type}` : ''}
+                            </span>
+                          </span>
+                        </div>
+                      </div>
+                      {canCreateAdminTestChat && (
+                        <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-gray-100 p-3.5 dark:border-white/[0.07]">
+                          <input
+                            type="checkbox"
+                            checked={adminOnlyEventChat}
+                            onChange={event => setAdminOnlyEventChat(event.target.checked)}
+                            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-emerald-500 focus:ring-emerald-500"
+                          />
+                          <span className="min-w-0">
+                            <span className="block text-[13px] font-semibold text-gray-900 dark:text-white">Admin-only test chat</span>
+                            <span className="mt-0.5 block text-[12px] leading-relaxed text-gray-500 dark:text-white/45">
+                              Use this event and its current setlist without adding scheduled members.
+                            </span>
+                          </span>
+                        </label>
+                      )}
+                      <p className="px-1 text-[12px] leading-relaxed text-gray-500 dark:text-white/40">
+                        {adminOnlyEventChat
+                          ? 'Only your administrator account will be added. You can add another admin later from Chat Info.'
+                          : 'All assigned team members will be added to the event chat.'}
+                      </p>
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          type="button"
+                          disabled={creatingEventChat}
+                          onClick={() => {
+                            setSelectedEvent(null);
+                            setAdminOnlyEventChat(false);
+                          }}
+                          className="h-11 flex-1 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-white/[0.08] dark:text-white/55 dark:hover:bg-white/[0.04]"
+                        >
+                          Back
+                        </button>
+                        <button
+                          type="button"
+                          disabled={creatingEventChat}
+                          onClick={submitEventChat}
+                          className="h-11 flex-1 rounded-xl bg-emerald-500 text-[13px] font-semibold text-white transition-colors hover:bg-emerald-600 disabled:opacity-50"
+                        >
+                          {creatingEventChat ? 'Creating…' : adminOnlyEventChat ? 'Create Test Chat' : 'Create Chat'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {filteredEvents.length === 0 && (
+                        <p className="text-center text-[13px] text-gray-400 dark:text-white/30 py-6">No events found</p>
+                      )}
+                      {filteredEvents.map(event => (
+                        <button
+                          key={event.id}
+                          onClick={() => setSelectedEvent(event)}
+                          className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-400/70 dark:hover:bg-white/[0.05]"
+                        >
+                          <span className="shrink-0 h-9 w-9 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 flex items-center justify-center">
+                            <CalendarDays className="h-4 w-4" />
+                          </span>
+                          <span className="flex-1 min-w-0 text-left">
+                            <span className="block text-[13px] font-semibold text-gray-900 dark:text-white truncate">{event.title}</span>
+                            <span className="block text-[11px] text-gray-400 dark:text-white/30 truncate">
+                              {new Date(event.event_date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                              {event.event_type ? ` · ${event.event_type}` : ''}
+                            </span>
+                          </span>
+                          <ChevronRight className="h-4 w-4 text-gray-300 dark:text-white/20" />
+                        </button>
+                      ))}
+                    </>
                   )}
-                  {filteredEvents.map(event => (
-                    <button
-                      key={event.id}
-                      onClick={() => {
-                        onCreateEventChat(event.id);
-                        onClose();
-                      }}
-                      className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-400/70 dark:hover:bg-white/[0.05]"
-                    >
-                      <span className="shrink-0 h-9 w-9 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 flex items-center justify-center">
-                        <CalendarDays className="h-4 w-4" />
-                      </span>
-                      <span className="flex-1 min-w-0 text-left">
-                        <span className="block text-[13px] font-semibold text-gray-900 dark:text-white truncate">{event.title}</span>
-                        <span className="block text-[11px] text-gray-400 dark:text-white/30 truncate">
-                          {new Date(event.event_date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
-                          {event.event_type ? ` · ${event.event_type}` : ''}
-                        </span>
-                      </span>
-                      <ChevronRight className="h-4 w-4 text-gray-300 dark:text-white/20" />
-                    </button>
-                  ))}
                 </>
               ) : (
                 <>
@@ -709,8 +882,9 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
 // ─── Input Bar ───────────────────────────────────────────────────────────────
 
 const QUICK_ACTION_OPTIONS = ['👍', '❤️', '🙏', '😂', '🔥', '👏'];
+type EventChatCommand = 'setlist' | 'song' | 'observe';
 
-function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply, onTyping, mentionProfiles }: {
+function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply, onTyping, mentionProfiles, eventDetails }: {
   conversationId: string;
   onSend: (text: string, imageUrl?: string) => void;
   replyTo: string | null;
@@ -726,8 +900,9 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
     mentionHandle?: string;
     mentionLabel?: string;
     mentionDescription?: string;
-    mentionType?: 'person' | 'everyone';
+    mentionType?: 'person' | 'everyone' | 'event';
   }>;
+  eventDetails: EventDiscussionDetails | null;
 }) {
   const { user } = useAuth();
   const [text, setText] = useState(() => readMessageDraft(user?.id ?? '', conversationId));
@@ -739,6 +914,8 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
   const [showEditableMentionDropdown, setShowEditableMentionDropdown] = useState(false);
   const [editableMentionStart, setEditableMentionStart] = useState<number | null>(null);
   const [editableMentionActiveIndex, setEditableMentionActiveIndex] = useState(0);
+  const [showSongPicker, setShowSongPicker] = useState(false);
+  const [selectedSong, setSelectedSong] = useState<EventDiscussionDetails['songs'][number] | null>(null);
   const [editableDropdownRect, setEditableDropdownRect] = useState<{ bottom: number; left: number; width: number; maxHeight: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const attachRef = useRef<HTMLInputElement>(null);
@@ -770,6 +947,40 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
       return search.includes(editableMentionQuery.toLowerCase());
     }).slice(0, 6);
   }, [editableMentionQuery, mentionProfiles]);
+
+  const commandQuery = getChatCommandQuery(text);
+  const isPastEvent = eventDetails
+    ? new Date(`${eventDetails.event_date}T${eventDetails.end_time || '23:59:59'}`).getTime() <= Date.now()
+    : false;
+  const commandOptions = useMemo(() => {
+    if (commandQuery === null || !eventDetails) return [];
+    const options: Array<{
+      command: EventChatCommand;
+      title: string;
+      description: string;
+      disabled: boolean;
+    }> = [
+      {
+        command: 'setlist',
+        title: 'Share setlist',
+        description: eventDetails.songs.length > 0 ? `${eventDetails.songs.length} songs from this event` : 'No songs have been added yet',
+        disabled: eventDetails.songs.length === 0,
+      },
+      {
+        command: 'song',
+        title: 'Reference a song',
+        description: eventDetails.songs.length > 0 ? 'Choose one song from the event setlist' : 'No songs have been added yet',
+        disabled: eventDetails.songs.length === 0,
+      },
+      {
+        command: 'observe',
+        title: 'Add an observation',
+        description: isPastEvent ? 'Open the post-event observation form' : 'Available after the event',
+        disabled: !isPastEvent,
+      },
+    ];
+    return options.filter(option => option.command.startsWith(commandQuery));
+  }, [commandQuery, eventDetails, isPastEvent]);
 
   const computeEditableDropdownPosition = useCallback(() => {
     const el = editableRef.current;
@@ -857,10 +1068,57 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
     setEditableMentionQuery('');
   }, [computeEditableDropdownPosition]);
 
+  const syncEditableComposer = useCallback((value: string) => {
+    setText(value);
+    const el = editableRef.current;
+    if (el) {
+      el.textContent = value;
+      el.focus({ preventScroll: true });
+      setEditableCaretOffset(value.length);
+    } else {
+      const textarea = textRef.current;
+      textarea?.focus({ preventScroll: true });
+      if (textarea) textarea.setSelectionRange(value.length, value.length);
+    }
+    requestAnimationFrame(resizeComposer);
+  }, [resizeComposer, setEditableCaretOffset]);
+
+  const selectCommand = useCallback((command: EventChatCommand) => {
+    setShowEditableMentionDropdown(false);
+    if (command === 'song') {
+      setText('');
+      if (editableRef.current) editableRef.current.textContent = '';
+      setShowSongPicker(true);
+      return;
+    }
+    setSelectedSong(null);
+    setShowSongPicker(false);
+    syncEditableComposer(`/${command} `);
+  }, [syncEditableComposer]);
+
+  const selectSong = useCallback((song: EventDiscussionDetails['songs'][number]) => {
+    setSelectedSong(song);
+    setShowSongPicker(false);
+    syncEditableComposer(`/song ${song.title}`);
+  }, [syncEditableComposer]);
+
   const handleSend = () => {
     if (!text.trim()) return;
+    let outgoing = text;
+    const normalized = text.trim();
+    if (eventDetails) {
+      if (normalized.toLowerCase() === '@event') {
+        outgoing = createChatEventReference('event', eventDetails);
+      } else if (normalized.toLowerCase() === '/setlist' && eventDetails.songs.length > 0) {
+        outgoing = createChatEventReference('setlist', eventDetails);
+      } else if (normalized.toLowerCase() === '/observe' && isPastEvent) {
+        outgoing = createChatEventReference('observation', eventDetails);
+      } else if (selectedSong && normalized.toLowerCase().startsWith('/song ')) {
+        outgoing = createChatEventReference('song', eventDetails, selectedSong);
+      }
+    }
     onTyping(false);
-    onSend(text);
+    onSend(outgoing);
     setText('');
     if (editableRef.current) {
       editableRef.current.textContent = '';
@@ -868,6 +1126,8 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
     setShowEditableMentionDropdown(false);
     setEditableMentionStart(null);
     setEditableMentionQuery('');
+    setShowSongPicker(false);
+    setSelectedSong(null);
     requestAnimationFrame(resizeComposer);
   };
 
@@ -903,6 +1163,8 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
 
   const handleEditableInput = (e: React.FormEvent<HTMLDivElement>) => {
     const value = e.currentTarget.innerText.replace(/\n$/, '');
+    if (selectedSong && value !== `/song ${selectedSong.title}`) setSelectedSong(null);
+    setShowSongPicker(false);
     setText(value);
     resizeComposer();
     updateEditableMentionState(value, getEditableCaretOffset());
@@ -1145,6 +1407,89 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
         }}
     >
       <AnimatePresence>
+        {eventDetails && commandQuery !== null && !showSongPicker && (
+          <motion.div
+            initial={{ opacity: 0, y: 6, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 6, scale: 0.98 }}
+            transition={{ duration: 0.14 }}
+            className="absolute inset-x-3 bottom-full z-50 mb-2 overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#1c1b1e]"
+          >
+            <div className="flex items-center justify-between border-b border-gray-100 px-3.5 py-2 dark:border-white/[0.06]">
+              <span className="text-[10px] font-black uppercase tracking-[0.16em] text-gray-400 dark:text-white/35">Event commands</span>
+              <span className="text-[10px] text-gray-400 dark:text-white/30">Type to filter</span>
+            </div>
+            {commandOptions.length > 0 ? commandOptions.map(option => (
+              <button
+                key={option.command}
+                type="button"
+                disabled={option.disabled}
+                onPointerDown={event => event.preventDefault()}
+                onClick={() => selectCommand(option.command)}
+                className="flex min-h-14 w-full items-center gap-3 border-b border-gray-100 px-3.5 py-2.5 text-left transition-colors last:border-b-0 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/[0.05] dark:hover:bg-white/[0.04]"
+              >
+                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+                  option.command === 'observe'
+                    ? 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-300'
+                    : option.command === 'song'
+                      ? 'bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-300'
+                      : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300'
+                }`}>
+                  {option.command === 'observe' ? <MessageCircle className="h-4 w-4" /> : <Music2 className="h-4 w-4" />}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2">
+                    <span className="font-mono text-[12px] font-bold text-emerald-600 dark:text-emerald-300">/{option.command}</span>
+                    <span className="truncate text-[13px] font-bold text-gray-900 dark:text-white">{option.title}</span>
+                  </span>
+                  <span className="mt-0.5 block truncate text-[11px] text-gray-400 dark:text-white/35">{option.description}</span>
+                </span>
+              </button>
+            )) : (
+              <p className="px-4 py-4 text-center text-[12px] text-gray-400 dark:text-white/35">No matching event command</p>
+            )}
+          </motion.div>
+        )}
+        {eventDetails && showSongPicker && (
+          <motion.div
+            initial={{ opacity: 0, y: 6, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 6, scale: 0.98 }}
+            transition={{ duration: 0.14 }}
+            className="absolute inset-x-3 bottom-full z-50 mb-2 max-h-[min(22rem,55dvh)] overflow-y-auto rounded-2xl border border-gray-200/80 bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#1c1b1e]"
+          >
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-3.5 py-2.5 dark:border-white/[0.06] dark:bg-[#1c1b1e]">
+              <span className="text-[12px] font-bold text-gray-900 dark:text-white">Choose a setlist song</span>
+              <button
+                type="button"
+                onClick={() => setShowSongPicker(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 dark:hover:bg-white/[0.06]"
+                aria-label="Close song picker"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            {eventDetails.songs.map((song, index) => (
+              <button
+                key={song.id}
+                type="button"
+                onPointerDown={event => event.preventDefault()}
+                onClick={() => selectSong(song)}
+                className="flex min-h-14 w-full items-center gap-3 border-b border-gray-100 px-3.5 py-2.5 text-left transition-colors last:border-b-0 hover:bg-gray-50 dark:border-white/[0.05] dark:hover:bg-white/[0.04]"
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-50 text-[11px] font-black text-violet-600 dark:bg-violet-500/10 dark:text-violet-300">{index + 1}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-bold text-gray-900 dark:text-white">{song.title}</span>
+                  <span className="mt-0.5 block truncate text-[11px] text-gray-400 dark:text-white/35">
+                    {[song.artist, song.performed_key || song.song_key ? `Key ${song.performed_key || song.song_key}` : null].filter(Boolean).join(' · ') || 'Setlist song'}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
         {replyTo && replyPreview && (
           <motion.div
             initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
@@ -1232,7 +1577,13 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
               textareaRef={textRef}
               value={text}
               profiles={mentionProfiles}
-              onChange={(value) => { setText(value); resizeComposer(); onTyping(value.trim().length > 0); }}
+              onChange={(value) => {
+                if (selectedSong && value !== `/song ${selectedSong.title}`) setSelectedSong(null);
+                setShowSongPicker(false);
+                setText(value);
+                resizeComposer();
+                onTyping(value.trim().length > 0);
+              }}
               onFocus={() => window.dispatchEvent(new Event('messages-composer-focus'))}
               onPointerDown={focusComposerWithoutPageScroll}
               placeholder="Message…"
@@ -1355,6 +1706,10 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
                 {profile.mentionType === 'everyone' ? (
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-[12px] font-black text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/10">
                     @
+                  </span>
+                ) : profile.mentionType === 'event' ? (
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-50 text-violet-600 ring-1 ring-violet-100 dark:bg-violet-500/10 dark:text-violet-300 dark:ring-violet-400/10">
+                    <CalendarDays className="h-4 w-4" />
                   </span>
                 ) : (
                   <Avatar src={profile.avatar_url} firstName={profile.first_name} lastName={profile.last_name} size="sm" />
@@ -2395,6 +2750,7 @@ type EventDiscussionDetails = {
   title: string;
   event_date: string;
   start_time: string | null;
+  end_time: string | null;
   event_type: string | null;
   songs: Array<{ id: string; title: string; artist: string | null; performed_key: string | null; song_key: string | null }>;
 };
@@ -2429,7 +2785,11 @@ function mapEventSongs(setlist: unknown, fallbackTitle: string): EventDiscussion
     }));
 }
 
-function EventDiscussionCard({ eventId, onOpen }: { eventId: string; onOpen: () => void }) {
+function EventDiscussionCard({ eventId, onOpen, onDetailsLoaded }: {
+  eventId: string;
+  onOpen: () => void;
+  onDetailsLoaded: (details: EventDiscussionDetails) => void;
+}) {
   const [details, setDetails] = useState<EventDiscussionDetails | null>(null);
 
   useEffect(() => {
@@ -2437,7 +2797,7 @@ function EventDiscussionCard({ eventId, onOpen }: { eventId: string; onOpen: () 
     const load = async () => {
       const { data: event } = await supabase
         .from('events')
-        .select('id, title, event_date, start_time, event_type')
+        .select('id, title, event_date, start_time, end_time, event_type')
         .eq('id', eventId)
         .maybeSingle();
       const { data: setlist } = await supabase
@@ -2447,11 +2807,13 @@ function EventDiscussionCard({ eventId, onOpen }: { eventId: string; onOpen: () 
         .maybeSingle();
       if (cancelled || !event) return;
       const songs = mapEventSongs(setlist, 'Untitled song');
-      setDetails({ ...(event as EventDiscussionDetails), songs });
+      const nextDetails = { ...(event as EventDiscussionDetails), songs };
+      setDetails(nextDetails);
+      onDetailsLoaded(nextDetails);
     };
     load();
     return () => { cancelled = true; };
-  }, [eventId]);
+  }, [eventId, onDetailsLoaded]);
 
   if (!details) return null;
 
@@ -2530,7 +2892,7 @@ function EventDetailPanel({ eventId, onClose, onViewFullEvent }: {
   const chipTextSub = isPast ? 'text-gray-400 dark:text-white/20' : 'text-white/70';
 
   return (
-    <div className="flex flex-col h-full bg-gray-50 dark:bg-[#0d0d0f]">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50 dark:bg-[#0d0d0f]">
       {/* Header — padded below the status bar on iOS/Android */}
       <div
         className="relative z-20 flex items-center justify-between gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+25px)] sm:pt-[calc(env(safe-area-inset-top)+12px)] bg-white dark:bg-[#111013] border-b border-gray-200/60 dark:border-white/[0.06] shrink-0 lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96 lg:pt-4"
@@ -2557,7 +2919,10 @@ function EventDetailPanel({ eventId, onClose, onViewFullEvent }: {
           <div className="h-6 w-6 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin" />
         </div>
       ) : (
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+        <div
+          className="flex-1 min-h-0 touch-pan-y overflow-y-auto overscroll-contain"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
           <div className="max-w-2xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-6 space-y-4">
 
             {/* Hero card */}
@@ -2728,6 +3093,7 @@ function ChatWindow({
   const [tappedMsgId, setTappedMsgId] = useState<string | null>(null);
   const [showInfo, setShowInfo] = useState(false);
   const [showEventDetail, setShowEventDetail] = useState(false);
+  const [eventCommandDetails, setEventCommandDetails] = useState<EventDiscussionDetails | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [previewFile, setPreviewFile] = useState<{ url: string; name: string } | null>(null);
@@ -2768,6 +3134,17 @@ function ChatWindow({
         mentionDescription: `Mention all ${Math.max(conv.members.length - 1, 0)} other ${conv.members.length - 1 === 1 ? 'member' : 'members'} in this chat`,
         mentionType: 'everyone' as const,
       },
+      ...(conv.type === 'event' && conv.event_id && eventCommandDetails ? [{
+        id: '__event',
+        first_name: 'event',
+        last_name: '',
+        avatar_url: null,
+        gender: null,
+        mentionHandle: 'event',
+        mentionLabel: 'Current event',
+        mentionDescription: eventCommandDetails.title,
+        mentionType: 'event' as const,
+      }] : []),
       ...conv.members
       .filter(member => member.user_id !== myUserId && member.profile?.first_name && member.profile?.last_name)
       .map(member => ({
@@ -2778,7 +3155,7 @@ function ChatWindow({
         gender: null,
       })),
     ],
-    [conv.members, myUserId]
+    [conv.event_id, conv.members, conv.type, eventCommandDetails, myUserId]
   );
 
   const avatarName = getConversationAvatarName(conv, myUserId);
@@ -3117,14 +3494,7 @@ function ChatWindow({
               <span className="block text-[10px] font-bold uppercase tracking-[0.12em] text-amber-700 dark:text-amber-300">Pinned Message</span>
               <span className="mt-0.5 block truncate text-[12px] text-amber-900/80 dark:text-amber-100/80">
                 {(() => {
-                  const c = parseContent(latestPinnedMessage.content);
-                  return c.type === 'image'
-                    ? `${getSenderName(latestPinnedMessage.sender)}: Photo`
-                    : c.type === 'file'
-                      ? `${getSenderName(latestPinnedMessage.sender)}: ${c.name}`
-                      : c.type === 'delete_request'
-                        ? `${getSenderName(latestPinnedMessage.sender)}: Delete chat request`
-                        : `${getSenderName(latestPinnedMessage.sender)}: ${c.text}`;
+                  return `${getSenderName(latestPinnedMessage.sender)}: ${previewContent(latestPinnedMessage.content)}`;
                 })()}
               </span>
             </span>
@@ -3135,7 +3505,11 @@ function ChatWindow({
         )}
 
         {conv.type === 'event' && conv.event_id && (
-          <EventDiscussionCard eventId={conv.event_id} onOpen={() => setShowEventDetail(true)} />
+          <EventDiscussionCard
+            eventId={conv.event_id}
+            onOpen={() => setShowEventDetail(true)}
+            onDetailsLoaded={setEventCommandDetails}
+          />
         )}
 
         {/* Pinned messages panel */}
@@ -3148,11 +3522,10 @@ function ChatWindow({
               <div className="px-4 py-3 space-y-2 max-h-40 overflow-y-auto">
                 <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-amber-600 dark:text-amber-400 mb-1">Pinned Messages</p>
                 {pinnedMessages.map(m => {
-                  const c = parseContent(m.content);
                   return (
                     <p key={m.id} className="text-[12px] text-amber-800 dark:text-amber-300/80 leading-snug">
                       <span className="font-semibold">{getSenderName(m.sender)}: </span>
-                      {c.type === 'image' ? '📷 Photo' : c.type === 'file' ? `📎 ${c.name}` : c.type === 'delete_request' ? 'Delete chat request' : c.text}
+                      {previewContent(m.content)}
                     </p>
                   );
                 })}
@@ -3292,7 +3665,7 @@ function ChatWindow({
                       className={`relative leading-relaxed cursor-default select-none ${
                         msg.reactions.length > 0 ? 'mb-5' : ''
                       } ${
-                        content.type === 'image'
+                        content.type === 'image' || content.type === 'event_reference'
                           ? 'px-0 py-0 bg-transparent border-0 shadow-none rounded-none'
                           : isMe
                             ? 'px-3.5 py-2 rounded-2xl bg-emerald-500 text-white rounded-br-md'
@@ -3366,6 +3739,8 @@ function ChatWindow({
                             </a>
                           </div>
                         </div>
+                      ) : content.type === 'event_reference' ? (
+                        <ChatEventReferenceCard reference={content} />
                       ) : (
                         <p className="text-[14px] whitespace-pre-wrap break-words" style={{ overflowWrap: 'anywhere' }}>
                           {renderMessageText(content.text, isMe)}
@@ -3587,7 +3962,7 @@ function ChatWindow({
         <div ref={messagesEndRef} />
       </div>
 
-      {!showInfo && !detailsSheetOpen && (
+      {!showInfo && !showEventDetail && !detailsSheetOpen && (
         <>
           <InputBar
             conversationId={conv.id}
@@ -3597,6 +3972,7 @@ function ChatWindow({
             onCancelReply={() => setReplyTo(null)}
             onTyping={handleTyping}
             mentionProfiles={mentionProfiles}
+            eventDetails={eventCommandDetails}
           />
         </>
       )}
@@ -3710,7 +4086,7 @@ function ChatWindow({
               animate={{ x: 0, opacity: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, boxShadow: mobilePanelShadow }}
               exit={{ x: '100%', opacity: 0.96, borderTopLeftRadius: 30, borderBottomLeftRadius: 30, boxShadow: mobilePanelShadow }}
               transition={mobilePanelTransition}
-              className="absolute inset-0 pointer-events-auto overflow-hidden bg-white will-change-transform dark:bg-[#111013] lg:rounded-none lg:shadow-none"
+              className="absolute inset-0 flex h-full min-h-0 flex-col pointer-events-auto overflow-hidden bg-white will-change-transform dark:bg-[#111013] lg:rounded-none lg:shadow-none"
             >
               <EventDetailPanel
                 eventId={conv.event_id}
@@ -3921,7 +4297,7 @@ function useDisableChatEdgeBackSwipe(active: boolean) {
 export function Messages() {
   const { conversationId: paramConvId } = useParams<{ conversationId?: string }>();
   const navigate = useNavigate();
-  const { user, isLeader } = useAuth();
+  const { user, isLeader, isOrgAdmin, isAdmin, isPlatformOwner } = useAuth();
   const { toast } = useToast();
 
   const isDesktop = useIsDesktop();
@@ -4004,9 +4380,14 @@ export function Messages() {
     if (id) selectConversation(id);
   };
 
-  const handleNewEventChat = async (eventId: string) => {
-    const id = await createEventConversation(eventId);
-    if (id) selectConversation(id);
+  const handleNewEventChat = async (eventId: string, adminOnlyTest: boolean) => {
+    const id = await createEventConversation(eventId, adminOnlyTest);
+    if (!id) {
+      toast('error', adminOnlyTest ? 'Could not create the admin-only test chat.' : 'Could not create the event chat.');
+      return false;
+    }
+    selectConversation(id);
+    return true;
   };
 
   const finishConversationAction = async (action: () => Promise<boolean>, successMessage: string) => {
@@ -4224,6 +4605,7 @@ export function Messages() {
         onCreateGroup={handleNewGroup}
         onCreateEventChat={handleNewEventChat}
         currentUserId={myUserId}
+        canCreateAdminTestChat={isOrgAdmin || isAdmin || isPlatformOwner}
       />
       <Modal open={Boolean(conversationActions)} onClose={() => !conversationActionBusy && setConversationActions(null)} title="Chat Options" size="sm" mobileView="dialog">
         {conversationActions && (

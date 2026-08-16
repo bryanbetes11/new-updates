@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../lib/supabase';
 import { Avatar } from './Avatar';
+import { CalendarDays } from 'lucide-react';
 
 interface Profile {
   id: string;
@@ -12,7 +13,7 @@ interface Profile {
   mentionHandle?: string;
   mentionLabel?: string;
   mentionDescription?: string;
-  mentionType?: 'person' | 'everyone';
+  mentionType?: 'person' | 'everyone' | 'event';
 }
 
 interface MentionTextareaProps {
@@ -315,6 +316,10 @@ export function MentionTextarea({
                 {p.mentionType === 'everyone' ? (
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-[12px] font-black text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/10">
                     @
+                  </span>
+                ) : p.mentionType === 'event' ? (
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-50 text-violet-600 ring-1 ring-violet-100 dark:bg-violet-500/10 dark:text-violet-300 dark:ring-violet-400/10">
+                    <CalendarDays className="h-4 w-4" />
                   </span>
                 ) : (
                   <Avatar src={p.avatar_url} firstName={p.first_name} lastName={p.last_name} size="sm" />

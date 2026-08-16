@@ -421,6 +421,7 @@ export function EventDetail() {
   const [eventConversationId, setEventConversationId] = useState<string | null | undefined>(undefined);
   const [showCreateChatModal, setShowCreateChatModal] = useState(false);
   const [creatingChat, setCreatingChat] = useState(false);
+  const [adminOnlyChatTest, setAdminOnlyChatTest] = useState(false);
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [showPastEventDetails, setShowPastEventDetails] = useState(false);
   const [postEventObservations, setPostEventObservations] = useState<PostEventObservation[]>([]);
@@ -439,6 +440,7 @@ export function EventDetail() {
   const [observationFollowUpForm, setObservationFollowUpForm] = useState({ assigned_to: '', due_date: '' });
   const [submittingObservation, setSubmittingObservation] = useState(false);
   const [showObservationModal, setShowObservationModal] = useState(false);
+  const observationPromptHandledRef = useRef(false);
   const [updatingObservationId, setUpdatingObservationId] = useState<string | null>(null);
   const postEventObservationViewsRef = useRef<PostEventObservationView[]>([]);
   const pendingObservationViewsRef = useRef(new Set<string>());
@@ -695,7 +697,7 @@ export function EventDetail() {
         supabase.from('songs').select('*').order('title'),
         supabase.from('setlists').select('id, status, event_id, events(event_date), setlist_songs(song_id)').eq('status', 'approved'),
         supabase.from('events').select('*').eq('event_type', 'Sunday Service').gte('event_date', new Date().toISOString().split('T')[0]).order('event_date'),
-        supabase.from('conversations').select('id').eq('event_id', id).eq('type', 'event').maybeSingle(),
+        supabase.from('conversations').select('id').eq('event_id', id).eq('type', 'event').not('name', 'like', '[Admin Test] %').maybeSingle(),
         supabase
           .from('post_event_observations')
           .select('*, profiles!post_event_observations_author_id_fkey(first_name, last_name, avatar_url), assignee:profiles!post_event_observations_assigned_to_fkey(first_name, last_name, avatar_url)')
@@ -1842,12 +1844,24 @@ export function EventDetail() {
 
   const handleCreateChat = async () => {
     if (!id) return;
+    if (eventConversationId && !adminOnlyChatTest) {
+      setShowCreateChatModal(false);
+      navigate(`/messages/${eventConversationId}`);
+      return;
+    }
     setCreatingChat(true);
-    const { data, error } = await supabase.rpc('create_event_conversation', { p_event_id: id });
+    const rpcName = adminOnlyChatTest
+      ? 'create_admin_test_event_conversation'
+      : 'create_event_conversation';
+    const { data, error } = await supabase.rpc(rpcName, { p_event_id: id });
     setCreatingChat(false);
+    if (error || !data) {
+      toast('error', error?.message || 'Failed to create group chat');
+      return;
+    }
     setShowCreateChatModal(false);
-    if (error || !data) { toast('error', 'Failed to create group chat'); return; }
-    setEventConversationId(data as string);
+    setAdminOnlyChatTest(false);
+    if (!adminOnlyChatTest) setEventConversationId(data as string);
     navigate(`/messages/${data}`);
   };
 
@@ -2480,6 +2494,22 @@ const openLyricsModal = (ss: SetlistSong) => {
     }
   };
 
+  useEffect(() => {
+    if (!event || observationPromptHandledRef.current) return;
+    if (!isEventCompleted(event) && !hasEventScheduleEnded(event, lifecycleNow)) return;
+
+    const searchParams = new URLSearchParams(location.search);
+    if (searchParams.get('addObservation') !== '1') return;
+
+    observationPromptHandledRef.current = true;
+    setShowObservationModal(true);
+    searchParams.delete('addObservation');
+    navigate({
+      pathname: location.pathname,
+      search: searchParams.toString() ? `?${searchParams.toString()}` : '',
+    }, { replace: true });
+  }, [event, lifecycleNow, location.pathname, location.search, navigate]);
+
   if (loading) return <PageLoader />;
   if (!event) return (
     <div className="page-container page-bottom-pad flex min-h-[60vh] items-center justify-center bg-[#050505] px-5 text-center text-white">
@@ -2956,10 +2986,13 @@ const openLyricsModal = (ss: SetlistSong) => {
                       {eventConversationId !== undefined && (
                         eventConversationId ? (
                           <button
-                            onClick={() => navigate(`/messages/${eventConversationId}`)}
+                            onClick={() => {
+                              if (isOrgAdmin || isAdmin || isPlatformOwner) setShowCreateChatModal(true);
+                              else navigate(`/messages/${eventConversationId}`);
+                            }}
                             className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:scale-95"
-                            title="Open group chat"
-                            aria-label="Open group chat"
+                            title={(isOrgAdmin || isAdmin || isPlatformOwner) ? 'Choose event chat' : 'Open group chat'}
+                            aria-label={(isOrgAdmin || isAdmin || isPlatformOwner) ? 'Choose event chat' : 'Open group chat'}
                           >
                             <MessageCircle className="h-4 w-4" />
                           </button>
@@ -5579,25 +5612,65 @@ const openLyricsModal = (ss: SetlistSong) => {
           </div>
         </Modal>
 
-        <Modal open={showCreateChatModal} onClose={() => setShowCreateChatModal(false)} title="Create Group Chat" size="sm">
+        <Modal
+          open={showCreateChatModal}
+          onClose={() => {
+            setShowCreateChatModal(false);
+            setAdminOnlyChatTest(false);
+          }}
+          title="Event Chat"
+          size="sm"
+        >
           <div className="space-y-4">
             <div className="flex items-start gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400">
                 <MessageCircle className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-[14px] font-semibold text-gray-900 dark:text-white">Create a group chat for this event?</p>
+                <p className="text-[14px] font-semibold text-gray-900 dark:text-white">
+                  {eventConversationId ? 'Choose which event chat to open' : 'Create a group chat for this event?'}
+                </p>
                 <p className="mt-1 text-[13px] leading-relaxed text-gray-500 dark:text-white/50">
-                  A group chat will be created for <strong className="text-gray-700 dark:text-white/70">{event.title}</strong> and all assigned team members will be added automatically.
+                  {adminOnlyChatTest ? (
+                    <>An event-linked test chat will be created for <strong className="text-gray-700 dark:text-white/70">{event.title}</strong>. Scheduled members will not be added.</>
+                  ) : (
+                    eventConversationId ? (
+                      <>The existing team chat for <strong className="text-gray-700 dark:text-white/70">{event.title}</strong> includes its assigned members.</>
+                    ) : (
+                      <>A group chat will be created for <strong className="text-gray-700 dark:text-white/70">{event.title}</strong> and all assigned team members will be added automatically.</>
+                    )
+                  )}
                 </p>
               </div>
             </div>
+            {(isOrgAdmin || isAdmin || isPlatformOwner) && (
+              <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-3.5 dark:border-white/[0.08] dark:bg-white/[0.035]">
+                <input
+                  type="checkbox"
+                  checked={adminOnlyChatTest}
+                  onChange={event => setAdminOnlyChatTest(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-emerald-500 focus:ring-emerald-500"
+                />
+                <span className="min-w-0">
+                  <span className="block text-[13px] font-semibold text-gray-900 dark:text-white">Admin-only test chat</span>
+                  <span className="mt-0.5 block text-[12px] leading-relaxed text-gray-500 dark:text-white/45">
+                    Test @event and slash commands without adding scheduled members. You can add another admin manually from Chat Info.
+                  </span>
+                </span>
+              </label>
+            )}
             <div className="flex gap-2 pt-1">
-              <button onClick={() => setShowCreateChatModal(false)} className="flex-1 h-10 rounded-xl border border-gray-200 dark:border-white/[0.08] text-[13px] font-semibold text-gray-600 dark:text-white/50 hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-colors">
+              <button
+                onClick={() => {
+                  setShowCreateChatModal(false);
+                  setAdminOnlyChatTest(false);
+                }}
+                className="flex-1 h-10 rounded-xl border border-gray-200 dark:border-white/[0.08] text-[13px] font-semibold text-gray-600 dark:text-white/50 hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-colors"
+              >
                 Cancel
               </button>
               <button onClick={handleCreateChat} disabled={creatingChat} className="flex-1 h-10 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-semibold disabled:opacity-45 transition-colors">
-                {creatingChat ? 'Creating…' : 'Create Chat'}
+                {creatingChat ? 'Creating…' : adminOnlyChatTest ? 'Create Test Chat' : eventConversationId ? 'Open Team Chat' : 'Create Team Chat'}
               </button>
             </div>
           </div>

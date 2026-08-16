@@ -23,11 +23,11 @@ const slides = [
     content: (
       <div className="space-y-3">
         <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
-          Attendance is tracked for every event you are assigned to. When an event happens, you are expected to submit your attendance on the same day.
+          Attendance is tracked for every event you are assigned to. At church, scan the printed church QR in ServeSync and explicitly tap Check In.
         </p>
         <div className="grid grid-cols-2 gap-2">
           {[
-            { label: 'Present', desc: 'You attended and checked in', color: 'bg-green-50 dark:bg-green-950/40 ring-green-200 dark:ring-green-800', text: 'text-green-700 dark:text-green-400', icon: CheckCircle2 },
+            { label: 'On-time', desc: 'You checked in within the grace period', color: 'bg-green-50 dark:bg-green-950/40 ring-green-200 dark:ring-green-800', text: 'text-green-700 dark:text-green-400', icon: CheckCircle2 },
             { label: 'Late', desc: 'You attended but checked in after the grace period', color: 'bg-amber-50 dark:bg-amber-950/40 ring-amber-200 dark:ring-amber-800', text: 'text-amber-700 dark:text-amber-400', icon: Clock },
             { label: 'Excused', desc: 'Your absence was officially excused by leadership', color: 'bg-sky-50 dark:bg-sky-950/40 ring-sky-200 dark:ring-sky-800', text: 'text-sky-700 dark:text-sky-400', icon: UserCheck },
             { label: 'Absent', desc: 'No attendance was submitted and no excuse was given', color: 'bg-red-50 dark:bg-red-950/40 ring-red-200 dark:ring-red-800', text: 'text-red-700 dark:text-red-400', icon: XCircle },
@@ -61,8 +61,8 @@ const slides = [
           {
             step: '1',
             time: 'Event Day',
-            title: 'Submit your attendance',
-            desc: 'Mark yourself present or late from the Events page. You have until midnight of the event day.',
+            title: 'Scan and check in at church',
+            desc: 'Open the ServeSync scanner, scan the printed church QR, choose your scheduled event, then tap Check In.',
             color: 'bg-brand-600',
             border: 'border-brand-200 dark:border-brand-800',
             bg: 'bg-brand-50/60 dark:bg-brand-950/30',
@@ -71,7 +71,7 @@ const slides = [
             step: '2',
             time: 'Day After (morning)',
             title: 'Reminder notification sent',
-            desc: 'If you have not submitted attendance yet, you will receive a push notification reminding you to do so.',
+            desc: 'If you have not checked in, ServeSync sends reminders. A scan alone does not record attendance—you must tap Check In.',
             color: 'bg-amber-500',
             border: 'border-amber-200 dark:border-amber-800',
             bg: 'bg-amber-50/60 dark:bg-amber-950/30',
@@ -108,12 +108,12 @@ const slides = [
     iconColor: 'text-amber-600 dark:text-amber-400',
     iconBg: 'bg-amber-50 dark:bg-amber-950/40',
     accentColor: 'amber',
-    title: 'Late vs. Present',
+    title: 'On-time vs. Late',
     subtitle: 'When does "on time" become "late"?',
     content: (
       <div className="space-y-3">
         <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
-          Attendance opens <span className="font-bold text-gray-900 dark:text-white">30 minutes before</span> each event. Checking in during this window marks you as <span className="font-bold text-green-600 dark:text-green-400">Present</span>.
+          Attendance opens <span className="font-bold text-gray-900 dark:text-white">30 minutes before</span> each event. Checking in before the five-minute grace period ends is shown as <span className="font-bold text-green-600 dark:text-green-400">On-time</span>.
         </p>
         <div className="rounded-xl overflow-hidden ring-1 ring-black/[0.06] dark:ring-white/[0.07]">
           <div className="bg-gray-50 dark:bg-white/[0.03] px-3 py-2 border-b border-black/[0.04] dark:border-white/[0.05]">
@@ -121,10 +121,10 @@ const slides = [
           </div>
           <div className="divide-y divide-black/[0.04] dark:divide-white/[0.04]">
             {[
-              { when: '30 min before event', status: 'Present', color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-950/30' },
-              { when: 'Event start time', status: 'Present', color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-950/30' },
+              { when: '30 min before event', status: 'On-time', color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-950/30' },
+              { when: 'Through the 5-min grace period', status: 'On-time', color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-950/30' },
               { when: 'After event starts', status: 'Late', color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/30' },
-              { when: 'Midnight — no submission', status: 'Auto-Absent', color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-950/30' },
+              { when: 'No valid check-in after the policy window', status: 'Auto-Absent', color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-950/30' },
             ].map(row => (
               <div key={row.when} className="flex items-center justify-between px-3 py-2.5">
                 <span className="text-xs text-gray-600 dark:text-gray-400">{row.when}</span>
@@ -228,15 +228,15 @@ const slides = [
           {[
             {
               icon: Calendar,
-              title: 'Events Page',
-              desc: 'Tap any event you are assigned to and use the "Mark Attendance" button to submit your attendance while the window is open.',
+              title: 'QR Scanner',
+              desc: 'Open the scanner from the top-right QR button, scan the printed church QR, select your scheduled event, and tap Check In.',
               color: 'text-brand-600 dark:text-brand-400',
               bg: 'bg-brand-50 dark:bg-brand-950/40',
             },
             {
               icon: Bell,
               title: 'Notifications',
-              desc: 'You will receive a reminder notification if you have not submitted attendance by the morning after the event.',
+              desc: 'You will receive reminders when attendance opens, when a scan is unfinished, and when attendance is still missing.',
               color: 'text-amber-600 dark:text-amber-400',
               bg: 'bg-amber-50 dark:bg-amber-950/40',
             },

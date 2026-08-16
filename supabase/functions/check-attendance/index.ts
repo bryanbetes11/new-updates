@@ -39,9 +39,18 @@ interface NotificationInsert {
   title: string;
   body: string;
   data: {
-    event_id: string;
+    event_id?: string;
+    session_id?: string;
+    dedupe_key?: string;
     url: string;
   };
+}
+
+interface PendingScanSession {
+  id: string;
+  user_id: string;
+  created_at: string;
+  expires_at: string;
 }
 
 interface AttendanceInsert {
@@ -172,20 +181,20 @@ Deno.serve(async (req: Request) => {
             {
               trigger: isWithinMinute(now, openAt),
               type: "attendance_open",
-              title: "Attendance is Now Open",
-              body: `Attendance for ${eventDisplay} is now open. Mark your attendance when you are already at church.`,
+              title: "Church Attendance is Open",
+              body: `Attendance for ${eventDisplay} is open. When you arrive at church, open ServeSync and scan the printed church QR.`,
             },
             {
               trigger: isWithinMinute(now, fiveMinutesBefore),
               type: "attendance_five_min_reminder",
               title: "Attendance Reminder",
-              body: `${eventDisplay} starts at ${eventTimeFormatted}. You still need to mark your attendance.`,
+              body: `${eventDisplay} starts at ${eventTimeFormatted}. If you are at church, scan the printed church QR and tap Check In.`,
             },
             {
               trigger: isWithinMinute(now, graceEndingSoon),
               type: "attendance_grace_final_reminder",
-              title: "Grace Period Ending Soon",
-              body: `${eventDisplay} already started. You have about 1 minute left before the 5-minute grace period closes.`,
+              title: "Present Grace Period Ending",
+              body: `${eventDisplay} already started. Scan the church QR and tap Check In now; check-ins after the 5-minute grace period are recorded as Late.`,
             },
           ];
 
@@ -208,11 +217,45 @@ Deno.serve(async (req: Request) => {
                 body: reminder.body,
                 data: {
                   event_id: event.id,
-                  url: `/events/${event.id}`,
+                  url: "/attendance/scan",
                 },
               });
             }
           }
+        }
+      }
+
+      const incompleteThreshold = new Date(now.getTime() - 2 * 60 * 1000).toISOString();
+      const { data: pendingScanSessions, error: pendingScanError } = await supabase
+        .from("attendance_qr_scan_sessions")
+        .select("id, user_id, created_at, expires_at")
+        .is("consumed_at", null)
+        .lte("created_at", incompleteThreshold)
+        .gt("expires_at", now.toISOString());
+
+      if (pendingScanError) throw pendingScanError;
+
+      for (const session of (pendingScanSessions || []) as PendingScanSession[]) {
+        const dedupeKey = `attendance-scan-incomplete:${session.id}`;
+        const { data: existing } = await supabase
+          .from("notifications")
+          .select("id")
+          .eq("user_id", session.user_id)
+          .eq("dedupe_key", dedupeKey)
+          .maybeSingle();
+
+        if (!existing) {
+          notifications.push({
+            user_id: session.user_id,
+            type: "attendance_scan_incomplete",
+            title: "Finish Your Attendance Check-In",
+            body: "You scanned the church QR but have not tapped Check In. Return to ServeSync before this scan expires.",
+            data: {
+              session_id: session.id,
+              dedupe_key: dedupeKey,
+              url: "/attendance/scan",
+            },
+          });
         }
       }
 
@@ -232,6 +275,7 @@ Deno.serve(async (req: Request) => {
         action: "timed_reminders",
         targetDate: phToday,
         eventsChecked: events?.length || 0,
+        incompleteScansChecked: pendingScanSessions?.length || 0,
         notificationsSent,
       };
     } else if (["remind", "missed_evening", "missed_final"].includes(action)) {
@@ -292,13 +336,13 @@ Deno.serve(async (req: Request) => {
               type: reminderType,
               title: reminderTitle,
               body: action === "missed_evening"
-                ? `Your attendance for ${eventDisplay} has not been submitted. Please update it in ServeSync.`
+                ? `No QR check-in is recorded for ${eventDisplay}. If you are still at church, scan the printed QR and tap Check In. Otherwise, contact a leader.`
                 : action === "missed_final"
-                ? `Final reminder: your attendance for ${eventDisplay} on ${eventDateFormatted} is still missing. It will be recorded as absent if it is not submitted today.`
-                : `You haven't submitted your attendance for ${eventDisplay} on ${eventDateFormatted}. Submit today — submitting after the event date will be recorded as Late.`,
+                ? `Final reminder: no QR check-in was recorded for ${eventDisplay} on ${eventDateFormatted}. It will be recorded as Absent under the attendance policy. Contact a leader today if you attended.`
+                : `No QR check-in was recorded for ${eventDisplay} on ${eventDateFormatted}. Contact a leader if you attended and need the record reviewed.`,
               data: {
                 event_id: event.id,
-                url: `/events/${event.id}`,
+                url: action === "missed_evening" ? "/attendance/scan" : `/events/${event.id}`,
               },
             });
           }

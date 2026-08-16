@@ -318,8 +318,11 @@ export function AttendanceQrScanner() {
 
               <div className={`mt-8 w-full rounded-3xl border px-5 py-6 ${result.status === 'late' ? 'border-amber-400/25 bg-amber-500/10' : 'border-emerald-400/25 bg-emerald-500/10'}`}>
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/45">Attendance status</p>
-                <p className={`mt-2 text-4xl font-black ${result.status === 'late' ? 'text-amber-400' : 'text-emerald-400'}`}>{result.status === 'late' ? 'Late' : 'Present'}</p>
-                <p className="mt-2 text-sm font-semibold text-white/55">Recorded at {format(new Date(result.checked_in_at), 'h:mm a')}</p>
+                <p className={`mt-2 text-4xl font-black ${result.status === 'late' ? 'text-amber-400' : 'text-emerald-400'}`}>{result.status === 'late' ? 'Late' : 'On-time'}</p>
+                <div className="mt-3 border-t border-white/10 pt-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/35">Check-in timestamp</p>
+                  <p className="mt-1 text-sm font-semibold text-white/65">{format(new Date(result.checked_in_at), 'MMM d, yyyy · h:mm a')}</p>
+                </div>
               </div>
 
               <div className={`mt-5 w-full rounded-2xl px-4 py-3 text-xs font-semibold leading-relaxed ${result.pilot_only ? 'bg-amber-500/10 text-amber-400' : 'bg-emerald-500/10 text-emerald-300'}`}>
@@ -347,12 +350,12 @@ export function AttendanceQrScanner() {
                       <div className="relative aspect-square overflow-hidden rounded-2xl bg-black shadow-[0_14px_35px_-24px_rgba(0,0,0,0.9)]">
                         <EventArtwork eventType={event.event_type} title={event.title} songs={event.artwork_songs} className="h-full w-full" />
                         <span className="absolute left-2 top-2 rounded-md bg-white px-2 py-1 text-[9px] font-black uppercase tracking-tight text-black shadow-sm">{format(new Date(event.starts_at), 'MMM d')}</span>
-                        <span className="absolute bottom-2 left-2 rounded-full bg-emerald-500 px-2.5 py-1 text-[10px] font-black text-black shadow-lg">{event.existing_status ? event.existing_status : 'Open now'}</span>
+                        <span className="absolute bottom-2 left-2 rounded-full bg-emerald-500 px-2.5 py-1 text-[10px] font-black text-black shadow-lg">{event.existing_status ? (event.existing_status === 'present' ? 'On-time' : event.existing_status) : 'Open now'}</span>
                       </div>
                       <h3 className="mt-2 line-clamp-2 text-[13px] font-extrabold leading-[1.25] text-gray-950 dark:text-white">{event.title}</h3>
                       <p className="mt-1 truncate text-[11px] font-medium text-gray-500">{format(new Date(event.starts_at), 'EEE · h:mm a')}–{format(new Date(event.ends_at), 'h:mm a')}</p>
                       {event.existing_status ? (
-                        <div className="mt-2 flex min-h-11 items-center justify-center rounded-xl bg-emerald-500/10 px-2 text-center text-xs font-bold capitalize text-emerald-500">Recorded: {event.existing_status}</div>
+                        <div className="mt-2 flex min-h-11 items-center justify-center rounded-xl bg-emerald-500/10 px-2 text-center text-xs font-bold capitalize text-emerald-500">Recorded: {event.existing_status === 'present' ? 'On-time' : event.existing_status}</div>
                       ) : (
                         <button type="button" onClick={() => void recordCheckin(event.id)} disabled={Boolean(checkingIn)} className="btn-primary mt-2 min-h-11 w-full !px-2 text-xs">
                           {checkingIn === event.id ? <><Loader2 className="h-4 w-4 animate-spin" /> Recording…</> : <><CheckCircle2 className="h-4 w-4" /> Check In</>}
@@ -381,7 +384,7 @@ export function AttendanceQrScanner() {
                       <h3 className="mt-2 line-clamp-2 text-[13px] font-extrabold leading-[1.25] text-gray-950 dark:text-white">{event.title}</h3>
                       <p className="mt-1 truncate text-[11px] font-medium text-gray-500">{format(new Date(event.starts_at), 'EEE · h:mm a')}</p>
                       {event.opens_at && <p className="mt-1 text-[10px] font-semibold leading-snug text-gray-600 dark:text-gray-300">Opens {format(new Date(event.opens_at), 'EEE, MMM d · h:mm a')}</p>}
-                      {event.existing_status && <div className="mt-2 rounded-lg bg-emerald-500/10 px-2 py-2 text-center text-xs font-bold capitalize text-emerald-500">Recorded: {event.existing_status}</div>}
+                      {event.existing_status && <div className="mt-2 rounded-lg bg-emerald-500/10 px-2 py-2 text-center text-xs font-bold capitalize text-emerald-500">Recorded: {event.existing_status === 'present' ? 'On-time' : event.existing_status}</div>}
                     </article>
                   ))}
                 </div>

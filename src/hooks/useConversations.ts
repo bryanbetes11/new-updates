@@ -144,12 +144,19 @@ export function useConversations() {
     return data as string;
   }, [user, fetchConversations]);
 
-  const createEventConversation = useCallback(async (eventId: string): Promise<string | null> => {
+  const createEventConversation = useCallback(async (eventId: string, adminOnlyTest = false): Promise<string | null> => {
     if (!user) return null;
-    const existing = conversations.find(c => c.type === 'event' && c.event_id === eventId);
+    const existing = conversations.find(c =>
+      c.type === 'event' &&
+      c.event_id === eventId &&
+      (adminOnlyTest ? c.name?.startsWith('[Admin Test] ') : !c.name?.startsWith('[Admin Test] '))
+    );
     if (existing) return existing.id;
 
-    const { data, error } = await supabase.rpc('create_event_conversation', {
+    const rpcName = adminOnlyTest
+      ? 'create_admin_test_event_conversation'
+      : 'create_event_conversation';
+    const { data, error } = await supabase.rpc(rpcName, {
       p_event_id: eventId,
     });
     if (error || !data) return null;

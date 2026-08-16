@@ -45,28 +45,36 @@ const copy: Record<string, NotificationCopy> = {
     body: 'You are assigned to [event] today at [start time].',
   },
   attendance_open: {
-    title: 'Attendance is Now Open',
-    body: 'Attendance for [event] is now open. Mark your attendance when you are already at church.',
+    title: 'Church Attendance is Open',
+    body: 'Attendance for [event] is open. When you arrive at church, open ServeSync and scan the printed church QR.',
   },
   attendance_reminder: {
     title: 'Attendance Reminder',
-    body: 'You still need to mark your attendance for [event].',
+    body: 'No QR check-in was recorded for [event]. Contact a leader if you attended and need the record reviewed.',
   },
   attendance_five_min_reminder: {
     title: 'Attendance Reminder',
-    body: '[Event] starts at [start time]. You still need to mark your attendance.',
+    body: '[Event] starts at [start time]. If you are at church, scan the printed church QR and tap Check In.',
   },
   attendance_grace_final_reminder: {
-    title: 'Grace Period Ending Soon',
-    body: '[Event] already started. You have about 1 minute left before the grace period closes.',
+    title: 'Present Grace Period Ending',
+    body: '[Event] already started. Scan the church QR and tap Check In now; later check-ins are recorded as Late.',
+  },
+  attendance_scan_incomplete: {
+    title: 'Finish Your Attendance Check-In',
+    body: 'You scanned the church QR but have not tapped Check In. Return to ServeSync before this scan expires.',
+  },
+  attendance_qr_recorded: {
+    title: 'Attendance Recorded',
+    body: 'Your attendance for [event] was recorded as [On-time or Late].',
   },
   attendance_missed_evening_reminder: {
     title: 'Attendance Still Missing',
-    body: 'Your attendance for [event] has not been submitted. Please update it in ServeSync.',
+    body: 'No QR check-in is recorded for [event]. If you are still at church, scan the printed QR and tap Check In.',
   },
   attendance_missed_final_reminder: {
     title: 'Attendance Not Submitted',
-    body: 'Final reminder: your attendance for [event] is still missing.',
+    body: 'Final reminder: no QR check-in was recorded for [event]. Contact a leader today if you attended.',
   },
   attendance_alert: {
     title: 'Attendance Alert',

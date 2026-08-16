@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { format } from 'date-fns';
-import { CalendarClock, Camera, CheckCircle2, Loader2, QrCode, RotateCcw, ShieldCheck } from 'lucide-react';
+import { Camera, CheckCircle2, Loader2, QrCode, RotateCcw, ShieldCheck } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import QrScanner from 'qr-scanner';
+import { EventArtwork } from '../components/EventArtwork';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { parseAttendanceQrPayload } from '../lib/attendanceQrPilot';
@@ -18,6 +19,28 @@ interface EligibleAttendanceEvent {
   checked_in_at: string | null;
   opens_at?: string;
   attendance_open?: boolean;
+  event_type?: string | null;
+  artwork_songs?: AttendanceArtworkSong[];
+}
+
+interface AttendanceArtworkSong {
+  position?: number | null;
+  youtube_url?: string | null;
+  songs?: {
+    title?: string | null;
+    artist?: string | null;
+    youtube_url?: string | null;
+  } | null;
+}
+
+interface AttendanceEventArtworkRow {
+  id: string;
+  event_type: string | null;
+  setlists?: Array<{
+    status?: string | null;
+    created_at?: string | null;
+    setlist_songs?: AttendanceArtworkSong[] | null;
+  }> | null;
 }
 
 interface CheckinResult {
@@ -37,6 +60,18 @@ function formatTimeRemaining(opensAt: string, now: number): string {
   if (hours < 24) return `${hours} hr${hours === 1 ? '' : 's'}`;
   const days = Math.ceil(hours / 24);
   return `${days} day${days === 1 ? '' : 's'}`;
+}
+
+function getPreferredArtworkSongs(event: AttendanceEventArtworkRow): AttendanceArtworkSong[] {
+  const setlists = [...(event.setlists || [])].sort((left, right) => {
+    const priority = (status?: string | null) => status === 'approved' ? 0 : status === 'pending_review' ? 1 : 2;
+    const priorityDifference = priority(left.status) - priority(right.status);
+    if (priorityDifference !== 0) return priorityDifference;
+    return new Date(right.created_at || 0).getTime() - new Date(left.created_at || 0).getTime();
+  });
+  return [...(setlists[0]?.setlist_songs || [])]
+    .sort((left, right) => (left.position ?? 999) - (right.position ?? 999))
+    .slice(0, 4);
 }
 
 export function AttendanceQrScanner() {
@@ -95,11 +130,29 @@ export function AttendanceQrScanner() {
       return;
     }
 
+    const scannedEvents = data?.events || [];
+    let enrichedEvents = scannedEvents;
+    if (scannedEvents.length > 0) {
+      const { data: artworkRows } = await supabase
+        .from('events')
+        .select('id, event_type, setlists(status, created_at, setlist_songs(position, youtube_url, songs(title, artist, youtube_url)))')
+        .in('id', scannedEvents.map((event) => event.id));
+      const artworkByEventId = new Map(
+        ((artworkRows || []) as AttendanceEventArtworkRow[]).map((event) => [event.id, event]),
+      );
+      enrichedEvents = scannedEvents.map((event) => {
+        const artwork = artworkByEventId.get(event.id);
+        return artwork
+          ? { ...event, event_type: artwork.event_type, artwork_songs: getPreferredArtworkSongs(artwork) }
+          : event;
+      });
+    }
+
     stopScanner();
     setScanToken(token);
     setSessionToken(data?.session_token || '');
     setScanMode(mode);
-    setEvents(data?.events || []);
+    setEvents(enrichedEvents);
   }, [canUsePilot, stopScanner, toast]);
 
   const startScanner = useCallback(async () => {
@@ -204,49 +257,52 @@ export function AttendanceQrScanner() {
               Scanning does not record attendance. Your check-in is submitted only when you tap the Check In button.
             </div>
             {openEvents.length > 0 && (
-              <div className="mt-5 space-y-3">
+              <div className="mt-5">
                 <p className="text-xs font-black uppercase tracking-[0.14em] text-emerald-500">Ready to check in</p>
-                {openEvents.map((event) => (
-                  <div key={event.id} className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.04] p-3">
-                    <p className="font-semibold">{event.title}</p>
-                    <p className="mt-0.5 text-xs text-gray-500">{format(new Date(event.starts_at), 'MMM d, h:mm a')} – {format(new Date(event.ends_at), 'h:mm a')}</p>
-                    {event.existing_status ? (
-                      <div className="mt-3 flex min-h-11 items-center justify-center rounded-xl bg-emerald-500/10 px-4 text-sm font-bold capitalize text-emerald-500">Already recorded: {event.existing_status}</div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => void recordCheckin(event.id)}
-                        disabled={Boolean(checkingIn)}
-                        className="btn-primary mt-3 min-h-11 w-full"
-                      >
-                        {checkingIn === event.id ? <><Loader2 className="h-4 w-4 animate-spin" /> Recording check-in…</> : <><CheckCircle2 className="h-4 w-4" /> Check In</>}
-                      </button>
-                    )}
-                  </div>
-                ))}
+                <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-5">
+                  {openEvents.map((event) => (
+                    <article key={event.id} className="min-w-0">
+                      <div className="relative aspect-square overflow-hidden rounded-2xl bg-black shadow-[0_14px_35px_-24px_rgba(0,0,0,0.9)]">
+                        <EventArtwork eventType={event.event_type} title={event.title} songs={event.artwork_songs} className="h-full w-full" />
+                        <span className="absolute left-2 top-2 rounded-md bg-white px-2 py-1 text-[9px] font-black uppercase tracking-tight text-black shadow-sm">{format(new Date(event.starts_at), 'MMM d')}</span>
+                        <span className="absolute bottom-2 left-2 rounded-full bg-emerald-500 px-2.5 py-1 text-[10px] font-black text-black shadow-lg">{event.existing_status ? event.existing_status : 'Open now'}</span>
+                      </div>
+                      <h3 className="mt-2 line-clamp-2 text-[13px] font-extrabold leading-[1.25] text-gray-950 dark:text-white">{event.title}</h3>
+                      <p className="mt-1 truncate text-[11px] font-medium text-gray-500">{format(new Date(event.starts_at), 'EEE · h:mm a')}–{format(new Date(event.ends_at), 'h:mm a')}</p>
+                      {event.existing_status ? (
+                        <div className="mt-2 flex min-h-11 items-center justify-center rounded-xl bg-emerald-500/10 px-2 text-center text-xs font-bold capitalize text-emerald-500">Recorded: {event.existing_status}</div>
+                      ) : (
+                        <button type="button" onClick={() => void recordCheckin(event.id)} disabled={Boolean(checkingIn)} className="btn-primary mt-2 min-h-11 w-full !px-2 text-xs">
+                          {checkingIn === event.id ? <><Loader2 className="h-4 w-4 animate-spin" /> Recording…</> : <><CheckCircle2 className="h-4 w-4" /> Check In</>}
+                        </button>
+                      )}
+                    </article>
+                  ))}
+                </div>
               </div>
             )}
 
             {upcomingEvents.length > 0 && (
-              <div className="mt-5 space-y-3">
+              <div className="mt-5">
                 <div>
                   <p className="text-xs font-black uppercase tracking-[0.14em] text-gray-500">Upcoming assignments</p>
                   {openEvents.length === 0 && <p className="mt-1 text-xs leading-relaxed text-gray-500">Attendance is not open yet. Scan the church QR again when your event window opens.</p>}
                 </div>
-                {upcomingEvents.map((event) => (
-                  <div key={event.id} className="rounded-xl border border-gray-200 p-3 dark:border-gray-800">
-                    <div className="flex items-start gap-3">
-                      <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-500 dark:bg-gray-900"><CalendarClock className="h-4 w-4" /></span>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-semibold">{event.title}</p>
-                        <p className="mt-0.5 text-xs text-gray-500">Event: {format(new Date(event.starts_at), 'EEE, MMM d · h:mm a')}</p>
-                        {event.opens_at && <p className="mt-1 text-xs font-semibold text-gray-600 dark:text-gray-300">Attendance opens {format(new Date(event.opens_at), 'EEE, MMM d · h:mm a')}</p>}
+                <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-5">
+                  {upcomingEvents.map((event) => (
+                    <article key={event.id} className="min-w-0">
+                      <div className="relative aspect-square overflow-hidden rounded-2xl bg-black shadow-[0_14px_35px_-24px_rgba(0,0,0,0.9)]">
+                        <EventArtwork eventType={event.event_type} title={event.title} songs={event.artwork_songs} className="h-full w-full opacity-90" />
+                        <span className="absolute left-2 top-2 rounded-md bg-white px-2 py-1 text-[9px] font-black uppercase tracking-tight text-black shadow-sm">{format(new Date(event.starts_at), 'MMM d')}</span>
+                        {event.opens_at && <span className="absolute bottom-2 left-2 max-w-[calc(100%-1rem)] truncate rounded-full bg-black/75 px-2.5 py-1 text-[10px] font-black text-amber-300 shadow-lg backdrop-blur">Opens in {formatTimeRemaining(event.opens_at, now)}</span>}
                       </div>
-                      {event.opens_at && <span className="shrink-0 rounded-full bg-amber-500/10 px-2.5 py-1 text-[11px] font-bold text-amber-500">In {formatTimeRemaining(event.opens_at, now)}</span>}
-                    </div>
-                    {event.existing_status && <div className="mt-3 rounded-lg bg-emerald-500/10 px-3 py-2 text-center text-xs font-bold capitalize text-emerald-500">Already recorded: {event.existing_status}</div>}
-                  </div>
-                ))}
+                      <h3 className="mt-2 line-clamp-2 text-[13px] font-extrabold leading-[1.25] text-gray-950 dark:text-white">{event.title}</h3>
+                      <p className="mt-1 truncate text-[11px] font-medium text-gray-500">{format(new Date(event.starts_at), 'EEE · h:mm a')}</p>
+                      {event.opens_at && <p className="mt-1 text-[10px] font-semibold leading-snug text-gray-600 dark:text-gray-300">Opens {format(new Date(event.opens_at), 'EEE, MMM d · h:mm a')}</p>}
+                      {event.existing_status && <div className="mt-2 rounded-lg bg-emerald-500/10 px-2 py-2 text-center text-xs font-bold capitalize text-emerald-500">Recorded: {event.existing_status}</div>}
+                    </article>
+                  ))}
+                </div>
               </div>
             )}
 

@@ -22,6 +22,9 @@ import { MentionTextarea } from '../components/MentionTextarea';
 import {
   createChatEventReference,
   getChatCommandQuery,
+  getInlineSongShortcut,
+  getInlineSongSegments,
+  getSongYoutubeTarget,
   parseChatEventReference,
   type ChatEventReference,
 } from '../lib/chatEventReferences';
@@ -168,33 +171,57 @@ function renderMessageText(text: string, isMe: boolean) {
   });
 }
 
-function InlineSongReference({ reference, onOpenSetlist }: { reference: ChatEventReference; onOpenSetlist: (songId?: string) => void }) {
+function InlineSongReference({ reference, eventSongs, isMe }: {
+  reference: ChatEventReference;
+  eventSongs: EventDiscussionDetails['songs'];
+  isMe: boolean;
+}) {
   const song = reference.song;
   if (!song || !reference.messageText) return null;
-  const token = `♪ ${song.title}`;
-  const tokenIndex = reference.messageText.indexOf(token);
-  const before = tokenIndex >= 0 ? reference.messageText.slice(0, tokenIndex) : reference.messageText;
-  const after = tokenIndex >= 0 ? reference.messageText.slice(tokenIndex + token.length) : '';
+  const candidates = [
+    ...eventSongs.map(item => ({ id: item.id, title: item.title, artist: item.artist, key: item.performed_key || item.song_key, youtubeUrl: item.youtube_url })),
+    ...(reference.songMentions || []),
+    song,
+  ];
+  const segments = getInlineSongSegments(reference.messageText, candidates);
 
   return (
-    <p className="text-[14px] whitespace-pre-wrap break-words" style={{ overflowWrap: 'anywhere' }}>
-      {before}
-      <button
-        type="button"
-        onClick={event => { event.stopPropagation(); onOpenSetlist(song.id); }}
-        className="mx-0.5 inline-flex min-h-7 max-w-full items-center gap-1 rounded-lg border border-violet-300/70 bg-violet-100 px-2 py-0.5 align-middle font-bold text-violet-800 transition-colors hover:bg-violet-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-violet-400/25 dark:bg-violet-500/15 dark:text-violet-200 dark:hover:bg-violet-500/25"
-        aria-label={`Open ${song.title} in the event setlist`}
-      >
-        <Music2 className="h-3.5 w-3.5 shrink-0" />
-        <span className="truncate">{song.title}</span>
-        {song.key && <span className="rounded bg-black/5 px-1 text-[10px] opacity-70 dark:bg-white/10">{song.key}</span>}
-      </button>
-      {after}
+    <p
+      className="text-[14px] whitespace-pre-wrap break-words"
+      style={{ overflowWrap: 'anywhere', wordSpacing: '0.12em' }}
+    >
+      {segments.map((segment, index) => segment.type === 'text' ? (
+        <span key={`text-${index}`}>{segment.text}</span>
+      ) : (
+        <a
+          key={`${segment.song.id}-${index}`}
+          href={getSongYoutubeTarget(segment.song)}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={event => event.stopPropagation()}
+          style={{ wordSpacing: 'normal' }}
+          className={`mx-0.5 inline-flex min-h-7 max-w-full items-center gap-1 rounded-lg border px-2 py-0.5 align-middle font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 ${
+            isMe
+              ? 'border-white/20 bg-black/[0.14] text-white/95 hover:bg-black/[0.2] focus-visible:ring-white/70'
+              : 'border-violet-300/70 bg-violet-100 text-violet-800 hover:bg-violet-200 focus-visible:ring-violet-400 dark:border-violet-400/25 dark:bg-violet-500/15 dark:text-violet-200 dark:hover:bg-violet-500/25'
+          }`}
+          aria-label={`Open ${segment.song.title} on YouTube`}
+        >
+          <Music2 className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">{segment.song.title}</span>
+          {segment.song.key && <span className="rounded bg-black/5 px-1 text-[10px] opacity-70 dark:bg-white/10">{segment.song.key}</span>}
+        </a>
+      ))}
     </p>
   );
 }
 
-function ChatEventReferenceCard({ reference, onOpenSetlist }: { reference: ChatEventReference; onOpenSetlist: (songId?: string) => void }) {
+function ChatEventReferenceCard({ reference, eventSongs, isMe, onOpenSetlist }: {
+  reference: ChatEventReference;
+  eventSongs: EventDiscussionDetails['songs'];
+  isMe: boolean;
+  onOpenSetlist: (songId?: string) => void;
+}) {
   const navigate = useNavigate();
   const isSetlist = reference.reference === 'setlist';
   const isSong = reference.reference === 'song';
@@ -212,7 +239,7 @@ function ChatEventReferenceCard({ reference, onOpenSetlist }: { reference: ChatE
   const action = isObservation ? 'Add observation' : isSong ? 'Open setlist' : isSetlist ? 'View setlist' : 'View event';
 
   if (isSong && reference.messageText) {
-    return <InlineSongReference reference={reference} onOpenSetlist={onOpenSetlist} />;
+    return <InlineSongReference reference={reference} eventSongs={eventSongs} isMe={isMe} />;
   }
 
   return (
@@ -917,15 +944,6 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
 const QUICK_ACTION_OPTIONS = ['👍', '❤️', '🙏', '😂', '🔥', '👏'];
 type EventChatCommand = 'setlist' | 'song' | 'observe';
 
-function getInlineSongCommand(text: string) {
-  const match = text.match(/(^|\s)\/song(?:\s+([^\n]*))?$/i);
-  if (!match || match.index === undefined) return null;
-  return {
-    start: match.index + match[1].length,
-    query: (match[2] || '').trim().toLowerCase(),
-  };
-}
-
 function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply, onTyping, mentionProfiles, eventDetails }: {
   conversationId: string;
   onSend: (text: string, imageUrl?: string) => void;
@@ -957,7 +975,7 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
   const [editableMentionStart, setEditableMentionStart] = useState<number | null>(null);
   const [editableMentionActiveIndex, setEditableMentionActiveIndex] = useState(0);
   const [showSongPicker, setShowSongPicker] = useState(false);
-  const [selectedSong, setSelectedSong] = useState<EventDiscussionDetails['songs'][number] | null>(null);
+  const [selectedSongs, setSelectedSongs] = useState<EventDiscussionDetails['songs']>([]);
   const [songPickerMaxHeight, setSongPickerMaxHeight] = useState(352);
   const [editableDropdownRect, setEditableDropdownRect] = useState<{ bottom: number; left: number; width: number; maxHeight: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -992,7 +1010,7 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
   }, [editableMentionQuery, mentionProfiles]);
 
   const commandQuery = getChatCommandQuery(text);
-  const inlineSongCommand = getInlineSongCommand(text);
+  const inlineSongCommand = getInlineSongShortcut(text);
   const filteredEventSongs = useMemo(() => {
     if (!eventDetails) return [];
     if (!inlineSongCommand?.query) return eventDetails.songs;
@@ -1018,7 +1036,7 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
       {
         command: 'song',
         title: 'Reference a song',
-        description: eventDetails.songs.length > 0 ? 'Choose one song from the event setlist' : 'No songs have been added yet',
+        description: eventDetails.songs.length > 0 ? 'Choose a song, or type / followed by its title' : 'No songs have been added yet',
         disabled: eventDetails.songs.length === 0,
       },
       {
@@ -1139,18 +1157,18 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
       setShowSongPicker(true);
       return;
     }
-    setSelectedSong(null);
+    setSelectedSongs([]);
     setShowSongPicker(false);
     syncEditableComposer(`/${command} `);
   }, [syncEditableComposer]);
 
   const selectSong = useCallback((song: EventDiscussionDetails['songs'][number]) => {
-    const command = getInlineSongCommand(text);
+    const command = getInlineSongShortcut(text);
     const token = `♪ ${song.title}`;
     const nextText = command
       ? `${text.slice(0, command.start)}${token} `
       : `${text}${text && !text.endsWith(' ') ? ' ' : ''}${token} `;
-    setSelectedSong(song);
+    setSelectedSongs(current => current.some(item => item.id === song.id) ? current : [...current, song]);
     setShowSongPicker(false);
     syncEditableComposer(nextText);
   }, [syncEditableComposer, text]);
@@ -1166,8 +1184,11 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
         outgoing = createChatEventReference('setlist', eventDetails);
       } else if (normalized.toLowerCase() === '/observe' && isPastEvent) {
         outgoing = createChatEventReference('observation', eventDetails);
-      } else if (selectedSong && text.includes(`♪ ${selectedSong.title}`)) {
-        outgoing = createChatEventReference('song', eventDetails, selectedSong, text);
+      } else {
+        const referencedSongs = selectedSongs.filter(song => text.includes(`♪ ${song.title}`));
+        if (referencedSongs.length > 0) {
+          outgoing = createChatEventReference('song', eventDetails, referencedSongs[0], text, referencedSongs);
+        }
       }
     }
     onTyping(false);
@@ -1180,7 +1201,7 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
     setEditableMentionStart(null);
     setEditableMentionQuery('');
     setShowSongPicker(false);
-    setSelectedSong(null);
+    setSelectedSongs([]);
     requestAnimationFrame(resizeComposer);
   };
 
@@ -1216,8 +1237,8 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
 
   const handleEditableInput = (e: React.FormEvent<HTMLDivElement>) => {
     const value = e.currentTarget.innerText.replace(/\n$/, '');
-    if (selectedSong && !value.includes(`♪ ${selectedSong.title}`)) setSelectedSong(null);
-    setShowSongPicker(Boolean(getInlineSongCommand(value)));
+    setSelectedSongs(current => current.filter(song => value.includes(`♪ ${song.title}`)));
+    setShowSongPicker(Boolean(getInlineSongShortcut(value)));
     setText(value);
     resizeComposer();
     updateEditableMentionState(value, getEditableCaretOffset());
@@ -1656,8 +1677,8 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
               value={text}
               profiles={mentionProfiles}
               onChange={(value) => {
-                if (selectedSong && !value.includes(`♪ ${selectedSong.title}`)) setSelectedSong(null);
-                setShowSongPicker(Boolean(getInlineSongCommand(value)));
+                setSelectedSongs(current => current.filter(song => value.includes(`♪ ${song.title}`)));
+                setShowSongPicker(Boolean(getInlineSongShortcut(value)));
                 setText(value);
                 resizeComposer();
                 onTyping(value.trim().length > 0);
@@ -2830,18 +2851,20 @@ type EventDiscussionDetails = {
   start_time: string | null;
   end_time: string | null;
   event_type: string | null;
-  songs: Array<{ id: string; title: string; artist: string | null; performed_key: string | null; song_key: string | null }>;
+  songs: Array<{ id: string; title: string; artist: string | null; performed_key: string | null; song_key: string | null; youtube_url: string | null }>;
 };
 
 type EventSetlistSongRow = {
   id: string;
   position: number | null;
   performed_key: string | null;
+  youtube_url: string | null;
   songs: {
     id: string;
     title: string;
     artist: string | null;
     song_key: string | null;
+    youtube_url: string | null;
   } | null;
 };
 
@@ -2860,6 +2883,7 @@ function mapEventSongs(setlist: unknown, fallbackTitle: string): EventDiscussion
       artist: item.songs?.artist ?? null,
       performed_key: item.performed_key ?? null,
       song_key: item.songs?.song_key ?? null,
+      youtube_url: item.youtube_url || item.songs?.youtube_url || null,
     }));
 }
 
@@ -2880,7 +2904,7 @@ function EventDiscussionCard({ eventId, onOpen, onDetailsLoaded }: {
         .maybeSingle();
       const { data: setlist } = await supabase
         .from('setlists')
-        .select('id, setlist_songs(id, position, performed_key, songs(id, title, artist, song_key))')
+        .select('id, setlist_songs(id, position, performed_key, youtube_url, songs(id, title, artist, song_key, youtube_url))')
         .eq('event_id', eventId)
         .maybeSingle();
       if (cancelled || !event) return;
@@ -2937,7 +2961,7 @@ type EventPanelData = {
   end_time: string | null;
   event_type: string | null;
   description: string | null;
-  songs: Array<{ id: string; title: string; artist: string | null; performed_key: string | null; song_key: string | null }>;
+  songs: Array<{ id: string; title: string; artist: string | null; performed_key: string | null; song_key: string | null; youtube_url: string | null }>;
 };
 
 function EventDetailPanel({ eventId, onClose, onViewFullEvent, mode = 'event', focusedSongId }: {
@@ -2954,7 +2978,7 @@ function EventDetailPanel({ eventId, onClose, onViewFullEvent, mode = 'event', f
     const load = async () => {
       const [{ data: event }, { data: setlist }] = await Promise.all([
         supabase.from('events').select('id, title, event_date, start_time, end_time, event_type, description').eq('id', eventId).maybeSingle(),
-        supabase.from('setlists').select('id, setlist_songs(id, position, performed_key, songs(id, title, artist, song_key))').eq('event_id', eventId).maybeSingle(),
+        supabase.from('setlists').select('id, setlist_songs(id, position, performed_key, youtube_url, songs(id, title, artist, song_key, youtube_url))').eq('event_id', eventId).maybeSingle(),
       ]);
       if (cancelled || !event) return;
       const songs = mapEventSongs(setlist, 'Untitled');
@@ -3839,6 +3863,8 @@ function ChatWindow({
                       ) : content.type === 'event_reference' ? (
                         <ChatEventReferenceCard
                           reference={content}
+                          eventSongs={eventCommandDetails?.songs || []}
+                          isMe={isMe}
                           onOpenSetlist={(songId) => {
                             setEventPanelMode('setlist');
                             setFocusedSetlistSongId(songId || null);

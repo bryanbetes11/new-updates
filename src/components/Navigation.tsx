@@ -808,6 +808,16 @@ export function Navigation({
       : []),
     ...(isOrgAdmin || isPlatformOwner || capabilities.manage_notifications
       ? [
+          ...(isOrgAdmin || isPlatformOwner
+            ? [
+                {
+                  path: "/leadership/attendance-qr",
+                  label: "Attendance QR",
+                  icon: ScanLine,
+                  tone: "from-cyan-500/85 via-blue-900 to-black",
+                },
+              ]
+            : []),
           {
             path: "/leadership/notifications",
             label: "Notification Controls",
@@ -1113,6 +1123,14 @@ export function Navigation({
       path: "/leadership/accountability",
       show: isLeader || isOrgAdmin || capabilities.manage_accountability,
       color: "#f59e0b",
+    },
+    {
+      icon: ScanLine,
+      label: "Attendance QR",
+      desc: "Manage the church check-in QR",
+      path: "/leadership/attendance-qr",
+      show: isOrgAdmin || isPlatformOwner,
+      color: "#06b6d4",
     },
     {
       icon: BellRing,
@@ -1896,15 +1914,13 @@ export function Navigation({
 
           <div className="relative z-20 flex items-center gap-1">
             <NotificationBell />
-            {(isOrgAdmin || isPlatformOwner) && (
-              <button
-                onClick={() => handleNav("/attendance/scan")}
-                className="flex h-10 w-10 items-center justify-center rounded-full text-white transition-colors hover:bg-white/[0.08]"
-                aria-label="Scan attendance QR"
-              >
-                <ScanLine className="h-6 w-6" />
-              </button>
-            )}
+            <button
+              onClick={() => handleNav("/attendance/scan")}
+              className="flex h-10 w-10 items-center justify-center rounded-full text-white transition-colors hover:bg-white/[0.08]"
+              aria-label="Scan attendance QR"
+            >
+              <ScanLine className="h-6 w-6" />
+            </button>
           </div>
         </div>
       </div>

@@ -401,7 +401,11 @@ export default function App() {
                       />
                       <Route path="/leadership/team" element={<TeamManage />} />
                       <Route path="/leadership/accountability" element={<Accountability />} />
-                      <Route path="/leadership/attendance-qr-pilot" element={<AttendanceQrPilot />} />
+                      <Route path="/leadership/attendance-qr" element={<AttendanceQrPilot />} />
+                      <Route
+                        path="/leadership/attendance-qr-pilot"
+                        element={<Navigate to="/leadership/attendance-qr" replace />}
+                      />
                       <Route
                         path="/leadership/church"
                         element={<OrganizationSettings />}

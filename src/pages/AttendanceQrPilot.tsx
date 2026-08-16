@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { addHours, format } from 'date-fns';
-import { CalendarClock, Download, FlaskConical, Loader2, QrCode, RefreshCw } from 'lucide-react';
+import { CalendarClock, Download, FlaskConical, Loader2, QrCode, RefreshCw, ShieldCheck } from 'lucide-react';
 import QRCode from 'qrcode';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -21,6 +21,14 @@ interface PilotState {
   events: PilotEvent[];
 }
 
+interface LiveQrState {
+  checkpoint_token: string;
+  active: boolean;
+  session_minutes: number;
+  window_opens_minutes_before: number;
+  present_grace_minutes: number;
+}
+
 function localDateTimeValue(date: Date): string {
   return format(date, "yyyy-MM-dd'T'HH:mm");
 }
@@ -30,7 +38,9 @@ export function AttendanceQrPilot() {
   const { toast } = useToast();
   const canUsePilot = isOrgAdmin || isPlatformOwner;
   const [pilotState, setPilotState] = useState<PilotState | null>(null);
+  const [liveState, setLiveState] = useState<LiveQrState | null>(null);
   const [qrImage, setQrImage] = useState('');
+  const [liveQrImage, setLiveQrImage] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [title, setTitle] = useState('QR Attendance Test');
@@ -41,6 +51,10 @@ export function AttendanceQrPilot() {
     () => pilotState?.checkpoint_token ? buildAttendanceQrPayload(pilotState.checkpoint_token) : '',
     [pilotState?.checkpoint_token],
   );
+  const liveQrPayload = useMemo(
+    () => liveState?.checkpoint_token ? buildAttendanceQrPayload(liveState.checkpoint_token) : '',
+    [liveState?.checkpoint_token],
+  );
 
   const loadPilot = useCallback(async () => {
     if (!canUsePilot) {
@@ -48,13 +62,17 @@ export function AttendanceQrPilot() {
       return;
     }
     setLoading(true);
-    const { data, error } = await supabase.rpc('get_qr_attendance_pilot_admin_state');
-    if (error) {
-      toast('error', error.message || 'Could not load the QR attendance pilot');
+    const [pilotResult, liveResult] = await Promise.all([
+      supabase.rpc('get_qr_attendance_pilot_admin_state'),
+      supabase.rpc('get_qr_attendance_admin_state'),
+    ]);
+    if (pilotResult.error || liveResult.error) {
+      toast('error', pilotResult.error?.message || liveResult.error?.message || 'Could not load QR attendance');
       setLoading(false);
       return;
     }
-    setPilotState(data as PilotState);
+    setPilotState(pilotResult.data as PilotState);
+    setLiveState(liveResult.data as LiveQrState);
     setLoading(false);
   }, [canUsePilot, toast]);
 
@@ -69,6 +87,16 @@ export function AttendanceQrPilot() {
       errorCorrectionLevel: 'M',
     }).then(setQrImage);
   }, [qrPayload]);
+
+  useEffect(() => {
+    if (!liveQrPayload) return;
+    void QRCode.toDataURL(liveQrPayload, {
+      width: 720,
+      margin: 2,
+      color: { dark: '#050505', light: '#ffffff' },
+      errorCorrectionLevel: 'M',
+    }).then(setLiveQrImage);
+  }, [liveQrPayload]);
 
   const createTestEvent = async () => {
     if (!title.trim()) {
@@ -116,10 +144,10 @@ export function AttendanceQrPilot() {
       <div className="app-content-shell mx-auto max-w-5xl space-y-5">
         <div>
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-emerald-500">
-            <FlaskConical className="h-4 w-4" /> Admin-only pilot
+            <ShieldCheck className="h-4 w-4" /> Attendance control
           </div>
-          <h1 className="mt-2 text-2xl font-black sm:text-3xl">QR Attendance Test Lab</h1>
-          <p className="mt-1 max-w-2xl text-sm text-gray-500">Everything on this page is isolated from real attendance, quarterly totals, automatic absences, and offenses.</p>
+          <h1 className="mt-2 text-2xl font-black sm:text-3xl">QR Attendance</h1>
+          <p className="mt-1 max-w-2xl text-sm text-gray-500">Download the live church QR for members, or keep using the isolated test lab without changing real records.</p>
         </div>
 
         {loading ? (
@@ -158,18 +186,33 @@ export function AttendanceQrPilot() {
               </div>
             </section>
 
-            <section className="card p-5 text-center">
-              <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 text-emerald-500"><QrCode className="h-6 w-6" /></div>
-              <h2 className="mt-3 font-bold">Reusable church test QR</h2>
-              <p className="mt-1 text-xs text-gray-500">Open ServeSync on your phone, tap the scanner icon, then scan this code.</p>
-              {qrImage && <img src={qrImage} alt="Reusable ServeSync attendance test QR code" className="mx-auto mt-4 w-full max-w-[300px] rounded-2xl bg-white p-3" />}
-              {qrImage && (
-                <a href={qrImage} download="servesync-attendance-test-qr.png" className="btn-secondary mt-4 inline-flex min-h-11 w-full items-center justify-center">
-                  <Download className="h-4 w-4" /> Download QR
-                </a>
-              )}
-              <p className="mt-3 text-[11px] leading-relaxed text-amber-500">Pilot QR: admin accounts only. It cannot write to real attendance records.</p>
-            </section>
+            <div className="space-y-5">
+              <section className="card border-emerald-500/20 p-5 text-center">
+                <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-500"><ShieldCheck className="h-6 w-6" /></div>
+                <h2 className="mt-3 font-bold">Live reusable church QR</h2>
+                <p className="mt-1 text-xs text-gray-500">This writes to official attendance. Members see only events they are scheduled for.</p>
+                {liveQrImage && <img src={liveQrImage} alt="Live reusable ServeSync church attendance QR code" className="mx-auto mt-4 w-full max-w-[300px] rounded-2xl bg-white p-3" />}
+                {liveQrImage && (
+                  <a href={liveQrImage} download="servesync-live-church-attendance-qr.png" className="btn-primary mt-4 inline-flex min-h-11 w-full items-center justify-center">
+                    <Download className="h-4 w-4" /> Download live QR
+                  </a>
+                )}
+                <p className="mt-3 text-[11px] leading-relaxed text-emerald-500">Each scan opens a one-use {liveState?.session_minutes || 5}-minute session. Attendance still requires a separate Check In tap.</p>
+              </section>
+
+              <section className="card p-5 text-center">
+                <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 text-amber-500"><QrCode className="h-6 w-6" /></div>
+                <h2 className="mt-3 font-bold">Isolated test QR</h2>
+                <p className="mt-1 text-xs text-gray-500">Use this only with the test events on the left.</p>
+                {qrImage && <img src={qrImage} alt="Reusable ServeSync attendance test QR code" className="mx-auto mt-4 w-full max-w-[300px] rounded-2xl bg-white p-3" />}
+                {qrImage && (
+                  <a href={qrImage} download="servesync-attendance-test-qr.png" className="btn-secondary mt-4 inline-flex min-h-11 w-full items-center justify-center">
+                    <Download className="h-4 w-4" /> Download test QR
+                  </a>
+                )}
+                <p className="mt-3 text-[11px] leading-relaxed text-amber-500">Admin test only. It cannot change real attendance or accountability.</p>
+              </section>
+            </div>
           </div>
         )}
       </div>

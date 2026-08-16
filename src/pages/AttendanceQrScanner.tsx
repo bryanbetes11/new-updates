@@ -9,12 +9,12 @@ import { useToast } from '../contexts/ToastContext';
 import { parseAttendanceQrPayload } from '../lib/attendanceQrPilot';
 import { supabase } from '../lib/supabase';
 
-interface EligiblePilotEvent {
+interface EligibleAttendanceEvent {
   id: string;
   title: string;
   starts_at: string;
   ends_at: string;
-  existing_status: 'present' | 'late' | null;
+  existing_status: 'present' | 'late' | 'absent' | 'excused' | null;
   checked_in_at: string | null;
 }
 
@@ -23,12 +23,12 @@ interface CheckinResult {
   event_title: string;
   status: 'present' | 'late';
   checked_in_at: string;
-  pilot_only: true;
+  pilot_only: boolean;
 }
 
 export function AttendanceQrScanner() {
   const navigate = useNavigate();
-  const { isOrgAdmin, isPlatformOwner } = useAuth();
+  const { user, isOrgAdmin, isPlatformOwner } = useAuth();
   const { toast } = useToast();
   const canUsePilot = isOrgAdmin || isPlatformOwner;
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -37,8 +37,10 @@ export function AttendanceQrScanner() {
   const [cameraError, setCameraError] = useState('');
   const [scanning, setScanning] = useState(false);
   const [validating, setValidating] = useState(false);
-  const [checkpointToken, setCheckpointToken] = useState('');
-  const [events, setEvents] = useState<EligiblePilotEvent[] | null>(null);
+  const [scanToken, setScanToken] = useState('');
+  const [sessionToken, setSessionToken] = useState('');
+  const [scanMode, setScanMode] = useState<'live' | 'pilot' | null>(null);
+  const [events, setEvents] = useState<EligibleAttendanceEvent[] | null>(null);
   const [checkingIn, setCheckingIn] = useState<string | null>(null);
   const [result, setResult] = useState<CheckinResult | null>(null);
 
@@ -61,7 +63,17 @@ export function AttendanceQrScanner() {
 
     processingRef.current = true;
     setValidating(true);
-    const { data, error } = await supabase.rpc('validate_qr_attendance_pilot_checkpoint', { p_token: token });
+    const liveResult = await supabase.rpc('validate_qr_attendance_checkpoint', { p_token: token });
+    let data = liveResult.data as { session_token?: string; events?: EligibleAttendanceEvent[] } | null;
+    let error = liveResult.error;
+    let mode: 'live' | 'pilot' = 'live';
+
+    if (error && canUsePilot) {
+      const pilotResult = await supabase.rpc('validate_qr_attendance_pilot_checkpoint', { p_token: token });
+      data = pilotResult.data as { events?: EligibleAttendanceEvent[] } | null;
+      error = pilotResult.error;
+      mode = 'pilot';
+    }
     setValidating(false);
     processingRef.current = false;
     if (error) {
@@ -70,12 +82,14 @@ export function AttendanceQrScanner() {
     }
 
     stopScanner();
-    setCheckpointToken(token);
-    setEvents(((data as { events?: EligiblePilotEvent[] })?.events || []));
-  }, [stopScanner, toast]);
+    setScanToken(token);
+    setSessionToken(data?.session_token || '');
+    setScanMode(mode);
+    setEvents(data?.events || []);
+  }, [canUsePilot, stopScanner, toast]);
 
   const startScanner = useCallback(async () => {
-    if (!canUsePilot || !videoRef.current || scannerRef.current) return;
+    if (!user || !videoRef.current || scannerRef.current) return;
     setCameraError('');
     const scanner = new QrScanner(
       videoRef.current,
@@ -91,12 +105,12 @@ export function AttendanceQrScanner() {
       scannerRef.current = null;
       setCameraError('Camera access was unavailable. Allow camera permission or choose a saved QR image below.');
     }
-  }, [canUsePilot, validateScan]);
+  }, [user, validateScan]);
 
   useEffect(() => {
-    if (canUsePilot && events === null) void startScanner();
+    if (user && events === null) void startScanner();
     return stopScanner;
-  }, [canUsePilot, events, startScanner, stopScanner]);
+  }, [user, events, startScanner, stopScanner]);
 
   const scanImage = async (file: File | undefined) => {
     if (!file) return;
@@ -112,15 +126,20 @@ export function AttendanceQrScanner() {
   };
 
   const recordCheckin = async (eventId: string) => {
-    if (!checkpointToken) return;
+    if (!scanMode || (scanMode === 'live' ? !sessionToken : !scanToken)) return;
     setCheckingIn(eventId);
-    const { data, error } = await supabase.rpc('record_qr_attendance_pilot_checkin', {
-      p_token: checkpointToken,
-      p_event_id: eventId,
-    });
+    const { data, error } = scanMode === 'live'
+      ? await supabase.rpc('record_qr_attendance_checkin', {
+          p_session_token: sessionToken,
+          p_event_id: eventId,
+        })
+      : await supabase.rpc('record_qr_attendance_pilot_checkin', {
+          p_token: scanToken,
+          p_event_id: eventId,
+        });
     setCheckingIn(null);
     if (error) {
-      toast('error', error.message || 'Could not record the test check-in');
+      toast('error', error.message || 'Could not record your check-in');
       return;
     }
     setResult(data as CheckinResult);
@@ -128,18 +147,16 @@ export function AttendanceQrScanner() {
 
   const reset = () => {
     setResult(null);
-    setCheckpointToken('');
+    setScanToken('');
+    setSessionToken('');
+    setScanMode(null);
     setEvents(null);
   };
-
-  if (!canUsePilot) {
-    return <div className="page-container page-bottom-pad"><div className="app-content-shell mx-auto max-w-xl"><div className="card p-6 text-center"><ShieldCheck className="mx-auto h-10 w-10 text-gray-400" /><h1 className="mt-3 text-xl font-bold">Admin pilot only</h1><p className="mt-2 text-sm text-gray-500">The QR scanner is currently available only to organization admins while attendance testing is isolated.</p></div></div></div>;
-  }
 
   return (
     <div className="page-container page-bottom-pad">
       <div className="app-content-shell mx-auto max-w-xl">
-        <div className="mb-4"><div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-emerald-500"><QrCode className="h-4 w-4" /> Attendance pilot</div><h1 className="mt-2 text-2xl font-black">Scan to check in</h1><p className="mt-1 text-sm text-gray-500">The attendance choices stay locked until a valid church QR is scanned.</p></div>
+        <div className="mb-4"><div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-emerald-500"><QrCode className="h-4 w-4" /> Church attendance</div><h1 className="mt-2 text-2xl font-black">Scan to check in</h1><p className="mt-1 text-sm text-gray-500">Only events you are scheduled for appear after the church QR is verified.</p></div>
 
         {result ? createPortal(
           <section className="fixed inset-0 z-[100] flex min-h-[100dvh] flex-col bg-[#050505] px-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-[calc(2rem+env(safe-area-inset-top))] text-white">
@@ -157,7 +174,9 @@ export function AttendanceQrScanner() {
                 <p className="mt-2 text-sm font-semibold text-white/55">Recorded at {format(new Date(result.checked_in_at), 'h:mm a')}</p>
               </div>
 
-              <div className="mt-5 w-full rounded-2xl bg-amber-500/10 px-4 py-3 text-xs font-semibold leading-relaxed text-amber-400">Pilot only — this test did not change real attendance or accountability.</div>
+              <div className={`mt-5 w-full rounded-2xl px-4 py-3 text-xs font-semibold leading-relaxed ${result.pilot_only ? 'bg-amber-500/10 text-amber-400' : 'bg-emerald-500/10 text-emerald-300'}`}>
+                {result.pilot_only ? 'Pilot only — this test did not change real attendance or accountability.' : 'This is now part of your official attendance record.'}
+              </div>
             </div>
             <div className="mx-auto grid w-full max-w-md gap-2 sm:grid-cols-2">
               <button type="button" className="btn-secondary min-h-12 w-full !border-white/15 !bg-white/[0.06] !text-white" onClick={reset}><RotateCcw className="h-4 w-4" /> Scan again</button>
@@ -167,7 +186,7 @@ export function AttendanceQrScanner() {
           document.body,
         ) : events !== null ? (
           <section className="card p-5">
-            <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-500"><ShieldCheck className="h-5 w-5" /></span><div><h2 className="font-bold">Church QR verified</h2><p className="text-xs text-gray-500">Review your event, then tap Check In.</p></div></div>
+            <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-500"><ShieldCheck className="h-5 w-5" /></span><div><h2 className="font-bold">Church QR verified</h2><p className="text-xs text-gray-500">{scanMode === 'pilot' ? 'Admin test mode' : 'Secure session expires in five minutes'} · review your event, then tap Check In.</p></div></div>
             <div className="mt-4 rounded-xl bg-emerald-500/10 px-3 py-2.5 text-xs font-semibold leading-relaxed text-emerald-500">
               Scanning does not record attendance. Your check-in is submitted only when you tap the Check In button.
             </div>
@@ -179,7 +198,7 @@ export function AttendanceQrScanner() {
                     <p className="mt-0.5 text-xs text-gray-500">{format(new Date(event.starts_at), 'MMM d, h:mm a')} – {format(new Date(event.ends_at), 'h:mm a')}</p>
                   </div>
                   {event.existing_status ? (
-                    <div className="mt-3 flex min-h-11 items-center justify-center rounded-xl bg-emerald-500/10 px-4 text-sm font-bold text-emerald-500">Already checked in</div>
+                    <div className="mt-3 flex min-h-11 items-center justify-center rounded-xl bg-emerald-500/10 px-4 text-sm font-bold capitalize text-emerald-500">Already recorded: {event.existing_status}</div>
                   ) : (
                     <button
                       type="button"
@@ -191,7 +210,7 @@ export function AttendanceQrScanner() {
                     </button>
                   )}
                 </div>
-              )) : <div className="rounded-xl bg-gray-100 p-5 text-center text-sm text-gray-500 dark:bg-gray-900">No test event is accepting attendance right now. Create one in the QR Test Lab with a start time within 30 minutes of now.</div>}
+              )) : <div className="rounded-xl bg-gray-100 p-5 text-center text-sm text-gray-500 dark:bg-gray-900">{scanMode === 'pilot' ? 'No test event is accepting attendance right now.' : 'No scheduled event is accepting your attendance right now. Events appear 30 minutes before their start time.'}</div>}
             </div>
             <button type="button" className="btn-secondary mt-4 min-h-11 w-full" onClick={reset}><RotateCcw className="h-4 w-4" /> Scan a different QR</button>
           </section>

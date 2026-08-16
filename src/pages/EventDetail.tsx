@@ -380,7 +380,6 @@ export function EventDetail() {
   const [sundayServices, setSundayServices] = useState<Event[]>([]);
   const [attendance, setAttendance] = useState<EventAttendance | null>(null);
   const [allAttendance, setAllAttendance] = useState<EventAttendance[]>([]);
-  const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [cardView, setCardView] = useState<'setlist' | 'checking' | 'report'>('setlist');
   const [cardDir, setCardDir] = useState<'forward' | 'back'>('forward');
   const navigateCard = (view: 'setlist' | 'checking' | 'report', dir: 'forward' | 'back' = 'forward') => {
@@ -1043,63 +1042,6 @@ export function EventDetail() {
     const interval = setInterval(calculateCountdown, 1000);
     return () => clearInterval(interval);
   }, [event]);
-
-  const handleMarkAttendance = async (markAs: 'present' | 'absent') => {
-    if (!id || !user || !event) return;
-    setAttendanceLoading(true);
-
-    let status: 'present' | 'late' | 'absent' = markAs;
-
-    if (markAs === 'present') {
-      const now = new Date();
-      const eventDate = parseISO(event.event_date);
-      const today = parseISO(getManilaTodayKey(now));
-      const eventDay = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
-      const daysDiff = Math.floor((eventDay.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-
-      if (daysDiff < 0) {
-        status = 'late';
-      } else if (event.start_time) {
-        const eventStartTime = getManilaEventDateTime(event.event_date, event.start_time);
-        const graceTime = new Date(eventStartTime.getTime() + 5 * 60 * 1000);
-        if (now > graceTime) {
-          status = 'late';
-        }
-      }
-    }
-
-    const isAssigned = assignments.some(a => a.user_id === user.id && a.status !== 'declined');
-
-    const { error } = await supabase.from('event_attendance').upsert({
-      event_id: id,
-      user_id: user.id,
-      status,
-      checked_in_at: new Date().toISOString(),
-      is_assigned: isAssigned,
-      record_source: 'member',
-      review_status: 'verified',
-      reviewed_by: null,
-      reviewed_at: null,
-    }, { onConflict: 'event_id,user_id' });
-
-    setAttendanceLoading(false);
-
-    if (error) {
-      toast('error', 'Failed to submit attendance');
-      return;
-    }
-
-    if (status === 'late') {
-      toast('info', 'You have been marked as late');
-    } else if (status === 'present') {
-      toast('success', 'Attendance marked as present');
-    } else {
-      toast('info', 'Attendance marked as absent');
-    }
-
-    fetchAttendance();
-  };
-
 
   const assignmentBatch = prepareEventAssignmentBatch(
     assignmentDrafts,
@@ -3205,7 +3147,7 @@ const openLyricsModal = (ss: SetlistSong) => {
 
         {(() => {
           const attendanceStatus = getAttendanceStatus();
-          const isAssigned = assignments.some(a => a.user_id === user?.id);
+          const isAssigned = assignments.some(a => a.user_id === user?.id && a.status !== 'declined');
           const showAttendance = attendanceStatus.windowOpen || attendanceStatus.isClosed || attendanceStatus.countdown;
 
           if (!showAttendance) return null;
@@ -3313,32 +3255,16 @@ const openLyricsModal = (ss: SetlistSong) => {
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-white">
-                          {isAssigned ? 'Ready to check in?' : 'Log attendance'}
+                          {isAssigned ? 'Scan the church QR to check in' : 'Attendance is QR-only'}
                         </p>
-                        <p className="mt-0.5 truncate text-[12px] text-white/45">
-                          {event?.start_time ? `${formatTime12Hour(event.start_time)} start · 5-minute grace` : 'Only mark when you are at church'}
+                        <p className="mt-0.5 text-[12px] leading-relaxed text-white/45">
+                          {event?.start_time ? `${formatTime12Hour(event.start_time)} start · opens 30 minutes before · 5-minute grace` : 'Use the scanner in the top-right corner when you are at church.'}
                         </p>
                       </div>
                     </div>
-                    <div className="mt-3 grid grid-cols-2 gap-2">
-                      <button
-                        onClick={() => handleMarkAttendance('present')}
-                        disabled={attendanceLoading}
-                        className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-emerald-500 text-[13px] font-bold text-black shadow-[0_10px_24px_-18px_rgba(34,197,94,0.95)] transition-colors hover:bg-emerald-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 active:scale-[0.98] disabled:opacity-50"
-                      >
-                        <Check className="h-4 w-4" /> Present
-                      </button>
-                      <button
-                        onClick={() => handleMarkAttendance('absent')}
-                        disabled={attendanceLoading}
-                        className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-white/[0.08] text-[13px] font-bold text-white/85 ring-1 ring-white/[0.08] transition-colors hover:bg-white/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 active:scale-[0.98] disabled:opacity-50"
-                      >
-                        <X className="h-4 w-4" /> Absent
-                      </button>
-                    </div>
                     <div className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-amber-300/75">
                       <AlertTriangle className="h-3 w-3 shrink-0" />
-                      <span className="leading-relaxed">Mark attendance only when you are already at church.</span>
+                      <span className="leading-relaxed">Scanning alone does not record attendance. Tap Check In after your scheduled event appears.</span>
                     </div>
                   </div>
                 )}

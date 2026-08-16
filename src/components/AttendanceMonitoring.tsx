@@ -34,7 +34,7 @@ interface AttendanceHistoryRow {
   event_title: string;
   event_date: string;
   event_type: string;
-  assignment_status: 'confirmed' | 'pending';
+  assignment_status: 'confirmed' | 'pending' | 'declined';
   status: string;
   review_status: 'verified' | 'needs_review';
   record_source: 'member' | 'leader' | 'automatic';
@@ -637,6 +637,7 @@ export function AttendanceMonitoring() {
                 { label: 'Verified absent', value: historyMember.absent_count, color: 'text-red-600' },
                 { label: 'Present', value: historyMember.present_count, color: 'text-green-600' },
                 { label: 'Late', value: historyMember.late_count, color: 'text-amber-600' },
+                { label: 'Excused', value: historyMember.excused_count, color: 'text-blue-600' },
                 { label: 'Needs review', value: historyMember.needs_review_count, color: 'text-violet-600' },
               ].map(s => (
                 <div key={s.label} className="text-center p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl">
@@ -672,6 +673,9 @@ export function AttendanceMonitoring() {
                           <span>{row.event_type}</span>
                           {row.assignment_status === 'pending' && (
                             <span className="rounded bg-amber-500/10 px-1.5 py-0.5 font-semibold text-amber-600 dark:text-amber-300">No confirmation</span>
+                          )}
+                          {row.assignment_status === 'declined' && (
+                            <span className="rounded bg-blue-500/10 px-1.5 py-0.5 font-semibold text-blue-600 dark:text-blue-300">Declined with reason</span>
                           )}
                           {row.record_source === 'automatic' && (
                             <span className="rounded bg-violet-500/10 px-1.5 py-0.5 font-semibold text-violet-600 dark:text-violet-300">System inferred</span>
@@ -726,7 +730,7 @@ export function AttendanceMonitoring() {
             <div className="rounded-xl border border-violet-500/15 bg-violet-500/[0.07] p-3">
               <p className="text-sm font-bold text-gray-900 dark:text-white">{reviewTarget.event_title}</p>
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                {format(parseISO(reviewTarget.event_date), 'MMM d, yyyy')} · {reviewTarget.assignment_status === 'pending' ? 'No schedule confirmation' : 'Confirmed schedule'}
+                {format(parseISO(reviewTarget.event_date), 'MMM d, yyyy')} · {reviewTarget.assignment_status === 'pending' ? 'No schedule confirmation' : reviewTarget.assignment_status === 'declined' ? 'Declined with reason' : 'Confirmed schedule'}
               </p>
             </div>
             <div>

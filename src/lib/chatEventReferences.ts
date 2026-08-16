@@ -15,6 +15,7 @@ export type ChatEventReference = {
     artist: string | null;
     key: string | null;
   };
+  messageText?: string;
 };
 
 type ReferenceEvent = {
@@ -35,6 +36,7 @@ export function createChatEventReference(
   reference: ChatEventReferenceKind,
   event: ReferenceEvent,
   song?: ReferenceEvent['songs'][number],
+  messageText?: string,
 ): string {
   const payload: ChatEventReference = {
     type: 'event_reference',
@@ -57,6 +59,7 @@ export function createChatEventReference(
       artist: song.artist,
       key: song.performed_key || song.song_key,
     };
+    if (messageText?.trim()) payload.messageText = messageText.trim();
   }
 
   return JSON.stringify(payload);
@@ -100,6 +103,10 @@ export function parseChatEventReference(value: unknown): ChatEventReference | nu
         key: typeof song.key === 'string' ? song.key : null,
       };
     }
+  }
+
+  if (typeof candidate.messageText === 'string' && candidate.messageText.trim()) {
+    parsed.messageText = candidate.messageText.trim();
   }
 
   if (parsed.reference === 'song' && !parsed.song) return null;

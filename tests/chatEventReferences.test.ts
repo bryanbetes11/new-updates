@@ -33,6 +33,11 @@ const songReference = parseChatEventReference(JSON.parse(createChatEventReferenc
 assert.equal(songReference?.song?.title, 'Forever');
 assert.equal(songReference?.song?.key, 'D');
 
+const inlineSongReference = parseChatEventReference(JSON.parse(
+  createChatEventReference('song', event, event.songs[0], 'Can we use ♪ Forever for the opening?'),
+));
+assert.equal(inlineSongReference?.messageText, 'Can we use ♪ Forever for the opening?');
+
 assert.equal(parseChatEventReference({ type: 'event_reference', reference: 'song', eventId: '1', eventTitle: 'x', eventDate: '2026-01-01' }), null);
 assert.equal(parseChatEventReference({ type: 'event_reference', reference: 'unknown', eventId: '1', eventTitle: 'x', eventDate: '2026-01-01' }), null);
 

@@ -168,7 +168,33 @@ function renderMessageText(text: string, isMe: boolean) {
   });
 }
 
-function ChatEventReferenceCard({ reference }: { reference: ChatEventReference }) {
+function InlineSongReference({ reference, onOpenSetlist }: { reference: ChatEventReference; onOpenSetlist: (songId?: string) => void }) {
+  const song = reference.song;
+  if (!song || !reference.messageText) return null;
+  const token = `♪ ${song.title}`;
+  const tokenIndex = reference.messageText.indexOf(token);
+  const before = tokenIndex >= 0 ? reference.messageText.slice(0, tokenIndex) : reference.messageText;
+  const after = tokenIndex >= 0 ? reference.messageText.slice(tokenIndex + token.length) : '';
+
+  return (
+    <p className="text-[14px] whitespace-pre-wrap break-words" style={{ overflowWrap: 'anywhere' }}>
+      {before}
+      <button
+        type="button"
+        onClick={event => { event.stopPropagation(); onOpenSetlist(song.id); }}
+        className="mx-0.5 inline-flex min-h-7 max-w-full items-center gap-1 rounded-lg border border-violet-300/70 bg-violet-100 px-2 py-0.5 align-middle font-bold text-violet-800 transition-colors hover:bg-violet-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-violet-400/25 dark:bg-violet-500/15 dark:text-violet-200 dark:hover:bg-violet-500/25"
+        aria-label={`Open ${song.title} in the event setlist`}
+      >
+        <Music2 className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate">{song.title}</span>
+        {song.key && <span className="rounded bg-black/5 px-1 text-[10px] opacity-70 dark:bg-white/10">{song.key}</span>}
+      </button>
+      {after}
+    </p>
+  );
+}
+
+function ChatEventReferenceCard({ reference, onOpenSetlist }: { reference: ChatEventReference; onOpenSetlist: (songId?: string) => void }) {
   const navigate = useNavigate();
   const isSetlist = reference.reference === 'setlist';
   const isSong = reference.reference === 'song';
@@ -185,12 +211,17 @@ function ChatEventReferenceCard({ reference }: { reference: ChatEventReference }
         : 'Event reference';
   const action = isObservation ? 'Add observation' : isSong ? 'Open setlist' : isSetlist ? 'View setlist' : 'View event';
 
+  if (isSong && reference.messageText) {
+    return <InlineSongReference reference={reference} onOpenSetlist={onOpenSetlist} />;
+  }
+
   return (
     <button
       type="button"
       onClick={event => {
         event.stopPropagation();
-        navigate(destination);
+        if (isSong || isSetlist) onOpenSetlist(reference.song?.id);
+        else navigate(destination);
       }}
       className="block w-[min(18rem,72vw)] overflow-hidden rounded-2xl border border-gray-200/80 bg-white text-left text-gray-900 shadow-sm transition-transform hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 dark:border-white/[0.08] dark:bg-[#1b1b1e] dark:text-white"
     >
@@ -270,6 +301,7 @@ function previewContent(content: string): string {
   if (parsed.type === 'image') return '📷 Photo';
   if (parsed.type === 'file') return `📎 ${parsed.name}`;
   if (parsed.type === 'event_reference') {
+    if (parsed.reference === 'song' && parsed.messageText) return parsed.messageText.length > 60 ? `${parsed.messageText.slice(0, 60)}…` : parsed.messageText;
     if (parsed.reference === 'song') return `🎵 ${parsed.song?.title || 'Song'}`;
     if (parsed.reference === 'setlist') return `🎶 Setlist · ${parsed.eventTitle}`;
     if (parsed.reference === 'observation') return `📝 Post-event observation · ${parsed.eventTitle}`;
@@ -285,6 +317,7 @@ function replyPreviewContent(content: string): string {
   if (parsed.type === 'image') return 'Photo';
   if (parsed.type === 'file') return parsed.name;
   if (parsed.type === 'event_reference') {
+    if (parsed.reference === 'song' && parsed.messageText) return parsed.messageText;
     if (parsed.reference === 'song') return parsed.song?.title || 'Song reference';
     if (parsed.reference === 'setlist') return `Setlist · ${parsed.eventTitle}`;
     if (parsed.reference === 'observation') return `Post-event observation · ${parsed.eventTitle}`;
@@ -884,6 +917,15 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
 const QUICK_ACTION_OPTIONS = ['👍', '❤️', '🙏', '😂', '🔥', '👏'];
 type EventChatCommand = 'setlist' | 'song' | 'observe';
 
+function getInlineSongCommand(text: string) {
+  const match = text.match(/(^|\s)\/song(?:\s+([^\n]*))?$/i);
+  if (!match || match.index === undefined) return null;
+  return {
+    start: match.index + match[1].length,
+    query: (match[2] || '').trim().toLowerCase(),
+  };
+}
+
 function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply, onTyping, mentionProfiles, eventDetails }: {
   conversationId: string;
   onSend: (text: string, imageUrl?: string) => void;
@@ -916,6 +958,7 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
   const [editableMentionActiveIndex, setEditableMentionActiveIndex] = useState(0);
   const [showSongPicker, setShowSongPicker] = useState(false);
   const [selectedSong, setSelectedSong] = useState<EventDiscussionDetails['songs'][number] | null>(null);
+  const [songPickerMaxHeight, setSongPickerMaxHeight] = useState(352);
   const [editableDropdownRect, setEditableDropdownRect] = useState<{ bottom: number; left: number; width: number; maxHeight: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const attachRef = useRef<HTMLInputElement>(null);
@@ -949,6 +992,12 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
   }, [editableMentionQuery, mentionProfiles]);
 
   const commandQuery = getChatCommandQuery(text);
+  const inlineSongCommand = getInlineSongCommand(text);
+  const filteredEventSongs = useMemo(() => {
+    if (!eventDetails) return [];
+    if (!inlineSongCommand?.query) return eventDetails.songs;
+    return eventDetails.songs.filter(song => `${song.title} ${song.artist || ''}`.toLowerCase().includes(inlineSongCommand.query));
+  }, [eventDetails, inlineSongCommand?.query]);
   const isPastEvent = eventDetails
     ? new Date(`${eventDetails.event_date}T${eventDetails.end_time || '23:59:59'}`).getTime() <= Date.now()
     : false;
@@ -1086,8 +1135,7 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
   const selectCommand = useCallback((command: EventChatCommand) => {
     setShowEditableMentionDropdown(false);
     if (command === 'song') {
-      setText('');
-      if (editableRef.current) editableRef.current.textContent = '';
+      syncEditableComposer('/song ');
       setShowSongPicker(true);
       return;
     }
@@ -1097,10 +1145,15 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
   }, [syncEditableComposer]);
 
   const selectSong = useCallback((song: EventDiscussionDetails['songs'][number]) => {
+    const command = getInlineSongCommand(text);
+    const token = `♪ ${song.title}`;
+    const nextText = command
+      ? `${text.slice(0, command.start)}${token} `
+      : `${text}${text && !text.endsWith(' ') ? ' ' : ''}${token} `;
     setSelectedSong(song);
     setShowSongPicker(false);
-    syncEditableComposer(`/song ${song.title}`);
-  }, [syncEditableComposer]);
+    syncEditableComposer(nextText);
+  }, [syncEditableComposer, text]);
 
   const handleSend = () => {
     if (!text.trim()) return;
@@ -1113,8 +1166,8 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
         outgoing = createChatEventReference('setlist', eventDetails);
       } else if (normalized.toLowerCase() === '/observe' && isPastEvent) {
         outgoing = createChatEventReference('observation', eventDetails);
-      } else if (selectedSong && normalized.toLowerCase().startsWith('/song ')) {
-        outgoing = createChatEventReference('song', eventDetails, selectedSong);
+      } else if (selectedSong && text.includes(`♪ ${selectedSong.title}`)) {
+        outgoing = createChatEventReference('song', eventDetails, selectedSong, text);
       }
     }
     onTyping(false);
@@ -1163,8 +1216,8 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
 
   const handleEditableInput = (e: React.FormEvent<HTMLDivElement>) => {
     const value = e.currentTarget.innerText.replace(/\n$/, '');
-    if (selectedSong && value !== `/song ${selectedSong.title}`) setSelectedSong(null);
-    setShowSongPicker(false);
+    if (selectedSong && !value.includes(`♪ ${selectedSong.title}`)) setSelectedSong(null);
+    setShowSongPicker(Boolean(getInlineSongCommand(value)));
     setText(value);
     resizeComposer();
     updateEditableMentionState(value, getEditableCaretOffset());
@@ -1348,6 +1401,25 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
     };
   }, [computeEditableDropdownPosition, showEditableMentionDropdown, useEditableComposer]);
 
+  useEffect(() => {
+    if (!showSongPicker) return;
+    const update = () => {
+      const composer = textRef.current || editableRef.current;
+      const viewportTop = window.visualViewport?.offsetTop ?? 0;
+      const composerTop = composer?.getBoundingClientRect().top ?? (window.visualViewport?.height ?? window.innerHeight);
+      setSongPickerMaxHeight(Math.min(352, Math.max(144, composerTop - viewportTop - 12)));
+    };
+    update();
+    window.addEventListener('resize', update);
+    window.visualViewport?.addEventListener('resize', update);
+    window.visualViewport?.addEventListener('scroll', update);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.visualViewport?.removeEventListener('resize', update);
+      window.visualViewport?.removeEventListener('scroll', update);
+    };
+  }, [showSongPicker]);
+
   const handleImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
@@ -1456,7 +1528,8 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 6, scale: 0.98 }}
             transition={{ duration: 0.14 }}
-            className="absolute inset-x-3 bottom-full z-50 mb-2 max-h-[min(22rem,55dvh)] overflow-y-auto rounded-2xl border border-gray-200/80 bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#1c1b1e]"
+            className="absolute inset-x-3 bottom-full z-50 mb-2 touch-pan-y overflow-y-auto overscroll-contain rounded-2xl border border-gray-200/80 bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#1c1b1e]"
+            style={{ maxHeight: songPickerMaxHeight, WebkitOverflowScrolling: 'touch' }}
           >
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-3.5 py-2.5 dark:border-white/[0.06] dark:bg-[#1c1b1e]">
               <span className="text-[12px] font-bold text-gray-900 dark:text-white">Choose a setlist song</span>
@@ -1469,11 +1542,13 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
                 <X className="h-4 w-4" />
               </button>
             </div>
-            {eventDetails.songs.map((song, index) => (
+            {filteredEventSongs.length > 0 ? filteredEventSongs.map((song) => {
+              const index = eventDetails.songs.findIndex(item => item.id === song.id);
+              return (
               <button
                 key={song.id}
                 type="button"
-                onPointerDown={event => event.preventDefault()}
+                onMouseDown={event => event.preventDefault()}
                 onClick={() => selectSong(song)}
                 className="flex min-h-14 w-full items-center gap-3 border-b border-gray-100 px-3.5 py-2.5 text-left transition-colors last:border-b-0 hover:bg-gray-50 dark:border-white/[0.05] dark:hover:bg-white/[0.04]"
               >
@@ -1485,7 +1560,10 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
                   </span>
                 </span>
               </button>
-            ))}
+              );
+            }) : (
+              <p className="px-4 py-6 text-center text-[12px] text-gray-400 dark:text-white/35">No matching song in this setlist</p>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -1578,8 +1656,8 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
               value={text}
               profiles={mentionProfiles}
               onChange={(value) => {
-                if (selectedSong && value !== `/song ${selectedSong.title}`) setSelectedSong(null);
-                setShowSongPicker(false);
+                if (selectedSong && !value.includes(`♪ ${selectedSong.title}`)) setSelectedSong(null);
+                setShowSongPicker(Boolean(getInlineSongCommand(value)));
                 setText(value);
                 resizeComposer();
                 onTyping(value.trim().length > 0);
@@ -2862,10 +2940,12 @@ type EventPanelData = {
   songs: Array<{ id: string; title: string; artist: string | null; performed_key: string | null; song_key: string | null }>;
 };
 
-function EventDetailPanel({ eventId, onClose, onViewFullEvent }: {
+function EventDetailPanel({ eventId, onClose, onViewFullEvent, mode = 'event', focusedSongId }: {
   eventId: string;
   onClose: () => void;
   onViewFullEvent: () => void;
+  mode?: 'event' | 'setlist';
+  focusedSongId?: string | null;
 }) {
   const [data, setData] = useState<EventPanelData | null>(null);
 
@@ -2891,6 +2971,11 @@ function EventDetailPanel({ eventId, onClose, onViewFullEvent }: {
   const chipTextPrimary = isPast ? 'text-gray-500 dark:text-white/35' : 'text-white';
   const chipTextSub = isPast ? 'text-gray-400 dark:text-white/20' : 'text-white/70';
 
+  useEffect(() => {
+    if (!data || !focusedSongId) return;
+    requestAnimationFrame(() => document.getElementById(`chat-setlist-song-${focusedSongId}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+  }, [data, focusedSongId]);
+
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50 dark:bg-[#0d0d0f]">
       {/* Header — padded below the status bar on iOS/Android */}
@@ -2904,14 +2989,14 @@ function EventDetailPanel({ eventId, onClose, onViewFullEvent }: {
           <ArrowLeft className="h-4 w-4" />
           Back
         </button>
-        <span className="text-[14px] font-bold text-gray-900 dark:text-white">Event Info</span>
-        <button
+        <span className="text-[14px] font-bold text-gray-900 dark:text-white">{mode === 'setlist' ? 'Event Setlist' : 'Event Info'}</span>
+        {mode === 'event' ? <button
           onClick={onViewFullEvent}
           className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 text-[13px] font-semibold active:opacity-70"
         >
           <ExternalLink className="h-3.5 w-3.5" />
           Full Event
-        </button>
+        </button> : <span className="w-[70px]" aria-hidden="true" />}
       </div>
 
       {!data ? (
@@ -2926,6 +3011,7 @@ function EventDetailPanel({ eventId, onClose, onViewFullEvent }: {
           <div className="max-w-2xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-6 space-y-4">
 
             {/* Hero card */}
+            {mode === 'event' && (
             <div className="rounded-3xl overflow-hidden bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06]"
               style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 28px -16px rgba(15,23,42,0.12)' }}
             >
@@ -2996,6 +3082,7 @@ function EventDetailPanel({ eventId, onClose, onViewFullEvent }: {
                 )}
               </div>
             </div>
+            )}
 
             {/* Setlist */}
             <div className="rounded-2xl bg-white dark:bg-white/[0.04] border border-gray-200/80 dark:border-white/[0.06] overflow-hidden">
@@ -3017,7 +3104,11 @@ function EventDetailPanel({ eventId, onClose, onViewFullEvent }: {
                   {data.songs.map((song, i) => {
                     const key = song.performed_key || song.song_key;
                     return (
-                      <div key={song.id} className="flex items-center gap-3 px-5 py-3">
+                      <div
+                        id={`chat-setlist-song-${song.id}`}
+                        key={song.id}
+                        className={`flex items-center gap-3 px-5 py-3 transition-colors ${focusedSongId === song.id ? 'bg-violet-50 ring-1 ring-inset ring-violet-300 dark:bg-violet-500/10 dark:ring-violet-400/25' : ''}`}
+                      >
                         <span className="text-[12px] font-bold text-gray-300 dark:text-white/20 w-5 text-right shrink-0">{i + 1}</span>
                         <div className="min-w-0 flex-1">
                           <p className="text-[14px] font-semibold text-gray-900 dark:text-white truncate">{song.title}</p>
@@ -3093,6 +3184,8 @@ function ChatWindow({
   const [tappedMsgId, setTappedMsgId] = useState<string | null>(null);
   const [showInfo, setShowInfo] = useState(false);
   const [showEventDetail, setShowEventDetail] = useState(false);
+  const [eventPanelMode, setEventPanelMode] = useState<'event' | 'setlist'>('event');
+  const [focusedSetlistSongId, setFocusedSetlistSongId] = useState<string | null>(null);
   const [eventCommandDetails, setEventCommandDetails] = useState<EventDiscussionDetails | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
@@ -3507,7 +3600,11 @@ function ChatWindow({
         {conv.type === 'event' && conv.event_id && (
           <EventDiscussionCard
             eventId={conv.event_id}
-            onOpen={() => setShowEventDetail(true)}
+            onOpen={() => {
+              setEventPanelMode('event');
+              setFocusedSetlistSongId(null);
+              setShowEventDetail(true);
+            }}
             onDetailsLoaded={setEventCommandDetails}
           />
         )}
@@ -3665,7 +3762,7 @@ function ChatWindow({
                       className={`relative leading-relaxed cursor-default select-none ${
                         msg.reactions.length > 0 ? 'mb-5' : ''
                       } ${
-                        content.type === 'image' || content.type === 'event_reference'
+                        content.type === 'image' || (content.type === 'event_reference' && !content.messageText)
                           ? 'px-0 py-0 bg-transparent border-0 shadow-none rounded-none'
                           : isMe
                             ? 'px-3.5 py-2 rounded-2xl bg-emerald-500 text-white rounded-br-md'
@@ -3740,7 +3837,14 @@ function ChatWindow({
                           </div>
                         </div>
                       ) : content.type === 'event_reference' ? (
-                        <ChatEventReferenceCard reference={content} />
+                        <ChatEventReferenceCard
+                          reference={content}
+                          onOpenSetlist={(songId) => {
+                            setEventPanelMode('setlist');
+                            setFocusedSetlistSongId(songId || null);
+                            setShowEventDetail(true);
+                          }}
+                        />
                       ) : (
                         <p className="text-[14px] whitespace-pre-wrap break-words" style={{ overflowWrap: 'anywhere' }}>
                           {renderMessageText(content.text, isMe)}
@@ -4090,6 +4194,8 @@ function ChatWindow({
             >
               <EventDetailPanel
                 eventId={conv.event_id}
+                mode={eventPanelMode}
+                focusedSongId={focusedSetlistSongId}
                 onClose={() => setShowEventDetail(false)}
                 onViewFullEvent={() => { setShowEventDetail(false); navigate(`/events/${conv.event_id}`); }}
               />

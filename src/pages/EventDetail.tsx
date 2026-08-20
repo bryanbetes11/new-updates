@@ -4,7 +4,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { format, parseISO, differenceInDays, subWeeks, previousSunday, addDays, subDays } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { animate, motion, useMotionValue, AnimatePresence, type PanInfo } from 'framer-motion';
-import { ArrowLeft, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, ListOrdered, Pause, Play, Settings2, MoreHorizontal, Upload, Calendar, Loader2, BellRing, Eye, Lock } from 'lucide-react';
+import { ArrowLeft, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, ListOrdered, Pause, Play, Settings2, MoreHorizontal, Upload, Calendar, Loader2, BellRing, Eye, Lock, Unlock, Wifi, WifiOff } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -30,6 +30,7 @@ import { isSetlistMeaningfullyCreated } from '../lib/setlistPersistence';
 import { getPendingAssignmentUserCount } from '../lib/eventAssignmentReminder';
 import { getPendingUserEventAssignments, getUserEventAssignments, shouldBlockEventDetails } from '../lib/eventAssignmentGate';
 import { getPostEventObservationViewers } from '../lib/postEventObservationViews';
+import { normalizeSongTitle } from '../lib/songTitle';
 
 import type { Event, EventAssignment, Setlist, SetlistSong, Song, ServiceFormat, SetlistCheckReport, PostEventObservation, PostEventObservationCategory, PostEventObservationStatus, PostEventObservationView } from '../types';
 import { inferServiceFormat, SERVICE_FORMAT_LABELS } from '../lib/setlistCheckerEngine';
@@ -176,6 +177,50 @@ type ApprovedSetlistUsage = {
 
 type AssignmentDraftRow = EventAssignmentDraft & { id: string };
 
+type RehearsalReadiness = 'not_rehearsed' | 'needs_work' | 'ready';
+type RehearsalIssueType = 'timing' | 'chords' | 'vocals' | 'transition' | 'lyrics' | 'other';
+
+interface EventSongPreparation {
+  id: string;
+  event_id: string;
+  rehearsal_event_id: string | null;
+  setlist_song_id: string;
+  song_id: string;
+  readiness: RehearsalReadiness;
+  issue_type: RehearsalIssueType | null;
+  note: string | null;
+  updated_at: string;
+}
+
+const REHEARSAL_READINESS_OPTIONS: Array<{ value: RehearsalReadiness; label: string }> = [
+  { value: 'not_rehearsed', label: 'Not rehearsed' },
+  { value: 'needs_work', label: 'Needs work' },
+  { value: 'ready', label: 'Ready' },
+];
+
+const REHEARSAL_ISSUE_OPTIONS: Array<{ value: RehearsalIssueType; label: string }> = [
+  { value: 'timing', label: 'Timing' },
+  { value: 'chords', label: 'Chords' },
+  { value: 'vocals', label: 'Vocals' },
+  { value: 'transition', label: 'Transition' },
+  { value: 'lyrics', label: 'Lyrics' },
+  { value: 'other', label: 'Other' },
+];
+
+function getServingRoleLabel(roleName: string) {
+  const labels: Record<string, string> = {
+    Guitar: 'Guitarist',
+    Bass: 'Bassist',
+    Drums: 'Drummer',
+    Keys: 'Keyboardist',
+    Audio: 'Audio Engineer',
+    Visuals: 'Visuals Operator',
+    Lights: 'Lighting Operator',
+    'Backup Vocals': 'Backup Vocalist',
+  };
+  return labels[roleName] || roleName;
+}
+
 type SetlistBuilderSong = {
   song_id: string;
   category: string;
@@ -316,8 +361,9 @@ export function EventDetail() {
   const location = useLocation();
   const smartBack = useSmartBack('/events');
 
-  const { user, profile, roles, userRoles, organization, isLeader, isOrgAdmin, isAdmin, isAdminCoordinator, isProductionDirector, isPlatformOwner } = useAuth();
+  const { user, profile, roles, userRoles, organization, loading: authLoading, isLeader, isOrgAdmin, isAdmin, isAdminCoordinator, isProductionDirector, isPlatformOwner } = useAuth();
   const { toast } = useToast();
+  const canUseServiceModePilot = isOrgAdmin || isAdmin || isPlatformOwner;
 
   const isMissingSetlistSubmissionTableError = useCallback((message?: string | null) => {
     if (!message) return false;
@@ -415,6 +461,13 @@ export function EventDetail() {
   const [serviceAutoScrollEnabled, setServiceAutoScrollEnabled] = useState(false);
   const [serviceSongPickerOpen, setServiceSongPickerOpen] = useState(false);
   const [serviceCloseConfirmOpen, setServiceCloseConfirmOpen] = useState(false);
+  const [servicePreparationOpen, setServicePreparationOpen] = useState(false);
+  const [showRehearsalSummary, setShowRehearsalSummary] = useState(false);
+  const [serviceModeUnlocked, setServiceModeUnlocked] = useState(false);
+  const [isOnline, setIsOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine);
+  const [songPreparation, setSongPreparation] = useState<Record<string, EventSongPreparation>>({});
+  const [preparationDraft, setPreparationDraft] = useState<{ readiness: RehearsalReadiness; issue_type: RehearsalIssueType | ''; note: string }>({ readiness: 'not_rehearsed', issue_type: '', note: '' });
+  const [savingPreparation, setSavingPreparation] = useState(false);
   const [serviceSongStageWidth, setServiceSongStageWidth] = useState(0);
   const [chartSaving, setChartSaving] = useState(false);
   const chartModalStorageKey = user?.id && id ? `${EVENT_CHART_OPEN_STORAGE_PREFIX}:${user.id}:${id}` : '';
@@ -461,9 +514,11 @@ export function EventDetail() {
   const postEventObservationViewsRef = useRef<PostEventObservationView[]>([]);
   const pendingObservationViewsRef = useRef(new Set<string>());
   const serviceSongStageRef = useRef<HTMLDivElement | null>(null);
+	const serviceModeOverlayRef = useRef<HTMLDivElement | null>(null);
+  const serviceModeCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const serviceModeOpenerRef = useRef<HTMLElement | null>(null);
   const serviceSwipeAnimating = useRef(false);
   const serviceTrackAnimation = useRef<{ stop: () => void } | null>(null);
-  const serviceModeEnterTimer = useRef<number | null>(null);
   const serviceModeClosing = useRef(false);
   const serviceTrackX = useMotionValue(0);
 
@@ -521,9 +576,10 @@ export function EventDetail() {
     const previousOverscroll = document.body.style.overscrollBehavior;
     const previousRootOverflow = root.style.overflow;
     const previousRootOverscroll = root.style.overscrollBehavior;
-    let restingViewportHeight = Math.max(window.innerHeight, window.visualViewport?.height || 0);
+    let restingViewportHeight = window.visualViewport?.height || window.innerHeight;
     const updateServiceViewportHeight = () => {
       const viewport = window.visualViewport;
+      const visibleViewportHeight = viewport?.height || window.innerHeight;
       const activeElement = document.activeElement;
       const editorFocused =
         activeElement instanceof HTMLTextAreaElement ||
@@ -534,7 +590,9 @@ export function EventDetail() {
       const keyboardOpen = editorFocused && rawKeyboardInset > 120;
 
       if (!keyboardOpen) {
-        restingViewportHeight = Math.max(restingViewportHeight, window.innerHeight, viewport?.height || 0);
+        // Follow the currently visible viewport so browser chrome or an
+        // orientation change cannot leave the chart extending off-screen.
+        restingViewportHeight = visibleViewportHeight;
       }
 
       root.style.setProperty('--service-mode-viewport-height', `${Math.round(restingViewportHeight)}px`);
@@ -598,23 +656,38 @@ export function EventDetail() {
 
   useEffect(() => {
     if (serviceModeIndex === null) {
-      if (serviceModeEnterTimer.current) {
-        window.clearTimeout(serviceModeEnterTimer.current);
-        serviceModeEnterTimer.current = null;
-      }
       setServiceChartEditing(false);
       setServiceModeEntering(false);
       setServiceChartControlsVisible(false);
       setServiceArrangementOpen(false);
       setServiceAutoScrollEnabled(false);
       setServiceSongPickerOpen(false);
+	  setServicePreparationOpen(false);
+	  setShowRehearsalSummary(false);
+	  setServiceModeUnlocked(false);
       setServiceCloseConfirmOpen(false);
     }
   }, [serviceModeIndex]);
 
   useEffect(() => {
-    if (!id || loading || serviceModeIndex !== null) return;
+    if (!id || authLoading || loading || serviceModeIndex !== null) return;
     if (serviceModeClosing.current) return;
+
+    const params = new URLSearchParams(location.search);
+    const modeParam = params.get('mode');
+    const shouldRestoreFromUrl = modeParam === 'service' || modeParam === 'rehearsal' || modeParam === 'restore';
+    const savedMode = getActiveServiceMode();
+
+    if (!canUseServiceModePilot) {
+      if (savedMode?.eventId === id) clearActiveServiceMode(id);
+      if (shouldRestoreFromUrl) {
+        params.delete('mode');
+        params.delete('song');
+        const nextSearch = params.toString();
+        navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ''}`, { replace: true });
+      }
+      return;
+    }
 
     const availableSongs = (event?.event_type === 'Rehearsals' && linkedSetlistSongs.length > 0
       ? linkedSetlistSongs
@@ -625,10 +698,6 @@ export function EventDetail() {
     if (availableSongs.length === 0) return;
     if (event?.event_type !== 'Rehearsals' && setlist?.status !== 'approved') return;
 
-    const params = new URLSearchParams(location.search);
-    const modeParam = params.get('mode');
-    const shouldRestoreFromUrl = modeParam === 'service' || modeParam === 'rehearsal' || modeParam === 'restore';
-    const savedMode = getActiveServiceMode();
     const shouldRestoreFromStorage = savedMode?.eventId === id;
     if (!shouldRestoreFromUrl && !shouldRestoreFromStorage) return;
 
@@ -638,8 +707,9 @@ export function EventDetail() {
     setServiceArrangementOpen(false);
     setServiceAutoScrollEnabled(false);
     setServiceModeEntering(false);
+	setServiceModeUnlocked(event?.event_type === 'Rehearsals');
     setServiceModeIndex(restoredIndex);
-  }, [event?.event_type, id, linkedSetlistSongs, loading, location.search, serviceModeIndex, setlist?.status, setlistSongs]);
+  }, [authLoading, canUseServiceModePilot, event?.event_type, id, linkedSetlistSongs, loading, location.pathname, location.search, navigate, serviceModeIndex, setlist?.status, setlistSongs]);
 
   useEffect(() => {
     if (serviceChartEditing) {
@@ -649,7 +719,7 @@ export function EventDetail() {
   }, [serviceChartEditing]);
 
   useEffect(() => {
-    if (!id || serviceModeIndex === null) return;
+    if (!id || !canUseServiceModePilot || serviceModeIndex === null) return;
     if (serviceModeClosing.current) return;
 
     saveActiveServiceMode(id, serviceModeIndex);
@@ -660,7 +730,7 @@ export function EventDetail() {
     const nextLocation = `${location.pathname}?${nextSearch}`;
     const currentLocation = `${location.pathname}${location.search}`;
     if (nextLocation !== currentLocation) navigate(nextLocation, { replace: true });
-  }, [event?.event_type, id, location.pathname, location.search, navigate, serviceModeIndex]);
+  }, [canUseServiceModePilot, event?.event_type, id, location.pathname, location.search, navigate, serviceModeIndex]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -672,14 +742,6 @@ export function EventDetail() {
       setSetlistEditMode(false);
     }
   }, [setlist?.status]);
-
-  useEffect(() => {
-    return () => {
-      if (serviceModeEnterTimer.current) {
-        window.clearTimeout(serviceModeEnterTimer.current);
-      }
-    };
-  }, []);
 
   useEffect(() => {
     const refreshLifecycle = () => setLifecycleNow(new Date());
@@ -843,6 +905,104 @@ export function EventDetail() {
   }, [id, isMissingSetlistSubmissionTableError]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  useEffect(() => {
+    const preparationEventId = event?.event_type === 'Rehearsals' ? event.linked_event_id : event?.id;
+    if (!canUseServiceModePilot || !preparationEventId) {
+      setSongPreparation({});
+      return;
+    }
+
+    let cancelled = false;
+    void supabase
+      .from('event_song_preparation')
+      .select('id, event_id, rehearsal_event_id, setlist_song_id, song_id, readiness, issue_type, note, updated_at')
+      .eq('event_id', preparationEventId)
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          console.error('Failed to load rehearsal handoff:', error);
+          setSongPreparation({});
+          return;
+        }
+        setSongPreparation(Object.fromEntries(((data || []) as EventSongPreparation[]).map(item => [item.setlist_song_id, item])));
+      });
+
+    return () => { cancelled = true; };
+  }, [canUseServiceModePilot, event?.event_type, event?.id, event?.linked_event_id]);
+
+  useEffect(() => {
+    const syncConnection = () => setIsOnline(navigator.onLine);
+    window.addEventListener('online', syncConnection);
+    window.addEventListener('offline', syncConnection);
+    return () => {
+      window.removeEventListener('online', syncConnection);
+      window.removeEventListener('offline', syncConnection);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (serviceModeIndex === null) return;
+
+    let wakeLock: { release: () => Promise<void> } | null = null;
+    let cancelled = false;
+    const requestWakeLock = async () => {
+      const wakeLockApi = (navigator as Navigator & { wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void> }> } }).wakeLock;
+      if (!wakeLockApi || document.visibilityState !== 'visible') return;
+      try {
+        const lock = await wakeLockApi.request('screen');
+        if (cancelled) await lock.release();
+        else wakeLock = lock;
+      } catch (error) {
+        console.info('Screen wake lock is unavailable:', error);
+      }
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && !wakeLock) void requestWakeLock();
+    };
+
+    void requestWakeLock();
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', handleVisibility);
+      void wakeLock?.release();
+      wakeLock = null;
+    };
+  }, [serviceModeIndex]);
+
+  useEffect(() => {
+    if (serviceModeIndex === null) return;
+    serviceModeCloseButtonRef.current?.focus();
+    const handleKeyDown = (keyboardEvent: KeyboardEvent) => {
+	  if (keyboardEvent.key === 'Tab') {
+		const overlay = serviceModeOverlayRef.current;
+		const focusable = overlay ? Array.from(overlay.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')).filter(element => !element.closest('[aria-hidden="true"]')) : [];
+		if (focusable.length > 0) {
+		  const first = focusable[0];
+		  const last = focusable[focusable.length - 1];
+		  if (keyboardEvent.shiftKey && document.activeElement === first) {
+			keyboardEvent.preventDefault();
+			last.focus();
+		  } else if (!keyboardEvent.shiftKey && document.activeElement === last) {
+			keyboardEvent.preventDefault();
+			first.focus();
+		  }
+		}
+		return;
+	  }
+      if (keyboardEvent.key !== 'Escape') return;
+      keyboardEvent.preventDefault();
+      if (serviceCloseConfirmOpen) setServiceCloseConfirmOpen(false);
+      else if (showRehearsalSummary) setShowRehearsalSummary(false);
+	  else {
+		setServiceSongPickerOpen(false);
+		setServiceCloseConfirmOpen(true);
+	  }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [serviceCloseConfirmOpen, serviceModeIndex, showRehearsalSummary]);
 
   const fetchRevisionComments = useCallback(async (setlistId: string) => {
     const { data, error } = await supabase
@@ -1340,24 +1500,31 @@ export function EventDetail() {
   };
 
   const handleConfirm = async (assignmentId: string) => {
-    if (respondingAssignmentId) return;
+    if (respondingAssignmentId || !user?.id) return;
     setRespondingAssignmentId(assignmentId);
     try {
-      const { error } = await withSaveTimeout(
+      const { data, error } = await withSaveTimeout(
         supabase
           .from('event_assignments')
           .update({ status: 'confirmed', confirmed_at: new Date().toISOString(), decline_reason: null })
           .eq('id', assignmentId)
+		  .eq('user_id', user.id)
+		  .select('id, status')
+		  .maybeSingle()
       );
 
-      if (error) {
-        toast('error', 'Could not confirm this assignment');
+      if (error || !data || data.status !== 'confirmed') {
+		console.error('Failed to confirm assignment:', error);
+        toast('error', error?.message || 'Could not confirm this assignment');
         return;
       }
 
       dispatchBadgeCountsRefresh();
       toast('success', 'Assignment confirmed');
       await fetchAll();
+	} catch (error) {
+	  console.error('Failed to confirm assignment:', error);
+	  toast('error', getErrorMessage(error, 'Could not confirm this assignment'));
     } finally {
       setRespondingAssignmentId(null);
     }
@@ -1915,9 +2082,32 @@ export function EventDetail() {
       return;
     }
 
+    const normalizedTitle = normalizeSongTitle(title);
+    const localTitleMatch = songs.find(song => normalizeSongTitle(song.title) === normalizedTitle);
+    if (localTitleMatch) {
+      const message = `“${localTitleMatch.title}” is already in the song library${localTitleMatch.artist ? ` by ${localTitleMatch.artist}` : ''}. Select the existing song instead.`;
+      setNewSongError(message);
+      toast('error', 'That song already exists');
+      return;
+    }
+
     setCreatingSong(true);
     setNewSongError('');
     try {
+      const { data: currentSongs, error: duplicateCheckError } = await supabase
+        .from('songs')
+        .select('id, title, artist');
+      if (duplicateCheckError) {
+        throw new Error('Could not check the song library. Please try again.');
+      }
+      const currentTitleMatch = currentSongs?.find(song => normalizeSongTitle(song.title) === normalizedTitle);
+      if (currentTitleMatch) {
+        const message = `“${currentTitleMatch.title}” is already in the song library${currentTitleMatch.artist ? ` by ${currentTitleMatch.artist}` : ''}. Select the existing song instead.`;
+        setNewSongError(message);
+        toast('error', 'That song already exists');
+        return;
+      }
+
       const { data, error } = await withSaveTimeout(
         supabase
           .from('songs')
@@ -2780,11 +2970,12 @@ const openLyricsModal = (ss: SetlistSong) => {
           {visiblePendingAssignments.map(assignment => {
             const isResponding = respondingAssignmentId === assignment.id;
             const roleName = assignment.roles?.name || 'Team role';
+			const servingRole = getServingRoleLabel(roleName);
             return (
               <div key={assignment.id} className="flex flex-col gap-3 px-3.5 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/35">Assigned role</p>
-                  <p className="mt-0.5 truncate text-sm font-bold text-white">{roleName}</p>
+				  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-300/70">Your role for this event</p>
+				  <p className="mt-1 text-sm font-bold leading-snug text-white">You’re assigned to serve as <span className="text-amber-300">{servingRole}</span>.</p>
                 </div>
                 <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
                   <button
@@ -2992,12 +3183,57 @@ const openLyricsModal = (ss: SetlistSong) => {
   };
   const serviceModeSong = serviceModeIndex === null ? null : serviceModeSongs[serviceModeIndex] || null;
   const serviceModeSongKey = serviceModeDisplayKey || serviceModeSong?.performed_key || serviceModeSong?.songs?.song_key || '';
+	const activeSongPreparation = serviceModeSong ? songPreparation[serviceModeSong.id] : undefined;
+	const rehearsalReadyCount = serviceModeSongs.filter(song => songPreparation[song.id]?.readiness === 'ready').length;
+	const rehearsalNeedsWorkCount = serviceModeSongs.filter(song => songPreparation[song.id]?.readiness === 'needs_work').length;
+	const openPreparationPanel = () => {
+	  if (!serviceModeSong) return;
+	  setPreparationDraft({
+	    readiness: activeSongPreparation?.readiness || 'not_rehearsed',
+	    issue_type: activeSongPreparation?.issue_type || '',
+	    note: activeSongPreparation?.note || '',
+	  });
+	  setServicePreparationOpen(value => !value);
+	};
+	const saveSongPreparation = async () => {
+	  if (!serviceModeSong || !user?.id || !organization?.id || event.event_type !== 'Rehearsals' || !event.linked_event_id || savingPreparation) return;
+	  setSavingPreparation(true);
+	  try {
+	    const payload = {
+	      org_id: organization.id,
+	      event_id: event.linked_event_id,
+	      rehearsal_event_id: event.id,
+	      setlist_song_id: serviceModeSong.id,
+	      song_id: serviceModeSong.song_id,
+	      readiness: preparationDraft.readiness,
+	      issue_type: preparationDraft.issue_type || null,
+	      note: preparationDraft.note.trim() || null,
+	      updated_by: user.id,
+	    };
+	    const { data, error } = await withSaveTimeout(
+	      supabase
+	        .from('event_song_preparation')
+	        .upsert(payload, { onConflict: 'event_id,setlist_song_id' })
+	        .select('id, event_id, rehearsal_event_id, setlist_song_id, song_id, readiness, issue_type, note, updated_at')
+	        .single()
+	    );
+	    if (error || !data) {
+	      toast('error', error?.message || 'Could not save rehearsal readiness');
+	      return;
+	    }
+	    setSongPreparation(current => ({ ...current, [serviceModeSong.id]: data as EventSongPreparation }));
+	    toast('success', 'Rehearsal handoff saved');
+	    setServicePreparationOpen(false);
+	  } finally {
+	    setSavingPreparation(false);
+	  }
+	};
 	  const serviceModeSourceLabel = event.event_type === 'Rehearsals' && linkedReferenceSongs.length > 0
 	    ? linkedServiceEvent?.title || 'linked Sunday Service'
 	    : orderedSetlistSongs.length > 0
 	    ? event.title
 	    : linkedServiceEvent?.title || 'linked Sunday Service';
-	  const showServiceModeEntryPoints = false;
+	  const showServiceModeEntryPoints = canUseServiceModePilot;
 	  const serviceModeLabel = event.event_type === 'Rehearsals' ? 'Rehearsal Mode' : 'Service Mode';
   const serviceModeLoadingTitle = event.event_type === 'Rehearsals' ? 'Preparing rehearsal flow.' : 'Preparing your setlist.';
   const serviceModeLoadingSteps = [
@@ -3018,34 +3254,30 @@ const openLyricsModal = (ss: SetlistSong) => {
       }))
       .filter((panel): panel is { offset: -1 | 0 | 1; index: number; song: SetlistSong & { songs: Song } } => !!panel.song?.songs);
   const openServiceMode = (index = 0) => {
+    if (!canUseServiceModePilot) return;
     if (serviceModeSongs.length === 0) return;
     if (event.event_type !== 'Rehearsals' && setlist?.status !== 'approved') return;
     const nextIndex = Math.min(Math.max(index, 0), serviceModeSongs.length - 1);
-    if (serviceModeEnterTimer.current) {
-      window.clearTimeout(serviceModeEnterTimer.current);
-    }
+	serviceModeOpenerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setServiceChartEditing(false);
     setServiceChartControlsVisible(false);
     setServiceArrangementOpen(false);
     setServiceAutoScrollEnabled(false);
     setServiceSongPickerOpen(false);
+	setServicePreparationOpen(false);
+	setShowRehearsalSummary(false);
+	setServiceModeUnlocked(event.event_type === 'Rehearsals');
     setServiceModeDisplayKey('');
     serviceTrackAnimation.current?.stop();
     serviceTrackX.set(0);
-    setServiceModeEntering(true);
+    // The event and its charts are already loaded here, so reveal the selected
+    // chart immediately instead of blocking it behind an artificial intro.
+    setServiceModeEntering(false);
     setServiceModeIndex(nextIndex);
-    serviceModeEnterTimer.current = window.setTimeout(() => {
-      setServiceModeEntering(false);
-      serviceModeEnterTimer.current = null;
-    }, 8500);
   };
   const closeServiceMode = () => {
     serviceModeClosing.current = true;
     if (id) clearActiveServiceMode(id);
-    if (serviceModeEnterTimer.current) {
-      window.clearTimeout(serviceModeEnterTimer.current);
-      serviceModeEnterTimer.current = null;
-    }
     const root = document.documentElement;
     root.classList.remove('service-mode-active');
     document.body.classList.remove('service-mode-active');
@@ -3061,6 +3293,9 @@ const openLyricsModal = (ss: SetlistSong) => {
     setServiceArrangementOpen(false);
     setServiceAutoScrollEnabled(false);
     setServiceSongPickerOpen(false);
+	setServicePreparationOpen(false);
+	setShowRehearsalSummary(false);
+	setServiceModeUnlocked(false);
     setServiceCloseConfirmOpen(false);
     setServiceModeEntering(false);
     setServiceModeDisplayKey('');
@@ -3071,6 +3306,7 @@ const openLyricsModal = (ss: SetlistSong) => {
     params.delete('song');
     const nextSearch = params.toString();
     navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ''}`, { replace: true });
+	window.setTimeout(() => serviceModeOpenerRef.current?.focus(), 0);
   };
 
   const requestCloseServiceMode = () => {
@@ -3092,6 +3328,7 @@ const openLyricsModal = (ss: SetlistSong) => {
     setServiceArrangementOpen(false);
     setServiceAutoScrollEnabled(false);
     setServiceSongPickerOpen(false);
+	setServicePreparationOpen(false);
     serviceSwipeAnimating.current = true;
     serviceTrackAnimation.current?.stop();
     serviceTrackAnimation.current = animate(serviceTrackX, direction === 1 ? -serviceSwipeWidth : serviceSwipeWidth, {
@@ -3114,6 +3351,7 @@ const openLyricsModal = (ss: SetlistSong) => {
     setServiceChartEditing(false);
     setServiceArrangementOpen(false);
     setServiceAutoScrollEnabled(false);
+	setServicePreparationOpen(false);
     serviceTrackAnimation.current?.stop();
     serviceTrackX.set(0);
     setServiceModeIndex(targetIndex);
@@ -3245,11 +3483,12 @@ const openLyricsModal = (ss: SetlistSong) => {
           {visiblePendingAssignments.map(assignment => {
             const isResponding = respondingAssignmentId === assignment.id;
             const roleName = assignment.roles?.name || 'Team role';
+			const servingRole = getServingRoleLabel(roleName);
             return (
               <div key={assignment.id} className="grid gap-3 px-4 py-4 sm:grid-cols-[1fr_auto] sm:items-center sm:px-5">
                 <div className="min-w-0">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/35">Assigned role</p>
-                  <p className="mt-1 truncate text-base font-black text-white">{roleName}</p>
+				  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-300/70">Your role for this event</p>
+				  <p className="mt-1 text-base font-black leading-snug text-white">You’re assigned to serve as <span className="text-amber-300">{servingRole}</span>.</p>
                 </div>
                 <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
                   <button
@@ -3286,6 +3525,10 @@ const openLyricsModal = (ss: SetlistSong) => {
       </div>
     </motion.main>
   ) : null;
+
+  const newSongTitleMatch = newSong.title.trim()
+    ? songs.find(song => normalizeSongTitle(song.title) === normalizeSongTitle(newSong.title)) || null
+    : null;
 
   return (
     <div className="page-container page-bottom-pad relative isolate overflow-x-clip bg-[#050505]">
@@ -3780,7 +4023,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                   {showServiceModeEntryPoints && canShowLinkedRehearsalModeButton && linkedReferenceSongs.length > 0 && (
                     <button
                       onClick={() => openServiceMode(0)}
-                      className="group relative hidden h-9 items-center justify-center gap-2 overflow-hidden rounded-full bg-emerald-500/15 px-3 text-xs font-bold text-emerald-200 ring-1 ring-emerald-400/20 transition hover:bg-emerald-500/20 active:scale-[0.98] sm:inline-flex"
+                      className="group relative inline-flex h-9 items-center justify-center gap-2 overflow-hidden rounded-full bg-emerald-500/15 px-3 text-xs font-bold text-emerald-200 ring-1 ring-emerald-400/20 transition hover:bg-emerald-500/20 active:scale-[0.98]"
                       title={`Open ${serviceModeLabel}`}
                     >
                       <FileText className="relative h-4 w-4 transition group-hover:scale-110" />
@@ -5370,7 +5613,23 @@ const openLyricsModal = (ss: SetlistSong) => {
           <form onSubmit={e => { e.preventDefault(); handleCreateSong(); }} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Title</label>
-              <input type="text" value={newSong.title} onChange={e => setNewSong({ ...newSong, title: e.target.value })} className="input-field" required />
+              <input
+                type="text"
+                value={newSong.title}
+                onChange={e => {
+                  setNewSong({ ...newSong, title: e.target.value });
+                  if (newSongError) setNewSongError('');
+                }}
+                className={`input-field ${newSongTitleMatch ? 'border-red-400 focus:border-red-500 focus:ring-red-500/25' : ''}`}
+                aria-invalid={Boolean(newSongTitleMatch)}
+                aria-describedby={newSongTitleMatch ? 'new-song-title-match' : undefined}
+                required
+              />
+              {newSongTitleMatch && (
+                <p id="new-song-title-match" className="mt-2 rounded-xl border border-amber-300/30 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
+                  “{newSongTitleMatch.title}” already exists{newSongTitleMatch.artist ? ` by ${newSongTitleMatch.artist}` : ''}. Close this form and select that song from the library.
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Artist <span className="text-red-500">*</span></label>
@@ -5398,7 +5657,7 @@ const openLyricsModal = (ss: SetlistSong) => {
             )}
             <div className="flex justify-end gap-3 pt-2">
               <button type="button" onClick={() => { setShowAddSong(false); setNewSongError(''); if (setlistBuilderActive) setShowSetlist(true); }} disabled={creatingSong} className="btn-secondary disabled:opacity-60">Cancel</button>
-              <button type="button" onClick={handleCreateSong} disabled={creatingSong || !newSong.title.trim() || !newSong.artist.trim()} className="btn-primary disabled:opacity-60">
+              <button type="button" onClick={handleCreateSong} disabled={creatingSong || !newSong.title.trim() || !newSong.artist.trim() || Boolean(newSongTitleMatch)} className="btn-primary disabled:opacity-60">
                 {creatingSong ? 'Creating...' : 'Create & Add'}
               </button>
             </div>
@@ -5629,17 +5888,21 @@ const openLyricsModal = (ss: SetlistSong) => {
           )}
         </Modal>
 
-        {typeof document !== 'undefined' && serviceModeSong?.songs && createPortal(
+        {typeof document !== 'undefined' && canUseServiceModePilot && serviceModeSong?.songs && createPortal(
               <motion.div
+				ref={serviceModeOverlayRef}
                 key="service-mode-overlay"
-                initial={{ opacity: 0, scale: 0.985, y: 18, filter: 'blur(10px)' }}
-                animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
-                transition={{ duration: 0.58, ease: [0.22, 1, 0.36, 1] }}
+				role="dialog"
+				aria-modal="true"
+				aria-label={serviceModeLabel}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.12, ease: 'easeOut' }}
                 className="service-mode-overlay fixed inset-0 isolate z-[2147483000] flex w-screen flex-col overflow-visible bg-white text-gray-950 dark:bg-[#0c0f0d] dark:text-white"
                 style={{
-                  bottom: 'calc(0px - var(--service-mode-bottom-bleed))',
-                  height: 'calc(var(--service-mode-viewport-height) + var(--service-mode-bottom-bleed))',
-                  overflow: 'visible',
+                  bottom: 0,
+                  height: 'var(--service-mode-viewport-height)',
+                  overflow: 'hidden',
                 }}
               >
                 <motion.div
@@ -5784,20 +6047,20 @@ const openLyricsModal = (ss: SetlistSong) => {
                     <motion.div
                       key="service-mode-chart"
                       className="service-mode-chart-shell relative z-10 flex min-h-0 flex-1 flex-col bg-white dark:bg-[#0c0f0d]"
-                      initial={{ opacity: 0, y: 24 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 18 }}
-                      transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.12, ease: 'easeOut' }}
                     >
                       <motion.div
-                        initial={{ y: -18, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        exit={{ y: -12, opacity: 0 }}
-                        transition={{ duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.12, ease: 'easeOut' }}
                         className="relative z-[80] flex shrink-0 items-center gap-2 border-b border-black/[0.06] bg-white/95 px-4 pb-3 pt-3 shadow-sm backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#0c0f0d]/95"
                         style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)' }}
                       >
-                        <button onClick={requestCloseServiceMode} className="rounded-full p-2 text-gray-500 hover:bg-black/[0.05] dark:text-white/55 dark:hover:bg-white/[0.08]">
+						<button ref={serviceModeCloseButtonRef} type="button" onClick={requestCloseServiceMode} aria-label={`Close ${serviceModeLabel}`} className="rounded-full p-2 text-gray-500 hover:bg-black/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-white/55 dark:hover:bg-white/[0.08]">
                           <X className="h-5 w-5" />
                         </button>
                         <div className="relative min-w-0 flex-1">
@@ -5808,7 +6071,13 @@ const openLyricsModal = (ss: SetlistSong) => {
                             className="group flex w-full min-w-0 items-center gap-2 rounded-2xl px-2 py-1 text-left transition hover:bg-emerald-50/70 active:scale-[0.99] dark:hover:bg-emerald-500/10"
                           >
                             <span className="min-w-0 flex-1">
-                              <span className="block text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700 dark:text-emerald-300">{serviceModeLabel}</span>
+							  <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700 dark:text-emerald-300">
+								{serviceModeLabel}
+								<span className={`inline-flex items-center gap-1 tracking-normal ${isOnline ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-600 dark:text-red-300'}`} title={isOnline ? 'Connected' : 'Offline'}>
+								  {isOnline ? <Wifi className="h-3 w-3" aria-hidden="true" /> : <WifiOff className="h-3 w-3" aria-hidden="true" />}
+								  <span className="sr-only">{isOnline ? 'Connected' : 'Offline'}</span>
+								</span>
+							  </span>
                               <span className="flex min-w-0 items-center gap-1.5">
                                 {serviceModeSongKey && (
                                   <span className="inline-flex h-5 min-w-8 shrink-0 items-center justify-center rounded-full border border-amber-300 bg-amber-100 px-2 text-[10px] font-black uppercase tracking-[0.08em] text-amber-800 shadow-sm shadow-amber-500/10 dark:border-amber-400/35 dark:bg-amber-400/15 dark:text-amber-200">
@@ -5932,11 +6201,73 @@ const openLyricsModal = (ss: SetlistSong) => {
                             </motion.span>
                           </button>
                       </motion.div>
+					  <div className="relative z-[70] shrink-0 border-b border-black/[0.06] bg-gray-50/95 px-3 py-2 dark:border-white/[0.08] dark:bg-[#101411]/95">
+						<div className="flex items-center gap-2">
+						  <button
+							type="button"
+							onClick={openPreparationPanel}
+							aria-expanded={servicePreparationOpen}
+							className={`inline-flex min-h-9 flex-1 items-center justify-center gap-2 rounded-xl px-3 text-xs font-black transition ${
+							  activeSongPreparation?.readiness === 'ready'
+								? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200'
+								: activeSongPreparation?.readiness === 'needs_work'
+								  ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200'
+								  : 'bg-gray-200 text-gray-700 dark:bg-white/[0.08] dark:text-white/65'
+							}`}
+						  >
+							{activeSongPreparation?.readiness === 'ready' ? <CheckCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+							{REHEARSAL_READINESS_OPTIONS.find(option => option.value === (activeSongPreparation?.readiness || 'not_rehearsed'))?.label}
+						  </button>
+						  {event.event_type === 'Rehearsals' ? (
+							<button type="button" onClick={() => setShowRehearsalSummary(true)} className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-emerald-600 px-3 text-xs font-black text-white">
+							  <ClipboardCheck className="h-4 w-4" /> Finish
+							</button>
+						  ) : (
+							<button
+							  type="button"
+							  onClick={() => setServiceModeUnlocked(value => !value)}
+							  className={`inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-black ${serviceModeUnlocked ? 'bg-amber-500 text-black' : 'bg-gray-900 text-white dark:bg-white dark:text-black'}`}
+							  aria-pressed={serviceModeUnlocked}
+							>
+							  {serviceModeUnlocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+							  {serviceModeUnlocked ? 'Editing' : 'Locked'}
+							</button>
+						  )}
+						</div>
+						<AnimatePresence initial={false}>
+						  {servicePreparationOpen && (
+							<motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+							  {event.event_type === 'Rehearsals' ? (
+								<div className="space-y-2 pt-2">
+								  <div className="grid grid-cols-3 gap-1.5">
+									{REHEARSAL_READINESS_OPTIONS.map(option => (
+									  <button key={option.value} type="button" onClick={() => setPreparationDraft(current => ({ ...current, readiness: option.value }))} className={`min-h-9 rounded-xl px-2 text-[11px] font-black ${preparationDraft.readiness === option.value ? 'bg-emerald-600 text-white' : 'bg-white text-gray-600 dark:bg-white/[0.06] dark:text-white/60'}`}>{option.label}</button>
+									))}
+								  </div>
+								  <div className="grid grid-cols-[minmax(0,0.38fr)_minmax(0,0.62fr)_auto] gap-2">
+									<select value={preparationDraft.issue_type} onChange={e => setPreparationDraft(current => ({ ...current, issue_type: e.target.value as RehearsalIssueType | '' }))} className="min-w-0 rounded-xl border-0 bg-white px-2 text-xs font-bold text-gray-800 dark:bg-white/[0.08] dark:text-white">
+									  <option value="">No issue</option>
+									  {REHEARSAL_ISSUE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+									</select>
+									<input value={preparationDraft.note} onChange={e => setPreparationDraft(current => ({ ...current, note: e.target.value }))} placeholder="Cue or follow-up note" className="min-w-0 rounded-xl border-0 bg-white px-3 text-xs text-gray-800 placeholder:text-gray-400 dark:bg-white/[0.08] dark:text-white" />
+									<button type="button" onClick={saveSongPreparation} disabled={savingPreparation} className="min-h-10 rounded-xl bg-emerald-600 px-3 text-xs font-black text-white disabled:opacity-60">{savingPreparation ? 'Saving…' : 'Save'}</button>
+								  </div>
+								</div>
+							  ) : (
+								<p className="pt-2 text-xs font-semibold leading-relaxed text-gray-600 dark:text-white/60">
+								  {activeSongPreparation?.issue_type ? `${REHEARSAL_ISSUE_OPTIONS.find(option => option.value === activeSongPreparation.issue_type)?.label}: ` : ''}
+								  {activeSongPreparation?.note || 'No rehearsal handoff note for this song.'}
+								</p>
+							  )}
+							</motion.div>
+						  )}
+						</AnimatePresence>
+					  </div>
                       <motion.div
-                        initial={{ y: 28, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        exit={{ y: 24, opacity: 0 }}
-                        transition={{ duration: 0.62, delay: 0.04, ease: [0.22, 1, 0.36, 1] }}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.12, ease: 'easeOut' }}
                         className="service-mode-chart-frame relative z-10 min-h-0 flex-1 overflow-visible bg-white dark:bg-[#0c0f0d]"
                       >
                         <div ref={serviceSongStageRef} className="service-mode-song-stage">
@@ -5957,6 +6288,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                             {serviceSongPanels.map(({ offset, index, song }) => (
                               <div
                                 key={`${song.song_id}-${index}`}
+								aria-hidden={offset !== 0}
                                 className={`service-mode-song-panel ${offset === 0 ? '' : 'pointer-events-none'}`}
                                 style={{ transform: `translate3d(${offset * 100}%, 0, 0)` }}
                               >
@@ -5969,7 +6301,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                   songKey={song.songs.song_key}
                                   performedKey={song.performed_key}
                                   chordproText={getSetlistSongChartText(song)}
-                                  editable={offset === 0 && (canManageSetlist || canEditSetlist)}
+								  editable={offset === 0 && canUseServiceModePilot && (event.event_type === 'Rehearsals' || serviceModeUnlocked)}
                                   fullBleed
                                   saving={offset === 0 ? chartSaving : false}
                                   hideTitleHeader
@@ -5999,6 +6331,38 @@ const openLyricsModal = (ss: SetlistSong) => {
                   )}
                 </AnimatePresence>
                 <AnimatePresence>
+				  {showRehearsalSummary && event.event_type === 'Rehearsals' && (
+					<motion.div className="absolute inset-0 z-[170] flex items-center justify-center bg-black/60 px-4 backdrop-blur-md" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowRehearsalSummary(false)}>
+					  <motion.div role="dialog" aria-modal="true" aria-labelledby="rehearsal-summary-title" className="max-h-[85vh] w-full max-w-lg overflow-hidden rounded-[28px] bg-white p-4 text-gray-950 shadow-2xl dark:bg-[#141815] dark:text-white" initial={{ y: 16, scale: 0.97 }} animate={{ y: 0, scale: 1 }} exit={{ y: 12, scale: 0.98 }} onClick={clickEvent => clickEvent.stopPropagation()}>
+						<div className="flex items-start justify-between gap-3">
+						  <div>
+							<p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-300">Rehearsal handoff</p>
+							<h2 id="rehearsal-summary-title" className="mt-1 text-xl font-black">Ready for Service Mode?</h2>
+							<p className="mt-1 text-xs font-semibold text-gray-500 dark:text-white/50">{rehearsalReadyCount} ready · {rehearsalNeedsWorkCount} need work · {serviceModeSongs.length - rehearsalReadyCount - rehearsalNeedsWorkCount} not rehearsed</p>
+						  </div>
+						  <button type="button" onClick={() => setShowRehearsalSummary(false)} aria-label="Close rehearsal summary" className="rounded-full p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-white/[0.08]"><X className="h-5 w-5" /></button>
+						</div>
+						<div className="mt-4 max-h-[52vh] space-y-2 overflow-y-auto overscroll-contain">
+						  {serviceModeSongs.map((song, index) => {
+							const preparation = songPreparation[song.id];
+							const readiness = preparation?.readiness || 'not_rehearsed';
+							return (
+							  <button key={song.id} type="button" onClick={() => { setShowRehearsalSummary(false); selectServiceSong(index); }} className="flex w-full items-start gap-3 rounded-2xl bg-gray-100 px-3 py-3 text-left dark:bg-white/[0.06]">
+								<span className={`mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ${readiness === 'ready' ? 'bg-emerald-500' : readiness === 'needs_work' ? 'bg-amber-500' : 'bg-gray-400'}`} />
+								<span className="min-w-0 flex-1">
+								  <span className="block text-sm font-black">{song.songs?.title || `Song ${index + 1}`}</span>
+								  <span className="mt-0.5 block text-xs font-semibold text-gray-500 dark:text-white/45">{REHEARSAL_READINESS_OPTIONS.find(option => option.value === readiness)?.label}{preparation?.note ? ` · ${preparation.note}` : ''}</span>
+								</span>
+							  </button>
+							);
+						  })}
+						</div>
+						<button type="button" onClick={closeServiceMode} className="mt-4 h-11 w-full rounded-2xl bg-emerald-600 text-sm font-black text-white">Finish Rehearsal</button>
+					  </motion.div>
+					</motion.div>
+				  )}
+				</AnimatePresence>
+				<AnimatePresence>
                   {serviceCloseConfirmOpen && (
                     <motion.div
                       className="absolute inset-0 z-[160] flex items-center justify-center bg-black/45 px-5 backdrop-blur-md"

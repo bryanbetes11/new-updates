@@ -103,6 +103,14 @@ const TeamNavIcon: NavIcon = ({ className, style }) => (
 const NotificationNavIcon: NavIcon = ({ className, style }) => (
   <BellRing className={className} style={style} />
 );
+const ACTIVE_STATE_NAV_ICONS = new Set<NavIcon>([
+  HomeIcon,
+  CalendarIcon,
+  NewsIcon,
+  LeaveIcon,
+  ShieldNavIcon,
+  MessageIcon,
+]);
 const globalSearchTypeMeta: Record<
   GlobalSearchKind,
   { label: string; icon: LucideIcon; tone: string }
@@ -1224,7 +1232,7 @@ export function Navigation({
             >
               <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_28%_22%,rgba(255,255,255,0.34),transparent_32%)]" />
               <Icon
-                active={active}
+				{...(ACTIVE_STATE_NAV_ICONS.has(Icon) ? { active } : {})}
                 className="relative h-[17px] w-[17px] shrink-0 text-white/90"
                 style={{ width: "17px", height: "17px", strokeWidth: 2.2 }}
               />
@@ -1272,7 +1280,7 @@ export function Navigation({
         >
           <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_28%_22%,rgba(255,255,255,0.34),transparent_32%)]" />
           <Icon
-            active={active}
+			{...(ACTIVE_STATE_NAV_ICONS.has(Icon) ? { active } : {})}
             className="relative h-[17px] w-[17px] shrink-0 text-white/90"
             style={{ width: "17px", height: "17px", strokeWidth: 2.2 }}
           />
@@ -2338,7 +2346,7 @@ export function Navigation({
                     )}
                     <div className="relative">
                       <Icon
-                        active={active}
+						{...(ACTIVE_STATE_NAV_ICONS.has(Icon) ? { active } : {})}
                         className="transition-colors duration-200"
                       />
                       <MobileBadge count={badge} color={item.badgeColor} />

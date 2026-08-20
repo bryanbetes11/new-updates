@@ -9,7 +9,7 @@ import {
   useNavigate,
 } from "react-router-dom";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import { AuthProvider } from "./contexts/AuthContext";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ToastProvider } from "./contexts/ToastContext";
 import { Layout } from "./components/Layout";
 import { PageLoader } from "./components/LoadingSpinner";
@@ -30,6 +30,7 @@ import {
   shouldRequireAppUpdate,
 } from "./lib/serviceWorkerUpdate";
 import {
+  clearActiveServiceMode,
   getActiveServiceMode,
   serviceModeResumePath,
 } from "./lib/serviceModeResume";
@@ -224,11 +225,18 @@ function PasswordRecoveryRedirect() {
 function ServiceModeResumeRedirect() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { loading, isOrgAdmin, isAdmin, isPlatformOwner } = useAuth();
   const hasTriedServiceModeResume = useRef(false);
+  const canUseServiceModePilot = isOrgAdmin || isAdmin || isPlatformOwner;
 
   useEffect(() => {
-    if (hasTriedServiceModeResume.current) return;
+    if (loading || hasTriedServiceModeResume.current) return;
     hasTriedServiceModeResume.current = true;
+
+    if (!canUseServiceModePilot) {
+      clearActiveServiceMode();
+      return;
+    }
 
     const restoreServiceMode = () => {
       const activeMode = getActiveServiceMode();
@@ -248,7 +256,7 @@ function ServiceModeResumeRedirect() {
     };
 
     restoreServiceMode();
-  }, [location.pathname, location.search, navigate]);
+  }, [canUseServiceModePilot, loading, location.pathname, location.search, navigate]);
 
   return null;
 }
@@ -281,9 +289,9 @@ export default function App() {
     <BrowserRouter>
       <InteractiveLabelCase />
       <PasswordRecoveryRedirect />
-      <ServiceModeResumeRedirect />
       <ThemeProvider>
         <AuthProvider>
+          <ServiceModeResumeRedirect />
           <ToastProvider>
             <AppUpdateModal
               open={showAppUpdate}

@@ -61,7 +61,7 @@ html[data-touch-feedback="apple"] :is(nav, aside) .touch-feedback-strong {
     --sidebar-bg: rgba(255,255,255,0.97);
     --sidebar-border: rgba(0,0,0,0.06);
     --service-mode-viewport-height: 100dvh;
-    --service-mode-bottom-bleed: max(env(safe-area-inset-bottom, 0px), 34px);
+    --service-mode-bottom-bleed: env(safe-area-inset-bottom, 0px);
     --service-mode-keyboard-inset: 0px;
     --duration-fast: 120ms;
     --duration-base: 220ms;
@@ -151,7 +151,7 @@ html[data-touch-feedback="apple"] :is(nav, aside) .touch-feedback-strong {
   html.service-mode-active body,
   body.service-mode-active {
     height: 100%;
-    min-height: calc(100dvh + var(--service-mode-bottom-bleed));
+    min-height: 100dvh;
     background: #fff !important;
     overflow: hidden !important;
     overscroll-behavior: none !important;
@@ -844,18 +844,18 @@ html[data-touch-feedback="apple"] :is(nav, aside) .touch-feedback-strong {
   .service-mode-overlay {
     top: 0;
     right: 0;
-    bottom: calc(0px - var(--service-mode-bottom-bleed));
+    bottom: 0;
     left: 0;
     max-height: none;
     min-height: 0;
-    height: calc(var(--service-mode-viewport-height) + var(--service-mode-bottom-bleed));
-    overflow: visible;
+    height: var(--service-mode-viewport-height);
+    overflow: hidden;
   }
 
   .service-mode-chart-shell,
   .service-mode-chart-frame {
     min-height: 0;
-    overflow: visible;
+    overflow: hidden;
   }
 
   .service-mode-chart-viewer {
@@ -866,7 +866,7 @@ html[data-touch-feedback="apple"] :is(nav, aside) .touch-feedback-strong {
 
   .service-mode-chart-scroll {
     margin-bottom: 0;
-    padding-bottom: calc(var(--service-mode-bottom-bleed) + 1.5rem);
+    padding-bottom: calc(var(--service-mode-bottom-bleed) + 5rem);
     overscroll-behavior-y: contain;
     scroll-behavior: auto;
     touch-action: pan-y;
@@ -876,7 +876,7 @@ html[data-touch-feedback="apple"] :is(nav, aside) .touch-feedback-strong {
 
   .service-mode-edit-scroll {
     margin-bottom: 0;
-    padding-bottom: calc(var(--service-mode-keyboard-inset, 0px) + var(--service-mode-bottom-bleed) + 1.5rem);
+    padding-bottom: calc(var(--service-mode-keyboard-inset, 0px) + var(--service-mode-bottom-bleed) + 5rem);
     overscroll-behavior-y: contain;
     touch-action: pan-y;
     -webkit-overflow-scrolling: touch;

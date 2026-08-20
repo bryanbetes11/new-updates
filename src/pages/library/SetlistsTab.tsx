@@ -6,7 +6,7 @@ import {
   Music, Upload, CheckCircle, AlertTriangle, Calendar, Search,
   ChevronDown, Trash2, Square, CheckSquare, X,
   Clock, Music2, ArrowUpDown,
-  ExternalLink, Globe2, ClipboardPaste, Pencil,
+  ExternalLink, Globe2, ClipboardPaste, Pencil, FileText, ShieldCheck,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -20,6 +20,7 @@ import { parseChordProMetadata } from '../../lib/chordPro';
 import { withSaveTimeout } from '../../lib/saveTimeout';
 import { filterSetlistsBySearch } from '../../lib/setlistSearch';
 import { buildSongUsages, type SongUsageSummary } from '../../lib/songUsage';
+import { normalizeSongTitle, sanitizeSongTitle } from '../../lib/songTitle';
 
 interface SetlistWithEvent {
   id: string;
@@ -40,6 +41,25 @@ interface ImportRow {
   song_key: string;
   song_category: string;
   song_leader: string;
+}
+
+type ChartImportAction = 'create' | 'update' | 'skip';
+type ChartImportView = 'new' | 'existing' | 'review' | 'all';
+
+interface ChartImportCandidate {
+  id: string;
+  fileName: string;
+  title: string;
+  artist: string;
+  songKey: string;
+  chordproText: string;
+  action: ChartImportAction;
+  reason: string;
+  existingSongId: string | null;
+  hasTitleConflict: boolean;
+  isExactDuplicate: boolean;
+  requiresReview: boolean;
+  fillsMissingArtist: boolean;
 }
 
 interface SongLeaderProfile {
@@ -70,22 +90,22 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
   return fallback;
 };
 
-const sanitizeSongTitle = (title: string): string => {
-  return title
-    .replace(/(Bro\.?|Sis\.?|Brother|Sister)\s*/gi, '')
-    .replace(/\bSTand\b/g, 'Stand')
-    .replace(/\bKatapaTan\b/g, 'Katapatan')
-    .replace(/\bKatapan\b/g, 'Katapatan')
-    .replace(/\bItaTanghal\b/g, 'Itatanghal')
-    .replace(/\bIStand\b/g, 'I Stand')
-    .replace(/\bIn Awe\b/g, 'in Awe')
-    .replace(/\s+/g, ' ')
-    .trim();
-};
+const normalizeSongArtist = (artist: string): string => artist.trim().toLowerCase();
 
-const normalizeSongTitle = (title: string): string => {
-  return sanitizeSongTitle(title).replace(/,/g, '').trim().toLowerCase();
-};
+const getDuplicateSongScore = (song: SongUsage): number => (
+  (song.chordpro_text?.trim() ? 8 : 0)
+  + (song.artist.trim() ? 4 : 0)
+  + (song.youtube_url?.trim() ? 2 : 0)
+  + (song.song_key.trim() ? 1 : 0)
+  + Math.min(song.usages.length, 5)
+);
+
+const chartFingerprint = (chart: string): string => chart
+  .replace(/\r\n/g, '\n')
+  .replace(/^\s*\{\s*(?:title|t)\s*:[^}]*\}\s*$/gim, '')
+  .replace(/[ \t]+$/gm, '')
+  .replace(/\n{3,}/g, '\n\n')
+  .trim();
 
 type SortKey = 'date_desc' | 'date_asc' | 'songs_desc';
 
@@ -141,7 +161,7 @@ interface SetlistsTabProps {
 }
 
 export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTabProps) {
-  const { user } = useAuth();
+  const { user, isOrgAdmin, isAdmin, isPlatformOwner } = useAuth();
   const location = useLocation();
   const { toast } = useToast();
   const [setlists, setSetlists] = useState<SetlistWithEvent[]>([]);
@@ -186,8 +206,20 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
     song_key: '',
     chordpro_text: '',
   });
+  const [chartImportCandidates, setChartImportCandidates] = useState<ChartImportCandidate[]>([]);
+  const [chartImportReviewOpen, setChartImportReviewOpen] = useState(false);
+  const [chartImportView, setChartImportView] = useState<ChartImportView>('new');
+  const [chartImportPreparing, setChartImportPreparing] = useState(false);
+  const [chartImportSaving, setChartImportSaving] = useState(false);
+  const [chartImportProgress, setChartImportProgress] = useState({ done: 0, total: 0 });
+  const [duplicateReviewOpen, setDuplicateReviewOpen] = useState(false);
+  const [selectedDuplicateTitle, setSelectedDuplicateTitle] = useState('');
+  const [duplicateKeeperId, setDuplicateKeeperId] = useState('');
+  const [duplicateMergeSaving, setDuplicateMergeSaving] = useState(false);
+  const [duplicateEditReturn, setDuplicateEditReturn] = useState<{ groupKey: string; keeperId: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const chartFileRef = useRef<HTMLInputElement>(null);
+  const canUseChartImportPilot = isOrgAdmin || isAdmin || isPlatformOwner;
   const openChartStorageKey = user?.id ? `${SONG_CHART_OPEN_STORAGE_PREFIX}:${user.id}` : '';
   const ownerFilter = new URLSearchParams(location.search).get('owner');
   const showMyCreatedSets = !isSongsOnly && ownerFilter === 'me';
@@ -242,6 +274,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
 
     setSongUsages(usages);
     setLoading(false);
+    return usages;
   };
 
   useEffect(() => { fetchData(); }, []);
@@ -309,7 +342,8 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
     }
   };
 
-  const openEditLibrarySong = (song: SongUsage) => {
+  const openEditLibrarySong = (song: SongUsage, returnToDuplicateReview: { groupKey: string; keeperId: string } | null = null) => {
+    setDuplicateEditReturn(returnToDuplicateReview);
     setEditingLibrarySong(song);
     setEditLibrarySongForm({
       title: song.title || '',
@@ -322,6 +356,10 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   const closeEditLibrarySong = () => {
     if (songDetailsSaving) return;
     setEditingLibrarySong(null);
+    if (duplicateEditReturn) {
+      setDuplicateReviewOpen(true);
+      setDuplicateEditReturn(null);
+    }
   };
 
   const handleSaveLibrarySongDetails = async () => {
@@ -331,10 +369,19 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
     const artist = editLibrarySongForm.artist.trim();
     const songKey = editLibrarySongForm.song_key.trim();
     const youtubeUrl = editLibrarySongForm.youtube_url.trim();
-    const canRenameSong = editingLibrarySong.created_by === user?.id;
+    const canRenameSong = editingLibrarySong.created_by === user?.id || canUseChartImportPilot;
+    const titleChanged = normalizeSongTitle(title) !== normalizeSongTitle(editingLibrarySong.title);
 
     if (canRenameSong && !title) {
       toast('error', 'Song title is required');
+      return;
+    }
+
+    const titleMatch = canRenameSong && titleChanged
+      ? songUsages.find(song => song.id !== editingLibrarySong.id && normalizeSongTitle(song.title) === normalizeSongTitle(title))
+      : null;
+    if (titleMatch) {
+      toast('error', `“${titleMatch.title}” already exists. Choose a different title or clean up the duplicate first.`);
       return;
     }
 
@@ -380,9 +427,40 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
 
       setSongUsages(current => current.map(song => song.id === updatedSong.id ? updatedSong : song));
       if (selectedChartSong?.id === updatedSong.id) setSelectedChartSong(updatedSong);
-      toast('success', 'Song details updated');
+      const returnContext = duplicateEditReturn;
+      const refreshedUsages = await fetchData();
       setEditingLibrarySong(null);
-      await fetchData();
+      setDuplicateEditReturn(null);
+
+      if (returnContext) {
+        const refreshedGroups = new Map<string, SongUsage[]>();
+        refreshedUsages.forEach(song => {
+          const groupKey = normalizeSongTitle(song.title);
+          if (!groupKey) return;
+          refreshedGroups.set(groupKey, [...(refreshedGroups.get(groupKey) || []), song]);
+        });
+        const duplicateGroups = Array.from(refreshedGroups.entries())
+          .filter(([, songs]) => songs.length > 1)
+          .map(([key, songs]) => ({
+            key,
+            songs: [...songs].sort((a, b) => getDuplicateSongScore(b) - getDuplicateSongScore(a)),
+          }))
+          .sort((a, b) => a.songs[0].title.localeCompare(b.songs[0].title));
+        const returnGroup = duplicateGroups.find(group => group.key === returnContext.groupKey)
+          || duplicateGroups[0]
+          || null;
+
+        setSelectedDuplicateTitle(returnGroup?.key || '');
+        setDuplicateKeeperId(
+          returnGroup?.songs.find(song => song.id === returnContext.keeperId)?.id
+          || returnGroup?.songs[0]?.id
+          || ''
+        );
+        setDuplicateReviewOpen(Boolean(returnGroup));
+        toast('success', returnGroup ? 'Song details updated. Returning to duplicate review.' : 'Song details updated. No duplicate titles remain.');
+      } else {
+        toast('success', 'Song details updated');
+      }
     } catch (error: unknown) {
       console.error('Failed to update song details:', error);
       toast('error', getErrorMessage(error, 'Failed to update song details'));
@@ -638,7 +716,8 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   });
 
   const handleChartUpload = async (files: FileList | null) => {
-    if (!files || files.length === 0 || !user) return;
+    if (!files || files.length === 0 || !user || !canUseChartImportPilot) return;
+    setChartImportPreparing(true);
     try {
       const chartFiles: Array<{ name: string; text: string }> = [];
 
@@ -657,58 +736,177 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
 
       const { data: existingSongs, error: existingError } = await supabase
         .from('songs')
-        .select('id, title, artist, song_key');
+        .select('id, title, artist, song_key, chordpro_text');
       if (existingError) throw existingError;
 
-      let createdCount = 0;
-      let updatedCount = 0;
-      const existingByTitle = new Map((existingSongs || []).map(song => [normalizeSongTitle(song.title), song]));
-
-      for (const chartFile of chartFiles) {
+      const parsedCharts = await Promise.all(chartFiles.map(async (chartFile, index) => {
         const normalizedChart = await normalizeChartInput(chartFile.text);
         const metadata = parseChordProMetadata(normalizedChart.chordproText);
         const fallbackName = chartFile.name.replace(/\.cho$/i, '').split('/').pop() || 'Untitled Song';
-        const title = sanitizeSongTitle(metadata.title || fallbackName);
-        const artist = metadata.artist || '';
-        const songKey = metadata.key || '';
-        const existing = existingByTitle.get(normalizeSongTitle(title));
+        return {
+          id: `${index}:${chartFile.name}`,
+          fileName: chartFile.name,
+          title: sanitizeSongTitle(metadata.title || fallbackName),
+          artist: metadata.artist || '',
+          songKey: metadata.key || '',
+          chordproText: normalizedChart.chordproText,
+        };
+      }));
 
-        if (existing) {
+      const titleCounts = new Map<string, number>();
+      parsedCharts.forEach(chart => {
+        const titleKey = normalizeSongTitle(chart.title);
+        titleCounts.set(titleKey, (titleCounts.get(titleKey) || 0) + 1);
+      });
+
+      const existingByTitle = new Map<string, typeof existingSongs>();
+      (existingSongs || []).forEach(song => {
+        const titleKey = normalizeSongTitle(song.title);
+        existingByTitle.set(titleKey, [...(existingByTitle.get(titleKey) || []), song]);
+      });
+
+      const firstFileByFingerprint = new Map<string, string>();
+      const selectedReplacementFileBySongId = new Map<string, string>();
+      const nextCandidates: ChartImportCandidate[] = parsedCharts.map(chart => {
+        const titleKey = normalizeSongTitle(chart.title);
+        const artistKey = normalizeSongArtist(chart.artist);
+        const fingerprint = chartFingerprint(chart.chordproText);
+        const exactDuplicateOf = firstFileByFingerprint.get(fingerprint) || null;
+        if (!exactDuplicateOf) firstFileByFingerprint.set(fingerprint, chart.fileName);
+
+        const titleMatches = existingByTitle.get(titleKey) || [];
+        const artistMatches = artistKey
+          ? titleMatches.filter(song => normalizeSongArtist(song.artist || '') === artistKey)
+          : [];
+        const existing = artistMatches.length === 1
+          ? artistMatches[0]
+          : titleMatches.length === 1
+          ? titleMatches[0]
+          : null;
+        const hasTitleConflict = (titleCounts.get(titleKey) || 0) > 1;
+        const fillsMissingArtist = Boolean(existing && !existing.artist?.trim() && chart.artist.trim());
+
+        let action: ChartImportAction = 'create';
+        let reason = 'Ready to add';
+        let requiresReview = false;
+        if (exactDuplicateOf) {
+          action = 'skip';
+          reason = `Exact duplicate of ${exactDuplicateOf}`;
+          requiresReview = true;
+        } else if (existing) {
+          const selectedReplacementFile = selectedReplacementFileBySongId.get(existing.id);
+          if (selectedReplacementFile) {
+            action = 'skip';
+            reason = `Alternative chart — ${selectedReplacementFile} will update ${existing.title}`;
+            requiresReview = true;
+          } else {
+            selectedReplacementFileBySongId.set(existing.id, chart.fileName);
+            action = 'update';
+            reason = fillsMissingArtist
+              ? `Will update ${existing.title} and add artist: ${chart.artist}`
+              : `Will update existing song: ${existing.title}`;
+          }
+        } else if (titleMatches.length > 1) {
+          action = 'skip';
+          reason = 'Multiple existing songs share this title';
+          requiresReview = true;
+        } else if (hasTitleConflict) {
+          action = 'skip';
+          reason = 'Multiple selected charts share this title';
+          requiresReview = true;
+        }
+
+        return {
+          ...chart,
+          action,
+          reason,
+          existingSongId: existing?.id || null,
+          hasTitleConflict,
+          isExactDuplicate: Boolean(exactDuplicateOf),
+          requiresReview,
+          fillsMissingArtist,
+        };
+      });
+
+      setChartImportCandidates(nextCandidates);
+      setChartImportProgress({ done: 0, total: 0 });
+      setChartImportView('new');
+      setChartImportReviewOpen(true);
+    } catch (error: unknown) {
+      console.error('Failed to prepare song charts:', error);
+      toast('error', getErrorMessage(error, 'Failed to prepare song charts'));
+    } finally {
+      setChartImportPreparing(false);
+      if (chartFileRef.current) chartFileRef.current.value = '';
+    }
+  };
+
+  const closeChartImportReview = () => {
+    if (chartImportSaving) return;
+    setChartImportReviewOpen(false);
+    setChartImportCandidates([]);
+    setChartImportView('new');
+    setChartImportProgress({ done: 0, total: 0 });
+  };
+
+  const updateChartImportCandidate = (id: string, action: ChartImportAction) => {
+    setChartImportCandidates(current => current.map(candidate => (
+      candidate.id === id ? { ...candidate, action } : candidate
+    )));
+  };
+
+  const commitChartImport = async () => {
+    if (!user || !canUseChartImportPilot || chartImportSaving) return;
+    const selectedCandidates = chartImportCandidates.filter(candidate => candidate.action !== 'skip');
+    if (selectedCandidates.length === 0) {
+      toast('info', 'Choose at least one chart to import');
+      return;
+    }
+
+    setChartImportSaving(true);
+    setChartImportProgress({ done: 0, total: selectedCandidates.length });
+    let createdCount = 0;
+    let updatedCount = 0;
+
+    try {
+      for (let index = 0; index < selectedCandidates.length; index += 1) {
+        const candidate = selectedCandidates[index];
+        if (candidate.action === 'update' && candidate.existingSongId) {
           const { error } = await supabase
             .from('songs')
             .update({
-              artist: existing.artist || artist,
-              song_key: existing.song_key || songKey,
-              chordpro_text: normalizedChart.chordproText,
+              ...(candidate.fillsMissingArtist ? { artist: candidate.artist } : {}),
+              ...(candidate.songKey ? { song_key: candidate.songKey } : {}),
+              chordpro_text: candidate.chordproText,
             })
-            .eq('id', existing.id);
+            .eq('id', candidate.existingSongId);
           if (error) throw error;
           updatedCount += 1;
         } else {
-          const { data: inserted, error } = await supabase
+          const { error } = await supabase
             .from('songs')
             .insert({
-              title,
-              artist,
-              song_key: songKey,
-              chordpro_text: normalizedChart.chordproText,
+              title: candidate.title,
+              artist: candidate.artist,
+              song_key: candidate.songKey,
+              chordpro_text: candidate.chordproText,
               created_by: user.id,
-            })
-            .select('id, title, artist, song_key')
-            .maybeSingle();
+            });
           if (error) throw error;
-          if (inserted) existingByTitle.set(normalizeSongTitle(title), inserted);
           createdCount += 1;
         }
+        setChartImportProgress({ done: index + 1, total: selectedCandidates.length });
       }
 
-      toast('success', `Imported ${chartFiles.length} charts (${createdCount} new, ${updatedCount} updated)`);
+      toast('success', `Imported ${selectedCandidates.length} charts (${createdCount} new, ${updatedCount} updated)`);
+      setChartImportReviewOpen(false);
+      setChartImportCandidates([]);
       await fetchData();
     } catch (error: unknown) {
       console.error('Failed to import song charts:', error);
-      toast('error', getErrorMessage(error, 'Failed to import song charts'));
+      toast('error', getErrorMessage(error, `Import stopped after ${createdCount + updatedCount} charts`));
     } finally {
-      if (chartFileRef.current) chartFileRef.current.value = '';
+      setChartImportSaving(false);
     }
   };
 
@@ -943,6 +1141,123 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
     setDeleting(false);
   };
 
+  const chooseDuplicateGroup = (groupKey: string) => {
+    const group = duplicateSongGroups.find(candidate => candidate.key === groupKey);
+    setSelectedDuplicateTitle(groupKey);
+    setDuplicateKeeperId(group?.songs[0]?.id || '');
+  };
+
+  const openDuplicateReview = () => {
+    const firstGroup = duplicateSongGroups[0];
+    setSelectedDuplicateTitle(firstGroup?.key || '');
+    setDuplicateKeeperId(firstGroup?.songs[0]?.id || '');
+    setDuplicateReviewOpen(true);
+  };
+
+  const handleMergeDuplicateSongs = async () => {
+    if (!canUseChartImportPilot || duplicateMergeSaving || !selectedDuplicateGroup || !duplicateKeeperId) return;
+    const keeper = selectedDuplicateGroup.songs.find(song => song.id === duplicateKeeperId);
+    if (!keeper) return;
+    if (!keeper.artist.trim()) {
+      toast('error', 'Add an artist to the song you want to keep before merging.');
+      return;
+    }
+
+    const duplicateIds = selectedDuplicateGroup.songs.filter(song => song.id !== keeper.id).map(song => song.id);
+    if (duplicateIds.length === 0) return;
+    const currentGroupIndex = duplicateSongGroups.findIndex(group => group.key === selectedDuplicateGroup.key);
+    const nextDuplicateGroup = duplicateSongGroups[currentGroupIndex + 1]
+      || duplicateSongGroups.find(group => group.key !== selectedDuplicateGroup.key)
+      || null;
+
+    setDuplicateMergeSaving(true);
+    try {
+      const groupIds = [keeper.id, ...duplicateIds];
+      const { data: sectionNotes, error: notesError } = await supabase
+        .from('song_section_notes')
+        .select('id, song_id, section_key, scope')
+        .in('song_id', groupIds);
+      if (notesError) throw notesError;
+
+      const retainedNoteKeys = new Set(
+        (sectionNotes || [])
+          .filter(note => note.song_id === keeper.id)
+          .map(note => `${note.section_key}:${note.scope}`)
+      );
+      const duplicateNotes = (sectionNotes || []).filter(note => duplicateIds.includes(note.song_id));
+      const conflictingNoteIds: string[] = [];
+      const movableNoteIds: string[] = [];
+      duplicateNotes.forEach(note => {
+        const noteKey = `${note.section_key}:${note.scope}`;
+        if (retainedNoteKeys.has(noteKey)) {
+          conflictingNoteIds.push(note.id);
+          return;
+        }
+        retainedNoteKeys.add(noteKey);
+        movableNoteIds.push(note.id);
+      });
+
+      if (conflictingNoteIds.length > 0) {
+        const { error } = await supabase.from('song_section_notes').delete().in('id', conflictingNoteIds);
+        if (error) throw error;
+      }
+      if (movableNoteIds.length > 0) {
+        const { error } = await supabase.from('song_section_notes').update({ song_id: keeper.id }).in('id', movableNoteIds);
+        if (error) throw error;
+      }
+
+      const { data: setlistUsages, error: usageLookupError } = await supabase
+        .from('setlist_songs')
+        .select('id, setlist_id, song_id')
+        .in('song_id', groupIds);
+      if (usageLookupError) throw usageLookupError;
+
+      const keeperSetlistIds = new Set(
+        (setlistUsages || []).filter(row => row.song_id === keeper.id).map(row => row.setlist_id)
+      );
+      const duplicateUsageRows = (setlistUsages || []).filter(row => duplicateIds.includes(row.song_id));
+      const duplicateUsageIdsToDelete: string[] = [];
+      const duplicateUsageIdsToMove: string[] = [];
+      duplicateUsageRows.forEach(row => {
+        if (keeperSetlistIds.has(row.setlist_id)) {
+          duplicateUsageIdsToDelete.push(row.id);
+          return;
+        }
+        keeperSetlistIds.add(row.setlist_id);
+        duplicateUsageIdsToMove.push(row.id);
+      });
+
+      if (duplicateUsageIdsToDelete.length > 0) {
+        const { error } = await supabase.from('setlist_songs').delete().in('id', duplicateUsageIdsToDelete);
+        if (error) throw error;
+      }
+      if (duplicateUsageIdsToMove.length > 0) {
+        const { error } = await supabase.from('setlist_songs').update({ song_id: keeper.id }).in('id', duplicateUsageIdsToMove);
+        if (error) throw error;
+      }
+
+      const { error: deleteError } = await supabase.from('songs').delete().in('id', duplicateIds);
+      if (deleteError) throw deleteError;
+
+      await fetchData();
+      if (nextDuplicateGroup) {
+        setSelectedDuplicateTitle(nextDuplicateGroup.key);
+        setDuplicateKeeperId(nextDuplicateGroup.songs[0]?.id || '');
+        toast('success', `Merged into “${keeper.title}”. Next: “${nextDuplicateGroup.title}”`);
+      } else {
+        setDuplicateReviewOpen(false);
+        setSelectedDuplicateTitle('');
+        setDuplicateKeeperId('');
+        toast('success', `Merged into “${keeper.title}”. No duplicate titles remain.`);
+      }
+    } catch (error: unknown) {
+      console.error('Failed to merge duplicate songs:', error);
+      toast('error', getErrorMessage(error, 'Could not merge the duplicate songs'));
+    } finally {
+      setDuplicateMergeSaving(false);
+    }
+  };
+
   const filteredSongs = songUsages.filter(s => {
     if (search && !s.title.toLowerCase().includes(search.toLowerCase()) && !s.artist.toLowerCase().includes(search.toLowerCase())) return false;
     if (activeFilter === 'safe') return s.is_safe;
@@ -950,6 +1265,35 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
     if (activeFilter === 'never_used') return s.days_since === null;
     return true;
   });
+
+  const duplicateSongGroups = (() => {
+    const groups = new Map<string, SongUsage[]>();
+    songUsages.forEach(song => {
+      const titleKey = normalizeSongTitle(song.title);
+      if (!titleKey) return;
+      groups.set(titleKey, [...(groups.get(titleKey) || []), song]);
+    });
+    return Array.from(groups.entries())
+      .filter(([, songs]) => songs.length > 1)
+      .map(([key, songs]) => ({
+        key,
+        title: songs[0].title,
+        songs: [...songs].sort((a, b) => getDuplicateSongScore(b) - getDuplicateSongScore(a)),
+      }))
+      .sort((a, b) => a.title.localeCompare(b.title));
+  })();
+  const selectedDuplicateGroup = duplicateSongGroups.find(group => group.key === selectedDuplicateTitle) || duplicateSongGroups[0] || null;
+
+  const newChartCandidates = chartImportCandidates.filter(candidate => !candidate.existingSongId && !candidate.requiresReview);
+  const existingChartCandidates = chartImportCandidates.filter(candidate => Boolean(candidate.existingSongId) && !candidate.requiresReview);
+  const reviewChartCandidates = chartImportCandidates.filter(candidate => candidate.requiresReview);
+  const visibleChartCandidates = chartImportView === 'new'
+    ? newChartCandidates
+    : chartImportView === 'existing'
+    ? existingChartCandidates
+    : chartImportView === 'review'
+    ? reviewChartCandidates
+    : chartImportCandidates;
 
   const songResultKey = JSON.stringify([activeFilter, search]);
   const visibleSongLimit = songPage.resultKey === songResultKey ? songPage.limit : SONG_PAGE_SIZE;
@@ -1466,7 +1810,40 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   return (
     <div className="space-y-5 pb-2">
 
-      <input ref={chartFileRef} type="file" accept=".cho" multiple className="hidden" onChange={e => handleChartUpload(e.target.files)} />
+      {canUseChartImportPilot && (
+        <input ref={chartFileRef} type="file" accept=".cho" multiple className="hidden" onChange={e => handleChartUpload(e.target.files)} />
+      )}
+
+      {canUseChartImportPilot && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+          className="flex flex-col gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.08] p-4 sm:flex-row sm:items-center"
+        >
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/20">
+            <FileText className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-black text-white">Import SongBookPro charts</p>
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/15 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] text-amber-200 ring-1 ring-amber-300/20">
+                <ShieldCheck className="h-3 w-3" /> Admin pilot
+              </span>
+            </div>
+            <p className="mt-1 text-xs leading-5 text-white/45">Choose multiple .cho files, review duplicates and existing matches, then import only the versions you approve.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => chartFileRef.current?.click()}
+            disabled={chartImportPreparing || chartImportSaving}
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-4 text-sm font-black text-black transition hover:bg-emerald-400 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Upload className="h-4 w-4" />
+            {chartImportPreparing ? 'Reading charts…' : 'Choose .cho files'}
+          </button>
+        </motion.div>
+      )}
 
       {/* ── Filter pills ── */}
       <motion.div
@@ -1503,6 +1880,17 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
             </button>
           );
         })}
+        {canUseChartImportPilot && duplicateSongGroups.length > 0 && (
+          <button
+            type="button"
+            onClick={openDuplicateReview}
+            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full border border-amber-300/25 bg-amber-400/[0.10] px-4 text-[12px] font-black text-amber-200 transition-colors hover:bg-amber-400/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/70 sm:w-auto sm:shrink-0"
+          >
+            <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+            Duplicates
+            <span className="rounded-full bg-amber-300/15 px-1.5 py-0.5 text-[10px]">{duplicateSongGroups.length}</span>
+          </button>
+        )}
       </motion.div>
 
       {/* ── Active filter chip ── */}
@@ -1747,6 +2135,278 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
         <span className="flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-full bg-red-500" style={{ boxShadow: '0 0 6px rgba(239,68,68,0.5)' }} />Not ready (&lt;60d)</span>
       </div>
 
+      <Modal
+        open={duplicateReviewOpen}
+        onClose={() => {
+          if (!duplicateMergeSaving) setDuplicateReviewOpen(false);
+        }}
+        title="Compare duplicate songs"
+        size="xl"
+        mobileView="page"
+        closeOnBackdrop={!duplicateMergeSaving}
+        closeOnEscape={!duplicateMergeSaving}
+      >
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-amber-300/15 bg-amber-400/[0.07] p-3">
+            <p className="text-sm font-bold text-amber-100">Choose the best library record to keep.</p>
+            <p className="mt-1 text-xs leading-5 text-amber-100/55">Merging moves setlist history and unique section notes to the selected song, then removes the extra records. Existing details on the selected song are kept. After a successful merge, the next duplicate opens automatically.</p>
+          </div>
+
+          <div className="flex gap-2 overflow-x-auto pb-1" aria-label="Duplicate song title groups">
+            {duplicateSongGroups.map(group => (
+              <button
+                key={group.key}
+                type="button"
+                onClick={() => chooseDuplicateGroup(group.key)}
+                disabled={duplicateMergeSaving}
+                aria-pressed={selectedDuplicateGroup?.key === group.key}
+                className={`min-h-10 shrink-0 rounded-xl px-3 text-left text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${selectedDuplicateGroup?.key === group.key ? 'bg-amber-400 text-black' : 'bg-white/[0.07] text-white/60 hover:bg-white/[0.11]'}`}
+              >
+                {group.title} <span className="ml-1 font-mono text-[10px] opacity-65">{group.songs.length}</span>
+              </button>
+            ))}
+          </div>
+
+          {selectedDuplicateGroup ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              {selectedDuplicateGroup.songs.map((song, index) => {
+                const selected = duplicateKeeperId === song.id;
+                const memberNames = Array.from(new Set(song.usages
+                  .map(usage => songLeaderMap[usage.event_id])
+                  .filter((name): name is string => Boolean(name))));
+                const eventTypes = Array.from(new Set(song.usages
+                  .map(usage => usage.event_type.trim())
+                  .filter(Boolean)));
+                return (
+                  <label
+                    key={song.id}
+                    className={`relative rounded-2xl border p-4 transition ${duplicateMergeSaving ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'} ${selected ? 'border-emerald-400/50 bg-emerald-500/[0.09] ring-1 ring-emerald-400/20' : 'border-white/[0.08] bg-white/[0.025] hover:bg-white/[0.045]'}`}
+                  >
+                    <input
+                      type="radio"
+                      name="duplicate-song-keeper"
+                      value={song.id}
+                      checked={selected}
+                      onChange={() => setDuplicateKeeperId(song.id)}
+                      disabled={duplicateMergeSaving}
+                      className="sr-only"
+                    />
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-base font-black text-white">{song.title}</p>
+                        <p className={song.artist ? 'mt-1 truncate text-xs text-white/55' : 'mt-1 text-xs font-bold text-amber-300'}>{song.artist || 'Missing artist'}</p>
+                      </div>
+                      <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.1em] ${selected ? 'bg-emerald-400 text-black' : 'bg-white/[0.07] text-white/40'}`}>
+                        {selected && <CheckCircle className="h-3 w-3" aria-hidden="true" />}
+                        {selected ? 'Keep' : index === 0 ? 'Recommended' : 'Compare'}
+                      </span>
+                    </div>
+                    <dl className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                      <div className="rounded-xl bg-black/20 p-2.5">
+                        <dt className="text-[9px] font-black uppercase tracking-[0.1em] text-white/30">Chord chart</dt>
+                        <dd className={`mt-1 font-bold ${song.chordpro_text?.trim() ? 'text-emerald-300' : 'text-white/35'}`}>{song.chordpro_text?.trim() ? 'Available' : 'Missing'}</dd>
+                      </div>
+                      <div className="rounded-xl bg-black/20 p-2.5">
+                        <dt className="text-[9px] font-black uppercase tracking-[0.1em] text-white/30">Song key</dt>
+                        <dd className="mt-1 font-bold text-white/70">{song.song_key || 'Not set'}</dd>
+                      </div>
+                      <div className="rounded-xl bg-black/20 p-2.5">
+                        <dt className="text-[9px] font-black uppercase tracking-[0.1em] text-white/30">Approved-set uses</dt>
+                        <dd className="mt-1 font-bold text-white/70">{song.usages.length}</dd>
+                      </div>
+                      <div className="rounded-xl bg-black/20 p-2.5">
+                        <dt className="text-[9px] font-black uppercase tracking-[0.1em] text-white/30">Last used</dt>
+                        <dd className="mt-1 font-bold text-white/70">{song.last_used_date ? format(parseISO(song.last_used_date), 'MMM d, yyyy') : 'Never'}</dd>
+                      </div>
+                      <div className="rounded-xl bg-black/20 p-2.5">
+                        <dt className="text-[9px] font-black uppercase tracking-[0.1em] text-white/30">Used by · song leader</dt>
+                        <dd className="mt-1 line-clamp-2 font-bold text-white/70">{memberNames.length > 0 ? memberNames.join(', ') : song.usages.length > 0 ? 'No leader assigned' : 'Never used'}</dd>
+                      </div>
+                      <div className="rounded-xl bg-black/20 p-2.5">
+                        <dt className="text-[9px] font-black uppercase tracking-[0.1em] text-white/30">Event types</dt>
+                        <dd className="mt-1 line-clamp-2 font-bold text-white/70">{eventTypes.length > 0 ? eventTypes.join(', ') : 'None'}</dd>
+                      </div>
+                    </dl>
+                    <button
+                      type="button"
+                      onClick={event => {
+                        event.preventDefault();
+                        setDuplicateReviewOpen(false);
+                        openEditLibrarySong(song, {
+                          groupKey: selectedDuplicateGroup.key,
+                          keeperId: duplicateKeeperId,
+                        });
+                      }}
+                      disabled={duplicateMergeSaving}
+                      className="mt-3 min-h-10 w-full rounded-xl bg-white/[0.07] px-3 text-xs font-bold text-white/65 transition hover:bg-white/[0.11] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Edit this record
+                    </button>
+                  </label>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-white/[0.07] px-4 py-10 text-center text-sm text-white/40">No duplicate titles found.</div>
+          )}
+
+          <div className="flex flex-col gap-3 border-t border-white/[0.07] pt-4 sm:flex-row sm:items-center">
+            <p className="flex-1 text-xs leading-5 text-white/40">The selected record remains unchanged. All other records in this title group will be removed after their references are moved.</p>
+            <button
+              type="button"
+              onClick={handleMergeDuplicateSongs}
+              disabled={duplicateMergeSaving || !selectedDuplicateGroup || !duplicateKeeperId}
+              className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 text-sm font-black text-black transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {duplicateMergeSaving
+                ? 'Merging…'
+                : duplicateSongGroups.length > 1
+                ? 'Merge and review next'
+                : 'Merge final duplicate'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={chartImportReviewOpen}
+        onClose={closeChartImportReview}
+        title="Review chord chart import"
+        size="xl"
+        mobileView="page"
+        closeOnBackdrop={!chartImportSaving}
+        closeOnEscape={!chartImportSaving}
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {[
+              { label: 'Files', value: chartImportCandidates.length, tone: 'text-white' },
+              { label: 'New songs', value: newChartCandidates.length, tone: 'text-emerald-300' },
+              { label: 'Updates', value: existingChartCandidates.length, tone: 'text-sky-300' },
+              { label: 'Review', value: reviewChartCandidates.length, tone: 'text-amber-300' },
+            ].map(item => (
+              <div key={item.label} className="rounded-2xl border border-white/[0.07] bg-white/[0.035] px-3 py-3 text-center">
+                <p className={`text-xl font-black tabular-nums ${item.tone}`}>{item.value}</p>
+                <p className="mt-0.5 text-[9px] font-black uppercase tracking-[0.14em] text-white/35">{item.label}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-col gap-2 rounded-2xl border border-amber-400/15 bg-amber-400/[0.06] p-3 sm:flex-row sm:items-center">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-300" />
+            <p className="flex-1 text-xs leading-5 text-amber-100/65">Existing songs are selected for replacement automatically. Duplicate exports and alternative charts stay skipped until you choose which version should win.</p>
+            <button
+              type="button"
+              onClick={() => setChartImportCandidates(current => current.map(candidate => (
+                candidate.isExactDuplicate || candidate.existingSongId || candidate.hasTitleConflict
+                  ? candidate
+                  : { ...candidate, action: 'create' }
+              )))}
+              disabled={chartImportSaving}
+              className="min-h-10 shrink-0 rounded-xl bg-white/[0.07] px-3 text-xs font-bold text-white/70 transition hover:bg-white/[0.11] disabled:opacity-50"
+            >
+              Select all ready
+            </button>
+          </div>
+
+          <div className="flex gap-1 overflow-x-auto rounded-2xl border border-white/[0.07] bg-black/20 p-1" aria-label="Chord chart import groups">
+            {([
+              { id: 'new', label: 'New songs', count: newChartCandidates.length },
+              { id: 'existing', label: 'Existing songs', count: existingChartCandidates.length },
+              { id: 'review', label: 'Needs review', count: reviewChartCandidates.length },
+              { id: 'all', label: 'All files', count: chartImportCandidates.length },
+            ] as const).map(group => (
+              <button
+                key={group.id}
+                type="button"
+                onClick={() => setChartImportView(group.id)}
+                aria-pressed={chartImportView === group.id}
+                className={`min-h-10 shrink-0 rounded-xl px-3 text-xs font-bold transition ${chartImportView === group.id ? 'bg-white/[0.12] text-white shadow-sm' : 'text-white/45 hover:bg-white/[0.06] hover:text-white/70'}`}
+              >
+                {group.label} <span className="ml-1 font-mono text-[10px] opacity-70">{group.count}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="max-h-[52vh] overflow-auto rounded-2xl border border-white/[0.07]">
+            <table className="w-full min-w-[720px] text-left text-xs">
+              <thead className="sticky top-0 z-10 bg-[#111] text-[9px] font-black uppercase tracking-[0.12em] text-white/35">
+                <tr>
+                  <th className="px-3 py-3">Chart</th>
+                  <th className="px-3 py-3">Artist / key</th>
+                  <th className="px-3 py-3">Status</th>
+                  <th className="px-3 py-3">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/[0.06]">
+                {visibleChartCandidates.map(candidate => (
+                  <tr key={candidate.id} className={candidate.action === 'skip' ? 'bg-white/[0.015]' : 'bg-emerald-500/[0.035]'}>
+                    <td className="px-3 py-3 align-top">
+                      <p className="font-bold text-white">{candidate.title}</p>
+                      <p className="mt-1 max-w-[18rem] truncate font-mono text-[10px] text-white/30" title={candidate.fileName}>{candidate.fileName}</p>
+                    </td>
+                    <td className="px-3 py-3 align-top">
+                      <p className={candidate.artist ? 'text-white/65' : 'text-amber-300'}>{candidate.artist || 'Missing artist'}</p>
+                      <p className={`mt-1 font-mono ${candidate.songKey ? 'text-emerald-300' : 'text-amber-300'}`}>{candidate.songKey ? `Key ${candidate.songKey}` : 'Key not set'}</p>
+                    </td>
+                    <td className="px-3 py-3 align-top">
+                      <p className={candidate.isExactDuplicate ? 'text-white/35' : candidate.requiresReview ? 'text-amber-300' : 'text-emerald-300'}>{candidate.reason}</p>
+                    </td>
+                    <td className="px-3 py-3 align-top">
+                      <select
+                        value={candidate.action}
+                        onChange={event => updateChartImportCandidate(candidate.id, event.target.value as ChartImportAction)}
+                        disabled={chartImportSaving || candidate.isExactDuplicate}
+                        aria-label={`Import action for ${candidate.title}`}
+                        className="h-10 min-w-36 rounded-xl border border-white/[0.09] bg-[#181818] px-3 text-xs font-bold text-white outline-none focus:border-emerald-400/50 focus:ring-2 focus:ring-emerald-400/20 disabled:cursor-not-allowed disabled:opacity-45"
+                      >
+                        {candidate.existingSongId && <option value="update">Replace existing</option>}
+                        <option value="create">Add new</option>
+                        <option value="skip">Skip</option>
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+                {visibleChartCandidates.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-10 text-center text-sm text-white/35">No charts in this group.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {chartImportSaving && (
+            <div className="space-y-2 rounded-2xl border border-emerald-400/15 bg-emerald-500/[0.06] p-3">
+              <div className="flex items-center justify-between text-xs font-bold text-white/65">
+                <span>Saving charts…</span>
+                <span className="tabular-nums">{chartImportProgress.done}/{chartImportProgress.total}</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-white/[0.07]">
+                <div
+                  className="h-full rounded-full bg-emerald-500 transition-[width] duration-200"
+                  style={{ width: `${chartImportProgress.total ? (chartImportProgress.done / chartImportProgress.total) * 100 : 0}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-col-reverse gap-2 border-t border-white/[0.06] pt-4 sm:flex-row sm:justify-end">
+            <button type="button" onClick={closeChartImportReview} disabled={chartImportSaving} className="btn-secondary min-h-11 disabled:opacity-50">Cancel</button>
+            <button
+              type="button"
+              onClick={commitChartImport}
+              disabled={chartImportSaving || chartImportCandidates.every(candidate => candidate.action === 'skip')}
+              className="btn-primary min-h-11 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {chartImportSaving
+                ? `Importing ${chartImportProgress.done}/${chartImportProgress.total}`
+                : `Import ${chartImportCandidates.filter(candidate => candidate.action !== 'skip').length} selected charts`}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
       <Modal open={showWebImport} onClose={closeWebImport} title="Search Ultimate Guitar" size="lg">
         <div className="space-y-5">
           <div className="relative rounded-3xl border border-sky-200/80 bg-sky-50/80 p-3 dark:border-sky-500/20 dark:bg-sky-500/[0.08]">
@@ -1880,7 +2540,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
 
       <Modal open={editingLibrarySong !== null} onClose={closeEditLibrarySong} title="Edit song details" size="md">
         {editingLibrarySong && (() => {
-          const canRenameSong = editingLibrarySong.created_by === user?.id;
+          const canRenameSong = editingLibrarySong.created_by === user?.id || canUseChartImportPilot;
           return (
           <div className="space-y-5">
             <div className="flex items-center gap-3 rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-3">
@@ -1914,6 +2574,11 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                 {!canRenameSong && (
                   <span className="mt-1.5 block text-[11px] font-semibold text-white/35">
                     Only the original creator can rename a shared song.
+                  </span>
+                )}
+                {canUseChartImportPilot && editingLibrarySong.created_by !== user?.id && (
+                  <span className="mt-1.5 block text-[11px] font-semibold text-emerald-300/55">
+                    Admin title editing is enabled for library cleanup.
                   </span>
                 )}
               </label>

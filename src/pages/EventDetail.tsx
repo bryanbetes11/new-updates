@@ -2740,19 +2740,8 @@ const openLyricsModal = (ss: SetlistSong) => {
   const isSongLeader = myAssignments.some(a => a.roles?.name === 'Song Leader');
   const userIsSongLeaderRole = userRoles.some(ur => ur.roles?.name === 'Song Leader');
   const hasEventManagementAccess = isLeader || isOrgAdmin || isPlatformOwner;
-  const canPreviewAssignmentGate = isOrgAdmin || isAdmin || isPlatformOwner;
-  const requestedPreviewAssignmentUserId = new URLSearchParams(location.search).get('previewAssignmentGate');
-  const previewAssignmentUserId = requestedPreviewAssignmentUserId === '1'
-    ? assignments.find(assignment => assignment.status === 'pending')?.user_id
-    : requestedPreviewAssignmentUserId;
-  const previewPendingAssignments = getPendingUserEventAssignments(assignments, previewAssignmentUserId);
-  const previewAssignmentGate = canPreviewAssignmentGate && previewPendingAssignments.length > 0;
-  const visiblePendingAssignments = previewAssignmentGate ? previewPendingAssignments : myPendingAssignments;
-  const previewMemberProfile = visiblePendingAssignments[0]?.profiles;
-  const previewMemberName = previewMemberProfile
-    ? `${previewMemberProfile.first_name || ''} ${previewMemberProfile.last_name || ''}`.trim()
-    : '';
-  const assignmentDetailsBlocked = previewAssignmentGate || shouldBlockEventDetails(assignments, user?.id, hasEventManagementAccess);
+  const visiblePendingAssignments = myPendingAssignments;
+  const assignmentDetailsBlocked = shouldBlockEventDetails(assignments, user?.id, hasEventManagementAccess);
   const pendingAssignmentPanel = visiblePendingAssignments.length > 0 && !assignmentDetailsBlocked ? (
     <motion.section
       {...blurUp(0.2)}
@@ -2765,24 +2754,6 @@ const openLyricsModal = (ss: SetlistSong) => {
     >
       <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-amber-300/45 to-transparent" />
       <div className="relative p-4 sm:p-5">
-        {previewAssignmentGate && (
-          <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-sky-400/15 bg-sky-400/[0.08] px-3 py-2">
-            <p className="min-w-0 truncate text-[11px] font-bold text-sky-200">
-              Admin preview{previewMemberName ? ` · ${previewMemberName}` : ''}
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                const params = new URLSearchParams(location.search);
-                params.delete('previewAssignmentGate');
-                navigate({ pathname: location.pathname, search: params.toString() ? `?${params.toString()}` : '' }, { replace: true });
-              }}
-              className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-bold text-sky-200 transition-colors hover:bg-sky-400/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
-            >
-              Exit Preview
-            </button>
-          </div>
-        )}
         <div className="flex items-start gap-3.5">
           <div
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl"
@@ -2792,23 +2763,15 @@ const openLyricsModal = (ss: SetlistSong) => {
           </div>
           <div className="min-w-0 flex-1">
             <p className="mb-0.5 text-[10px] font-mono font-medium uppercase tracking-[0.22em] text-amber-400">
-              {previewAssignmentGate ? 'Member preview' : assignmentDetailsBlocked ? 'Response required' : 'Action required'}
+              Action required
             </p>
             <h2 id="pending-assignment-title" className="text-[15px] font-bold leading-tight text-white" style={{ letterSpacing: '-0.02em' }}>
-              {previewAssignmentGate
-                ? 'Respond before viewing event details'
-                : assignmentDetailsBlocked
-                ? 'Respond before viewing event details'
-                : `${visiblePendingAssignments.length} pending ${visiblePendingAssignments.length === 1 ? 'assignment' : 'assignments'}`}
+              {visiblePendingAssignments.length} pending {visiblePendingAssignments.length === 1 ? 'assignment' : 'assignments'}
             </h2>
             <p className="mt-1 max-w-2xl text-xs leading-relaxed text-white/50">
-              {previewAssignmentGate
-                ? 'This read-only preview shows the gate exactly as this pending member will see it.'
-                : assignmentDetailsBlocked
-                ? 'Confirm or decline every role below to unlock the setlist, team list, and event tools.'
-                : isSongLeader
-                  ? 'You can keep preparing as Song Leader, but please respond to each additional role.'
-                  : 'Please respond to each role so the event leaders have an accurate team count.'}
+              {isSongLeader
+                ? 'You can keep preparing as Song Leader, but please respond to each additional role.'
+                : 'Please respond to each role so the event leaders have an accurate team count.'}
             </p>
           </div>
         </div>
@@ -2827,7 +2790,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                   <button
                     type="button"
                     onClick={() => handleConfirm(assignment.id)}
-                    disabled={previewAssignmentGate || respondingAssignmentId !== null}
+                    disabled={respondingAssignmentId !== null}
                     className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-emerald-600 px-4 text-xs font-bold text-white transition-colors hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:cursor-wait disabled:opacity-55"
                     aria-label={`Confirm ${roleName} assignment`}
                   >
@@ -2837,7 +2800,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                   <button
                     type="button"
                     onClick={() => setShowDecline(assignment.id)}
-                    disabled={previewAssignmentGate || respondingAssignmentId !== null}
+                    disabled={respondingAssignmentId !== null}
                     className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/[0.1] px-4 text-xs font-bold text-red-200 transition-colors hover:bg-red-500/[0.17] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 disabled:cursor-wait disabled:opacity-55"
                     aria-label={`Decline ${roleName} assignment`}
                   >
@@ -3200,12 +3163,6 @@ const openLyricsModal = (ss: SetlistSong) => {
     setTimeout(() => smartBack(), 300);
   };
 
-  const exitAssignmentPreview = () => {
-    const params = new URLSearchParams(location.search);
-    params.delete('previewAssignmentGate');
-    navigate({ pathname: location.pathname, search: params.toString() ? `?${params.toString()}` : '' }, { replace: true });
-  };
-
   const fullScreenAssignmentGate = assignmentDetailsBlocked ? (
     <motion.main
       {...blurUp(0.08)}
@@ -3228,21 +3185,6 @@ const openLyricsModal = (ss: SetlistSong) => {
       >
         <ArrowLeft className="h-4 w-4" aria-hidden="true" />
       </button>
-
-      {previewAssignmentGate && (
-        <div className="absolute right-4 top-[calc(env(safe-area-inset-top)+1rem)] z-20 flex items-center gap-2 sm:right-6 lg:right-10 lg:top-10">
-          <span className="hidden rounded-full border border-sky-400/15 bg-sky-400/[0.08] px-3 py-2 text-[11px] font-bold text-sky-200 backdrop-blur-xl sm:inline-flex">
-            Previewing {previewMemberName || 'pending member'}
-          </span>
-          <button
-            type="button"
-            onClick={exitAssignmentPreview}
-            className="inline-flex min-h-11 items-center justify-center rounded-full border border-sky-400/20 bg-sky-400/[0.09] px-4 text-xs font-bold text-sky-100 backdrop-blur-xl transition-colors hover:bg-sky-400/[0.15] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
-          >
-            Exit Preview
-          </button>
-        </div>
-      )}
 
       <div className="relative z-10 mx-auto w-full max-w-2xl text-center">
         <EventArtwork
@@ -3313,7 +3255,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                   <button
                     type="button"
                     onClick={() => handleConfirm(assignment.id)}
-                    disabled={previewAssignmentGate || respondingAssignmentId !== null}
+                    disabled={respondingAssignmentId !== null}
                     className={`inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-emerald-600 px-5 text-xs font-black text-white transition-colors hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:cursor-not-allowed ${respondingAssignmentId ? 'opacity-45' : ''}`}
                     aria-label={`Confirm ${roleName} assignment`}
                   >
@@ -3323,7 +3265,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                   <button
                     type="button"
                     onClick={() => setShowDecline(assignment.id)}
-                    disabled={previewAssignmentGate || respondingAssignmentId !== null}
+                    disabled={respondingAssignmentId !== null}
                     className={`inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/[0.1] px-5 text-xs font-black text-red-200 transition-colors hover:bg-red-500/[0.17] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 disabled:cursor-not-allowed ${respondingAssignmentId ? 'opacity-45' : ''}`}
                     aria-label={`Decline ${roleName} assignment`}
                   >
@@ -4814,9 +4756,6 @@ const openLyricsModal = (ss: SetlistSong) => {
                   .map(a => {
                     const isSongLeaderRole = a.roles?.name === 'Song Leader';
                     const declineNoteOpen = expandedDeclineNotes.has(a.id);
-                    const canPreviewThisMember = canPreviewAssignmentGate
-                      && a.status === 'pending'
-                      && assignments.find(assignment => assignment.user_id === a.user_id && assignment.status === 'pending')?.id === a.id;
                     return (
                       <div key={a.id}>
                         <div className="group flex items-center gap-3 rounded-xl px-1.5 py-2 transition-colors hover:bg-white/[0.04]">
@@ -4857,22 +4796,6 @@ const openLyricsModal = (ss: SetlistSong) => {
                             )}
                           </div>
                           <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${a.status === 'confirmed' ? 'bg-emerald-500/10 text-emerald-300' : a.status === 'declined' ? 'bg-red-500/10 text-red-300' : 'bg-amber-500/10 text-amber-300'}`}>{a.status}</span>
-                          {canPreviewThisMember && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const params = new URLSearchParams(location.search);
-                                params.set('previewAssignmentGate', a.user_id);
-                                navigate({ pathname: location.pathname, search: `?${params.toString()}` }, { replace: true });
-                                window.scrollTo({ top: 0, behavior: 'smooth' });
-                              }}
-                              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sky-300/70 transition-colors hover:bg-sky-400/10 hover:text-sky-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
-                              title={`Preview ${a.profiles?.first_name || 'member'}'s confirmation gate`}
-                              aria-label={`Preview ${a.profiles?.first_name || 'member'}'s confirmation gate`}
-                            >
-                              <Eye className="h-4 w-4" aria-hidden="true" />
-                            </button>
-                          )}
                           {isLeader && (
                             <button
                               onClick={() => handleRemoveAssignment(a.id)}

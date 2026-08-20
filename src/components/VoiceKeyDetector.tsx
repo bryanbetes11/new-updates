@@ -151,39 +151,36 @@ export function VoiceKeyDetector({ onApply }: VoiceKeyDetectorProps) {
     setInputStrength(0);
   };
 
-  return (
-    <div className="mt-3 rounded-2xl border border-violet-200 bg-violet-50/70 p-3 dark:border-violet-400/20 dark:bg-violet-500/[0.08]">
-      <div className="flex items-start gap-2.5">
-        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white shadow-sm shadow-violet-500/20">
-          <Mic className="h-4 w-4" aria-hidden="true" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-bold text-violet-950 dark:text-violet-100">Voice Key Assist</p>
-            <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-700 dark:bg-violet-400/10 dark:text-violet-200">
-              <ShieldCheck className="h-3 w-3" aria-hidden="true" /> Major keys
-            </span>
-          </div>
-          <p className="mt-0.5 text-xs leading-relaxed text-violet-700 dark:text-violet-200/70">
-            Sing the chorus without instruments and finish on the note where the song feels resolved. Suggestions use major keys only, and audio stays on this device.
-          </p>
-        </div>
-      </div>
-
-      {(status === 'idle' || status === 'requesting') && (
+  if (status === 'idle' || status === 'requesting') {
+    return (
+      <div className="contents">
         <button
           type="button"
           onClick={() => void startRecording()}
           disabled={status === 'requesting'}
-          className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-3 text-sm font-bold text-white transition-colors hover:bg-violet-700 disabled:cursor-wait disabled:opacity-60"
+          className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-violet-300 bg-violet-50 px-4 text-sm font-bold text-violet-700 transition-colors hover:bg-violet-100 disabled:cursor-wait disabled:opacity-60 dark:border-violet-400/30 dark:bg-violet-500/[0.08] dark:text-violet-200 dark:hover:bg-violet-500/[0.14] sm:w-auto"
         >
           <Mic className="h-4 w-4" aria-hidden="true" />
-          {status === 'requesting' ? 'Waiting for microphone…' : 'Sing to suggest key'}
+          {status === 'requesting' ? 'Waiting for microphone…' : 'Find with voice'}
         </button>
-      )}
+        <p className="col-span-full text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+          Sing for 12 seconds with no music. We’ll suggest one major key. Check it with an instrument before saving. Your audio stays on this device.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="col-span-full rounded-2xl border border-violet-200 bg-violet-50/70 p-3 dark:border-violet-400/20 dark:bg-violet-500/[0.08]">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="text-sm font-bold text-violet-950 dark:text-violet-100">Voice Key Assist</p>
+        <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-700 dark:bg-violet-400/10 dark:text-violet-200">
+          <ShieldCheck className="h-3 w-3" aria-hidden="true" /> Major keys
+        </span>
+      </div>
 
       {status === 'listening' && (
-        <div className="mt-3" aria-live="polite">
+        <div className="mt-2" aria-live="polite">
           <div className="flex items-center justify-between rounded-xl bg-white/80 px-3 py-2.5 ring-1 ring-violet-200/70 dark:bg-black/20 dark:ring-violet-400/15">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-violet-500 dark:text-violet-300/60">Hearing</p>
@@ -211,7 +208,7 @@ export function VoiceKeyDetector({ onApply }: VoiceKeyDetectorProps) {
       )}
 
       {status === 'result' && result && (
-        <div className="mt-3" aria-live="polite">
+        <div className="mt-2" aria-live="polite">
           <div className="rounded-xl bg-white/80 p-3 ring-1 ring-violet-200/70 dark:bg-black/20 dark:ring-violet-400/15">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -245,7 +242,7 @@ export function VoiceKeyDetector({ onApply }: VoiceKeyDetectorProps) {
       )}
 
       {status === 'error' && (
-        <div className="mt-3" role="alert">
+        <div className="mt-2" role="alert">
           <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold leading-relaxed text-amber-800 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-200 dark:ring-amber-400/20">{errorMessage}</p>
           <button type="button" onClick={reset} className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 text-xs font-bold text-violet-700 dark:text-violet-200">
             <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" /> Try again

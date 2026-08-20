@@ -175,6 +175,14 @@ type ApprovedSetlistUsage = {
 
 type AssignmentDraftRow = EventAssignmentDraft & { id: string };
 
+type SetlistBuilderSong = {
+  song_id: string;
+  category: string;
+  youtube_url: string;
+  performed_key: string;
+  artist: string;
+};
+
 let assignmentDraftSequence = 0;
 const createAssignmentDraftRow = (): AssignmentDraftRow => ({
   id: `assignment-draft-${++assignmentDraftSequence}`,
@@ -341,6 +349,11 @@ export function EventDetail() {
   const [showSongConfig, setShowSongConfig] = useState(false);
   const [selectedSongForConfig, setSelectedSongForConfig] = useState<string | null>(null);
   const [songConfig, setSongConfig] = useState({ category: '', youtube_url: '', performed_key: '', artist: '' });
+  const [setlistBuilderSongs, setSetlistBuilderSongs] = useState<SetlistBuilderSong[]>([]);
+  const [setlistBuilderActive, setSetlistBuilderActive] = useState(false);
+  const [setlistBuilderDragIndex, setSetlistBuilderDragIndex] = useState<number | null>(null);
+  const [savingSetlistBuilder, setSavingSetlistBuilder] = useState(false);
+  const [showSetlistExitConfirm, setShowSetlistExitConfirm] = useState(false);
   const [assignmentDrafts, setAssignmentDrafts] = useState<AssignmentDraftRow[]>(() => [createAssignmentDraftRow()]);
   const [multiMemberSelections, setMultiMemberSelections] = useState<Record<string, string[]>>({});
   const [assigningBatch, setAssigningBatch] = useState(false);
@@ -1387,8 +1400,36 @@ export function EventDetail() {
     }
   };
 
-  const handleCreateSetlist = () => {
+  const openSetlistBuilder = () => {
+    setSetlistBuilderSongs([]);
+    setSetlistBuilderDragIndex(null);
+    setSongSearch('');
+    setSetlistBuilderActive(true);
     setShowSetlist(true);
+  };
+
+  const closeSetlistBuilder = (force = false) => {
+    if (savingSetlistBuilder && !force) return;
+    setShowSetlist(false);
+    setSetlistBuilderActive(false);
+    setSetlistBuilderSongs([]);
+    setSetlistBuilderDragIndex(null);
+    setSongSearch('');
+  };
+
+  const requestSetlistBuilderClose = () => {
+    if (savingSetlistBuilder) return;
+    setShowSetlistExitConfirm(true);
+  };
+
+  const confirmSetlistBuilderClose = () => {
+    setShowSetlistExitConfirm(false);
+    resetSongConfigModal(false);
+    closeSetlistBuilder(true);
+  };
+
+  const handleCreateSetlist = () => {
+    openSetlistBuilder();
   };
 
   const handleSendAssignmentReminders = async () => {
@@ -1575,16 +1616,116 @@ export function EventDetail() {
 
   const openSongConfig = (songId: string) => {
     const song = songs.find(s => s.id === songId);
+    const stagedSong = setlistBuilderSongs.find(draft => draft.song_id === songId);
     setSelectedSongForConfig(songId);
-    setSongConfig({ category: '', youtube_url: '', performed_key: song?.song_key || '', artist: song?.artist || '' });
+    setSongConfig(stagedSong ? {
+      category: stagedSong.category,
+      youtube_url: stagedSong.youtube_url,
+      performed_key: stagedSong.performed_key,
+      artist: stagedSong.artist,
+    } : { category: '', youtube_url: '', performed_key: '', artist: song?.artist || '' });
     setShowSongConfig(true);
     setShowSetlist(false);
   };
 
-  const resetSongConfigModal = () => {
+  const resetSongConfigModal = (returnToBuilder = false) => {
     setShowSongConfig(false);
     setSelectedSongForConfig(null);
     setSongConfig({ category: '', youtube_url: '', performed_key: '', artist: '' });
+    if (returnToBuilder && setlistBuilderActive) setShowSetlist(true);
+  };
+
+  const closeSongConfigFlow = () => {
+    if (setlistBuilderActive) {
+      requestSetlistBuilderClose();
+      return;
+    }
+    resetSongConfigModal(false);
+  };
+
+  const moveSetlistBuilderSong = (from: number, to: number) => {
+    if (to < 0 || to >= setlistBuilderSongs.length) return;
+    setSetlistBuilderSongs(current => {
+      const next = [...current];
+      const [movedSong] = next.splice(from, 1);
+      next.splice(to, 0, movedSong);
+      return next;
+    });
+  };
+
+  const saveSetlistBuilder = async () => {
+    if (!id || !user || savingSetlistBuilder || setlistBuilderSongs.length === 0) return;
+    setSavingSetlistBuilder(true);
+    try {
+      let targetSetlist = setlist;
+      if (!targetSetlist) {
+        const fmt = serviceFormat || (event ? inferServiceFormat(event.event_type) : 'custom');
+        const { data: existing, error: existingError } = await supabase
+          .from('setlists')
+          .select('*')
+          .eq('event_id', id)
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        if (existingError) {
+          toast('error', existingError.message);
+          return;
+        }
+
+        if (existing) {
+          targetSetlist = existing as Setlist;
+        } else {
+          const { data: created, error: createError } = await supabase
+            .from('setlists')
+            .insert({ event_id: id, created_by: user.id, service_format: fmt })
+            .select('*')
+            .single();
+
+          if (createError || !created) {
+            toast('error', createError?.message || 'Failed to start the setlist');
+            return;
+          }
+          targetSetlist = created as Setlist;
+        }
+      }
+
+      const startPosition = setlistSongs.length;
+      const { data, error } = await withSaveTimeout(
+        supabase
+          .from('setlist_songs')
+          .insert(setlistBuilderSongs.map((draft, index) => ({
+            setlist_id: targetSetlist.id,
+            song_id: draft.song_id,
+            position: startPosition + index + 1,
+            song_category: draft.category,
+            youtube_url: draft.youtube_url.trim(),
+            performed_key: draft.performed_key,
+          })))
+          .select('*, songs(*)')
+      );
+
+      if (error || !data) {
+        toast('error', error?.message || 'Failed to add the selected songs');
+        return;
+      }
+
+      const insertedSongs = data as SetlistSong[];
+      setSetlist(targetSetlist);
+      if (targetSetlist.service_format) setServiceFormat(targetSetlist.service_format as ServiceFormat);
+      setSetlistSongs(current => [...current, ...insertedSongs].sort((a, b) => a.position - b.position));
+
+      if (targetSetlist.status === 'approved') {
+        await markSetlistNeedsReapproval();
+      } else {
+        toast('success', insertedSongs.length === 1 ? 'Song added' : `${insertedSongs.length} songs added`);
+      }
+
+      closeSetlistBuilder(true);
+      await fetchAll();
+    } finally {
+      setSavingSetlistBuilder(false);
+    }
   };
 
   const confirmAddSong = async () => {
@@ -1608,8 +1749,25 @@ export function EventDetail() {
         }
         setSongs(current => current.map(song => song.id === selectedSongForConfig ? { ...song, artist } : song));
       }
-      const insertedSong = await handleAddSongToSetlist(selectedSongForConfig, songConfig.category, songConfig.youtube_url, songConfig.performed_key);
-      if (insertedSong) resetSongConfigModal();
+      if (setlistBuilderActive) {
+        const stagedSong: SetlistBuilderSong = {
+          song_id: selectedSongForConfig,
+          category: songConfig.category,
+          youtube_url: songConfig.youtube_url,
+          performed_key: songConfig.performed_key,
+          artist,
+        };
+        setSetlistBuilderSongs(current => {
+          const existingIndex = current.findIndex(draft => draft.song_id === selectedSongForConfig);
+          if (existingIndex === -1) return [...current, stagedSong];
+          return current.map((draft, index) => index === existingIndex ? stagedSong : draft);
+        });
+        toast('info', 'Song added to your setlist draft');
+        resetSongConfigModal(true);
+      } else {
+        const insertedSong = await handleAddSongToSetlist(selectedSongForConfig, songConfig.category, songConfig.youtube_url, songConfig.performed_key);
+        if (insertedSong) resetSongConfigModal();
+      }
     } finally {
       setAddingSetlistSong(false);
     }
@@ -1765,7 +1923,7 @@ export function EventDetail() {
       setSongConfig({
         category: '',
         youtube_url: createdSong.youtube_url || '',
-        performed_key: createdSong.song_key || '',
+        performed_key: '',
         artist: createdSong.artist || '',
       });
       setShowSongConfig(true);
@@ -3149,17 +3307,19 @@ const openLyricsModal = (ss: SetlistSong) => {
               >
                 <AlertCircle className="h-5 w-5 text-white" />
               </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-mono font-medium uppercase tracking-[0.22em] text-amber-600 dark:text-amber-400 mb-0.5">
-                  Action required
-                </p>
-                <p className="text-[15px] font-bold text-gray-900 dark:text-white leading-tight" style={{ letterSpacing: '-0.02em' }}>
-                  You have a pending assignment
-                </p>
-                <p className="text-[12px] text-gray-600 dark:text-white/55 mt-0.5">
-                  Role: <span className="font-semibold text-gray-800 dark:text-white/80">{myAssignment.roles?.name}</span>
-                </p>
-                <div className="flex items-center gap-2 mt-3">
+              <div className="min-w-0 flex-1 md:flex md:items-center md:justify-between md:gap-6">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-mono font-medium uppercase tracking-[0.22em] text-amber-600 dark:text-amber-400 mb-0.5">
+                    Action required
+                  </p>
+                  <p className="text-[15px] font-bold text-gray-900 dark:text-white leading-tight" style={{ letterSpacing: '-0.02em' }}>
+                    You have a pending assignment
+                  </p>
+                  <p className="text-[12px] text-gray-600 dark:text-white/55 mt-0.5">
+                    Role: <span className="font-semibold text-gray-800 dark:text-white/80">{myAssignment.roles?.name}</span>
+                  </p>
+                </div>
+                <div className="mt-3 flex shrink-0 items-center gap-2 md:mt-0">
                   <button
                     onClick={() => handleConfirm(myAssignment.id)}
                     className="inline-flex h-11 items-center gap-1.5 rounded-full px-4 text-[12px] font-semibold text-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 active:scale-[0.97]"
@@ -3504,32 +3664,47 @@ const openLyricsModal = (ss: SetlistSong) => {
                 <Music className="h-4 w-4 text-brand-600 dark:text-brand-400" /> Setlist
               </h2>
             </div>
-            <div className="py-8 text-center">
-              <p className="text-sm text-gray-400 mb-4">No setlist created for this event</p>
-              {canManageSetlist && (
-                <div className="space-y-3">
-                  <div className="max-w-xs mx-auto">
-                    <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Service Format</p>
-                    <select
-                      value={serviceFormat || inferServiceFormat(event.event_type)}
-                      onChange={e => setServiceFormat(e.target.value as ServiceFormat)}
-                      className="w-full input-field text-sm"
-                    >
-                      {(Object.keys(SERVICE_FORMAT_LABELS) as ServiceFormat[]).map(k => (
-                        <option key={k} value={k}>{SERVICE_FORMAT_LABELS[k]}</option>
-                      ))}
-                    </select>
+            <div className="rounded-2xl border border-gray-200 bg-gray-50/80 p-4 dark:border-white/[0.08] dark:bg-white/[0.035] sm:p-5">
+              <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_minmax(280px,340px)] md:items-center">
+                <div className="flex min-w-0 items-start gap-3.5 text-left">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200/70 dark:bg-emerald-500/[0.12] dark:text-emerald-300 dark:ring-emerald-400/15">
+                    <Music className="h-5 w-5" aria-hidden="true" />
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleCreateSetlist}
-                    className="btn-primary"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Create Setlist
-                  </button>
+                  <div className="min-w-0 pt-0.5">
+                    <p className="text-sm font-bold text-gray-900 dark:text-white">Build this service’s setlist</p>
+                    <p className="mt-1 max-w-md text-xs leading-relaxed text-gray-500 dark:text-white/45">
+                      Choose the service flow first, then add songs and set the best key for the song leader and congregation.
+                    </p>
+                  </div>
                 </div>
-              )}
+                {canManageSetlist && (
+                  <div className="space-y-2 text-left">
+                    <label htmlFor="event-service-format" className="block text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500 dark:text-white/40">
+                      Service format
+                    </label>
+                    <div className="flex flex-col gap-2 sm:flex-row md:flex-col lg:flex-row">
+                      <select
+                        id="event-service-format"
+                        value={serviceFormat || inferServiceFormat(event.event_type)}
+                        onChange={e => setServiceFormat(e.target.value as ServiceFormat)}
+                        className="input-field min-h-11 min-w-0 flex-1 text-sm"
+                      >
+                        {(Object.keys(SERVICE_FORMAT_LABELS) as ServiceFormat[]).map(k => (
+                          <option key={k} value={k}>{SERVICE_FORMAT_LABELS[k]}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={handleCreateSetlist}
+                        className="btn-primary min-h-11 shrink-0 justify-center"
+                      >
+                        <Plus className="h-4 w-4" />
+                        Create Setlist
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           )
@@ -3942,7 +4117,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                       {/* Song editing — creator/editor when not finalized */}
                       {showSetlistEditControls && ((canManageSetlist && !['approved', 'rejected'].includes(setlist.status)) || (canEditSetlist && setlist.status === 'approved')) ? (
                         <>
-                          <button onClick={() => setShowSetlist(true)} className="btn-secondary text-xs">
+                          <button onClick={openSetlistBuilder} className="btn-secondary text-xs">
                             <Plus className="h-3.5 w-3.5" /> Add Song
                           </button>
                           <button onClick={() => setShowAddSong(true)} className="btn-ghost text-xs">
@@ -4831,8 +5006,85 @@ const openLyricsModal = (ss: SetlistSong) => {
           </div>
         </Modal>
 
-        <Modal open={showSetlist} onClose={() => { setShowSetlist(false); setSongSearch(''); }} title="Add Song to Setlist">
+        <Modal
+          open={showSetlist}
+          onClose={requestSetlistBuilderClose}
+          title={setlist ? 'Add Songs to Setlist' : 'Build Setlist'}
+          size="lg"
+        >
           <div className="space-y-3">
+            {setlistBuilderSongs.length > 0 && (
+              <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-emerald-50/70 dark:border-emerald-400/15 dark:bg-emerald-500/[0.06]">
+                <div className="flex items-center justify-between gap-3 border-b border-emerald-200/70 px-3 py-2.5 dark:border-emerald-400/10">
+                  <div>
+                    <p className="text-xs font-bold text-emerald-900 dark:text-emerald-100">
+                      Selected songs ({setlistBuilderSongs.length})
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-emerald-700/70 dark:text-emerald-200/55">Drag or use the arrows to set the service order.</p>
+                  </div>
+                  <ListOrdered className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" aria-hidden="true" />
+                </div>
+                <div className="max-h-52 overflow-y-auto p-1.5">
+                  {setlistBuilderSongs.map((draft, index) => {
+                    const song = songs.find(candidate => candidate.id === draft.song_id);
+                    if (!song) return null;
+                    return (
+                      <div
+                        key={draft.song_id}
+                        draggable
+                        onDragStart={() => setSetlistBuilderDragIndex(index)}
+                        onDragOver={event => {
+                          event.preventDefault();
+                          if (setlistBuilderDragIndex === null || setlistBuilderDragIndex === index) return;
+                          moveSetlistBuilderSong(setlistBuilderDragIndex, index);
+                          setSetlistBuilderDragIndex(index);
+                        }}
+                        onDragEnd={() => setSetlistBuilderDragIndex(null)}
+                        className={`flex items-center gap-2 rounded-xl px-2 py-2 transition-colors ${setlistBuilderDragIndex === index ? 'bg-emerald-100 dark:bg-emerald-500/10' : 'hover:bg-white/70 dark:hover:bg-white/[0.04]'}`}
+                      >
+                        <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-emerald-500/60 active:cursor-grabbing" aria-hidden="true" />
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-white text-[10px] font-bold text-emerald-700 ring-1 ring-emerald-200 dark:bg-black/20 dark:text-emerald-200 dark:ring-emerald-400/15">{index + 1}</span>
+                        <SongArtwork song={song} youtubeUrl={draft.youtube_url || song.youtube_url} className="h-9 w-9 rounded-lg" />
+                        <button type="button" onClick={() => openSongConfig(draft.song_id)} className="min-w-0 flex-1 text-left">
+                          <p className="truncate text-xs font-bold text-gray-900 dark:text-white">{song.title}</p>
+                          <p className="mt-0.5 truncate text-[10px] text-gray-500 dark:text-gray-400">
+                            {[draft.category, draft.performed_key].filter(Boolean).join(' · ')}
+                          </p>
+                        </button>
+                        <div className="flex shrink-0 items-center gap-0.5">
+                          <button
+                            type="button"
+                            onClick={() => moveSetlistBuilderSong(index, index - 1)}
+                            disabled={index === 0}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-white hover:text-emerald-700 disabled:opacity-25 dark:hover:bg-white/[0.06] dark:hover:text-emerald-200"
+                            aria-label={`Move ${song.title} up`}
+                          >
+                            <ArrowUp className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moveSetlistBuilderSong(index, index + 1)}
+                            disabled={index === setlistBuilderSongs.length - 1}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-white hover:text-emerald-700 disabled:opacity-25 dark:hover:bg-white/[0.06] dark:hover:text-emerald-200"
+                            aria-label={`Move ${song.title} down`}
+                          >
+                            <ArrowDown className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSetlistBuilderSongs(current => current.filter(item => item.song_id !== draft.song_id))}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-300"
+                            aria-label={`Remove ${song.title}`}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               <input
@@ -4844,16 +5096,15 @@ const openLyricsModal = (ss: SetlistSong) => {
                 autoComplete="off"
               />
             </div>
-            <div className="space-y-1 h-72 overflow-y-auto">
+            <div className={`${setlistBuilderSongs.length > 0 ? 'h-[34dvh] sm:h-[34vh]' : 'h-[56dvh] sm:h-[50vh]'} max-h-[34rem] space-y-1 overflow-y-auto`}>
               {songs
-                .filter(s => !setlistSongs.some(ss => ss.song_id === s.id))
+                .filter(s => !setlistSongs.some(ss => ss.song_id === s.id) && !setlistBuilderSongs.some(draft => draft.song_id === s.id))
                 .filter(s => {
                   const q = songSearch.trim().toLowerCase();
                   if (!q) return true;
                   return (
                     s.title.toLowerCase().includes(q) ||
-                    (s.artist && s.artist.toLowerCase().includes(q)) ||
-                    (s.song_key && s.song_key.toLowerCase().includes(q))
+                    (s.artist && s.artist.toLowerCase().includes(q))
                   );
                 })
                 .map(song => {
@@ -4865,10 +5116,11 @@ const openLyricsModal = (ss: SetlistSong) => {
                       onClick={() => openSongConfig(song.id)}
                       className="flex items-center gap-3 w-full p-3 rounded-xl text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                     >
+                      <SongArtwork song={song} youtubeUrl={song.youtube_url} className="h-11 w-11 rounded-lg" />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-gray-900 dark:text-white">{song.title}</p>
                         <p className={`text-xs ${song.artist?.trim() ? 'text-gray-500 dark:text-gray-400' : 'font-semibold text-amber-600 dark:text-amber-400'}`}>
-                          {song.artist?.trim() || 'Artist required before use'}{song.song_key && ` -- ${song.song_key}`}
+                          {song.artist?.trim() || 'Artist required before use'}
                         </p>
                       </div>
                       {usage ? (
@@ -4886,14 +5138,13 @@ const openLyricsModal = (ss: SetlistSong) => {
                   );
                 })}
               {songs
-                .filter(s => !setlistSongs.some(ss => ss.song_id === s.id))
+                .filter(s => !setlistSongs.some(ss => ss.song_id === s.id) && !setlistBuilderSongs.some(draft => draft.song_id === s.id))
                 .filter(s => {
                   const q = songSearch.trim().toLowerCase();
                   if (!q) return true;
                   return (
                     s.title.toLowerCase().includes(q) ||
-                    (s.artist && s.artist.toLowerCase().includes(q)) ||
-                    (s.song_key && s.song_key.toLowerCase().includes(q))
+                    (s.artist && s.artist.toLowerCase().includes(q))
                   );
                 }).length === 0 && (
                 <p className="text-center text-sm text-gray-400 py-4">
@@ -4908,10 +5159,24 @@ const openLyricsModal = (ss: SetlistSong) => {
             >
               <Plus className="h-4 w-4" /> Create New Song
             </button>
+            <button
+              type="button"
+              onClick={saveSetlistBuilder}
+              disabled={setlistBuilderSongs.length === 0 || savingSetlistBuilder}
+              className="btn-primary min-h-11 w-full justify-center disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {savingSetlistBuilder
+                ? 'Saving setlist…'
+                : setlistBuilderSongs.length === 0
+                  ? 'Select songs to continue'
+                  : setlist
+                    ? `Add ${setlistBuilderSongs.length} ${setlistBuilderSongs.length === 1 ? 'song' : 'songs'}`
+                    : `Create setlist with ${setlistBuilderSongs.length} ${setlistBuilderSongs.length === 1 ? 'song' : 'songs'}`}
+            </button>
           </div>
         </Modal>
 
-        <Modal open={showAddSong} onClose={() => { if (!creatingSong) { setShowAddSong(false); setNewSongError(''); } }} title="Create New Song">
+        <Modal open={showAddSong} onClose={() => { if (!creatingSong) { setShowAddSong(false); setNewSongError(''); if (setlistBuilderActive) setShowSetlist(true); } }} title="Create New Song">
           <form onSubmit={e => { e.preventDefault(); handleCreateSong(); }} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Title</label>
@@ -4922,15 +5187,9 @@ const openLyricsModal = (ss: SetlistSong) => {
               <input type="text" value={newSong.artist} onChange={e => setNewSong({ ...newSong, artist: e.target.value })} className="input-field" placeholder="Who sings this version?" required />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">This helps the team choose the correct song and thumbnail.</p>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Key</label>
-                <input type="text" value={newSong.song_key} onChange={e => setNewSong({ ...newSong, song_key: e.target.value })} className="input-field" placeholder="e.g., G" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Duration</label>
-                <input type="text" value={newSong.duration} onChange={e => setNewSong({ ...newSong, duration: e.target.value })} className="input-field" placeholder="e.g., 4:30" />
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Duration</label>
+              <input type="text" value={newSong.duration} onChange={e => setNewSong({ ...newSong, duration: e.target.value })} className="input-field" placeholder="e.g., 4:30" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">YouTube Link (optional)</label>
@@ -4948,7 +5207,7 @@ const openLyricsModal = (ss: SetlistSong) => {
               </div>
             )}
             <div className="flex justify-end gap-3 pt-2">
-              <button type="button" onClick={() => { setShowAddSong(false); setNewSongError(''); }} disabled={creatingSong} className="btn-secondary disabled:opacity-60">Cancel</button>
+              <button type="button" onClick={() => { setShowAddSong(false); setNewSongError(''); if (setlistBuilderActive) setShowSetlist(true); }} disabled={creatingSong} className="btn-secondary disabled:opacity-60">Cancel</button>
               <button type="button" onClick={handleCreateSong} disabled={creatingSong || !newSong.title.trim() || !newSong.artist.trim()} className="btn-primary disabled:opacity-60">
                 {creatingSong ? 'Creating...' : 'Create & Add'}
               </button>
@@ -4956,16 +5215,25 @@ const openLyricsModal = (ss: SetlistSong) => {
           </form>
         </Modal>
 
-        <Modal open={showSongConfig} onClose={resetSongConfigModal} title="Configure Song">
+        <Modal
+          open={showSongConfig}
+          onClose={closeSongConfigFlow}
+          onBack={setlistBuilderActive ? () => resetSongConfigModal(true) : undefined}
+          backLabel="Back to song list"
+          title="Configure Song"
+        >
           <div className="space-y-4">
             {selectedSongForConfig && (() => {
               const song = songs.find(s => s.id === selectedSongForConfig);
               return song ? (
-                <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">{song.title}</p>
-                  <p className={`text-xs ${song.artist?.trim() ? 'text-gray-500 dark:text-gray-400' : 'font-semibold text-amber-600 dark:text-amber-400'}`}>
-                    {song.artist?.trim() || 'Artist required'}{song.song_key && ` -- Default Key: ${song.song_key}`}
-                  </p>
+                <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/50">
+                  <SongArtwork song={song} youtubeUrl={songConfig.youtube_url || song.youtube_url} className="h-14 w-14 rounded-xl" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-base font-bold text-gray-900 dark:text-white">{song.title}</p>
+                    <p className={`mt-0.5 truncate text-sm ${song.artist?.trim() ? 'text-gray-500 dark:text-gray-400' : 'font-semibold text-amber-600 dark:text-amber-400'}`}>
+                      {song.artist?.trim() || 'Artist required'}
+                    </p>
+                  </div>
                 </div>
               ) : null;
             })()}
@@ -4987,23 +5255,18 @@ const openLyricsModal = (ss: SetlistSong) => {
               </div>
             )}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Key</label>
-              <Select
-                value={songConfig.performed_key}
-                onChange={v => setSongConfig({ ...songConfig, performed_key: v })}
-                options={['C', 'C#', 'Db', 'D', 'D#', 'Eb', 'E', 'F', 'F#', 'Gb', 'G', 'G#', 'Ab', 'A', 'A#', 'Bb', 'B',
-                  'Cm', 'C#m', 'Dm', 'D#m', 'Ebm', 'Em', 'Fm', 'F#m', 'Gm', 'G#m', 'Am', 'A#m', 'Bbm', 'Bm'].map(k => ({ value: k, label: k }))}
-                placeholder="Select key"
-              />
-              {selectedSongForConfig && (() => {
-                const song = songs.find(s => s.id === selectedSongForConfig);
-                return song?.song_key && songConfig.performed_key && songConfig.performed_key !== song.song_key ? (
-                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Different from library default ({song.song_key})</p>
-                ) : null;
-              })()}
-              <VoiceKeyDetector
-                onApply={performedKey => setSongConfig(current => ({ ...current, performed_key: performedKey }))}
-              />
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Key for this set</label>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <Select
+                  value={songConfig.performed_key}
+                  onChange={v => setSongConfig({ ...songConfig, performed_key: v })}
+                  options={['C', 'C#', 'Db', 'D', 'D#', 'Eb', 'E', 'F', 'F#', 'Gb', 'G', 'G#', 'Ab', 'A', 'A#', 'Bb', 'B'].map(k => ({ value: k, label: k }))}
+                  placeholder="Select key"
+                />
+                <VoiceKeyDetector
+                  onApply={performedKey => setSongConfig(current => ({ ...current, performed_key: performedKey }))}
+                />
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Category</label>
@@ -5032,9 +5295,41 @@ const openLyricsModal = (ss: SetlistSong) => {
               />
             </div>
             <div className="flex justify-end gap-3 pt-2">
-              <button type="button" onClick={resetSongConfigModal} disabled={addingSetlistSong} className="btn-secondary disabled:opacity-60">Cancel</button>
+              <button type="button" onClick={() => resetSongConfigModal(setlistBuilderActive)} disabled={addingSetlistSong} className="btn-secondary disabled:opacity-60">
+                {setlistBuilderActive ? 'Back to Songs' : 'Cancel'}
+              </button>
               <button type="button" onClick={confirmAddSong} disabled={!songConfig.category || !songConfig.artist.trim() || addingSetlistSong} className="btn-primary disabled:opacity-60">
-                {addingSetlistSong ? 'Adding...' : 'Add to Setlist'}
+                {addingSetlistSong ? 'Adding...' : setlistBuilderActive ? (setlistBuilderSongs.some(draft => draft.song_id === selectedSongForConfig) ? 'Update Selection' : 'Add to Selection') : 'Add to Setlist'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+
+        <Modal
+          open={showSetlistExitConfirm}
+          onClose={() => setShowSetlistExitConfirm(false)}
+          title="Exit setlist builder?"
+          size="sm"
+          mobileView="dialog"
+        >
+          <div className="space-y-5">
+            <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+              Your selected songs and any unsaved key or category changes will be lost.
+            </p>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setShowSetlistExitConfirm(false)}
+                className="btn-secondary min-h-11 justify-center"
+              >
+                Keep Editing
+              </button>
+              <button
+                type="button"
+                onClick={confirmSetlistBuilderClose}
+                className="inline-flex min-h-11 items-center justify-center rounded-xl bg-red-600 px-4 text-sm font-bold text-white transition-colors hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+              >
+                Exit Without Saving
               </button>
             </div>
           </div>
@@ -5048,7 +5343,7 @@ const openLyricsModal = (ss: SetlistSong) => {
               return ss?.songs ? (
                 <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
                   <p className="text-sm font-medium text-gray-900 dark:text-white">{ss.songs.title}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{ss.songs.artist || 'No artist listed'}{ss.songs.song_key && ` -- Default Key: ${ss.songs.song_key}`}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{ss.songs.artist || 'No artist listed'}</p>
                   <button
                     type="button"
                     onClick={openLyricsFromEditingSong}

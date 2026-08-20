@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { X } from 'lucide-react';
+import { ArrowLeft, X } from 'lucide-react';
 
 interface ModalProps {
   open: boolean;
@@ -15,6 +15,8 @@ interface ModalProps {
   closeOnEscape?: boolean;
   titleAlign?: 'left' | 'center';
   bodyClassName?: string;
+  onBack?: () => void;
+  backLabel?: string;
 }
 
 const desktopSizes = {
@@ -161,6 +163,8 @@ export function Modal({
   closeOnEscape = true,
   titleAlign = 'left',
   bodyClassName = '',
+  onBack,
+  backLabel = 'Back',
 }: ModalProps) {
   const [visible, setVisible] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -335,13 +339,26 @@ export function Modal({
             {!isMobilePage && !isMobileDialog && (
               <div className="absolute top-3 left-1/2 -translate-x-1/2 w-8 h-1 rounded-full bg-gray-200 dark:bg-gray-700 sm:hidden" />
             )}
-            <h2
-              id={titleId}
-              className={`text-[15px] font-bold text-gray-900 dark:text-white ${titleAlign === 'center' ? 'absolute left-1/2 -translate-x-1/2 text-center' : ''}`}
-              style={{ letterSpacing: '-0.02em' }}
-            >
-              {title}
-            </h2>
+            <div className={`flex min-w-0 items-center gap-2 ${titleAlign === 'center' ? 'contents' : ''}`}>
+              {onBack && titleAlign !== 'center' && (
+                <button
+                  type="button"
+                  onClick={onBack}
+                  className="-ml-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-white"
+                  aria-label={backLabel}
+                  title={backLabel}
+                >
+                  <ArrowLeft className="h-5 w-5" />
+                </button>
+              )}
+              <h2
+                id={titleId}
+                className={`truncate text-[15px] font-bold text-gray-900 dark:text-white ${titleAlign === 'center' ? 'absolute left-1/2 -translate-x-1/2 text-center' : ''}`}
+                style={{ letterSpacing: '-0.02em' }}
+              >
+                {title}
+              </h2>
+            </div>
             {!hideCloseButton && (
               <button
                 type="button"

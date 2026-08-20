@@ -126,7 +126,7 @@ export function SongArtwork({ song, youtubeUrl, className = 'h-10 w-10 rounded-l
     () => artworkEligible ? getPublicSearchArtworkUrl(title, artist) : null,
     [artist, artworkEligible, title]
   );
-  const artworkUrl = artworkEligible ? [publicArtworkUrl, videoArtworkUrl, searchArtworkUrl].find(
+  const artworkUrl = artworkEligible ? [videoArtworkUrl, publicArtworkUrl, searchArtworkUrl].find(
     (url): url is string => typeof url === 'string' && !failedUrls.has(url)
   ) || null : null;
 

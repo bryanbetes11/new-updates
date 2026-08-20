@@ -161,7 +161,7 @@ export function VoiceKeyDetector({ onApply }: VoiceKeyDetectorProps) {
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-sm font-bold text-violet-950 dark:text-violet-100">Voice Key Assist</p>
             <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-700 dark:bg-violet-400/10 dark:text-violet-200">
-              <ShieldCheck className="h-3 w-3" aria-hidden="true" /> Admin test
+              <ShieldCheck className="h-3 w-3" aria-hidden="true" /> Major keys
             </span>
           </div>
           <p className="mt-0.5 text-xs leading-relaxed text-violet-700 dark:text-violet-200/70">
@@ -223,23 +223,20 @@ export function VoiceKeyDetector({ onApply }: VoiceKeyDetectorProps) {
               </span>
             </div>
             {result.confidence === 'low' && (
-              <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">The melody was ambiguous. Compare the major-key suggestions before applying one.</p>
+              <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">The melody was ambiguous, so test this result carefully before using it.</p>
             )}
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              {result.suggestions.map((suggestion, index) => (
-                <button
-                  key={suggestion.key}
-                  type="button"
-                  onClick={() => onApply(suggestion.key)}
-                  className={`min-h-11 rounded-xl px-2 text-sm font-black transition-colors ${index === 0
-                    ? 'bg-violet-600 text-white hover:bg-violet-700'
-                    : 'bg-violet-100 text-violet-800 hover:bg-violet-200 dark:bg-white/[0.06] dark:text-violet-100 dark:hover:bg-white/[0.10]'}`}
-                  aria-label={`Use ${suggestion.label}`}
-                >
-                  {suggestion.key}
-                </button>
-              ))}
+            <div className="mt-3 rounded-xl bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-amber-800 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-200 dark:ring-amber-400/20">
+              <p className="font-bold">Verify before saving</p>
+              <p className="mt-0.5">Play the suggested key on your instrument and sing the chorus once. Adjust it manually if it does not feel right for your voice.</p>
             </div>
+            <button
+              type="button"
+              onClick={() => onApply(result.suggestions[0].key)}
+              className="mt-3 min-h-11 w-full rounded-xl bg-violet-600 px-3 text-sm font-black text-white transition-colors hover:bg-violet-700"
+              aria-label={`Use ${result.suggestions[0].label}`}
+            >
+              Use {result.suggestions[0].key}
+            </button>
           </div>
           <button type="button" onClick={reset} className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 text-xs font-bold text-violet-700 dark:text-violet-200">
             <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" /> Try again

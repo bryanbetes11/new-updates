@@ -180,9 +180,9 @@ export function inferKeyFromPitchFrames(frames: DetectedPitchFrame[]): KeyInfere
   }
 
   candidates.sort((left, right) => right.score - left.score);
-  const suggestions = candidates.slice(0, 3);
+  const scoreMargin = candidates[0].score - candidates[1].score;
+  const suggestions = candidates.slice(0, 1);
   const distinctPitchClasses = histogram.filter(value => value > 0).length;
-  const scoreMargin = suggestions[0].score - suggestions[1].score;
   const confidence = usableFrames.length >= 60 && distinctPitchClasses >= 5 && scoreMargin >= 0.055
     ? 'high'
     : usableFrames.length >= 28 && distinctPitchClasses >= 4 && scoreMargin >= 0.025

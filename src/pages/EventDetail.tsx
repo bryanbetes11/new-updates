@@ -309,7 +309,6 @@ export function EventDetail() {
 
   const { user, profile, roles, userRoles, organization, isLeader, isOrgAdmin, isAdmin, isAdminCoordinator, isProductionDirector, isPlatformOwner } = useAuth();
   const { toast } = useToast();
-  const canTestVoiceKeyAssist = isOrgAdmin || isAdmin || isPlatformOwner;
 
   const isMissingSetlistSubmissionTableError = useCallback((message?: string | null) => {
     if (!message) return false;
@@ -5002,11 +5001,9 @@ const openLyricsModal = (ss: SetlistSong) => {
                   <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Different from library default ({song.song_key})</p>
                 ) : null;
               })()}
-              {canTestVoiceKeyAssist && (
-                <VoiceKeyDetector
-                  onApply={performedKey => setSongConfig(current => ({ ...current, performed_key: performedKey }))}
-                />
-              )}
+              <VoiceKeyDetector
+                onApply={performedKey => setSongConfig(current => ({ ...current, performed_key: performedKey }))}
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Category</label>

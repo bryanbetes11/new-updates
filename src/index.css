@@ -204,6 +204,13 @@ html[data-touch-feedback="apple"] :is(nav, aside) .touch-feedback-strong {
     backdrop-filter: none !important;
   }
 
+  /* iOS can blur descendants when nested backdrop filters share a fixed header. */
+  .service-mode-topbar,
+  .service-mode-topbar button {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
   html.service-mode-active .mobile-chat-composer,
   body.service-mode-active .mobile-chat-composer,
   html.service-mode-active .composer-container,

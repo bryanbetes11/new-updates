@@ -1890,11 +1890,12 @@ export function Navigation({
           top: "-1px",
           paddingTop: "env(safe-area-inset-top)",
           height: "calc(3.5rem + env(safe-area-inset-top) + 1px)",
-          transform: mobileHeaderTransform,
-          filter: mobileOpen ? "blur(1.25px) brightness(0.78)" : "none",
-          transition:
-            "transform 260ms cubic-bezier(0.22, 1, 0.36, 1), filter 260ms cubic-bezier(0.22, 1, 0.36, 1)",
-          willChange: "transform",
+          // Avoid keeping the closed header on a transformed GPU layer. iOS
+          // can rasterize text and icons on that layer at a soft resolution.
+          transform: mobileOpen ? mobileHeaderTransform : "none",
+          filter: "none",
+          transition: "transform 260ms cubic-bezier(0.22, 1, 0.36, 1)",
+          willChange: mobileOpen ? "transform" : "auto",
         }}
       >
         <div className="relative z-10 flex h-14 w-full items-center justify-between gap-2 bg-[#050505] px-4 pb-0">

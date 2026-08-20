@@ -21,7 +21,6 @@ import { EventArtwork } from '../components/EventArtwork';
 import { VoiceKeyDetector } from '../components/VoiceKeyDetector';
 import { withSaveTimeout } from '../lib/saveTimeout';
 import { clearActiveServiceMode, getActiveServiceMode, saveActiveServiceMode } from '../lib/serviceModeResume';
-import { useSmartBack } from '../lib/navigationHistory';
 import { describeSetlistReviewAge, getSetlistPendingMessage } from '../lib/setlistReviewAge';
 import { getSingleLyricsAutofill, normalizeLyricsInputForSave, normalizeLyricsSearchResults, type LyricsSearchResult } from '../lib/lyricsSearch';
 import { getEventAssignmentKey, prepareEventAssignmentBatch, type EventAssignmentDraft } from '../lib/eventAssignmentBatch';
@@ -359,7 +358,6 @@ export function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const smartBack = useSmartBack('/events');
 
   const { user, profile, roles, userRoles, organization, loading: authLoading, isLeader, isOrgAdmin, isAdmin, isAdminCoordinator, isProductionDirector, isPlatformOwner } = useAuth();
   const { toast } = useToast();
@@ -3398,7 +3396,7 @@ const openLyricsModal = (ss: SetlistSong) => {
 
   const goBack = () => {
     setIsLeaving(true);
-    setTimeout(() => smartBack(), 300);
+    setTimeout(() => navigate('/events'), 300);
   };
 
   const fullScreenAssignmentGate = assignmentDetailsBlocked ? (
@@ -4007,23 +4005,23 @@ const openLyricsModal = (ss: SetlistSong) => {
         {!setlist ? (
           showLinkedSetlistReference ? (
             <div className="overflow-hidden animate-slide-up border-t border-gray-200/70 pt-4 dark:border-white/[0.08]" style={{ animationDelay: '125ms' }}>
-              <div className="flex items-start justify-between gap-3 pb-4">
+              <div className="flex flex-col gap-3 pb-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                     <Music className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
                     <h2 className="text-base font-semibold text-gray-900 dark:text-white">Sunday Service Setlist</h2>
                     <span className={statusColors[linkedSetlistStatus] || 'badge-blue'}>{statusLabels[linkedSetlistStatus] || linkedSetlistStatus}</span>
                   </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">
+                  <p className="mt-1.5 line-clamp-2 text-xs leading-5 text-gray-500 dark:text-gray-400 sm:truncate">
                     Reference only from {linkedServiceEvent?.title || 'linked Sunday Service'}
                     {linkedServiceDateLabel ? ` · ${linkedServiceDateLabel}` : ''}
                   </p>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="flex w-full items-center gap-2 sm:w-auto sm:shrink-0">
                   {showServiceModeEntryPoints && canShowLinkedRehearsalModeButton && linkedReferenceSongs.length > 0 && (
                     <button
                       onClick={() => openServiceMode(0)}
-                      className="group relative inline-flex h-9 items-center justify-center gap-2 overflow-hidden rounded-full bg-emerald-500/15 px-3 text-xs font-bold text-emerald-200 ring-1 ring-emerald-400/20 transition hover:bg-emerald-500/20 active:scale-[0.98]"
+                      className="group relative inline-flex h-11 flex-1 items-center justify-center gap-2 overflow-hidden rounded-full bg-emerald-500/15 px-4 text-sm font-bold text-emerald-200 ring-1 ring-emerald-400/20 transition hover:bg-emerald-500/20 active:scale-[0.98] sm:h-9 sm:flex-none sm:px-3 sm:text-xs"
                       title={`Open ${serviceModeLabel}`}
                     >
                       <FileText className="relative h-4 w-4 transition group-hover:scale-110" />
@@ -6052,12 +6050,8 @@ const openLyricsModal = (ss: SetlistSong) => {
                       exit={{ opacity: 0 }}
                       transition={{ duration: 0.12, ease: 'easeOut' }}
                     >
-                      <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.12, ease: 'easeOut' }}
-                        className="relative z-[80] flex shrink-0 items-center gap-2 border-b border-black/[0.06] bg-white/95 px-4 pb-3 pt-3 shadow-sm backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#0c0f0d]/95"
+                      <div
+                        className="service-mode-topbar relative z-[80] flex shrink-0 items-center gap-2 border-b border-black/[0.06] bg-white px-4 pb-3 pt-3 shadow-sm dark:border-white/[0.08] dark:bg-[#0c0f0d]"
                         style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)' }}
                       >
 						<button ref={serviceModeCloseButtonRef} type="button" onClick={requestCloseServiceMode} aria-label={`Close ${serviceModeLabel}`} className="rounded-full p-2 text-gray-500 hover:bg-black/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-white/55 dark:hover:bg-white/[0.08]">
@@ -6154,7 +6148,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                             setServiceChartControlsVisible(false);
                           }}
                           disabled={serviceChartEditing || serviceModeEntering}
-                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 backdrop-blur-md transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100 ${
+                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100 ${
                             serviceArrangementOpen
                               ? 'border-amber-500 bg-amber-500 text-white shadow-lg shadow-amber-500/25'
                               : 'border-black/[0.06] bg-white/90 text-gray-600 shadow-sm hover:border-amber-200 hover:bg-amber-50 hover:text-amber-700 dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/70 dark:hover:border-amber-500/30 dark:hover:bg-amber-500/10 dark:hover:text-amber-300'
@@ -6168,7 +6162,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                         <button
                           onClick={() => setServiceAutoScrollEnabled(value => !value)}
                           disabled={serviceChartEditing || serviceModeEntering}
-                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 backdrop-blur-md transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100 ${
+                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100 ${
                             serviceAutoScrollEnabled
                               ? 'border-emerald-500 bg-emerald-600 text-white shadow-lg shadow-emerald-600/25'
                               : 'border-black/[0.06] bg-white/90 text-gray-600 shadow-sm hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/70 dark:hover:border-emerald-500/30 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300'
@@ -6181,7 +6175,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                         </button>
                         <button
                           onClick={() => setServiceChartControlsVisible(value => !value)}
-                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 backdrop-blur-md transition active:scale-95 ${
+                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition active:scale-95 ${
                             serviceChartControlsVisible
                               ? 'border-emerald-500 bg-emerald-600 text-white shadow-lg shadow-emerald-600/25'
                               : 'border-black/[0.06] bg-white/90 text-gray-600 shadow-sm hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/70 dark:hover:border-emerald-500/30 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300'
@@ -6200,7 +6194,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                               <Settings2 className="h-4.5 w-4.5" />
                             </motion.span>
                           </button>
-                      </motion.div>
+                      </div>
 					  <div className="relative z-[70] shrink-0 border-b border-black/[0.06] bg-gray-50/95 px-3 py-2 dark:border-white/[0.08] dark:bg-[#101411]/95">
 						<div className="flex items-center gap-2">
 						  <button

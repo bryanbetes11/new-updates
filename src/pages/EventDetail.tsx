@@ -4,7 +4,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { format, parseISO, differenceInDays, subWeeks, previousSunday, addDays, subDays } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { animate, motion, useMotionValue, AnimatePresence, type PanInfo } from 'framer-motion';
-import { ArrowLeft, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, ListOrdered, Pause, Play, Settings2, MoreHorizontal, Upload, Calendar, Loader2, BellRing, Eye } from 'lucide-react';
+import { ArrowLeft, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, ListOrdered, Pause, Play, Settings2, MoreHorizontal, Upload, Calendar, Loader2, BellRing, Eye, Lock } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -28,6 +28,7 @@ import { getEventAssignmentKey, prepareEventAssignmentBatch, type EventAssignmen
 import { hasEventScheduleEnded, isEventCompleted, type EventLifecycleOverride } from '../lib/eventLifecycle';
 import { isSetlistMeaningfullyCreated } from '../lib/setlistPersistence';
 import { getPendingAssignmentUserCount } from '../lib/eventAssignmentReminder';
+import { getPendingUserEventAssignments, getUserEventAssignments, shouldBlockEventDetails } from '../lib/eventAssignmentGate';
 import { getPostEventObservationViewers } from '../lib/postEventObservationViews';
 
 import type { Event, EventAssignment, Setlist, SetlistSong, Song, ServiceFormat, SetlistCheckReport, PostEventObservation, PostEventObservationCategory, PostEventObservationStatus, PostEventObservationView } from '../types';
@@ -368,6 +369,7 @@ export function EventDetail() {
   const [newSongError, setNewSongError] = useState('');
   const [declineReason, setDeclineReason] = useState('');
   const [showDecline, setShowDecline] = useState<string | null>(null);
+  const [respondingAssignmentId, setRespondingAssignmentId] = useState<string | null>(null);
   const [expandedDeclineNotes, setExpandedDeclineNotes] = useState<Set<string>>(new Set());
   const [showDeleteEvent, setShowDeleteEvent] = useState(false);
   const [showEventActionsMenu, setShowEventActionsMenu] = useState(false);
@@ -1338,35 +1340,60 @@ export function EventDetail() {
   };
 
   const handleConfirm = async (assignmentId: string) => {
-    await supabase.from('event_assignments').update({ status: 'confirmed', confirmed_at: new Date().toISOString() }).eq('id', assignmentId);
-    dispatchBadgeCountsRefresh();
-    toast('success', 'Assignment confirmed');
-    fetchAll();
+    if (respondingAssignmentId) return;
+    setRespondingAssignmentId(assignmentId);
+    try {
+      const { error } = await withSaveTimeout(
+        supabase
+          .from('event_assignments')
+          .update({ status: 'confirmed', confirmed_at: new Date().toISOString(), decline_reason: null })
+          .eq('id', assignmentId)
+      );
+
+      if (error) {
+        toast('error', 'Could not confirm this assignment');
+        return;
+      }
+
+      dispatchBadgeCountsRefresh();
+      toast('success', 'Assignment confirmed');
+      await fetchAll();
+    } finally {
+      setRespondingAssignmentId(null);
+    }
   };
 
   const handleDecline = async (assignmentId: string) => {
+    if (respondingAssignmentId) return;
     const reason = declineReason.trim();
     if (!reason) {
       toast('error', 'Please provide a reason for declining');
       return;
     }
 
-    const { error } = await supabase
-      .from('event_assignments')
-      .update({ status: 'declined', decline_reason: reason })
-      .eq('id', assignmentId);
+    setRespondingAssignmentId(assignmentId);
+    try {
+      const { error } = await withSaveTimeout(
+        supabase
+          .from('event_assignments')
+          .update({ status: 'declined', decline_reason: reason, confirmed_at: null })
+          .eq('id', assignmentId)
+      );
 
-    if (error) {
-      console.error('Failed to decline assignment:', error);
-      toast('error', 'Could not decline this assignment');
-      return;
+      if (error) {
+        console.error('Failed to decline assignment:', error);
+        toast('error', 'Could not decline this assignment');
+        return;
+      }
+
+      dispatchBadgeCountsRefresh();
+      toast('info', 'Assignment declined');
+      setShowDecline(null);
+      setDeclineReason('');
+      await fetchAll();
+    } finally {
+      setRespondingAssignmentId(null);
     }
-
-    dispatchBadgeCountsRefresh();
-    toast('info', 'Assignment declined');
-    setShowDecline(null);
-    setDeclineReason('');
-    fetchAll();
   };
 
   const handleRemoveAssignment = async (assignmentId: string) => {
@@ -2683,7 +2710,12 @@ const openLyricsModal = (ss: SetlistSong) => {
     </div>
   );
 
-  const myAssignment = assignments.find(a => a.user_id === user?.id);
+  const myAssignments = getUserEventAssignments(assignments, user?.id);
+  const myPendingAssignments = getPendingUserEventAssignments(assignments, user?.id);
+  const myAssignment = myAssignments.find(assignment => assignment.roles?.name === 'Song Leader')
+    || myAssignments.find(assignment => assignment.status !== 'declined')
+    || myAssignments[0];
+  const decliningAssignment = showDecline ? assignments.find(assignment => assignment.id === showDecline) : null;
   const confirmedCount = assignments.filter(a => a.status === 'confirmed').length;
   const pendingAssignmentUserCount = getPendingAssignmentUserCount(assignments);
   const songLeaderAssignment = assignments.find(a => a.roles?.name === 'Song Leader');
@@ -2705,8 +2737,120 @@ const openLyricsModal = (ss: SetlistSong) => {
       : '';
   const songLeaderName = directSongLeaderName || linkedSongLeaderName;
   const eventDisplayTitle = directSongLeaderName || shortenPrefixedTitle(event.title);
-  const isSongLeader = assignments.some(a => a.user_id === user?.id && a.roles?.name === 'Song Leader');
+  const isSongLeader = myAssignments.some(a => a.roles?.name === 'Song Leader');
   const userIsSongLeaderRole = userRoles.some(ur => ur.roles?.name === 'Song Leader');
+  const hasEventManagementAccess = isLeader || isOrgAdmin || isPlatformOwner;
+  const canPreviewAssignmentGate = isOrgAdmin || isAdmin || isPlatformOwner;
+  const requestedPreviewAssignmentUserId = new URLSearchParams(location.search).get('previewAssignmentGate');
+  const previewAssignmentUserId = requestedPreviewAssignmentUserId === '1'
+    ? assignments.find(assignment => assignment.status === 'pending')?.user_id
+    : requestedPreviewAssignmentUserId;
+  const previewPendingAssignments = getPendingUserEventAssignments(assignments, previewAssignmentUserId);
+  const previewAssignmentGate = canPreviewAssignmentGate && previewPendingAssignments.length > 0;
+  const visiblePendingAssignments = previewAssignmentGate ? previewPendingAssignments : myPendingAssignments;
+  const previewMemberProfile = visiblePendingAssignments[0]?.profiles;
+  const previewMemberName = previewMemberProfile
+    ? `${previewMemberProfile.first_name || ''} ${previewMemberProfile.last_name || ''}`.trim()
+    : '';
+  const assignmentDetailsBlocked = previewAssignmentGate || shouldBlockEventDetails(assignments, user?.id, hasEventManagementAccess);
+  const pendingAssignmentPanel = visiblePendingAssignments.length > 0 && !assignmentDetailsBlocked ? (
+    <motion.section
+      {...blurUp(0.2)}
+      className="relative overflow-hidden rounded-3xl border border-amber-500/25 bg-[#120b05]"
+      style={{
+        backgroundImage: 'linear-gradient(135deg, rgba(245,158,11,0.16), rgba(245,158,11,0.05) 52%, transparent 82%)',
+        boxShadow: '0 6px 20px -12px rgba(245,158,11,0.20)',
+      }}
+      aria-labelledby="pending-assignment-title"
+    >
+      <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-amber-300/45 to-transparent" />
+      <div className="relative p-4 sm:p-5">
+        {previewAssignmentGate && (
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-sky-400/15 bg-sky-400/[0.08] px-3 py-2">
+            <p className="min-w-0 truncate text-[11px] font-bold text-sky-200">
+              Admin preview{previewMemberName ? ` · ${previewMemberName}` : ''}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                const params = new URLSearchParams(location.search);
+                params.delete('previewAssignmentGate');
+                navigate({ pathname: location.pathname, search: params.toString() ? `?${params.toString()}` : '' }, { replace: true });
+              }}
+              className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-bold text-sky-200 transition-colors hover:bg-sky-400/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+            >
+              Exit Preview
+            </button>
+          </div>
+        )}
+        <div className="flex items-start gap-3.5">
+          <div
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl"
+            style={{ background: 'linear-gradient(145deg, #f59e0b, #d97706)', boxShadow: '0 3px 10px rgba(245,158,11,0.4)' }}
+          >
+            <AlertCircle className="h-5 w-5 text-white" aria-hidden="true" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="mb-0.5 text-[10px] font-mono font-medium uppercase tracking-[0.22em] text-amber-400">
+              {previewAssignmentGate ? 'Member preview' : assignmentDetailsBlocked ? 'Response required' : 'Action required'}
+            </p>
+            <h2 id="pending-assignment-title" className="text-[15px] font-bold leading-tight text-white" style={{ letterSpacing: '-0.02em' }}>
+              {previewAssignmentGate
+                ? 'Respond before viewing event details'
+                : assignmentDetailsBlocked
+                ? 'Respond before viewing event details'
+                : `${visiblePendingAssignments.length} pending ${visiblePendingAssignments.length === 1 ? 'assignment' : 'assignments'}`}
+            </h2>
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-white/50">
+              {previewAssignmentGate
+                ? 'This read-only preview shows the gate exactly as this pending member will see it.'
+                : assignmentDetailsBlocked
+                ? 'Confirm or decline every role below to unlock the setlist, team list, and event tools.'
+                : isSongLeader
+                  ? 'You can keep preparing as Song Leader, but please respond to each additional role.'
+                  : 'Please respond to each role so the event leaders have an accurate team count.'}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 divide-y divide-white/[0.07] overflow-hidden rounded-2xl border border-white/[0.08] bg-black/15">
+          {visiblePendingAssignments.map(assignment => {
+            const isResponding = respondingAssignmentId === assignment.id;
+            const roleName = assignment.roles?.name || 'Team role';
+            return (
+              <div key={assignment.id} className="flex flex-col gap-3 px-3.5 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/35">Assigned role</p>
+                  <p className="mt-0.5 truncate text-sm font-bold text-white">{roleName}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleConfirm(assignment.id)}
+                    disabled={previewAssignmentGate || respondingAssignmentId !== null}
+                    className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-emerald-600 px-4 text-xs font-bold text-white transition-colors hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:cursor-wait disabled:opacity-55"
+                    aria-label={`Confirm ${roleName} assignment`}
+                  >
+                    {isResponding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                    Confirm
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowDecline(assignment.id)}
+                    disabled={previewAssignmentGate || respondingAssignmentId !== null}
+                    className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/[0.1] px-4 text-xs font-bold text-red-200 transition-colors hover:bg-red-500/[0.17] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 disabled:cursor-wait disabled:opacity-55"
+                    aria-label={`Decline ${roleName} assignment`}
+                  >
+                    <X className="h-3.5 w-3.5" /> Decline
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </motion.section>
+  ) : null;
   const canManageSetlist = isLeader || isSongLeader || userIsSongLeaderRole;
   const canEditSetlist = isLeader || isProductionDirector;
   const canEditEvent = isLeader || isProductionDirector;
@@ -3056,8 +3200,153 @@ const openLyricsModal = (ss: SetlistSong) => {
     setTimeout(() => smartBack(), 300);
   };
 
+  const exitAssignmentPreview = () => {
+    const params = new URLSearchParams(location.search);
+    params.delete('previewAssignmentGate');
+    navigate({ pathname: location.pathname, search: params.toString() ? `?${params.toString()}` : '' }, { replace: true });
+  };
+
+  const fullScreenAssignmentGate = assignmentDetailsBlocked ? (
+    <motion.main
+      {...blurUp(0.08)}
+      className="relative flex min-h-[calc(100dvh-5rem)] w-full items-center justify-center overflow-hidden px-4 pb-10 pt-[calc(env(safe-area-inset-top)+5rem)] sm:px-6 sm:pb-14 sm:pt-[calc(env(safe-area-inset-top)+6rem)] lg:px-10 lg:py-16"
+      aria-labelledby="assignment-gate-title"
+    >
+      <div className="pointer-events-none absolute inset-0" aria-hidden="true">
+        <div className="absolute left-1/2 top-[-12rem] h-[34rem] w-[34rem] -translate-x-1/2 rounded-full bg-amber-500/[0.10] blur-[120px] sm:h-[42rem] sm:w-[42rem]" />
+        <div className="absolute left-[8%] top-[38%] h-56 w-56 rounded-full bg-emerald-500/[0.06] blur-[100px]" />
+        <div className="absolute right-[6%] top-[24%] h-64 w-64 rounded-full bg-sky-500/[0.05] blur-[110px]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(255,255,255,0.055),transparent_30%),linear-gradient(180deg,rgba(5,5,5,0.2),#050505_82%)]" />
+      </div>
+
+      <button
+        type="button"
+        onClick={goBack}
+        className="absolute left-4 top-[calc(env(safe-area-inset-top)+1rem)] z-20 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/[0.09] bg-white/[0.05] text-white/70 backdrop-blur-xl transition-colors hover:bg-white/[0.1] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 sm:left-6 lg:left-10 lg:top-10"
+        aria-label="Back to events"
+        title="Back to events"
+      >
+        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+      </button>
+
+      {previewAssignmentGate && (
+        <div className="absolute right-4 top-[calc(env(safe-area-inset-top)+1rem)] z-20 flex items-center gap-2 sm:right-6 lg:right-10 lg:top-10">
+          <span className="hidden rounded-full border border-sky-400/15 bg-sky-400/[0.08] px-3 py-2 text-[11px] font-bold text-sky-200 backdrop-blur-xl sm:inline-flex">
+            Previewing {previewMemberName || 'pending member'}
+          </span>
+          <button
+            type="button"
+            onClick={exitAssignmentPreview}
+            className="inline-flex min-h-11 items-center justify-center rounded-full border border-sky-400/20 bg-sky-400/[0.09] px-4 text-xs font-bold text-sky-100 backdrop-blur-xl transition-colors hover:bg-sky-400/[0.15] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+          >
+            Exit Preview
+          </button>
+        </div>
+      )}
+
+      <div className="relative z-10 mx-auto w-full max-w-2xl text-center">
+        <EventArtwork
+          eventType={event.event_type}
+          title={event.title}
+          songs={eventDetailArtworkSongs}
+          className="mx-auto h-32 w-32 rounded-2xl shadow-[0_24px_70px_-28px_rgba(245,158,11,0.55)] ring-1 ring-white/[0.10] sm:h-36 sm:w-36"
+        />
+
+        <p className="mt-6 text-[10px] font-mono font-bold uppercase tracking-[0.24em] text-emerald-400/80">
+          {event.event_type}
+        </p>
+        <h1 className="mx-auto mt-2 max-w-xl text-3xl font-black leading-[1.02] text-white sm:text-5xl" style={{ letterSpacing: '-0.045em' }}>
+          {eventDisplayTitle}
+        </h1>
+        <div className="mt-3 text-xs font-semibold text-white/45">
+          <div className="space-y-1 sm:hidden">
+            {[compactEventFacts.slice(0, 2), compactEventFacts.slice(2)].map((facts, rowIndex) => facts.length > 0 && (
+              <div key={rowIndex} className="flex items-center justify-center gap-2">
+                {facts.map((fact, index) => (
+                  <span key={fact} className="inline-flex items-center gap-2 whitespace-nowrap">
+                    {index > 0 && <span className="h-1 w-1 rounded-full bg-white/25" />}
+                    {fact}
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
+          <div className="hidden flex-wrap items-center justify-center gap-x-2 gap-y-1 sm:flex">
+            {compactEventFacts.map((fact, index) => (
+              <span key={fact} className="inline-flex items-center gap-2">
+                {index > 0 && <span className="h-1 w-1 rounded-full bg-white/25" />}
+                {fact}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <section
+          className="relative mx-auto mt-7 w-full max-w-2xl overflow-hidden rounded-[28px] border border-amber-400/20 bg-[#0b0b0b]/90 px-4 pb-4 pt-6 shadow-[0_26px_80px_-42px_rgba(245,158,11,0.55)] backdrop-blur-2xl sm:mt-9 sm:px-7 sm:pb-6 sm:pt-8"
+          aria-labelledby="assignment-gate-title"
+        >
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(245,158,11,0.14),transparent_38%),linear-gradient(135deg,rgba(255,255,255,0.025),transparent_55%)]" aria-hidden="true" />
+          <div className="pointer-events-none absolute inset-x-12 top-0 h-px bg-gradient-to-r from-transparent via-amber-300/50 to-transparent" aria-hidden="true" />
+
+          <div className="relative">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500 text-black shadow-[0_12px_35px_-12px_rgba(245,158,11,0.8)]">
+              <Lock className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <p className="mt-5 text-[10px] font-mono font-bold uppercase tracking-[0.22em] text-amber-400">
+              Response required
+            </p>
+            <h2 id="assignment-gate-title" className="mt-2 text-[1.65rem] font-black leading-[1.08] text-white sm:text-3xl" style={{ letterSpacing: '-0.035em' }}>
+              Respond before viewing<span className="hidden sm:inline"> </span><br className="sm:hidden" />event details
+            </h2>
+
+        <div className="mx-auto mt-6 w-full max-w-xl divide-y divide-white/[0.07] overflow-hidden rounded-2xl border border-white/[0.09] bg-black/25 text-left sm:mt-7">
+          {visiblePendingAssignments.map(assignment => {
+            const isResponding = respondingAssignmentId === assignment.id;
+            const roleName = assignment.roles?.name || 'Team role';
+            return (
+              <div key={assignment.id} className="grid gap-3 px-4 py-4 sm:grid-cols-[1fr_auto] sm:items-center sm:px-5">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/35">Assigned role</p>
+                  <p className="mt-1 truncate text-base font-black text-white">{roleName}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleConfirm(assignment.id)}
+                    disabled={previewAssignmentGate || respondingAssignmentId !== null}
+                    className={`inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-emerald-600 px-5 text-xs font-black text-white transition-colors hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:cursor-not-allowed ${respondingAssignmentId ? 'opacity-45' : ''}`}
+                    aria-label={`Confirm ${roleName} assignment`}
+                  >
+                    {isResponding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                    Confirm
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowDecline(assignment.id)}
+                    disabled={previewAssignmentGate || respondingAssignmentId !== null}
+                    className={`inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/[0.1] px-5 text-xs font-black text-red-200 transition-colors hover:bg-red-500/[0.17] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 disabled:cursor-not-allowed ${respondingAssignmentId ? 'opacity-45' : ''}`}
+                    aria-label={`Decline ${roleName} assignment`}
+                  >
+                    <X className="h-3.5 w-3.5" aria-hidden="true" /> Decline
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+            <p className="mx-auto mt-4 flex max-w-md items-center justify-center gap-2 border-t border-white/[0.06] px-2 pt-4 text-[11px] font-semibold leading-relaxed text-white/35 sm:mt-5 sm:pt-5">
+              <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              Event details stay private until all assignments have a response.
+            </p>
+          </div>
+        </section>
+      </div>
+    </motion.main>
+  ) : null;
+
   return (
-    <div className="page-container page-bottom-pad relative isolate overflow-visible bg-[#050505]">
+    <div className="page-container page-bottom-pad relative isolate overflow-x-clip bg-[#050505]">
       <div
         className="pointer-events-none fixed inset-x-0 top-0 z-0 h-[calc(env(safe-area-inset-top)+22rem)] overflow-hidden bg-[#050505] lg:hidden"
         aria-hidden="true"
@@ -3075,9 +3364,14 @@ const openLyricsModal = (ss: SetlistSong) => {
       <motion.div
         animate={isLeaving ? { opacity: 0, y: -12, filter: 'blur(8px)' } : { opacity: 1, y: 0, filter: 'blur(0px)' }}
         transition={{ duration: 0.28, ease: [0.4, 0, 1, 1] }}
-        className="relative z-10 mx-auto max-w-2xl space-y-4 px-4 pt-0 sm:px-6 sm:pt-5 md:max-w-[860px] md:px-8 lg:max-w-6xl lg:pt-12 xl:max-w-[1560px]"
+        className={assignmentDetailsBlocked
+          ? 'relative z-10 w-full'
+          : 'relative z-10 mx-auto w-full max-w-2xl space-y-4 px-4 pt-0 sm:px-6 sm:pt-5 md:max-w-none md:px-8 lg:max-w-6xl lg:pt-12 xl:max-w-[1560px]'}
       >
+        {fullScreenAssignmentGate}
+
         {/* ── Event Summary ────────────────────────────── */}
+        {!assignmentDetailsBlocked && (
         <motion.div
           {...blurUp(0.08)}
           className="relative isolate z-10 -mx-4 overflow-visible px-4 pb-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] sm:-mx-6 sm:px-6 sm:pb-5 sm:pt-3 md:-mx-8 md:px-8 lg:mt-0"
@@ -3085,7 +3379,7 @@ const openLyricsModal = (ss: SetlistSong) => {
             opacity: heroIsPast ? 0.85 : 1,
           }}
         >
-          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="pointer-events-none absolute left-1/2 top-0 h-full w-screen -translate-x-1/2 overflow-hidden">
             <div className="absolute inset-x-[-35%] top-[-9rem] flex justify-center">
               <EventArtwork
                 eventType={event.event_type}
@@ -3122,7 +3416,8 @@ const openLyricsModal = (ss: SetlistSong) => {
                   <h1 className="min-w-0 flex-1 text-[1.75rem] font-black leading-[1.04] text-white sm:text-[2.5rem] lg:text-[4.5rem] xl:text-[5.5rem]" style={{ letterSpacing: '-0.04em' }}>
                     {eventDisplayTitle}
                   </h1>
-                  <div className="flex shrink-0 items-center gap-2 max-[380px]:self-end">
+                  {!assignmentDetailsBlocked && (
+                    <div className="flex shrink-0 items-center gap-2 max-[380px]:self-end">
                       <button
                         onClick={handleShareEvent}
                         disabled={sharingEvent}
@@ -3234,6 +3529,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                         </div>
                       )}
                     </div>
+                  )}
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] font-medium text-white/60">
                   <span className="badge-blue text-[10px]">{event.event_type}</span>
@@ -3256,7 +3552,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                   ))}
                 </div>
 
-                {event.description && (
+                {event.description && !assignmentDetailsBlocked && (
                   <p className="mt-4 max-w-3xl break-words border-t border-white/[0.08] pt-3 text-[12px] leading-relaxed text-white/55">{event.description}</p>
                 )}
               </div>
@@ -3264,9 +3560,10 @@ const openLyricsModal = (ss: SetlistSong) => {
 
           </div>
         </motion.div>
+        )}
 
         {/* ── Pending Assignment Banner ────────────────── */}
-        {postEventFeedbackOpen && (
+        {!assignmentDetailsBlocked && postEventFeedbackOpen && (
           <button
             type="button"
             onClick={() => setShowPastEventDetails(current => !current)}
@@ -3286,58 +3583,9 @@ const openLyricsModal = (ss: SetlistSong) => {
           </button>
         )}
 
-        {(!postEventFeedbackOpen || showPastEventDetails) && (
+        {!assignmentDetailsBlocked && (!postEventFeedbackOpen || showPastEventDetails) && (
           <div id="past-event-details" className="contents">
-        {myAssignment && myAssignment.status === 'pending' && (
-          <motion.div
-            {...blurUp(0.2)}
-            className="relative rounded-3xl overflow-hidden border border-amber-200 dark:border-amber-500/25 bg-white dark:bg-[#120b05]"
-            style={{
-              backgroundImage: 'linear-gradient(135deg, rgba(245,158,11,0.14), rgba(245,158,11,0.04) 50%, transparent 80%)',
-              boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -12px rgba(245,158,11,0.20)',
-            }}
-          >
-            <div className="absolute inset-0 dark:bg-white/[0.025]" />
-            <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-amber-300/40 dark:via-amber-400/30 to-transparent" />
-
-            <div className="relative px-5 py-4 flex items-start gap-3.5">
-              <div
-                className="relative flex items-center justify-center h-10 w-10 rounded-2xl shrink-0"
-                style={{ background: 'linear-gradient(145deg, #f59e0b, #d97706)', boxShadow: '0 3px 10px rgba(245,158,11,0.4)' }}
-              >
-                <AlertCircle className="h-5 w-5 text-white" />
-              </div>
-              <div className="min-w-0 flex-1 md:flex md:items-center md:justify-between md:gap-6">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-mono font-medium uppercase tracking-[0.22em] text-amber-600 dark:text-amber-400 mb-0.5">
-                    Action required
-                  </p>
-                  <p className="text-[15px] font-bold text-gray-900 dark:text-white leading-tight" style={{ letterSpacing: '-0.02em' }}>
-                    You have a pending assignment
-                  </p>
-                  <p className="text-[12px] text-gray-600 dark:text-white/55 mt-0.5">
-                    Role: <span className="font-semibold text-gray-800 dark:text-white/80">{myAssignment.roles?.name}</span>
-                  </p>
-                </div>
-                <div className="mt-3 flex shrink-0 items-center gap-2 md:mt-0">
-                  <button
-                    onClick={() => handleConfirm(myAssignment.id)}
-                    className="inline-flex h-11 items-center gap-1.5 rounded-full px-4 text-[12px] font-semibold text-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 active:scale-[0.97]"
-                    style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', boxShadow: '0 3px 10px rgba(22,163,74,0.3)' }}
-                  >
-                    <Check className="h-3.5 w-3.5" /> Confirm
-                  </button>
-                  <button
-                    onClick={() => setShowDecline(myAssignment.id)}
-                    className="inline-flex h-11 items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-4 text-[12px] font-semibold text-red-700 transition-colors hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 active:scale-[0.97] dark:border-red-500/25 dark:bg-red-500/[0.12] dark:text-red-300 dark:hover:bg-red-500/[0.18]"
-                  >
-                    <X className="h-3.5 w-3.5" /> Decline
-                  </button>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
+        {pendingAssignmentPanel}
 
         {(() => {
           const attendanceStatus = getAttendanceStatus();
@@ -4236,7 +4484,7 @@ const openLyricsModal = (ss: SetlistSong) => {
           </div>
         )}
 
-        {(postEventFeedbackOpen || postEventObservations.length > 0) && (
+        {!assignmentDetailsBlocked && (postEventFeedbackOpen || postEventObservations.length > 0) && (
           <div className="animate-slide-up border-t border-gray-200/70 pt-4 dark:border-white/[0.08]" style={{ animationDelay: '145ms' }}>
             <div>
               <div className="mb-3 space-y-2">
@@ -4509,7 +4757,7 @@ const openLyricsModal = (ss: SetlistSong) => {
           </div>
         )}
 
-        {(!postEventFeedbackOpen || showPastEventDetails) && (
+        {!assignmentDetailsBlocked && (!postEventFeedbackOpen || showPastEventDetails) && (
         <div className="animate-slide-up border-t border-gray-200/70 pt-4 dark:border-white/[0.08]" style={{ animationDelay: '150ms' }}>
           <div>
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -4566,6 +4814,9 @@ const openLyricsModal = (ss: SetlistSong) => {
                   .map(a => {
                     const isSongLeaderRole = a.roles?.name === 'Song Leader';
                     const declineNoteOpen = expandedDeclineNotes.has(a.id);
+                    const canPreviewThisMember = canPreviewAssignmentGate
+                      && a.status === 'pending'
+                      && assignments.find(assignment => assignment.user_id === a.user_id && assignment.status === 'pending')?.id === a.id;
                     return (
                       <div key={a.id}>
                         <div className="group flex items-center gap-3 rounded-xl px-1.5 py-2 transition-colors hover:bg-white/[0.04]">
@@ -4606,6 +4857,22 @@ const openLyricsModal = (ss: SetlistSong) => {
                             )}
                           </div>
                           <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${a.status === 'confirmed' ? 'bg-emerald-500/10 text-emerald-300' : a.status === 'declined' ? 'bg-red-500/10 text-red-300' : 'bg-amber-500/10 text-amber-300'}`}>{a.status}</span>
+                          {canPreviewThisMember && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const params = new URLSearchParams(location.search);
+                                params.set('previewAssignmentGate', a.user_id);
+                                navigate({ pathname: location.pathname, search: `?${params.toString()}` }, { replace: true });
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                              }}
+                              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sky-300/70 transition-colors hover:bg-sky-400/10 hover:text-sky-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+                              title={`Preview ${a.profiles?.first_name || 'member'}'s confirmation gate`}
+                              aria-label={`Preview ${a.profiles?.first_name || 'member'}'s confirmation gate`}
+                            >
+                              <Eye className="h-4 w-4" aria-hidden="true" />
+                            </button>
+                          )}
                           {isLeader && (
                             <button
                               onClick={() => handleRemoveAssignment(a.id)}
@@ -5869,13 +6136,22 @@ const openLyricsModal = (ss: SetlistSong) => {
         <Modal
           open={!!showDecline}
           onClose={() => {
+            if (respondingAssignmentId) return;
             setShowDecline(null);
             setDeclineReason('');
           }}
           title="Decline Assignment"
           size="sm"
+          closeOnBackdrop={!respondingAssignmentId}
+          closeOnEscape={!respondingAssignmentId}
         >
           <div className="space-y-4">
+            {decliningAssignment?.roles?.name && (
+              <div className="rounded-2xl border border-red-500/15 bg-red-500/[0.07] px-3.5 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-red-400/70">Assigned role</p>
+                <p className="mt-0.5 text-sm font-bold text-gray-900 dark:text-white">{decliningAssignment.roles.name}</p>
+              </div>
+            )}
             <div>
               <label htmlFor="assignment-decline-reason" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                 Reason <span className="text-red-500" aria-hidden="true">*</span>
@@ -5888,6 +6164,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                 placeholder="Why are you declining?"
                 required
                 aria-required="true"
+                disabled={!!respondingAssignmentId}
               />
             </div>
             <div className="flex justify-end gap-3">
@@ -5896,16 +6173,18 @@ const openLyricsModal = (ss: SetlistSong) => {
                   setShowDecline(null);
                   setDeclineReason('');
                 }}
-                className="btn-secondary"
+                disabled={!!respondingAssignmentId}
+                className="btn-secondary disabled:opacity-55"
               >
                 Cancel
               </button>
               <button
                 onClick={() => showDecline && handleDecline(showDecline)}
-                disabled={!declineReason.trim()}
+                disabled={!declineReason.trim() || !!respondingAssignmentId}
                 className="btn-danger disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Decline
+                {respondingAssignmentId ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {respondingAssignmentId ? 'Declining…' : 'Decline'}
               </button>
             </div>
           </div>

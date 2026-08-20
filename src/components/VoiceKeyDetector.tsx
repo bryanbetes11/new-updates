@@ -165,7 +165,7 @@ export function VoiceKeyDetector({ onApply }: VoiceKeyDetectorProps) {
             </span>
           </div>
           <p className="mt-0.5 text-xs leading-relaxed text-violet-700 dark:text-violet-200/70">
-            Sing the chorus without instruments and finish on the note where the song feels resolved. Audio stays on this device.
+            Sing the chorus without instruments and finish on the note where the song feels resolved. Suggestions use major keys only, and audio stays on this device.
           </p>
         </div>
       </div>
@@ -223,7 +223,7 @@ export function VoiceKeyDetector({ onApply }: VoiceKeyDetectorProps) {
               </span>
             </div>
             {result.confidence === 'low' && (
-              <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">The melody was ambiguous. Compare the suggestions before applying one.</p>
+              <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">The melody was ambiguous. Compare the major-key suggestions before applying one.</p>
             )}
             <div className="mt-3 grid grid-cols-3 gap-2">
               {result.suggestions.map((suggestion, index) => (

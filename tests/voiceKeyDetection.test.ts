@@ -30,6 +30,10 @@ expect(detectMonophonicPitch(silence, sampleRate) === null, 'rejects silence');
 const cMajor = inferKeyFromPitchFrames(framesForNotes([60, 64, 67, 71, 69, 62, 67, 64, 60]));
 expect(cMajor !== null, 'infers a key from enough clear notes');
 expect(cMajor?.suggestions.some(suggestion => suggestion.key === 'C') === true, 'ranks C major among the top suggestions');
+expect(cMajor?.suggestions.every(suggestion => !suggestion.key.endsWith('m')) === true, 'returns major-key suggestions only');
+
+const minorLeaningPhrase = inferKeyFromPitchFrames(framesForNotes([69, 72, 76, 79, 68, 69]));
+expect(minorLeaningPhrase?.suggestions.every(suggestion => !suggestion.key.endsWith('m')) === true, 'never exposes minor keys for a minor-leaning melody');
 
 const tooShort = inferKeyFromPitchFrames(framesForNotes([60]));
 expect(tooShort === null, 'rejects recordings with too few detected frames');

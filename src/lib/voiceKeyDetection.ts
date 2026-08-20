@@ -24,7 +24,6 @@ export interface KeyInference {
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'] as const;
 const MAJOR_PROFILE = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88];
-const MINOR_PROFILE = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -177,11 +176,6 @@ export function inferKeyFromPitchFrames(frames: DetectedPitchFrame[]): KeyInfere
       key: NOTE_NAMES[tonic],
       label: `${NOTE_NAMES[tonic]} major`,
       score: cosineSimilarity(histogram, profileForTonic(MAJOR_PROFILE, tonic)),
-    });
-    candidates.push({
-      key: `${NOTE_NAMES[tonic]}m`,
-      label: `${NOTE_NAMES[tonic]} minor`,
-      score: cosineSimilarity(histogram, profileForTonic(MINOR_PROFILE, tonic)),
     });
   }
 

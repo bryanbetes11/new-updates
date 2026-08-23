@@ -1345,14 +1345,14 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
   const editableMentionProfiles = useMemo(() => {
     return mentionProfiles.filter(profile => {
       if (!editableMentionQuery) return true;
-      const search = [
+      const terms = [
         profile.first_name,
         profile.last_name,
         profile.mentionHandle,
         profile.mentionLabel,
-        profile.mentionDescription,
-      ].filter(Boolean).join(' ').toLowerCase();
-      return search.includes(editableMentionQuery.toLowerCase());
+      ].filter(Boolean)
+        .flatMap(value => value!.toLowerCase().split(/[\s_]+/));
+      return terms.some(term => term.startsWith(editableMentionQuery.toLowerCase()));
     }).slice(0, 6);
   }, [editableMentionQuery, mentionProfiles]);
 
@@ -1402,13 +1402,15 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
     const rect = el.getBoundingClientRect();
     const viewport = window.visualViewport;
     const viewportWidth = viewport?.width ?? window.innerWidth;
+    const viewportHeight = viewport?.height ?? window.innerHeight;
     const viewportOffsetLeft = viewport?.offsetLeft ?? 0;
     const viewportOffsetTop = viewport?.offsetTop ?? 0;
     const composerTop = rect.top - viewportOffsetTop;
-    const width = Math.min(Math.max(rect.width + 56, 260), viewportWidth - 16);
-    const left = Math.min(Math.max(rect.left - viewportOffsetLeft, 8), viewportWidth - width - 8);
-    const bottom = Math.max(8, window.innerHeight - rect.top + 8);
-    const maxHeight = Math.min(224, Math.max(112, composerTop - 16));
+    const isPhone = viewportWidth < 640;
+    const width = Math.min(Math.max(rect.width + (isPhone ? 104 : 56), isPhone ? 320 : 260), viewportWidth - 16);
+    const left = Math.min(Math.max(rect.left - viewportOffsetLeft - (isPhone ? 52 : 28), 8), viewportWidth - width - 8);
+    const bottom = Math.max(8, viewportHeight - composerTop + 8);
+    const maxHeight = Math.min(isPhone ? 360 : 300, Math.max(isPhone ? 180 : 144, composerTop - 16));
     setEditableDropdownRect({ bottom, left, width, maxHeight });
   }, []);
 
@@ -1589,6 +1591,12 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
     setText(value);
     resizeComposer();
     updateEditableMentionState(value, getEditableCaretOffset());
+    // iOS may update its selection after the input event. Re-read it on the
+    // next frame so @ + typed characters filter the mention list immediately.
+    requestAnimationFrame(() => {
+      const liveValue = editableRef.current?.innerText.replace(/\n$/, '') ?? value;
+      updateEditableMentionState(liveValue, getEditableCaretOffset());
+    });
     onTyping(value.trim().length > 0);
   };
 
@@ -2120,7 +2128,7 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
       {useEditableComposer && showEditableMentionDropdown && editableMentionProfiles.length > 0 && editableDropdownRect &&
         createPortal(
           <div
-            className="fixed z-[2147483647] overflow-y-auto rounded-xl bg-white shadow-2xl ring-1 ring-black/[0.08] dark:bg-[#1c1b1e] dark:ring-white/[0.1]"
+            className="fixed z-[2147483647] touch-pan-y overflow-y-auto overscroll-contain rounded-2xl bg-white shadow-2xl ring-1 ring-black/[0.08] dark:bg-[#1c1b1e] dark:ring-white/[0.1]"
             style={{
               bottom: editableDropdownRect.bottom,
               left: editableDropdownRect.left,
@@ -2143,18 +2151,18 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
                   event.preventDefault();
                   event.stopPropagation();
                 }}
-                className={`flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors ${
+                className={`flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors ${
                   index === editableMentionActiveIndex
                     ? 'bg-brand-50 dark:bg-brand-900/20'
                     : 'hover:bg-gray-50 dark:hover:bg-white/[0.04]'
                 }`}
               >
                 {profile.mentionType === 'everyone' ? (
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-[12px] font-black text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/10">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-[15px] font-black text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/10">
                     @
                   </span>
                 ) : profile.mentionType === 'event' ? (
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-50 text-violet-600 ring-1 ring-violet-100 dark:bg-violet-500/10 dark:text-violet-300 dark:ring-violet-400/10">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-50 text-violet-600 ring-1 ring-violet-100 dark:bg-violet-500/10 dark:text-violet-300 dark:ring-violet-400/10">
                     <CalendarDays className="h-4 w-4" />
                   </span>
                 ) : (
@@ -2549,7 +2557,7 @@ function ConvInfoPanel({
         {infoView === 'main' && (
           <>
         {/* Profile card */}
-        <div className="mx-4 mt-4 rounded-2xl bg-white dark:bg-[#111013] border border-gray-100 dark:border-white/[0.06] flex flex-col items-center py-6 px-4">
+        <div className="mx-4 mt-4 flex flex-col items-center border-b border-gray-100 px-4 py-6 dark:border-white/[0.06]">
           {getConversationAvatarSrc(conv, myUserId) ? (
             <img src={getConversationAvatarSrc(conv, myUserId)} alt={displayName} className="h-20 w-20 rounded-full object-cover mb-3" />
           ) : (
@@ -2595,7 +2603,7 @@ function ConvInfoPanel({
         </div>
 
         {conv.type === 'group' && (
-          <div className="mx-4 mt-3 rounded-2xl bg-white dark:bg-[#111013] border border-gray-100 dark:border-white/[0.06] p-4">
+          <div className="mx-4 border-b border-gray-100 px-0 py-4 dark:border-white/[0.06]">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[12px] font-semibold text-gray-500 dark:text-white/35">Group name</p>
@@ -2641,7 +2649,7 @@ function ConvInfoPanel({
         )}
 
         {(conv.type === 'group' || conv.type === 'event') && (
-          <div className="mx-4 mt-3 rounded-2xl bg-white dark:bg-[#111013] border border-gray-100 dark:border-white/[0.06] overflow-hidden">
+          <div className="mx-4 border-b border-gray-100 dark:border-white/[0.06]">
             <button
               onClick={() => setShowMembersModal(true)}
               className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-white/[0.03] transition-colors"
@@ -2656,8 +2664,8 @@ function ConvInfoPanel({
         )}
 
         {/* Search card */}
-        <div className="mx-4 mt-3 rounded-2xl bg-white dark:bg-[#111013] border border-gray-100 dark:border-white/[0.06] overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-white/[0.06]">
+        <div className="mx-4 border-b border-gray-100 dark:border-white/[0.06]">
+          <div className="flex items-center gap-2 py-3">
             <Search className="h-3.5 w-3.5 text-gray-400 dark:text-white/30 shrink-0" />
             <input
               value={search}
@@ -2700,8 +2708,8 @@ function ConvInfoPanel({
         </div>
 
         {/* Media card */}
-        <div className="mx-4 mt-3 rounded-2xl bg-white dark:bg-[#111013] border border-gray-100 dark:border-white/[0.06] overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-white/[0.06]">
+        <div className="mx-4 border-b border-gray-100 dark:border-white/[0.06]">
+          <div className="flex items-center justify-between py-3">
             <span className="text-[13px] font-semibold text-gray-900 dark:text-white">Media</span>
             <span className="text-[12px] text-gray-400 dark:text-white/30">{mediaItems.length}</span>
           </div>
@@ -2734,8 +2742,8 @@ function ConvInfoPanel({
         </div>
 
         {/* Files card */}
-        <div className="mx-4 mt-3 rounded-2xl bg-white dark:bg-[#111013] border border-gray-100 dark:border-white/[0.06] overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-white/[0.06]">
+        <div className="mx-4 border-b border-gray-100 dark:border-white/[0.06]">
+          <div className="flex items-center justify-between py-3">
             <span className="text-[13px] font-semibold text-gray-900 dark:text-white">Files</span>
             <span className="text-[12px] text-gray-400 dark:text-white/30">{fileItems.length}</span>
           </div>
@@ -2765,8 +2773,8 @@ function ConvInfoPanel({
         </div>
 
         {/* Links card */}
-        <div className="mx-4 mt-3 rounded-2xl bg-white dark:bg-[#111013] border border-gray-100 dark:border-white/[0.06] overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-white/[0.06]">
+        <div className="mx-4 border-b border-gray-100 dark:border-white/[0.06]">
+          <div className="flex items-center justify-between py-3">
             <span className="text-[13px] font-semibold text-gray-900 dark:text-white">Links</span>
             <span className="text-[12px] text-gray-400 dark:text-white/30">{linkItems.length}</span>
           </div>
@@ -2799,7 +2807,7 @@ function ConvInfoPanel({
         </div>
 
         {/* Leave / Delete card */}
-        <div className="mx-4 mt-3 mb-6 space-y-2">
+        <div className="mx-4 mb-6 space-y-2 pt-4">
 
           {/* Leave Group — group/event chats, all members */}
           {(conv.type === 'group' || conv.type === 'event') && !leaveGroupConfirm && !leaveConfirm && (

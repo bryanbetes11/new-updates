@@ -55,71 +55,7 @@ export function MentionTextarea({
   const [showDropdown, setShowDropdown] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [mentionStart, setMentionStart] = useState<number | null>(null);
-  const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
-
-  const getCaretRect = useCallback((el: HTMLTextAreaElement, position: number) => {
-    const rect = el.getBoundingClientRect();
-    const style = window.getComputedStyle(el);
-    const mirror = document.createElement('div');
-    const marker = document.createElement('span');
-    const properties = [
-      'boxSizing',
-      'width',
-      'height',
-      'overflowX',
-      'overflowY',
-      'borderTopWidth',
-      'borderRightWidth',
-      'borderBottomWidth',
-      'borderLeftWidth',
-      'paddingTop',
-      'paddingRight',
-      'paddingBottom',
-      'paddingLeft',
-      'fontStyle',
-      'fontVariant',
-      'fontWeight',
-      'fontStretch',
-      'fontSize',
-      'lineHeight',
-      'fontFamily',
-      'textAlign',
-      'textTransform',
-      'textIndent',
-      'textDecoration',
-      'letterSpacing',
-      'wordSpacing',
-      'tabSize',
-      'MozTabSize',
-    ] as const;
-
-    mirror.style.position = 'fixed';
-    mirror.style.top = `${rect.top}px`;
-    mirror.style.left = `${rect.left}px`;
-    mirror.style.visibility = 'hidden';
-    mirror.style.whiteSpace = 'pre-wrap';
-    mirror.style.overflowWrap = 'break-word';
-    mirror.style.wordBreak = 'break-word';
-
-    properties.forEach(property => {
-      (mirror.style as unknown as Record<string, string>)[property] =
-        (style as unknown as Record<string, string>)[property] || '';
-    });
-
-    mirror.textContent = el.value.slice(0, position);
-    marker.textContent = el.value.slice(position, position + 1) || '\u200b';
-    mirror.appendChild(marker);
-    document.body.appendChild(mirror);
-
-    const markerRect = marker.getBoundingClientRect();
-    document.body.removeChild(mirror);
-
-    return {
-      top: markerRect.top - el.scrollTop,
-      left: markerRect.left - el.scrollLeft,
-      bottom: markerRect.bottom - el.scrollTop,
-    };
-  }, []);
+  const [dropdownRect, setDropdownRect] = useState<{ bottom: number; left: number; width: number; maxHeight: number } | null>(null);
 
   useEffect(() => {
     if (providedProfiles) {
@@ -134,46 +70,47 @@ export function MentionTextarea({
       .then(({ data }) => setProfiles((data || []) as Profile[]));
   }, [providedProfiles]);
 
+  // The controlled value is the source of truth while typing. Reading the
+  // active token from it keeps filtering live on mobile browsers where a
+  // selection update can arrive after React's change event.
+  const selectionEnd = ref.current?.selectionStart ?? value.length;
+  const liveMentionMatch = value.slice(0, selectionEnd).match(/@(\w*)$/) ?? value.match(/@(\w*)$/);
+  const liveMentionQuery = liveMentionMatch ? liveMentionMatch[1] : query;
   const filtered = profiles.filter(p => {
-    if (!query) return true;
-    const search = [
+    if (!liveMentionQuery) return true;
+    const terms = [
       p.first_name,
       p.last_name,
       p.mentionHandle,
       p.mentionLabel,
-      p.mentionDescription,
-    ].filter(Boolean).join(' ').toLowerCase();
-    return search.includes(query.toLowerCase());
+    ].filter(Boolean)
+      .flatMap(value => value!.toLowerCase().split(/[\s_]+/));
+    return terms.some(term => term.startsWith(liveMentionQuery.toLowerCase()));
   }).slice(0, 6);
 
   const computeDropdownPosition = useCallback(() => {
     const el = ref.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const caret = getCaretRect(el, el.selectionStart ?? value.length);
-    const DROPDOWN_HEIGHT = Math.min(filtered.length, 6) * 52 + 8;
-    const DROPDOWN_WIDTH = Math.min(Math.max(rect.width, 260), window.innerWidth - 16);
-    const spaceAbove = caret.top;
-    const spaceBelow = window.innerHeight - caret.bottom;
-
-    let top: number;
-    if (spaceAbove >= DROPDOWN_HEIGHT || spaceAbove > spaceBelow) {
-      top = caret.top - DROPDOWN_HEIGHT - 6;
-    } else {
-      top = caret.bottom + 6;
-    }
-
-    const left = Math.min(
-      Math.max(caret.left, 8),
-      window.innerWidth - DROPDOWN_WIDTH - 8
-    );
+    const viewport = window.visualViewport;
+    const viewportWidth = viewport?.width ?? window.innerWidth;
+    const viewportHeight = viewport?.height ?? window.innerHeight;
+    const viewportOffsetLeft = viewport?.offsetLeft ?? 0;
+    const viewportOffsetTop = viewport?.offsetTop ?? 0;
+    const composerTop = rect.top - viewportOffsetTop;
+    const isPhone = viewportWidth < 640;
+    const width = Math.min(Math.max(rect.width + (isPhone ? 104 : 0), isPhone ? 320 : 260), viewportWidth - 16);
+    const left = Math.min(Math.max(rect.left - viewportOffsetLeft - (isPhone ? 52 : 0), 8), viewportWidth - width - 8);
+    const bottom = Math.max(8, viewportHeight - composerTop + 8);
+    const maxHeight = Math.min(isPhone ? 360 : 320, Math.max(isPhone ? 180 : 144, composerTop - 16));
 
     setDropdownRect({
-      top,
+      bottom,
       left,
-      width: DROPDOWN_WIDTH,
+      width,
+      maxHeight,
     });
-  }, [ref, filtered.length, getCaretRect, value.length]);
+  }, [ref]);
 
   useEffect(() => {
     if (showDropdown) computeDropdownPosition();
@@ -183,9 +120,13 @@ export function MentionTextarea({
     if (!showDropdown) return;
     window.addEventListener('resize', computeDropdownPosition);
     window.addEventListener('scroll', computeDropdownPosition, true);
+    window.visualViewport?.addEventListener('resize', computeDropdownPosition);
+    window.visualViewport?.addEventListener('scroll', computeDropdownPosition);
     return () => {
       window.removeEventListener('resize', computeDropdownPosition);
       window.removeEventListener('scroll', computeDropdownPosition, true);
+      window.visualViewport?.removeEventListener('resize', computeDropdownPosition);
+      window.visualViewport?.removeEventListener('scroll', computeDropdownPosition);
     };
   }, [showDropdown, computeDropdownPosition]);
 
@@ -194,25 +135,25 @@ export function MentionTextarea({
     el.style.height = `${el.scrollHeight}px`;
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const text = e.target.value;
-    autoResize(e.target);
-    onChange(text);
-
-    const cursor = e.target.selectionStart;
-    const textBefore = text.slice(0, cursor);
-    const atMatch = textBefore.match(/@(\w*)$/);
-
+  const syncMentionState = (text: string, cursor: number) => {
+    const atMatch = text.slice(0, cursor).match(/@(\w*)$/);
     if (atMatch) {
       setMentionStart(cursor - atMatch[0].length);
       setQuery(atMatch[1]);
       setShowDropdown(true);
       setActiveIndex(0);
-    } else {
-      setShowDropdown(false);
-      setMentionStart(null);
-      setQuery('');
+      return;
     }
+    setShowDropdown(false);
+    setMentionStart(null);
+    setQuery('');
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const text = e.target.value;
+    autoResize(e.target);
+    onChange(text);
+    syncMentionState(text, e.target.selectionStart);
   };
 
   const insertMention = (profile: Profile) => {
@@ -276,6 +217,7 @@ export function MentionTextarea({
         ref={ref}
         value={value}
         onChange={handleChange}
+        onInput={event => syncMentionState(event.currentTarget.value, event.currentTarget.selectionStart)}
         onClick={e => {
           if (showDropdown) computeDropdownPosition();
           onClick?.(e);
@@ -295,11 +237,12 @@ export function MentionTextarea({
       {showDropdown && filtered.length > 0 && dropdownRect &&
         createPortal(
           <div
-            className="fixed z-[9999] rounded-xl bg-white dark:bg-[#1c1b1e] ring-1 ring-black/[0.08] dark:ring-white/[0.1] shadow-2xl overflow-hidden"
+            className="fixed z-[9999] touch-pan-y overflow-y-auto overscroll-contain rounded-2xl bg-white dark:bg-[#1c1b1e] ring-1 ring-black/[0.08] dark:ring-white/[0.1] shadow-2xl"
             style={{
-              top: dropdownRect.top,
+              bottom: dropdownRect.bottom,
               left: dropdownRect.left,
               width: dropdownRect.width,
+              maxHeight: dropdownRect.maxHeight,
             }}
           >
             {filtered.map((p, i) => (
@@ -307,18 +250,18 @@ export function MentionTextarea({
                 key={p.id}
                 type="button"
                 onPointerDown={e => { e.preventDefault(); insertMention(p); }}
-                className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors ${
+                className={`w-full flex items-center gap-3 px-3.5 py-3 text-left transition-colors ${
                   i === activeIndex
                     ? 'bg-brand-50 dark:bg-brand-900/20'
                     : 'hover:bg-gray-50 dark:hover:bg-white/[0.04]'
                 }`}
               >
                 {p.mentionType === 'everyone' ? (
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-[12px] font-black text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/10">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-[15px] font-black text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/10">
                     @
                   </span>
                 ) : p.mentionType === 'event' ? (
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-50 text-violet-600 ring-1 ring-violet-100 dark:bg-violet-500/10 dark:text-violet-300 dark:ring-violet-400/10">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-50 text-violet-600 ring-1 ring-violet-100 dark:bg-violet-500/10 dark:text-violet-300 dark:ring-violet-400/10">
                     <CalendarDays className="h-4 w-4" />
                   </span>
                 ) : (

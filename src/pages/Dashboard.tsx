@@ -13,6 +13,7 @@ import { Modal } from '../components/Modal';
 import { EventArtwork } from '../components/EventArtwork';
 import { SongArtwork } from '../components/SongArtwork';
 import { Avatar } from '../components/Avatar';
+import { HomeAppUpdateCard } from '../components/HomeAppUpdateCard';
 import { hasArtworkArtist } from '../lib/songArtworkEligibility';
 import { getEventPreparationHighlight, type EventPreparationHighlight, type EventPreparationInput } from '../lib/eventPreparation';
 import { isSetlistMeaningfullyCreated } from '../lib/setlistPersistence';
@@ -1269,6 +1270,8 @@ export function Dashboard() {
         animate="animate"
         className="relative mx-auto w-full max-w-2xl space-y-5 px-4 pt-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:px-6 sm:pt-5 sm:space-y-6 md:max-w-[860px] md:px-8 lg:max-w-6xl lg:pb-24 xl:max-w-[1560px]"
       >
+
+        <HomeAppUpdateCard />
 
         <motion.section variants={item} className="space-y-4">
             <div className="hidden items-center lg:flex">

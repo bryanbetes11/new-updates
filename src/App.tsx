@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   BrowserRouter,
   Routes,
@@ -8,11 +8,13 @@ import {
   useLocation,
   useNavigate,
 } from "react-router-dom";
+import { RefreshCw } from "lucide-react";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ToastProvider } from "./contexts/ToastContext";
 import { Layout } from "./components/Layout";
 import { PageLoader } from "./components/LoadingSpinner";
+import { StartupScreen } from "./components/StartupScreen";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { SurveyGate } from "./components/SurveyGate";
 import { InteractiveLabelCase } from "./components/InteractiveLabelCase";
@@ -21,14 +23,24 @@ import {
   recoveryRedirectPath,
 } from "./lib/authRedirect";
 import { AppUpdateModal } from "./components/AppUpdateModal";
-import { APP_UPDATE_VERSION, APP_VERSION_LABEL } from "./lib/appUpdate";
+import { ReleaseNotesModal } from "./components/ReleaseNotesModal";
+import { DailyUpdateCheckModal, type DailyUpdateCheckStatus } from "./components/DailyUpdateCheckModal";
+import {
+  APP_DAILY_UPDATE_CHECK_KEY,
+  APP_RELEASE_NOTES_SEEN_KEY,
+  APP_VERSION,
+  APP_VERSION_LABEL,
+} from "./lib/appUpdate";
 import {
   APP_UPDATE_AVAILABLE_EVENT,
   applyPendingAppUpdate,
+  checkForAppUpdate,
   getInstalledAppVersion,
+  getPendingAppUpdate,
   hasPendingAppUpdate,
-  shouldRequireAppUpdate,
+  type PendingAppUpdate,
 } from "./lib/serviceWorkerUpdate";
+import { getLastAppRoute, isRememberableAppRoute, rememberLastAppRoute } from "./lib/appStartup";
 import {
   clearActiveServiceMode,
   getActiveServiceMode,
@@ -261,22 +273,243 @@ function ServiceModeResumeRedirect() {
   return null;
 }
 
+const LONG_BACKGROUND_THRESHOLD_MS = 30 * 60 * 1000;
+
+function getBrowserStorage() {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+function StartupGate({ children }: { children: ReactNode }) {
+  const { loading } = useAuth();
+  const [minimumDisplayElapsed, setMinimumDisplayElapsed] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setMinimumDisplayElapsed(true), 450);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  if (loading || !minimumDisplayElapsed) return <StartupScreen />;
+  return children;
+}
+
+function RootRedirect() {
+  const { user } = useAuth();
+  const storage = getBrowserStorage();
+  const target = user && storage ? getLastAppRoute(storage, user.id) : user ? "/dashboard" : "/login";
+  return <Navigate to={target} replace />;
+}
+
+function LoginRoute() {
+  const { user } = useAuth();
+  const location = useLocation();
+  if (!user) return <Login />;
+
+  const redirect = new URLSearchParams(location.search).get("redirect");
+  const storage = getBrowserStorage();
+  const fallback = storage ? getLastAppRoute(storage, user.id) : "/dashboard";
+  return <Navigate to={redirect && isRememberableAppRoute(redirect) ? redirect : fallback} replace />;
+}
+
+function LastRouteTracker() {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+
+  useEffect(() => {
+    if (loading || !user) return;
+    const storage = getBrowserStorage();
+    if (!storage) return;
+    rememberLastAppRoute(storage, user.id, `${location.pathname}${location.search}`);
+  }, [loading, location.pathname, location.search, user]);
+
+  return null;
+}
+
+function ReleaseNotesExperience({ suppressed }: { suppressed: boolean }) {
+  const { user } = useAuth();
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    const storage = getBrowserStorage();
+    if (!storage || storage.getItem(APP_RELEASE_NOTES_SEEN_KEY) !== APP_VERSION) setOpen(true);
+  }, [user]);
+
+  const close = () => {
+    getBrowserStorage()?.setItem(APP_RELEASE_NOTES_SEEN_KEY, APP_VERSION);
+    setOpen(false);
+  };
+
+  return <ReleaseNotesModal open={open && !suppressed} onClose={close} />;
+}
+
+function getLocalDateKey() {
+  const date = new Date();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+function DailyUpdateCheckExperience({ suppressed }: { suppressed: boolean }) {
+  const { user } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [status, setStatus] = useState<DailyUpdateCheckStatus>("checking");
+  const [latestVersion, setLatestVersion] = useState<string>();
+  const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
+  const attemptedDateRef = useRef<string | null>(null);
+
+  const runDailyCheck = useCallback(async (showCheckingState = true) => {
+    if (showCheckingState) {
+      setStatus("checking");
+      setOpen(true);
+    }
+
+    const result = await checkForAppUpdate();
+    const storage = getBrowserStorage();
+    if (result.status === "up-to-date") {
+      storage?.setItem(APP_DAILY_UPDATE_CHECK_KEY, getLocalDateKey());
+      setStatus("current");
+      setOpen(showCheckingState);
+      return;
+    }
+    if (result.status === "available") {
+      storage?.setItem(APP_DAILY_UPDATE_CHECK_KEY, getLocalDateKey());
+      setLatestVersion(result.manifest.version);
+      setStatus("available");
+      setOpen(showCheckingState);
+      return;
+    }
+
+    setStatus("error");
+    setOpen(showCheckingState);
+  }, []);
+
+  const checkIfDue = useCallback(() => {
+    if (!user) return;
+    const storage = getBrowserStorage();
+    const today = getLocalDateKey();
+    if (storage?.getItem(APP_DAILY_UPDATE_CHECK_KEY) === today || attemptedDateRef.current === today) return;
+
+    attemptedDateRef.current = today;
+    const releaseNotesSeen = storage?.getItem(APP_RELEASE_NOTES_SEEN_KEY) === APP_VERSION;
+    void runDailyCheck(releaseNotesSeen);
+  }, [runDailyCheck, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const timer = window.setTimeout(checkIfDue, 900);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") checkIfDue();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [checkIfDue, user]);
+
+  return (
+    <>
+      <DailyUpdateCheckModal
+        open={open && !suppressed}
+        status={status}
+        latestVersion={latestVersion}
+        onClose={() => setOpen(false)}
+        onRetry={() => void runDailyCheck(true)}
+        onViewReleaseNotes={() => {
+          setOpen(false);
+          setReleaseNotesOpen(true);
+        }}
+      />
+      <ReleaseNotesModal open={releaseNotesOpen && !suppressed} onClose={() => setReleaseNotesOpen(false)} />
+    </>
+  );
+}
+
+function ResumeSyncIndicator() {
+  const [syncing, setSyncing] = useState(false);
+  const hiddenAtRef = useRef<number | null>(null);
+  const syncPromiseRef = useRef<Promise<void> | null>(null);
+
+  const syncLatestVersion = useCallback(() => {
+    if (syncPromiseRef.current) return syncPromiseRef.current;
+
+    setSyncing(true);
+    const startedAt = Date.now();
+    syncPromiseRef.current = checkForAppUpdate()
+      .then(() => {
+        const remaining = Math.max(0, 700 - (Date.now() - startedAt));
+        return new Promise<void>(resolve => window.setTimeout(resolve, remaining));
+      })
+      .finally(() => {
+        setSyncing(false);
+        syncPromiseRef.current = null;
+      });
+    return syncPromiseRef.current;
+  }, []);
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenAtRef.current = Date.now();
+        return;
+      }
+
+      const hiddenAt = hiddenAtRef.current;
+      hiddenAtRef.current = null;
+      if (hiddenAt && Date.now() - hiddenAt >= LONG_BACKGROUND_THRESHOLD_MS) {
+        void syncLatestVersion();
+      }
+    };
+    const handleOnline = () => void syncLatestVersion();
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("online", handleOnline);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("online", handleOnline);
+    };
+  }, [syncLatestVersion]);
+
+  if (!syncing) return null;
+  return (
+    <div className="pointer-events-none fixed inset-x-0 top-[max(0.75rem,env(safe-area-inset-top))] z-[120] flex justify-center px-4" role="status" aria-live="polite">
+      <div className="flex h-10 items-center gap-2 rounded-full border border-white/[0.10] bg-[#101412]/95 px-4 text-[12px] font-semibold text-white/80 shadow-2xl backdrop-blur-xl">
+        <RefreshCw className="h-3.5 w-3.5 animate-spin text-emerald-400 motion-reduce:animate-none" />
+        Syncing latest updates…
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [showAppUpdate, setShowAppUpdate] = useState(false);
   const [applyingUpdate, setApplyingUpdate] = useState(false);
   const [installedVersion, setInstalledVersion] = useState<string | null>(null);
+  const [targetVersion, setTargetVersion] = useState(APP_VERSION);
+  const [updateRequired, setUpdateRequired] = useState(false);
 
   useEffect(() => {
-    const handleUpdateAvailable = () => {
+    const handleUpdateAvailable = (event: Event) => {
+      const update = (event as CustomEvent<PendingAppUpdate>).detail;
       setInstalledVersion(getInstalledAppVersion());
-      setShowAppUpdate(shouldRequireAppUpdate());
+      setTargetVersion(update?.version || APP_VERSION);
+      setUpdateRequired(Boolean(update?.required));
+      setShowAppUpdate(true);
     };
 
     window.addEventListener(APP_UPDATE_AVAILABLE_EVENT, handleUpdateAvailable);
 
     setInstalledVersion(getInstalledAppVersion());
-    if (hasPendingAppUpdate() && shouldRequireAppUpdate())
+    const pendingUpdate = getPendingAppUpdate();
+    if (hasPendingAppUpdate() && pendingUpdate) {
+      setTargetVersion(pendingUpdate.version);
+      setUpdateRequired(pendingUpdate.required);
       setShowAppUpdate(true);
+    }
 
     return () =>
       window.removeEventListener(
@@ -291,20 +524,27 @@ export default function App() {
       <PasswordRecoveryRedirect />
       <ThemeProvider>
         <AuthProvider>
-          <ServiceModeResumeRedirect />
-          <ToastProvider>
-            <AppUpdateModal
-              open={showAppUpdate}
-              currentVersion={installedVersion || APP_VERSION_LABEL}
-              targetVersion={APP_UPDATE_VERSION}
-              onUpdate={() => {
-                setApplyingUpdate(true);
-                void applyPendingAppUpdate();
-              }}
-              applying={applyingUpdate}
-            />
-            <Routes>
-              <Route path="/" element={<Navigate to="/login" replace />} />
+          <StartupGate>
+            <ServiceModeResumeRedirect />
+            <LastRouteTracker />
+            <ResumeSyncIndicator />
+            <ToastProvider>
+              <DailyUpdateCheckExperience suppressed={showAppUpdate} />
+              <ReleaseNotesExperience suppressed={showAppUpdate} />
+              <AppUpdateModal
+                open={showAppUpdate}
+                currentVersion={installedVersion || APP_VERSION_LABEL}
+                targetVersion={targetVersion}
+                required={updateRequired}
+                onLater={() => setShowAppUpdate(false)}
+                onUpdate={() => {
+                  setApplyingUpdate(true);
+                  void applyPendingAppUpdate();
+                }}
+                applying={applyingUpdate}
+              />
+              <Routes>
+              <Route path="/" element={<RootRedirect />} />
               <Route
                 path="/platform"
                 element={<Navigate to="/activity-log" replace />}
@@ -317,16 +557,16 @@ export default function App() {
                 <Route element={<RouteLoadingBoundary />}>
                   <Route
                     path="/landing"
-                    element={<Navigate to="/login" replace />}
+                    element={<RootRedirect />}
                   />
-                  <Route path="/login" element={<Login />} />
+                  <Route path="/login" element={<LoginRoute />} />
                   <Route path="/reset-password" element={<ResetPassword />} />
                   <Route path="/auth/confirm" element={<AuthConfirm />} />
                   <Route path="/register" element={<Register />} />
                   <Route path="/invite/:token" element={<InviteAccept />} />
                   <Route
                     path="/create-church"
-                    element={<Navigate to="/login" replace />}
+                    element={<RootRedirect />}
                   />
                   <Route element={<ProtectedRoute />}>
                     <Route path="/onboarding" element={<Onboarding />} />
@@ -446,11 +686,12 @@ export default function App() {
                       <Route path="/discipline" element={<Navigate to="/leadership/accountability?tab=conduct" replace />} />
                     </Route>
                   </Route>
-                  <Route path="*" element={<Navigate to="/login" replace />} />
+                  <Route path="*" element={<RootRedirect />} />
                 </Route>
               </Route>
-            </Routes>
-          </ToastProvider>
+              </Routes>
+            </ToastProvider>
+          </StartupGate>
         </AuthProvider>
       </ThemeProvider>
     </BrowserRouter>

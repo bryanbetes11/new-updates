@@ -3,6 +3,6 @@
   "compilerOptions": {
     "types": ["vite/client"]
   },
-  "include": ["tests/**/*.test.ts"],
+  "include": ["tests/**/*.test.ts", "src/vite-env.d.ts"],
   "exclude": ["**/._*"]
 }

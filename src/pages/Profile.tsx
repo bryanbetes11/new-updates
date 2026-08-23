@@ -6,7 +6,7 @@ import {
   Pencil, Save, LogOut, X, Check, Crown,
   Camera, Loader2, Shield, ChevronDown, Clock,
   MessageSquare, XCircle, CheckCircle, Eye, KeyRound,
-  Phone, Cake, Calendar, AlertCircle, Mail
+  Phone, Cake, Calendar, AlertCircle, Mail, Info, RefreshCw, Sparkles
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -15,8 +15,11 @@ import { DatePicker } from '../components/DatePicker';
 import { PageLoader } from '../components/LoadingSpinner';
 import { PushNotificationSetting } from '../components/PushNotificationSetting';
 import { NotificationPreferencesSetting } from '../components/NotificationPreferencesSetting';
+import { ReleaseNotesModal } from '../components/ReleaseNotesModal';
 import { RoleBadge, sortRolesLeadershipFirst } from '../components/RoleBadge';
 import { phoneHref } from '../lib/phone';
+import { APP_BUILD_ID, APP_UPDATE_PUBLISHED_AT, APP_VERSION_LABEL } from '../lib/appUpdate';
+import { checkForAppUpdate } from '../lib/serviceWorkerUpdate';
 import type { DisciplineRecord } from '../types';
 
 interface AccountabilitySummary {
@@ -83,6 +86,8 @@ export function Profile() {
   const [emailPanelOpen, setEmailPanelOpen] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [emailUpdating, setEmailUpdating] = useState(false);
+  const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
+  const [checkingForUpdate, setCheckingForUpdate] = useState(false);
 
   useEffect(() => {
     if (profile) {
@@ -200,6 +205,22 @@ export function Profile() {
     await refreshProfile();
     setAvatarUploading(false);
     toast('success', 'Profile picture updated');
+  };
+
+  const handleCheckForUpdates = async () => {
+    setCheckingForUpdate(true);
+    const result = await checkForAppUpdate();
+    setCheckingForUpdate(false);
+
+    if (result.status === 'up-to-date') {
+      toast('success', `ServeSync ${APP_VERSION_LABEL} is up to date.`);
+      return;
+    }
+    if (result.status === 'available') {
+      toast('success', `ServeSync v${result.manifest.version} is being prepared.`);
+      return;
+    }
+    toast('error', 'Could not check for updates. Check your connection and try again.');
   };
 
   if (!profile) return <PageLoader />;
@@ -768,7 +789,51 @@ export function Profile() {
           <NotificationPreferencesSetting />
         </motion.section>
 
+        <motion.section
+          initial={{ opacity: 0, y: 14, filter: 'blur(4px)' }}
+          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          transition={{ duration: 0.5, delay: 0.28, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <SectionLabel>
+            <span className="flex items-center gap-1.5"><Info className="h-3 w-3" /> About ServeSync</span>
+          </SectionLabel>
+          <PremiumCard className="p-5 sm:p-6">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3.5">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-500/[0.10] dark:text-emerald-300">
+                  <img src="/generated/servesync-mark-light.png" alt="" className="h-9 w-9 object-contain" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[15px] font-black tracking-[-0.02em] text-gray-950 dark:text-white">ServeSync {APP_VERSION_LABEL}</p>
+                  <p className="mt-0.5 text-[11px] text-gray-500 dark:text-white/40">
+                    Build {APP_BUILD_ID} · Released {format(new Date(APP_UPDATE_PUBLISHED_AT), 'MMM d, yyyy')}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2 min-[390px]:flex-row">
+                <button
+                  type="button"
+                  onClick={() => setReleaseNotesOpen(true)}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-4 text-[12px] font-bold text-gray-700 transition-colors hover:bg-gray-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white/70 dark:hover:bg-white/[0.07]"
+                >
+                  <Sparkles className="h-4 w-4 text-emerald-500" /> What’s New
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCheckForUpdates}
+                  disabled={checkingForUpdate}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-emerald-500 px-4 text-[12px] font-bold text-white transition-colors hover:bg-emerald-600 disabled:opacity-45"
+                >
+                  <RefreshCw className={`h-4 w-4 ${checkingForUpdate ? 'animate-spin motion-reduce:animate-none' : ''}`} />
+                  {checkingForUpdate ? 'Checking…' : 'Check for Updates'}
+                </button>
+              </div>
+            </div>
+          </PremiumCard>
+        </motion.section>
+
       </div>
+      <ReleaseNotesModal open={releaseNotesOpen} onClose={() => setReleaseNotesOpen(false)} />
     </div>
   );
 }

@@ -7,7 +7,9 @@ interface AppUpdateModalProps {
   currentVersion: string;
   targetVersion: string;
   onUpdate: () => void;
+  onLater: () => void;
   applying: boolean;
+  required: boolean;
 }
 
 function formatVersionLabel(version: string) {
@@ -32,19 +34,21 @@ export function AppUpdateModal({
   currentVersion,
   targetVersion,
   onUpdate,
+  onLater,
   applying,
+  required,
 }: AppUpdateModalProps) {
   return (
     <Modal
       open={open}
-      onClose={() => {}}
-      title="Update Available"
+      onClose={required ? () => {} : onLater}
+      title={required ? 'Update Required' : 'Update Available'}
       size="md"
       mobileView="dialog"
       titleAlign="center"
-      hideCloseButton
-      closeOnBackdrop={false}
-      closeOnEscape={false}
+      hideCloseButton={required}
+      closeOnBackdrop={!required}
+      closeOnEscape={!required}
     >
       <div className="space-y-4">
         <div className="flex items-start gap-3">
@@ -52,9 +56,13 @@ export function AppUpdateModal({
             <Download className="h-5 w-5" />
           </div>
           <div className="min-w-0">
-            <p className="text-[16px] font-bold text-gray-900 dark:text-white">A fresh ServeSync update is ready.</p>
+            <p className="text-[16px] font-bold text-gray-900 dark:text-white">
+              {required ? 'ServeSync needs to update before you continue.' : 'A fresh ServeSync update is ready.'}
+            </p>
             <p className="mt-1 text-[13px] leading-relaxed text-gray-500 dark:text-white/50">
-              Here are the changes that matter for your day-to-day ministry work.
+              {required
+                ? 'This version is no longer compatible with the latest ServeSync services. Your account and saved information are safe.'
+                : 'Install it now, or keep working and update when you are ready.'}
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-mono uppercase tracking-[0.18em] text-gray-400 dark:text-white/30">
               <span>Installed {formatVersionLabel(currentVersion)}</span>
@@ -84,11 +92,22 @@ export function AppUpdateModal({
           )}
         </div>
 
-        <div className="pt-1">
+        <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row">
+          {!required && (
+            <button
+              type="button"
+              onClick={onLater}
+              disabled={applying}
+              className="h-11 flex-1 rounded-xl border border-gray-200 bg-white text-[13px] font-semibold text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-45 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white/60 dark:hover:bg-white/[0.07]"
+            >
+              Later
+            </button>
+          )}
           <button
+            type="button"
             onClick={onUpdate}
             disabled={applying}
-            className="w-full h-10 rounded-xl bg-emerald-500 text-[13px] font-semibold text-white transition-colors hover:bg-emerald-600 disabled:opacity-45"
+            className="h-11 flex-[1.4] rounded-xl bg-emerald-500 text-[13px] font-semibold text-white transition-colors hover:bg-emerald-600 disabled:opacity-45"
           >
             {applying ? 'Installing Update...' : 'Update ServeSync'}
           </button>

@@ -1,13 +1,64 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const packageJson = JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf8')) as { version: string };
+const appVersion = packageJson.version;
+
+function getGitBuildId() {
+  try {
+    return execFileSync('git', ['rev-parse', '--short=12', 'HEAD'], {
+      cwd: __dirname,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    return 'local';
+  }
+}
+
+const appBuildId = (
+  process.env.SERVESYNC_BUILD_ID
+  || process.env.VERCEL_GIT_COMMIT_SHA
+  || process.env.COMMIT_REF
+  || getGitBuildId()
+).slice(0, 12);
+const appPublishedAt = process.env.SERVESYNC_PUBLISHED_AT || new Date().toISOString();
+const minimumSupportedVersion = process.env.SERVESYNC_MINIMUM_VERSION || '0.0.0';
+
+const versionManifest = {
+  version: appVersion,
+  buildId: appBuildId,
+  cacheVersion: `${appVersion}-${appBuildId}`,
+  publishedAt: appPublishedAt,
+  minimumSupportedVersion,
+};
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: 'servesync-version-manifest',
+      generateBundle() {
+        this.emitFile({
+          type: 'asset',
+          fileName: 'version.json',
+          source: `${JSON.stringify(versionManifest, null, 2)}\n`,
+        });
+      },
+    },
+  ],
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
+    __APP_BUILD_ID__: JSON.stringify(appBuildId),
+    __APP_PUBLISHED_AT__: JSON.stringify(appPublishedAt),
+    __APP_MINIMUM_SUPPORTED_VERSION__: JSON.stringify(minimumSupportedVersion),
+  },
   resolve: {
     alias: [
       {

@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { format, parseISO, startOfDay, subWeeks, previousSunday, addDays, subDays, differenceInDays, eachDayOfInterval } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { motion } from 'framer-motion';
-import { Calendar, Plus, Search, Filter, Users, Trash2, CalendarOff, AlertCircle, Clock, X, PartyPopper, Heart, Sparkles, List, CheckCircle } from 'lucide-react';
+import { Calendar, Plus, Search, Users, Trash2, CalendarOff, AlertCircle, Clock, X, PartyPopper, Heart, Sparkles, List, CheckCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -449,7 +449,7 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
           pointerEvent.preventDefault();
           openLifecycleDialog('options');
         }}
-        className={`touch-action-pan-y group relative w-full text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] ${variant === 'featured' ? 'flex flex-col rounded-[1rem] p-1.5' : 'flex min-h-[5.5rem] items-center gap-3 px-0 py-3 focus-visible:ring-inset'} ${lifecycleDialogMode ? 'z-10 scale-[1.005] bg-[#080d0a] shadow-[0_16px_48px_-24px_rgba(34,197,94,0.75)]' : variant === 'featured' ? 'bg-white/[0.025] hover:bg-white/[0.05]' : 'bg-transparent hover:bg-white/[0.03]'} ${canManageLifecycle ? 'select-none' : ''}`}
+        className={`touch-action-pan-y group relative w-full text-left transition-all duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] motion-reduce:transform-none ${variant === 'featured' ? 'flex flex-col rounded-[1rem] p-1.5 hover:-translate-y-1 hover:scale-[1.01] hover:shadow-[0_20px_46px_-24px_rgba(34,197,94,0.55)]' : 'flex min-h-[5.5rem] items-center gap-3 px-0 py-3 focus-visible:ring-inset'} ${lifecycleDialogMode ? 'z-10 scale-[1.005] bg-[#080d0a] shadow-[0_16px_48px_-24px_rgba(34,197,94,0.75)]' : variant === 'featured' ? 'bg-white/[0.025] hover:bg-white/[0.06]' : 'bg-transparent hover:bg-white/[0.03]'} ${canManageLifecycle ? 'select-none' : ''}`}
         style={{ opacity: isPast ? 0.62 : 1 }}
         aria-expanded={lifecycleDialogMode ? true : undefined}
       >
@@ -818,7 +818,7 @@ function EventList({ events, calendarEntries, songLeaderMap, setlistInfoMap, onE
     return (
       <div className="touch-action-pan-y space-y-3">
         {featuredEvents.length > 0 ? (
-          <div className="grid grid-cols-2 gap-2.5 border-b border-white/[0.08] pb-4">
+          <div className="grid grid-cols-2 gap-2.5 border-b border-white/[0.08] pb-4 lg:grid-cols-4">
             {featuredEvents.map(item => <div key={item.event.id} className="min-w-0">{renderItem(item, true)}</div>)}
           </div>
         ) : null}
@@ -844,7 +844,7 @@ function EventList({ events, calendarEntries, songLeaderMap, setlistInfoMap, onE
         </div>
       ) : <>
         {featuredEvents.length > 0 ? (
-          <div className="grid grid-cols-2 gap-2.5 border-b border-white/[0.08] pb-4">
+          <div className="grid grid-cols-2 gap-2.5 border-b border-white/[0.08] pb-4 lg:grid-cols-4">
             {featuredEvents.map(item => <motion.div key={item.event.id} variants={itemAnim} className="min-w-0">{renderItem(item, true)}</motion.div>)}
           </div>
         ) : null}
@@ -928,7 +928,7 @@ function EventDesktopCardGroups({ events, calendarEntries, songLeaderMap, setlis
       className="space-y-8"
     >
       {featuredEvents.length > 0 ? (
-        <section className="grid grid-cols-2 gap-3 border-b border-white/[0.08] pb-6">
+        <section className="grid grid-cols-4 gap-3 border-b border-white/[0.08] pb-6">
           {featuredEvents.map(item => (
             <EventCard
               key={item.event.id}
@@ -997,7 +997,6 @@ export function Events() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
   const [members, setMembers] = useState<EventMemberSummary[]>([]);
@@ -1347,14 +1346,12 @@ export function Events() {
 
   const filtered = events.filter(e => {
     const matchSearch = !search || e.title.toLowerCase().includes(search.toLowerCase());
-    const matchType = !typeFilter || e.event_type === typeFilter;
     const matchTab = activeTab === 'upcoming' ? !isEventCompleted(e) : isEventCompleted(e);
-    return matchSearch && matchType && matchTab;
+    return matchSearch && matchTab;
   });
   const calendarEvents = events.filter(e => {
     const matchSearch = !search || e.title.toLowerCase().includes(search.toLowerCase());
-    const matchType = !typeFilter || e.event_type === typeFilter;
-    return matchSearch && matchType;
+    return matchSearch;
   });
   const displayEvents = desktopView === 'calendar' ? calendarEvents : filtered;
 
@@ -1433,14 +1430,6 @@ export function Events() {
                 </button>
               )}
             </div>
-            <Select
-              value={typeFilter}
-              onChange={setTypeFilter}
-              options={[{ value: '', label: 'All Types' }, ...eventTypes.map(t => ({ value: t, label: t }))]}
-              placeholder="All Types"
-              className="w-full sm:w-48"
-              icon={<Filter className="h-4 w-4" />}
-            />
             <div className="hidden shrink-0 items-center gap-1 rounded-[0.7rem] bg-white/[0.07] p-1 md:flex">
               {([
                 { value: 'list' as const, label: 'List', icon: List },
@@ -1484,7 +1473,7 @@ export function Events() {
           <EmptyState
             icon={<Calendar className="h-8 w-8" />}
             title="No events found"
-            description={search || typeFilter ? 'Try adjusting your search or filter.' : 'Create your first event to get started.'}
+            description={search ? 'Try adjusting your search.' : 'Create your first event to get started.'}
             action={isLeader ? <button onClick={() => openCreateEvent()} className="btn-primary"><Plus className="h-4 w-4" /> Create Event</button> : undefined}
           />
         ) : (

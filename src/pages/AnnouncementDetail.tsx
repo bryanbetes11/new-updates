@@ -135,7 +135,7 @@ function CommentItem({
   };
 
   return (
-    <div className={`relative ${isReply ? '' : 'border-b border-black/[0.03] dark:border-white/[0.04] last:border-0'}`}>
+    <div data-app-nonselect="true" className={`relative ${isReply ? '' : 'border-b border-black/[0.03] dark:border-white/[0.04] last:border-0'}`}>
       <div className="overflow-hidden">
         <div
           ref={containerRef}

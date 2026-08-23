@@ -90,6 +90,7 @@ export function useMessages(conversationId: string | null) {
   const [memberReadTimes, setMemberReadTimes] = useState<MemberReadTime[]>([]);
   const typingTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const loadedConversationRef = useRef<string | null>(null);
 
   const fetchMemberReadTimes = useCallback(async () => {
     if (!conversationId) return;
@@ -102,7 +103,8 @@ export function useMessages(conversationId: string | null) {
 
   const fetchMessages = useCallback(async () => {
     if (!conversationId) return;
-    setLoading(true);
+    const isInitialLoad = loadedConversationRef.current !== conversationId;
+    if (isInitialLoad) setLoading(true);
 
     const { data } = await supabase
       .from('messages')
@@ -147,6 +149,7 @@ export function useMessages(conversationId: string | null) {
       reactions: message.message_reactions ?? [],
       reply_preview: message.reply_to ? (replyMap[message.reply_to] ?? null) : null,
     })));
+    loadedConversationRef.current = conversationId;
     setLoading(false);
   }, [conversationId]);
 
@@ -161,7 +164,7 @@ export function useMessages(conversationId: string | null) {
   }, [conversationId, user]);
 
   useEffect(() => {
-    if (!conversationId) { setMessages([]); setTypingUsers([]); return; }
+    if (!conversationId) { loadedConversationRef.current = null; setMessages([]); setTypingUsers([]); return; }
     fetchMessages();
     fetchMemberReadTimes();
     markRead();

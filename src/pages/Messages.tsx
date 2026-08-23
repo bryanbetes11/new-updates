@@ -117,6 +117,198 @@ function parseContent(content: string): MsgContent {
   return { type: 'text', text: content };
 }
 
+interface MessageActionAnchorRect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  width: number;
+  height: number;
+}
+
+interface MessageActionOverlayProps {
+  open: boolean;
+  anchorRect: MessageActionAnchorRect | null;
+  senderName: string;
+  preview: string;
+  canCopy: boolean;
+  isMine: boolean;
+  isPinned: boolean;
+  onClose: () => void;
+  onReply: () => void;
+  onCopy: () => void;
+  onReact: () => void;
+  onTogglePin: () => void;
+  onDelete: () => void;
+}
+
+interface MessageActionPlacement {
+  left: number;
+  top: number;
+  width: number;
+  opensAbove: boolean;
+  pointerLeft: number;
+}
+
+const MESSAGE_ACTION_MARGIN = 12;
+const MESSAGE_ACTION_GAP = 12;
+
+function clampToViewport(value: number, minimum: number, maximum: number) {
+  return Math.min(Math.max(value, minimum), Math.max(minimum, maximum));
+}
+
+function MessageActionOverlay({
+  open,
+  anchorRect,
+  senderName,
+  preview,
+  canCopy,
+  isMine,
+  isPinned,
+  onClose,
+  onReply,
+  onCopy,
+  onReact,
+  onTogglePin,
+  onDelete,
+}: MessageActionOverlayProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+  const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
+  const [placement, setPlacement] = useState<MessageActionPlacement | null>(null);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!open) return;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLButtonElement>('button:not([disabled])') || []);
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    const handleResize = () => setViewport({ width: window.innerWidth, height: window.innerHeight });
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('resize', handleResize);
+    closeButtonRef.current?.focus({ preventScroll: true });
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', handleResize);
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+    };
+  }, [open]);
+
+  useLayoutEffect(() => {
+    if (!open || !anchorRect) return;
+    const animationFrame = window.requestAnimationFrame(() => {
+      const dialogHeight = dialogRef.current?.getBoundingClientRect().height || 330;
+      const width = Math.min(360, Math.max(280, Math.min(anchorRect.width + 96, viewport.width - (MESSAGE_ACTION_MARGIN * 2))));
+      const centeredLeft = anchorRect.left + ((anchorRect.width - width) / 2);
+      const left = clampToViewport(centeredLeft, MESSAGE_ACTION_MARGIN, viewport.width - width - MESSAGE_ACTION_MARGIN);
+      const roomBelow = viewport.height - anchorRect.bottom - MESSAGE_ACTION_MARGIN;
+      const roomAbove = anchorRect.top - MESSAGE_ACTION_MARGIN;
+      const opensAbove = roomBelow < dialogHeight + MESSAGE_ACTION_GAP && roomAbove > roomBelow;
+      const preferredTop = opensAbove
+        ? anchorRect.top - dialogHeight - MESSAGE_ACTION_GAP
+        : anchorRect.bottom + MESSAGE_ACTION_GAP;
+      const top = clampToViewport(preferredTop, MESSAGE_ACTION_MARGIN, viewport.height - dialogHeight - MESSAGE_ACTION_MARGIN);
+      const pointerLeft = clampToViewport((anchorRect.left + (anchorRect.width / 2)) - left, 28, width - 28);
+      setPlacement({ left, top, width, opensAbove, pointerLeft });
+    });
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [anchorRect, canCopy, isMine, open, viewport]);
+
+  if (!open || !anchorRect) return null;
+
+  const halo = {
+    left: clampToViewport(anchorRect.left - 5, 0, viewport.width),
+    top: clampToViewport(anchorRect.top - 5, 0, viewport.height),
+    right: clampToViewport(anchorRect.right + 5, 0, viewport.width),
+    bottom: clampToViewport(anchorRect.bottom + 5, 0, viewport.height),
+  };
+  const backdropClass = 'pointer-events-auto fixed bg-black/65 backdrop-blur-[5px] animate-fade-in';
+  const actionClass = 'flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-[13px] font-bold text-white/72 transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400';
+
+  return createPortal(
+    <div className="pointer-events-none fixed inset-0 z-[2147483647]" role="presentation" data-app-nonselect="true">
+      <div aria-hidden="true" onClick={onClose} className={backdropClass} style={{ inset: '0 0 auto 0', height: halo.top }} />
+      <div aria-hidden="true" onClick={onClose} className={backdropClass} style={{ inset: `${halo.bottom}px 0 0 0` }} />
+      <div aria-hidden="true" onClick={onClose} className={backdropClass} style={{ left: 0, top: halo.top, width: halo.left, height: halo.bottom - halo.top }} />
+      <div aria-hidden="true" onClick={onClose} className={backdropClass} style={{ left: halo.right, right: 0, top: halo.top, height: halo.bottom - halo.top }} />
+
+      <div
+        aria-hidden="true"
+        onClick={onClose}
+        className="pointer-events-auto fixed rounded-[1.15rem] border border-emerald-300/50 bg-transparent shadow-[0_0_0_1px_rgba(34,197,94,0.14),0_18px_55px_-24px_rgba(34,197,94,0.9)]"
+        style={{ left: halo.left, top: halo.top, width: halo.right - halo.left, height: halo.bottom - halo.top }}
+      />
+
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Options for message from ${senderName}`}
+        className="pointer-events-auto fixed overflow-hidden rounded-[1.35rem] border border-white/[0.10] bg-[#121512]/98 text-white shadow-[0_28px_80px_-24px_rgba(0,0,0,0.95)] ring-1 ring-emerald-400/[0.08] animate-scale-in"
+        style={placement ? {
+          left: placement.left,
+          top: placement.top,
+          width: placement.width,
+          transformOrigin: placement.opensAbove ? 'bottom center' : 'top center',
+        } : { left: MESSAGE_ACTION_MARGIN, top: anchorRect.bottom + MESSAGE_ACTION_GAP, width: Math.min(360, viewport.width - 24), opacity: 0 }}
+        onClick={event => event.stopPropagation()}
+      >
+        {placement && (
+          <span
+            aria-hidden="true"
+            className={`absolute h-3 w-3 rotate-45 border-white/[0.10] bg-[#121512] ${placement.opensAbove ? '-bottom-1.5 border-b border-r' : '-top-1.5 border-l border-t'}`}
+            style={{ left: placement.pointerLeft - 6 }}
+          />
+        )}
+
+        <div className="relative border-b border-white/[0.07] px-4 pb-3 pt-4">
+          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-300/70">Message options</p>
+          <p className="mt-1 truncate pr-10 text-[14px] font-black tracking-[-0.02em]">{senderName}</p>
+          <p className="mt-0.5 truncate pr-4 text-[11px] font-semibold text-white/42">{preview}</p>
+          <button ref={closeButtonRef} type="button" onClick={onClose} className="absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-xl text-white/45 transition-colors hover:bg-white/[0.07] hover:text-white" aria-label="Close message options">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-1.5 p-3">
+          <button type="button" onClick={onReply} className={actionClass}><CornerUpLeft className="h-4 w-4 text-emerald-300" /> Reply</button>
+          <button type="button" onClick={onReact} className={actionClass}><span className="text-[15px] leading-none">😊</span> React</button>
+          {canCopy && <button type="button" onClick={onCopy} className={actionClass}><Copy className="h-4 w-4 text-sky-300" /> Copy</button>}
+          <button type="button" onClick={onTogglePin} className={actionClass}><Pin className="h-4 w-4 text-amber-300" /> {isPinned ? 'Unpin' : 'Pin'}</button>
+          {isMine && <button type="button" onClick={onDelete} className={`${actionClass} col-span-2 text-red-300 hover:bg-red-500/10`}><Trash2 className="h-4 w-4" /> Delete message</button>}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 function getOtherMember(conv: Conversation, myId: string) {
   return conv.members.find(m => m.user_id !== myId);
 }
@@ -410,7 +602,15 @@ function formatTypingUsers(users: Array<{ name: string }>): string {
   return `${users[0].name} and ${users.length - 1} others are typing`;
 }
 
-const QUICK_EMOJIS = ['❤️', '👍', '😂', '😮', '😢', '🙏'];
+const QUICK_REACTIONS = [
+  { emoji: '👍', label: 'Like', surface: 'from-sky-400/30 to-sky-500/10 ring-sky-300/25' },
+  { emoji: '❤️', label: 'Love', surface: 'from-rose-400/30 to-rose-500/10 ring-rose-300/25' },
+  { emoji: '😂', label: 'Haha', surface: 'from-amber-300/25 to-yellow-400/10 ring-amber-200/25' },
+  { emoji: '😊', label: 'Yay', surface: 'from-amber-300/25 to-orange-400/10 ring-amber-200/25' },
+  { emoji: '😮', label: 'Wow', surface: 'from-amber-300/25 to-yellow-400/10 ring-amber-200/25' },
+  { emoji: '😢', label: 'Sad', surface: 'from-sky-300/25 to-blue-400/10 ring-sky-200/25' },
+  { emoji: '😠', label: 'Angry', surface: 'from-red-400/30 to-orange-500/10 ring-red-300/25' },
+] as const;
 const mobilePanelTransition = { type: 'spring' as const, stiffness: 380, damping: 36, mass: 0.88 };
 const mobilePanelShadow = '0 24px 70px -34px rgba(15, 23, 42, 0.65)';
 const REPLY_DRAG_THRESHOLD = 56;
@@ -419,19 +619,117 @@ const REPLY_DRAG_THRESHOLD = 56;
 
 function EmojiPicker({ onPick }: { onPick: (e: string) => void }) {
   return (
-    <div className="flex gap-1 p-1.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-100 dark:border-white/[0.08] shadow-xl">
-      {QUICK_EMOJIS.map(e => (
-        <button
-          key={e}
+    <div data-app-nonselect="true" className="grid w-full grid-cols-7 gap-1 rounded-[1.3rem] border border-gray-200/80 bg-white/98 p-2 shadow-[0_22px_65px_-28px_rgba(0,0,0,0.65)] ring-1 ring-black/[0.025] dark:border-white/[0.10] dark:bg-[#18181b]/98 dark:ring-white/[0.03]">
+      {QUICK_REACTIONS.map(reaction => (
+        <motion.button
+          key={reaction.emoji}
           type="button"
-          onClick={() => onPick(e)}
-          aria-label={`React with ${e}`}
-          className="flex h-10 w-10 items-center justify-center rounded-xl text-[18px] transition-colors hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 active:scale-95 dark:hover:bg-white/[0.08]"
+          onClick={() => onPick(reaction.emoji)}
+          aria-label={`React with ${reaction.label}`}
+          whileHover={{ y: -4, scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+          transition={{ type: 'spring', stiffness: 480, damping: 24 }}
+          className="group/reaction flex min-w-0 flex-col items-center gap-1 rounded-xl py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70"
         >
-          {e}
-        </button>
+          <span
+            className={`flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br text-[23px] shadow-sm ring-1 ${reaction.surface} transition-[filter,box-shadow] group-hover/reaction:brightness-110 group-hover/reaction:shadow-md`}
+            style={{ fontFamily: '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif' }}
+          >
+            {reaction.emoji}
+          </span>
+          <span className="truncate text-[8px] font-bold tracking-[-0.01em] text-gray-400 dark:text-white/38 sm:text-[9px]">{reaction.label}</span>
+        </motion.button>
       ))}
     </div>
+  );
+}
+
+function EmojiReactionPopover({
+  open,
+  anchorRect,
+  boundaryTop,
+  onClose,
+  onPick,
+}: {
+  open: boolean;
+  anchorRect: MessageActionAnchorRect | null;
+  boundaryTop: number;
+  onClose: () => void;
+  onPick: (emoji: string) => void;
+}) {
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
+  const [style, setStyle] = useState<{ left: number; top: number; width: number; opacity: number; transformOrigin: string } | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleResize = () => setViewport({ width: window.innerWidth, height: window.innerHeight });
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose, open]);
+
+  useLayoutEffect(() => {
+    if (!open || !anchorRect) return;
+    const animationFrame = window.requestAnimationFrame(() => {
+      const popover = popoverRef.current?.getBoundingClientRect();
+      const width = Math.min(390, viewport.width - 24);
+      const height = popover?.height || 70;
+      const lowerTopBound = Math.max(12, boundaryTop + 8);
+      const roomAbove = anchorRect.top - lowerTopBound;
+      const roomBelow = viewport.height - anchorRect.bottom - 12;
+      const opensAbove = roomAbove >= height + 10 || roomBelow < height + 10;
+      const preferredTop = opensAbove ? anchorRect.top - height - 10 : anchorRect.bottom + 10;
+      const top = clampToViewport(preferredTop, lowerTopBound, viewport.height - height - 12);
+      const centeredLeft = anchorRect.left + ((anchorRect.width - width) / 2);
+      const left = clampToViewport(centeredLeft, 12, viewport.width - width - 12);
+      setStyle({ left, top, width, opacity: 1, transformOrigin: opensAbove ? 'bottom center' : 'top center' });
+    });
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [anchorRect, boundaryTop, open, viewport]);
+
+  if (!open || !anchorRect) return null;
+
+  const halo = {
+    left: clampToViewport(anchorRect.left - 5, 0, viewport.width),
+    top: clampToViewport(anchorRect.top - 5, 0, viewport.height),
+    right: clampToViewport(anchorRect.right + 5, 0, viewport.width),
+    bottom: clampToViewport(anchorRect.bottom + 5, 0, viewport.height),
+  };
+  const backdropClass = 'pointer-events-auto fixed bg-black/65 backdrop-blur-[5px] animate-fade-in';
+
+  return createPortal(
+    <div className="pointer-events-none fixed inset-0 z-[2147483647]" role="presentation" data-app-nonselect="true">
+      <div aria-hidden="true" onClick={onClose} className={backdropClass} style={{ inset: '0 0 auto 0', height: halo.top }} />
+      <div aria-hidden="true" onClick={onClose} className={backdropClass} style={{ inset: `${halo.bottom}px 0 0 0` }} />
+      <div aria-hidden="true" onClick={onClose} className={backdropClass} style={{ left: 0, top: halo.top, width: halo.left, height: halo.bottom - halo.top }} />
+      <div aria-hidden="true" onClick={onClose} className={backdropClass} style={{ left: halo.right, right: 0, top: halo.top, height: halo.bottom - halo.top }} />
+      <div
+        aria-hidden="true"
+        onClick={onClose}
+        className="pointer-events-auto fixed rounded-[1.15rem] border border-emerald-300/50 bg-transparent shadow-[0_0_0_1px_rgba(34,197,94,0.14),0_18px_55px_-24px_rgba(34,197,94,0.9)]"
+        style={{ left: halo.left, top: halo.top, width: halo.right - halo.left, height: halo.bottom - halo.top }}
+      />
+      <motion.div
+        ref={popoverRef}
+        initial={{ opacity: 0, scale: 0.9, y: 5 }}
+        animate={{ opacity: style?.opacity ?? 0, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.92, y: 4 }}
+        transition={{ type: 'spring', stiffness: 430, damping: 31 }}
+        className="pointer-events-auto fixed"
+        style={style || { left: 12, top: anchorRect.bottom + 10, width: Math.min(390, viewport.width - 24), opacity: 0, transformOrigin: 'top center' }}
+        onClick={event => event.stopPropagation()}
+      >
+        <EmojiPicker onPick={onPick} />
+      </motion.div>
+    </div>,
+    document.body,
   );
 }
 
@@ -2720,6 +3018,12 @@ function ReactionDetailsSheet({
     acc[reaction.emoji] = (acc[reaction.emoji] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
+  const reactionsByUser = Object.values(reactions.reduce((acc, reaction) => {
+    const current = acc[reaction.user_id] || { userId: reaction.user_id, emojis: [] as string[] };
+    if (!current.emojis.includes(reaction.emoji)) current.emojis.push(reaction.emoji);
+    acc[reaction.user_id] = current;
+    return acc;
+  }, {} as Record<string, { userId: string; emojis: string[] }>));
 
   const getMember = (userId: string) => members.find(member => member.user_id === userId);
 
@@ -2758,27 +3062,17 @@ function ReactionDetailsSheet({
           </div>
 
           <div className="min-h-[13.5rem] max-h-[52dvh] overflow-y-auto py-1.5">
-            {reactions.map((reaction, index) => {
-              const member = getMember(reaction.user_id);
-              const isMine = reaction.user_id === myUserId;
+            {reactionsByUser.map((reactionGroup) => {
+              const member = getMember(reactionGroup.userId);
+              const isMine = reactionGroup.userId === myUserId;
               const displayName = isMine ? 'You' : getFullName(member?.profile, 'Unknown member');
               const avatarProfile = member?.profile;
 
-              const removeMine = async () => {
-                if (!isMine) return;
-                await onToggleReaction(message.id, reaction.emoji);
-                onClose();
-              };
-
               return (
-                <button
-                  type="button"
-                  key={`${reaction.user_id}-${reaction.emoji}-${index}`}
-                  onClick={removeMine}
-                  disabled={!isMine}
-                  className={`flex w-full items-center gap-2.5 px-5 py-2 text-left transition-colors ${
-                    isMine ? 'hover:bg-emerald-50 active:bg-emerald-100 dark:hover:bg-emerald-500/[0.08] dark:active:bg-emerald-500/[0.12]' : 'cursor-default'
-                  }`}
+                <div
+                  key={reactionGroup.userId}
+                  data-app-nonselect="true"
+                  className="flex w-full items-center gap-2.5 px-5 py-2 text-left"
                 >
                   <Avatar
                     src={avatarProfile?.avatar_url ?? undefined}
@@ -2789,20 +3083,27 @@ function ReactionDetailsSheet({
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[14px] font-bold text-gray-900 dark:text-white">{displayName}</p>
                     {isMine && (
-                      <p className="mt-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-300">Tap to remove your reaction</p>
+                      <p className="mt-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-300">Tap a reaction to remove it</p>
                     )}
                   </div>
-                  <span
-                    className={`flex h-9 min-w-9 items-center justify-center rounded-full px-2.5 text-[19px] transition-all ${
-                      isMine
-                        ? 'bg-emerald-50 ring-1 ring-emerald-200 active:scale-95 dark:bg-emerald-500/[0.12] dark:ring-emerald-400/25'
-                        : 'bg-gray-100 dark:bg-white/[0.07]'
-                    }`}
-                    aria-hidden="true"
-                  >
-                    {reaction.emoji}
-                  </span>
-                </button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {reactionGroup.emojis.map(emoji => isMine ? (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => void onToggleReaction(message.id, emoji)}
+                        aria-label={`Remove ${emoji} reaction`}
+                        className="flex h-9 min-w-9 items-center justify-center rounded-full bg-emerald-50 px-2.5 text-[19px] ring-1 ring-emerald-200 transition-transform hover:scale-105 active:scale-90 dark:bg-emerald-500/[0.12] dark:ring-emerald-400/25"
+                      >
+                        {emoji}
+                      </button>
+                    ) : (
+                      <span key={emoji} className="flex h-9 min-w-9 items-center justify-center rounded-full bg-gray-100 px-2.5 text-[19px] dark:bg-white/[0.07]" aria-label={`${emoji} reaction`}>
+                        {emoji}
+                      </span>
+                    ))}
+                  </div>
+                </div>
               );
             })}
           </div>
@@ -3252,8 +3553,10 @@ function ChatWindow({
 }) {
   const [replyTo, setReplyTo] = useState<{ id: string; preview: string } | null>(null);
   const [activeMsg, setActiveMsg] = useState<string | null>(null);
-  const [actionMenuPlacement, setActionMenuPlacement] = useState<'above' | 'below'>('above');
+  const [messageActionAnchorRect, setMessageActionAnchorRect] = useState<MessageActionAnchorRect | null>(null);
   const [emojiMsgId, setEmojiMsgId] = useState<string | null>(null);
+  const [emojiAnchorRect, setEmojiAnchorRect] = useState<MessageActionAnchorRect | null>(null);
+  const [emojiBoundaryTop, setEmojiBoundaryTop] = useState(0);
   const [tappedMsgId, setTappedMsgId] = useState<string | null>(null);
   const [showInfo, setShowInfo] = useState(false);
   const [showEventDetail, setShowEventDetail] = useState(false);
@@ -3271,6 +3574,7 @@ function ChatWindow({
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const messageBubbleRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const msgLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const msgLongPressOrigin = useRef<{ x: number; y: number } | null>(null);
   const draggedMessageId = useRef<string | null>(null);
   const atBottomRef = useRef(true);
   const forceStickToLatestRef = useRef(false);
@@ -3327,35 +3631,73 @@ function ChatWindow({
   const avatarName = getConversationAvatarName(conv, myUserId);
 
   const clearMessageLongPress = useCallback(() => {
-    if (!msgLongPressTimer.current) return;
-    clearTimeout(msgLongPressTimer.current);
-    msgLongPressTimer.current = null;
+    if (msgLongPressTimer.current) {
+      clearTimeout(msgLongPressTimer.current);
+      msgLongPressTimer.current = null;
+    }
+    msgLongPressOrigin.current = null;
   }, []);
 
+  useEffect(() => clearMessageLongPress, [clearMessageLongPress]);
+
   const openMessageActions = useCallback((messageId: string, anchor?: HTMLElement | null) => {
-    const anchorRect = anchor?.getBoundingClientRect();
-    const headerBottom = chatHeaderRef.current?.getBoundingClientRect().bottom ?? 0;
-    const estimatedMenuHeight = 220;
-    const availableAboveHeader = anchorRect ? anchorRect.top - headerBottom : estimatedMenuHeight;
-    setActionMenuPlacement(availableAboveHeader < estimatedMenuHeight ? 'below' : 'above');
+    const messageBubble = messageBubbleRefs.current[messageId] || anchor;
+    const anchorRect = messageBubble?.getBoundingClientRect();
+    if (!anchorRect) return;
+    window.getSelection()?.removeAllRanges();
+    setMessageActionAnchorRect({
+      left: anchorRect.left,
+      top: anchorRect.top,
+      right: anchorRect.right,
+      bottom: anchorRect.bottom,
+      width: anchorRect.width,
+      height: anchorRect.height,
+    });
     setActiveMsg(messageId);
     setEmojiMsgId(null);
+    setEmojiAnchorRect(null);
+    setTappedMsgId(null);
+  }, []);
+
+  const closeMessageActions = useCallback(() => {
+    setActiveMsg(null);
+    setMessageActionAnchorRect(null);
+  }, []);
+
+  const closeEmojiPicker = useCallback(() => {
+    setEmojiMsgId(null);
+    setEmojiAnchorRect(null);
+  }, []);
+
+  const openEmojiPicker = useCallback((messageId: string) => {
+    const anchorRect = messageBubbleRefs.current[messageId]?.getBoundingClientRect();
+    if (!anchorRect) return;
+    setEmojiAnchorRect({
+      left: anchorRect.left,
+      top: anchorRect.top,
+      right: anchorRect.right,
+      bottom: anchorRect.bottom,
+      width: anchorRect.width,
+      height: anchorRect.height,
+    });
+    setEmojiBoundaryTop(chatHeaderRef.current?.getBoundingClientRect().bottom ?? 0);
+    setEmojiMsgId(messageId);
     setTappedMsgId(null);
   }, []);
 
   const startReplyToMessage = useCallback((msg: Message) => {
     setReplyTo({ id: msg.id, preview: `${getSenderName(msg.sender)}: ${replyPreviewContent(msg.content)}` });
-    setActiveMsg(null);
-    setEmojiMsgId(null);
+    closeMessageActions();
+    closeEmojiPicker();
     setTappedMsgId(null);
-  }, []);
+  }, [closeEmojiPicker, closeMessageActions]);
 
   const handleReplyDragStart = useCallback((messageId: string) => {
     draggedMessageId.current = messageId;
     clearMessageLongPress();
-    setActiveMsg(null);
-    setEmojiMsgId(null);
-  }, [clearMessageLongPress]);
+    closeMessageActions();
+    closeEmojiPicker();
+  }, [clearMessageLongPress, closeEmojiPicker, closeMessageActions]);
 
   const handleReplyDragEnd = useCallback((msg: Message, isMe: boolean, info: PanInfo) => {
     const shouldReply = isMe
@@ -3450,10 +3792,10 @@ function ChatWindow({
   // Close action menu on outside click
   useEffect(() => {
     if (!activeMsg && !emojiMsgId && !tappedMsgId) return;
-    const handler = () => { setActiveMsg(null); setEmojiMsgId(null); setTappedMsgId(null); };
+    const handler = () => { closeMessageActions(); closeEmojiPicker(); setTappedMsgId(null); };
     document.addEventListener('click', handler);
     return () => document.removeEventListener('click', handler);
-  }, [activeMsg, emojiMsgId, tappedMsgId]);
+  }, [activeMsg, closeEmojiPicker, closeMessageActions, emojiMsgId, tappedMsgId]);
 
   const stopTyping = useCallback(() => {
     if (typingStopRef.current) {
@@ -3596,20 +3938,22 @@ function ChatWindow({
     }
   }, [seenDetailsMessage, seenDetailsMessageId, seenDetailsSeers.length]);
 
-  // Group messages: same sender within 5 min = grouped
+  // Keep consecutive messages from one sender visually stacked. A date divider
+  // always starts a fresh group, but elapsed time alone should not create a
+  // large visual break between adjacent bubbles.
   const grouped = useMemo(() => {
     return messages.map((msg, i) => {
       const prev = messages[i - 1];
-      const isGrouped = prev &&
-        prev.sender_id === msg.sender_id &&
-        new Date(msg.created_at).getTime() - new Date(prev.created_at).getTime() < 5 * 60 * 1000;
       const showDateDivider = !prev ||
         new Date(msg.created_at).toDateString() !== new Date(prev.created_at).toDateString();
+      const isGrouped = Boolean(prev && !showDateDivider && prev.sender_id === msg.sender_id);
       return { msg, isGrouped, showDateDivider };
     });
   }, [messages]);
 
   const isGroupChat = conv.type === 'group' || conv.type === 'event';
+  const activeMessage = activeMsg ? messages.find(message => message.id === activeMsg) ?? null : null;
+  const activeMessageContent = activeMessage ? parseContent(activeMessage.content) : null;
 
   return (
     <div className="relative flex flex-col h-full min-h-0 overflow-hidden bg-white dark:bg-[#111013]">
@@ -3740,6 +4084,7 @@ function ChatWindow({
           const displaySeers = seers.filter(s => s.userId !== msg.sender_id);
           const latestSeenAt = displaySeers.length > 0 ? displaySeers.map(s => s.readAt).sort()[displaySeers.length - 1] : '';
           const showAvatar = !isMe && (!isGrouped || i === 0);
+          const needsReactionClearance = !showDateDivider && (messages[i - 1]?.reactions.length ?? 0) > 0;
           const isActionsOpen = activeMsg === msg.id;
           const isEmojiOpen = emojiMsgId === msg.id;
           const deleteRequesterName = content.type === 'delete_request'
@@ -3750,7 +4095,7 @@ function ChatWindow({
             : 'Someone';
 
           return (
-            <div key={msg.id} ref={el => { messageRefs.current[msg.id] = el; }} className="rounded-xl">
+            <div key={msg.id} ref={el => { messageRefs.current[msg.id] = el; }} className="flow-root rounded-xl">
               {showDateDivider && (
                 <div className="flex items-center gap-3 my-4">
                   <div className="flex-1 h-px bg-gray-100 dark:bg-white/[0.06]" />
@@ -3769,7 +4114,7 @@ function ChatWindow({
                 />
               ) : (
               <>
-              <div className={`flex items-end gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'} ${isGrouped && !showDateDivider ? 'mt-0.5' : 'mt-3'}`}>
+              <div className={`flex items-end gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'} ${needsReactionClearance ? 'mt-2' : isGrouped && !showDateDivider ? '-mt-4' : 'mt-3'}`}>
                 {/* Avatar spacer */}
                 {!isMe && (
                   <div className="shrink-0 w-7">
@@ -3798,7 +4143,12 @@ function ChatWindow({
                     {isMe && (
                       <div className="hidden sm:flex opacity-0 group-hover:opacity-100 transition-opacity items-center gap-0.5 mb-1">
                         <button
-                          onClick={e => { e.stopPropagation(); setEmojiMsgId(isEmojiOpen ? null : msg.id); setActiveMsg(null); }}
+                          onClick={e => {
+                            e.stopPropagation();
+                            if (isEmojiOpen) closeEmojiPicker();
+                            else openEmojiPicker(msg.id);
+                            closeMessageActions();
+                          }}
                           className="h-7 w-7 flex items-center justify-center rounded-full text-gray-400 dark:text-white/25 hover:bg-gray-100 dark:hover:bg-white/[0.07] hover:text-gray-600 dark:hover:text-white/60 transition-colors"
                         >
                           <span className="text-[13px]">😊</span>
@@ -3806,7 +4156,7 @@ function ChatWindow({
                         <button
                           onClick={e => {
                             e.stopPropagation();
-                            if (isActionsOpen) setActiveMsg(null);
+                            if (isActionsOpen) closeMessageActions();
                             else openMessageActions(msg.id, e.currentTarget);
                           }}
                           className="h-7 w-7 flex items-center justify-center rounded-full text-gray-400 dark:text-white/25 hover:bg-gray-100 dark:hover:bg-white/[0.07] hover:text-gray-600 dark:hover:text-white/60 transition-colors"
@@ -3837,19 +4187,32 @@ function ChatWindow({
                         setTappedMsgId(prev => prev === msg.id ? null : msg.id);
                       }}
                       onPointerDown={e => {
-                        if (e.pointerType !== 'touch') return;
+                        if (e.pointerType !== 'touch' && e.pointerType !== 'pen') return;
+                        clearMessageLongPress();
+                        window.getSelection()?.removeAllRanges();
+                        msgLongPressOrigin.current = { x: e.clientX, y: e.clientY };
                         const anchor = e.currentTarget;
                         msgLongPressTimer.current = setTimeout(() => {
+                          msgLongPressTimer.current = null;
+                          msgLongPressOrigin.current = null;
                           openMessageActions(msg.id, anchor);
                         }, 500);
+                      }}
+                      onPointerMove={e => {
+                        const origin = msgLongPressOrigin.current;
+                        if (!origin || Math.hypot(e.clientX - origin.x, e.clientY - origin.y) <= 10) return;
+                        clearMessageLongPress();
                       }}
                       onPointerUp={clearMessageLongPress}
                       onPointerLeave={clearMessageLongPress}
                       onPointerCancel={clearMessageLongPress}
-                      onContextMenu={e => e.preventDefault()}
-                      className={`relative leading-relaxed cursor-default select-none ${
-                        msg.reactions.length > 0 ? 'mb-5' : ''
-                      } ${
+                      onContextMenu={e => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        openMessageActions(msg.id, e.currentTarget);
+                      }}
+                      data-app-nonselect="true"
+                      className={`relative mb-0.5 leading-relaxed cursor-default select-none ${
                         content.type === 'image' || (content.type === 'event_reference' && !content.messageText)
                           ? 'px-0 py-0 bg-transparent border-0 shadow-none rounded-none'
                           : isMe
@@ -3947,7 +4310,7 @@ function ChatWindow({
                       {/* Reactions — sitting just below the bubble's bottom-right corner */}
                       {msg.reactions.length > 0 && (
                         <div
-                          className="absolute bottom-0 right-0 translate-y-3/4 flex items-center gap-px px-1.5 py-[3px] rounded-full bg-white dark:bg-[#1c1c1e] border border-gray-100 dark:border-white/[0.1] shadow-md z-10"
+                          className="absolute -bottom-3 -right-1 -mb-2 z-10 flex h-[26px] min-w-[51px] items-center justify-center gap-px rounded-full border border-gray-100 bg-white px-1.5 py-0 shadow-md dark:border-white/[0.1] dark:bg-[#1c1c1e]"
                           onClick={e => e.stopPropagation()}
                         >
                           {Object.entries(
@@ -3984,7 +4347,12 @@ function ChatWindow({
                     {!isMe && (
                       <div className="hidden sm:flex opacity-0 group-hover:opacity-100 transition-opacity items-center gap-0.5 mb-1">
                         <button
-                          onClick={e => { e.stopPropagation(); setEmojiMsgId(isEmojiOpen ? null : msg.id); setActiveMsg(null); }}
+                          onClick={e => {
+                            e.stopPropagation();
+                            if (isEmojiOpen) closeEmojiPicker();
+                            else openEmojiPicker(msg.id);
+                            closeMessageActions();
+                          }}
                           className="h-7 w-7 flex items-center justify-center rounded-full text-gray-400 dark:text-white/25 hover:bg-gray-100 dark:hover:bg-white/[0.07] hover:text-gray-600 dark:hover:text-white/60 transition-colors"
                         >
                           <span className="text-[13px]">😊</span>
@@ -3992,7 +4360,7 @@ function ChatWindow({
                         <button
                           onClick={e => {
                             e.stopPropagation();
-                            if (isActionsOpen) setActiveMsg(null);
+                            if (isActionsOpen) closeMessageActions();
                             else openMessageActions(msg.id, e.currentTarget);
                           }}
                           className="h-7 w-7 flex items-center justify-center rounded-full text-gray-400 dark:text-white/25 hover:bg-gray-100 dark:hover:bg-white/[0.07] hover:text-gray-600 dark:hover:text-white/60 transition-colors"
@@ -4019,70 +4387,6 @@ function ChatWindow({
                     )}
                   </AnimatePresence>
 
-                  {/* Emoji picker */}
-                  <AnimatePresence>
-                    {isEmojiOpen && (
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.9, y: 4 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.9, y: 4 }}
-                        transition={{ duration: 0.12 }}
-                        className={`absolute z-20 bottom-full mb-1 ${isMe ? 'right-0' : 'left-0'}`}
-                        onClick={e => e.stopPropagation()}
-                      >
-                        <EmojiPicker onPick={emoji => { toggleReaction(msg.id, emoji); setEmojiMsgId(null); }} />
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-
-                  {/* Actions menu */}
-                  <AnimatePresence>
-                    {isActionsOpen && (
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.9, y: 4 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.9, y: 4 }}
-                        transition={{ duration: 0.12 }}
-                        className={`absolute z-20 ${actionMenuPlacement === 'below' ? 'top-full mt-1' : 'bottom-full mb-1'} ${isMe ? 'right-0' : 'left-0'} min-w-[140px] bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-100 dark:border-white/[0.08] shadow-xl overflow-hidden`}
-                        onClick={e => e.stopPropagation()}
-                      >
-                        <button
-                          onClick={() => startReplyToMessage(msg)}
-                          className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[13px] text-gray-700 dark:text-white/70 hover:bg-gray-50 dark:hover:bg-white/[0.05] transition-colors"
-                        >
-                          <CornerUpLeft className="h-3.5 w-3.5" /> Reply
-                        </button>
-                        {content.type === 'text' && (
-                          <button
-                            onClick={() => { navigator.clipboard.writeText(content.text); setActiveMsg(null); }}
-                            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[13px] text-gray-700 dark:text-white/70 hover:bg-gray-50 dark:hover:bg-white/[0.05] transition-colors"
-                          >
-                            <Copy className="h-3.5 w-3.5" /> Copy
-                          </button>
-                        )}
-                        <button
-                          onClick={() => { setEmojiMsgId(msg.id); setActiveMsg(null); }}
-                          className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[13px] text-gray-700 dark:text-white/70 hover:bg-gray-50 dark:hover:bg-white/[0.05] transition-colors"
-                        >
-                          <span className="text-[13px] leading-none">😊</span> React
-                        </button>
-                        <button
-                          onClick={() => { pinMessage(msg.id, !msg.is_pinned); setActiveMsg(null); }}
-                          className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[13px] text-gray-700 dark:text-white/70 hover:bg-gray-50 dark:hover:bg-white/[0.05] transition-colors"
-                        >
-                          <Pin className="h-3.5 w-3.5" /> {msg.is_pinned ? 'Unpin' : 'Pin'}
-                        </button>
-                        {isMe && (
-                          <button
-                            onClick={() => { deleteMessage(msg.id); setActiveMsg(null); }}
-                            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[13px] text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" /> Delete
-                          </button>
-                        )}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
                 </div>
               </div>
 
@@ -4155,6 +4459,47 @@ function ChatWindow({
 
         <div ref={messagesEndRef} />
       </div>
+
+      <MessageActionOverlay
+        open={Boolean(activeMessage && messageActionAnchorRect)}
+        anchorRect={messageActionAnchorRect}
+        senderName={activeMessage ? getSenderName(activeMessage.sender) : 'Message'}
+        preview={activeMessage ? previewContent(activeMessage.content) : ''}
+        canCopy={activeMessageContent?.type === 'text'}
+        isMine={activeMessage?.sender_id === myUserId}
+        isPinned={Boolean(activeMessage?.is_pinned)}
+        onClose={closeMessageActions}
+        onReply={() => {
+          if (activeMessage) startReplyToMessage(activeMessage);
+        }}
+        onCopy={() => {
+          if (activeMessageContent?.type === 'text') void navigator.clipboard.writeText(activeMessageContent.text);
+          closeMessageActions();
+        }}
+        onReact={() => {
+          if (activeMessage) openEmojiPicker(activeMessage.id);
+          closeMessageActions();
+        }}
+        onTogglePin={() => {
+          if (activeMessage) void pinMessage(activeMessage.id, !activeMessage.is_pinned);
+          closeMessageActions();
+        }}
+        onDelete={() => {
+          if (activeMessage) void deleteMessage(activeMessage.id);
+          closeMessageActions();
+        }}
+      />
+
+      <EmojiReactionPopover
+        open={Boolean(emojiMsgId && emojiAnchorRect)}
+        anchorRect={emojiAnchorRect}
+        boundaryTop={emojiBoundaryTop}
+        onClose={closeEmojiPicker}
+        onPick={emoji => {
+          if (emojiMsgId) void toggleReaction(emojiMsgId, emoji);
+          closeEmojiPicker();
+        }}
+      />
 
       {!showInfo && !showEventDetail && !detailsSheetOpen && (
         <>

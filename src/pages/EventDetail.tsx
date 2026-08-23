@@ -3950,7 +3950,7 @@ const openLyricsModal = (ss: SetlistSong) => {
               ) : revisionComments.map(comment => {
                 const authorName = `${comment.profiles?.first_name || 'Team'} ${comment.profiles?.last_name || 'member'}`.trim();
                 return (
-                  <div key={comment.id} className={`rounded-lg border border-gray-200/70 bg-gray-50/70 px-2.5 py-2 dark:border-white/[0.08] dark:bg-white/[0.03] ${comment.reply_to ? 'ml-4 border-l-2 border-l-amber-400/70 sm:ml-6' : ''}`}>
+                  <div key={comment.id} data-app-nonselect="true" className={`rounded-lg border border-gray-200/70 bg-gray-50/70 px-2.5 py-2 dark:border-white/[0.08] dark:bg-white/[0.03] ${comment.reply_to ? 'ml-4 border-l-2 border-l-amber-400/70 sm:ml-6' : ''}`}>
                     <div className="flex items-center gap-1.5">
                       <Avatar src={comment.profiles?.avatar_url} firstName={comment.profiles?.first_name || '?'} lastName={comment.profiles?.last_name} size="xs" />
                       <div className="flex min-w-0 flex-1 items-baseline gap-1.5 overflow-hidden">

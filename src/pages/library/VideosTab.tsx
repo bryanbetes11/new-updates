@@ -911,7 +911,7 @@ export function VideosTab() {
               ) : comments.map(comment => {
                 const name = `${comment.profiles?.first_name || ''} ${comment.profiles?.last_name || ''}`.trim() || 'Team member';
                 return (
-                  <div key={comment.id} className="flex gap-2.5 rounded-xl bg-gray-50 p-2.5 dark:bg-white/[0.035]">
+                  <div key={comment.id} data-app-nonselect="true" className="flex gap-2.5 rounded-xl bg-gray-50 p-2.5 dark:bg-white/[0.035]">
                     {comment.profiles?.avatar_url ? (
                       <img src={comment.profiles.avatar_url} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" />
                     ) : (

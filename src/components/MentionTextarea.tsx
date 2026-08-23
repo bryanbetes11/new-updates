@@ -32,6 +32,25 @@ interface MentionTextareaProps {
   onClick?: React.MouseEventHandler<HTMLTextAreaElement>;
 }
 
+function MentionTextOverlay({ text, profiles }: { text: string; profiles: Profile[] }) {
+  const mentionDisplays = profiles
+    .map(profile => `@${(profile.mentionHandle ?? `${profile.first_name} ${profile.last_name}`.trim().replace(/\s+/g, '_')).replace(/_/g, ' ')}`)
+    .sort((a, b) => b.length - a.length);
+  const escaped = mentionDisplays.map(display => display.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const parts = escaped.length > 0 ? text.split(new RegExp(`(${escaped.join('|')})`, 'gi')) : [text];
+
+  return (
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden px-3.5 py-2 text-[15px] leading-relaxed whitespace-pre-wrap break-words sm:text-[14px]">
+      {parts.map((part, index) => {
+        const isMention = mentionDisplays.some(display => display.toLowerCase() === part.toLowerCase());
+        return isMention
+          ? <span key={`${part}-${index}`} className="rounded bg-emerald-500/10 font-semibold text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-300">{part}</span>
+          : <span key={`${part}-${index}`} className="text-gray-900 dark:text-white">{part}</span>;
+      })}
+    </div>
+  );
+}
+
 export function MentionTextarea({
   value,
   onChange,
@@ -166,7 +185,7 @@ export function MentionTextarea({
     const mentionHandle = profile.mentionHandle ?? `${profile.first_name} ${profile.last_name}`
       .trim()
       .replace(/\s+/g, '_');
-    const mention = `@${mentionHandle}`;
+    const mention = `@${mentionHandle.replace(/_/g, ' ')}`;
     const newValue = `${before}${mention} ${after}`;
     onChange(newValue);
     setShowDropdown(false);
@@ -204,6 +223,30 @@ export function MentionTextarea({
         return;
       }
     }
+
+    if (e.key === 'Backspace' && e.currentTarget.selectionStart === e.currentTarget.selectionEnd) {
+      const cursor = e.currentTarget.selectionStart;
+      const before = value.slice(0, cursor);
+      const mention = before.match(/@[^\s@]+(?: [^\s@]+)*$/)?.[0];
+      if (!mention) {
+        onKeyDown?.(e);
+        return;
+      }
+      e.preventDefault();
+      const parts = mention.slice(1).split(' ');
+      const replacement = parts.length > 1 ? `@${parts.slice(0, -1).join(' ')}` : '';
+      const start = cursor - mention.length;
+      const nextValue = `${value.slice(0, start)}${replacement}${value.slice(cursor)}`;
+      const nextCursor = start + replacement.length;
+      onChange(nextValue);
+      requestAnimationFrame(() => {
+        const el = ref.current;
+        if (!el) return;
+        el.focus({ preventScroll: true });
+        el.setSelectionRange(nextCursor, nextCursor);
+      });
+      return;
+    }
     onKeyDown?.(e);
   };
 
@@ -215,6 +258,7 @@ export function MentionTextarea({
 
   return (
     <div className="relative min-w-0 flex-1 self-stretch">
+      {value && <MentionTextOverlay text={value} profiles={profiles} />}
       <textarea
         ref={ref}
         value={value}
@@ -232,7 +276,7 @@ export function MentionTextarea({
         onFocus={onFocus}
         onPointerDown={onPointerDown}
         placeholder={placeholder}
-        className={`block w-full min-w-0 ${className}`}
+        className={`relative z-[1] block w-full min-w-0 ${value ? '!text-transparent caret-emerald-500' : ''} ${className}`}
         style={style}
         rows={rows}
       />

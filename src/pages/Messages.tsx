@@ -1291,6 +1291,53 @@ function NewMessageModal({ open, onClose, onSelect, onCreateGroup, onCreateEvent
 const QUICK_ACTION_OPTIONS = ['👍', '❤️', '🙏', '😂', '🔥', '👏'];
 type EventChatCommand = 'setlist' | 'song' | 'observe';
 
+type ComposerMentionProfile = {
+  first_name: string;
+  last_name: string;
+  mentionHandle?: string;
+};
+
+function getMentionHandle(profile: ComposerMentionProfile) {
+  return profile.mentionHandle ?? `${profile.first_name} ${profile.last_name}`.trim().replace(/\s+/g, '_');
+}
+
+function serializeComposerMentions(text: string, profiles: ComposerMentionProfile[]) {
+  return [...profiles]
+    .sort((a, b) => getMentionHandle(b).length - getMentionHandle(a).length)
+    .reduce((serialized, profile) => {
+      const handle = getMentionHandle(profile);
+      const display = `@${handle.replace(/_/g, ' ')}`;
+      const escapedDisplay = display.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return serialized.replace(new RegExp(`(^|\\s)${escapedDisplay}(?=\\s|$|[,.!?;:])`, 'gi'), `$1@${handle}`);
+    }, text);
+}
+
+function removeTrailingMentionWord(value: string, cursor: number) {
+  const before = value.slice(0, cursor);
+  const mention = before.match(/@[^\s@]+(?: [^\s@]+)*$/)?.[0];
+  if (!mention) return null;
+  const parts = mention.slice(1).split(' ');
+  const replacement = parts.length > 1 ? `@${parts.slice(0, -1).join(' ')}` : '';
+  const start = cursor - mention.length;
+  return { value: `${value.slice(0, start)}${replacement}${value.slice(cursor)}`, cursor: start + replacement.length };
+}
+
+function ComposerMentionHighlight({ text, profiles }: { text: string; profiles: ComposerMentionProfile[] }) {
+  const mentionDisplays = profiles
+    .map(profile => `@${getMentionHandle(profile).replace(/_/g, ' ')}`)
+    .sort((a, b) => b.length - a.length);
+  const escaped = mentionDisplays.map(display => display.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const parts = escaped.length > 0 ? text.split(new RegExp(`(${escaped.join('|')})`, 'gi')) : [text];
+
+  return (
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden px-3.5 py-2 text-[15px] leading-relaxed whitespace-pre-wrap break-words text-gray-900 dark:text-white">
+      {parts.map((part, index) => mentionDisplays.some(display => display.toLowerCase() === part.toLowerCase())
+        ? <span key={`${part}-${index}`} className="rounded bg-emerald-500/10 font-semibold text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-300">{part}</span>
+        : <span key={`${part}-${index}`}>{part}</span>)}
+    </div>
+  );
+}
+
 function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply, onTyping, mentionProfiles, eventDetails }: {
   conversationId: string;
   onSend: (text: string, imageUrl?: string) => void;
@@ -1298,13 +1345,10 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
   replyPreview: string | null;
   onCancelReply: () => void;
   onTyping: (isTyping: boolean) => void;
-  mentionProfiles: Array<{
+  mentionProfiles: Array<ComposerMentionProfile & {
     id: string;
-    first_name: string;
-    last_name: string;
     avatar_url: string | null;
     gender: string | null;
-    mentionHandle?: string;
     mentionLabel?: string;
     mentionDescription?: string;
     mentionType?: 'person' | 'everyone' | 'event';
@@ -1527,7 +1571,8 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
 
   const handleSend = () => {
     if (!text.trim()) return;
-    let outgoing = text;
+    const serializedText = serializeComposerMentions(text, mentionProfiles);
+    let outgoing = serializedText;
     const normalized = text.trim();
     if (eventDetails) {
       if (normalized.toLowerCase() === '@event') {
@@ -1539,7 +1584,7 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
       } else {
         const referencedSongs = selectedSongs.filter(song => text.includes(`♪ ${song.title}`));
         if (referencedSongs.length > 0) {
-          outgoing = createChatEventReference('song', eventDetails, referencedSongs[0], text, referencedSongs);
+          outgoing = createChatEventReference('song', eventDetails, referencedSongs[0], serializedText, referencedSongs);
         }
       }
     }
@@ -1641,10 +1686,7 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
     const cursor = getEditableCaretOffset();
     const before = text.slice(0, editableMentionStart);
     const after = text.slice(cursor);
-    const mentionHandle = profile.mentionHandle ?? `${profile.first_name} ${profile.last_name}`
-      .trim()
-      .replace(/\s+/g, '_');
-    const mention = `@${mentionHandle}`;
+    const mention = `@${getMentionHandle(profile).replace(/_/g, ' ')}`;
     const nextText = `${before}${mention} ${after}`;
     const nextCursor = before.length + mention.length + 1;
 
@@ -1734,6 +1776,17 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
       if (e.key === 'Escape') {
         setShowEditableMentionDropdown(false);
       }
+    }
+
+    if (e.key === 'Backspace') {
+      const next = removeTrailingMentionWord(text, getEditableCaretOffset());
+      if (!next) return;
+      e.preventDefault();
+      const el = editableRef.current;
+      if (el) el.textContent = next.value;
+      setText(next.value);
+      onTyping(next.value.trim().length > 0);
+      requestAnimationFrame(() => setEditableCaretOffset(next.cursor));
     }
   };
 
@@ -2011,24 +2064,27 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
         </div>
         <div className="flex-1 min-h-[36px] max-h-[140px] flex items-end rounded-2xl bg-gray-100 dark:bg-white/[0.06] border border-gray-200/80 dark:border-white/[0.06] overflow-hidden">
           {useEditableComposer ? (
-            <div
-              ref={editableRef}
-              contentEditable
-              role="textbox"
-              aria-label="Message"
-              data-placeholder="Message..."
-              data-chat-composer="true"
-              suppressContentEditableWarning
-              onInput={handleEditableInput}
-              onFocus={() => window.dispatchEvent(new Event('messages-composer-focus'))}
-              onClick={() => {
-                if (showEditableMentionDropdown) computeEditableDropdownPosition();
-              }}
-              onKeyDown={handleEditableKeyDown}
-              onPointerDown={focusEditableComposerWithoutPageScroll}
-              className={`chat-editable-input flex-1 px-3.5 py-2 text-[15px] bg-transparent text-gray-900 dark:text-white outline-none leading-relaxed overflow-y-auto whitespace-pre-wrap break-words ${text.trim() ? '' : 'is-empty'}`}
-              style={{ maxHeight: '132px', minHeight: '40px' }}
-            />
+            <div className="relative flex-1 self-stretch">
+              {text && <ComposerMentionHighlight text={text} profiles={mentionProfiles} />}
+              <div
+                ref={editableRef}
+                contentEditable
+                role="textbox"
+                aria-label="Message"
+                data-placeholder="Message..."
+                data-chat-composer="true"
+                suppressContentEditableWarning
+                onInput={handleEditableInput}
+                onFocus={() => window.dispatchEvent(new Event('messages-composer-focus'))}
+                onClick={() => {
+                  if (showEditableMentionDropdown) computeEditableDropdownPosition();
+                }}
+                onKeyDown={handleEditableKeyDown}
+                onPointerDown={focusEditableComposerWithoutPageScroll}
+                className={`chat-editable-input relative z-[1] flex-1 px-3.5 py-2 text-[15px] bg-transparent outline-none leading-relaxed overflow-y-auto whitespace-pre-wrap break-words ${text ? '!text-transparent caret-emerald-500' : 'text-gray-900 dark:text-white is-empty'}`}
+                style={{ maxHeight: '132px', minHeight: '40px' }}
+              />
+            </div>
           ) : (
             <MentionTextarea
               textareaRef={textRef}

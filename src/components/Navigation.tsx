@@ -77,6 +77,29 @@ interface SearchAnchorRect {
   width: number;
 }
 
+function AttendanceQrScanIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 28 28"
+      fill="none"
+      aria-hidden="true"
+      className={className}
+    >
+      <path
+        d="M10 3.5H7A3.5 3.5 0 0 0 3.5 7v3M18 3.5h3A3.5 3.5 0 0 1 24.5 7v3M24.5 18v3a3.5 3.5 0 0 1-3.5 3.5h-3M10 24.5H7A3.5 3.5 0 0 1 3.5 21v-3"
+        stroke="currentColor"
+        strokeWidth="2.25"
+        strokeLinecap="round"
+      />
+      <rect x="8" y="8" width="4.5" height="4.5" rx="1.1" stroke="currentColor" strokeWidth="1.9" />
+      <rect x="15.5" y="15.5" width="4.5" height="4.5" rx="1.1" stroke="currentColor" strokeWidth="1.9" />
+      <path d="M16 8h4v4M8 16h4v4M16 12h2M12 16v2" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5.5 14h17" stroke="currentColor" strokeWidth="1.15" strokeLinecap="round" opacity="0.48" />
+      <circle cx="14" cy="14" r="1.25" fill="#34d399" />
+    </svg>
+  );
+}
+
 interface NavItem {
   path: string;
   label: string;
@@ -870,7 +893,6 @@ export function Navigation({
     ? "translateX(min(82vw, 340px))"
     : "translateX(0)";
   const mobileNavTransform = `${mobileMenuTranslateX} ${hideBottomMobileNav ? "translateY(calc(100% + 10px))" : "translateY(0)"}`;
-  const mobileHeaderTransform = mobileMenuTranslateX;
   const mobileTitle = location.pathname.startsWith("/events")
     ? "Events"
     : location.pathname.startsWith("/announcements")
@@ -1882,20 +1904,21 @@ export function Navigation({
       />
       <div
         data-mobile-header="true"
-        className={`fixed left-0 right-0 top-0 z-50 isolate flex items-end justify-between overflow-visible lg:hidden ${hideMobileAll || hideMobileHeader ? "hidden" : ""}`}
+        className={`fixed inset-x-0 top-0 z-50 flex items-end justify-between overflow-visible lg:hidden ${hideMobileAll || hideMobileHeader ? "hidden" : ""} ${mobileOpen ? "invisible pointer-events-none" : ""}`}
         style={{
           background: "#050505",
           borderBottom: "none",
           boxShadow: "none",
-          top: "-1px",
           paddingTop: "env(safe-area-inset-top)",
-          height: "calc(3.5rem + env(safe-area-inset-top) + 1px)",
-          // Avoid keeping the closed header on a transformed GPU layer. iOS
-          // can rasterize text and icons on that layer at a soft resolution.
-          transform: mobileOpen ? mobileHeaderTransform : "none",
+          height: "calc(3.5rem + env(safe-area-inset-top))",
+          // Keep the shared phone header on WebKit's normal text-painting path.
+          // Even an inactive transform transition can leave a fixed element
+          // rasterized at a soft resolution after the drawer has closed.
+          transform: "none",
           filter: "none",
-          transition: "transform 260ms cubic-bezier(0.22, 1, 0.36, 1)",
-          willChange: mobileOpen ? "transform" : "auto",
+          transition: "none",
+          willChange: "auto",
+          backfaceVisibility: "visible",
         }}
       >
         <div className="relative z-10 flex h-14 w-full items-center justify-between gap-2 bg-[#050505] px-4 pb-0">
@@ -1925,10 +1948,11 @@ export function Navigation({
             <NotificationBell />
             <button
               onClick={() => handleNav("/attendance/scan")}
-              className="flex h-10 w-10 items-center justify-center rounded-full text-white transition-colors hover:bg-white/[0.08]"
+              className="group relative flex h-10 w-10 items-center justify-center rounded-full text-white transition-colors hover:bg-white/[0.08] active:bg-white/[0.12]"
               aria-label="Scan attendance QR"
+              title="Scan attendance QR"
             >
-              <ScanLine className="h-6 w-6" />
+              <AttendanceQrScanIcon className="h-[1.65rem] w-[1.65rem] text-white transition-opacity group-hover:opacity-90" />
             </button>
           </div>
         </div>

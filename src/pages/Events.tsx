@@ -17,6 +17,7 @@ import { formatTime12Hour } from '../lib/timeFormat';
 import { withRequestTimeout } from '../lib/requestTimeout';
 import { describeSetlistReviewAge, getSetlistPendingMessage } from '../lib/setlistReviewAge';
 import { EventArtwork } from '../components/EventArtwork';
+import { EventLifecycleActionModal, type EventActionAnchorRect, type EventLifecycleDialogMode } from '../components/EventLifecycleActionModal';
 import { CalendarGrid } from '../components/CalendarGrid';
 import type { Event } from '../types';
 import { hasArtworkArtist } from '../lib/songArtworkEligibility';
@@ -325,13 +326,15 @@ function formatSongLeaderName(profile: RelatedProfile) {
   return prefix ? `${prefix} ${name}` : name;
 }
 
-function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEventClick, onLifecycleChange, isPast, artworkClassName = 'h-16 w-16' }: {
-  event: Event; calendarEntries: CalendarEntry[]; songLeaderMap?: Record<string, string>; setlistInfoMap?: Record<string, SetlistInfo>; onEventClick: (id: string) => void; onLifecycleChange?: (event: Event) => void; isPast?: boolean; artworkClassName?: string;
+function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEventClick, onLifecycleChange, isPast, artworkClassName = 'h-16 w-16', variant = 'list' }: {
+  event: Event; calendarEntries: CalendarEntry[]; songLeaderMap?: Record<string, string>; setlistInfoMap?: Record<string, SetlistInfo>; onEventClick: (id: string) => void; onLifecycleChange?: (event: Event) => void; isPast?: boolean; artworkClassName?: string; variant?: 'list' | 'featured';
 }) {
   const { user, isPlatformOwner } = useAuth();
   const { toast } = useToast();
-  const [showLifecycleConfirm, setShowLifecycleConfirm] = useState(false);
+  const [lifecycleDialogMode, setLifecycleDialogMode] = useState<EventLifecycleDialogMode | null>(null);
+  const [lifecycleAnchorRect, setLifecycleAnchorRect] = useState<EventActionAnchorRect | null>(null);
   const [savingLifecycle, setSavingLifecycle] = useState(false);
+  const eventButtonRef = useRef<HTMLButtonElement>(null);
   const longPressTimerRef = useRef<number | null>(null);
   const longPressTriggeredRef = useRef(false);
   const longPressOriginRef = useRef<{ x: number; y: number } | null>(null);
@@ -360,14 +363,28 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
 
   useEffect(() => () => cancelLongPress(), []);
 
+  const openLifecycleDialog = (mode: EventLifecycleDialogMode) => {
+    const rect = eventButtonRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setLifecycleAnchorRect({
+      left: rect.left,
+      top: rect.top,
+      right: rect.right,
+      bottom: rect.bottom,
+      width: rect.width,
+      height: rect.height,
+    });
+    setLifecycleDialogMode(mode);
+  };
+
   const startLongPress = (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (!canManageLifecycle || !window.matchMedia('(max-width: 767px)').matches) return;
+    if (!canManageLifecycle) return;
     cancelLongPress();
     longPressTriggeredRef.current = false;
     longPressOriginRef.current = { x: event.clientX, y: event.clientY };
     longPressTimerRef.current = window.setTimeout(() => {
       longPressTriggeredRef.current = true;
-      setShowLifecycleConfirm(true);
+      openLifecycleDialog('options');
       longPressTimerRef.current = null;
       if ('vibrate' in navigator) navigator.vibrate(35);
     }, 600);
@@ -406,7 +423,7 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
       return;
     }
 
-    setShowLifecycleConfirm(false);
+    setLifecycleDialogMode(null);
     onLifecycleChange?.(updatedEvent as Event);
     toast('success', isPast ? 'Event moved to Upcoming' : 'Event moved to Past events');
   };
@@ -414,6 +431,7 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
   return (
     <div className="relative">
       <button
+        ref={eventButtonRef}
         onClick={() => {
           if (longPressTriggeredRef.current) {
             longPressTriggeredRef.current = false;
@@ -426,10 +444,58 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
         onPointerCancel={cancelLongPress}
         onPointerLeave={cancelLongPress}
         onPointerMove={handleLongPressMove}
-        onContextMenu={event => { if (canManageLifecycle) event.preventDefault(); }}
-        className={`touch-action-pan-y group relative flex min-h-[5.5rem] w-full items-center gap-3 bg-transparent px-0 py-3 text-left transition-colors hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#22c55e] ${canManageLifecycle ? 'select-none' : ''}`}
+        onContextMenu={pointerEvent => {
+          if (!canManageLifecycle) return;
+          pointerEvent.preventDefault();
+          openLifecycleDialog('options');
+        }}
+        className={`touch-action-pan-y group relative w-full text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] ${variant === 'featured' ? 'flex flex-col rounded-[1rem] p-1.5' : 'flex min-h-[5.5rem] items-center gap-3 px-0 py-3 focus-visible:ring-inset'} ${lifecycleDialogMode ? 'z-10 scale-[1.005] bg-[#080d0a] shadow-[0_16px_48px_-24px_rgba(34,197,94,0.75)]' : variant === 'featured' ? 'bg-white/[0.025] hover:bg-white/[0.05]' : 'bg-transparent hover:bg-white/[0.03]'} ${canManageLifecycle ? 'select-none' : ''}`}
         style={{ opacity: isPast ? 0.62 : 1 }}
+        aria-expanded={lifecycleDialogMode ? true : undefined}
       >
+      {variant === 'featured' ? (
+        <>
+          <div className="relative aspect-[4/3] w-full overflow-hidden rounded-[0.72rem] border border-white/[0.08] bg-[#161a18]">
+            {setlistInfo?.songCount ? (
+              <EventArtwork
+                eventType={event.event_type}
+                title={event.title}
+                artworkUrls={setlistInfo.artworkUrls || []}
+                songs={setlistInfo.artworkSongs}
+                className="h-full w-full rounded-none border-0"
+              />
+            ) : (
+              <EmptyEventArtwork className="h-full w-full rounded-none border-0" />
+            )}
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/85 to-transparent" />
+            <span className="absolute left-2 top-2 rounded-md border border-white/10 bg-black/75 px-2 py-1 text-[9px] font-black uppercase tracking-[0.08em] text-white shadow-lg backdrop-blur-sm">
+              {format(parseISO(event.event_date), 'MMM dd')}
+            </span>
+            {(showOverdueStyle || showDueSoonStyle || scheduleHasEnded || isPast) && (
+              <span className={`absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[9px] font-black shadow-lg backdrop-blur-sm ${showOverdueStyle ? 'bg-red-500/85 text-white' : showDueSoonStyle ? 'bg-amber-400/90 text-black' : isPast ? 'bg-black/75 text-white/75' : 'bg-amber-400/90 text-black'}`}>
+                {showOverdueStyle ? <AlertCircle className="h-3 w-3" /> : <CheckCircle className="h-3 w-3" />}
+                {showOverdueStyle ? 'Overdue' : showDueSoonStyle ? `Due in ${daysUntilDue}d` : isPast ? 'Completed' : 'Finished'}
+              </span>
+            )}
+            {setlistInfo?.songCount ? (
+              <span className="absolute bottom-2 right-2 rounded-md bg-black/75 px-2 py-1 text-[9px] font-bold text-emerald-300 backdrop-blur-sm">
+                {setlistInfo.songCount} song{setlistInfo.songCount === 1 ? '' : 's'}
+              </span>
+            ) : null}
+          </div>
+          <div className="w-full min-w-0 px-1 pb-1 pt-2.5">
+            <p className="truncate text-[13px] font-black leading-snug text-white" style={{ letterSpacing: '-0.015em' }}>{songLeader || event.title}</p>
+            <div className="mt-1 flex min-w-0 items-center gap-1.5">
+              <EventTypeLabel type={event.event_type} />
+              <span className="h-0.5 w-0.5 shrink-0 rounded-full bg-white/25" />
+              <span className="truncate text-[10px] font-semibold text-white/42">{formatTime12Hour(event.start_time || '')}{event.end_time && ` – ${formatTime12Hour(event.end_time)}`}</span>
+            </div>
+            {dayEntries.length > 0 ? (
+              <p className="mt-1 truncate text-[9px] font-semibold text-amber-300/70">Out: {dayEntries.map(entry => entry.name).join(', ')}</p>
+            ) : null}
+          </div>
+        </>
+      ) : <>
       {setlistInfo?.songCount ? (
         <EventArtwork
           eventType={event.event_type}
@@ -512,12 +578,13 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
           compact
         />
       </div>
+      </>}
       </button>
 
-      {canManageLifecycle && (
+      {canManageLifecycle && variant === 'list' && (
         <button
           type="button"
-          onClick={() => setShowLifecycleConfirm(true)}
+          onClick={() => openLifecycleDialog('confirm')}
           className="absolute right-[5.5rem] top-1/2 z-20 hidden min-h-9 -translate-y-1/2 items-center gap-1.5 rounded-full border border-emerald-400/25 bg-[#10251a] px-3 text-[11px] font-black text-emerald-300 shadow-lg shadow-black/40 transition-colors hover:bg-[#173523] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] md:inline-flex lg:right-[6rem]"
           aria-label={isPast ? 'Move event to Upcoming' : 'Move event to Past events'}
         >
@@ -526,26 +593,22 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
         </button>
       )}
 
-      <Modal
-        open={showLifecycleConfirm}
-        onClose={() => !savingLifecycle && setShowLifecycleConfirm(false)}
-        title={isPast ? 'Move Event to Upcoming?' : 'Move Event to Past?'}
-        size="sm"
-      >
-        <div className="space-y-4">
-          <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
-            {isPast
-              ? `Move “${songLeader || event.title}” back to Upcoming events?`
-              : `Confirm that “${songLeader || event.title}” is finished and move it to Past events. This will open its post-event observations.`}
-          </p>
-          <div className="flex justify-end gap-3">
-            <button type="button" onClick={() => setShowLifecycleConfirm(false)} disabled={savingLifecycle} className="btn-secondary">Cancel</button>
-            <button type="button" onClick={handleLifecycleChange} disabled={savingLifecycle} className="btn-primary">
-              {savingLifecycle ? 'Moving…' : (isPast ? 'Move to Upcoming' : 'Move to Past')}
-            </button>
-          </div>
-        </div>
-      </Modal>
+      <EventLifecycleActionModal
+        open={lifecycleDialogMode !== null}
+        mode={lifecycleDialogMode || 'options'}
+        anchorRect={lifecycleAnchorRect}
+        eventName={songLeader || event.title}
+        eventMeta={`${event.event_type} · ${formatTime12Hour(event.start_time || '')}${event.end_time ? ` – ${formatTime12Hour(event.end_time)}` : ''}`}
+        isPast={Boolean(isPast)}
+        saving={savingLifecycle}
+        onClose={() => { if (!savingLifecycle) setLifecycleDialogMode(null); }}
+        onModeChange={setLifecycleDialogMode}
+        onOpenEvent={() => {
+          setLifecycleDialogMode(null);
+          onEventClick(event.id);
+        }}
+        onConfirm={() => void handleLifecycleChange()}
+      />
     </div>
   );
 }
@@ -732,25 +795,38 @@ function EventList({ events, calendarEntries, songLeaderMap, setlistInfoMap, onE
 
   if (merged.length === 0) return null;
 
-  const renderItem = (item: ListItem) => (
+  const featuredEvents = merged.filter((item): item is Extract<ListItem, { kind: 'event' }> => item.kind === 'event').slice(0, 4);
+  const featuredEventIds = new Set(featuredEvents.map(item => item.event.id));
+  const remainingItems = merged.filter(item => item.kind !== 'event' || !featuredEventIds.has(item.event.id));
+
+  const renderItem = (item: ListItem, featured = false) => (
     item.kind === 'event' ? (
-      <EventCard event={item.event} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={onEventClick} onLifecycleChange={onLifecycleChange} isPast={showPast} />
+      <EventCard event={item.event} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={onEventClick} onLifecycleChange={onLifecycleChange} isPast={showPast} variant={featured ? 'featured' : 'list'} />
     ) : (
       <BirthdayCard name={item.entry.name} date={item.entry.date} />
     )
   );
 
   if (!animateItems) {
+    if (layout === 'grid') {
+      return (
+        <div className="touch-action-pan-y grid gap-2.5 md:grid-cols-2 xl:grid-cols-3">
+          {merged.map(item => <div key={item.kind === 'event' ? item.event.id : `bday-${item.entry.name}-${item.entry.date}`}>{renderItem(item)}</div>)}
+        </div>
+      );
+    }
     return (
-      <div className={layout === 'grid' ? 'touch-action-pan-y grid gap-2.5 md:grid-cols-2 xl:grid-cols-3' : 'touch-action-pan-y divide-y divide-white/[0.08]'}>
-        {merged.map((item) => (
-          <div
-            key={item.kind === 'event' ? item.event.id : `bday-${item.entry.name}-${item.entry.date}`}
-            className="touch-action-pan-y"
-          >
-            {renderItem(item)}
+      <div className="touch-action-pan-y space-y-3">
+        {featuredEvents.length > 0 ? (
+          <div className="grid grid-cols-2 gap-2.5 border-b border-white/[0.08] pb-4">
+            {featuredEvents.map(item => <div key={item.event.id} className="min-w-0">{renderItem(item, true)}</div>)}
           </div>
-        ))}
+        ) : null}
+        {remainingItems.length > 0 ? (
+          <div className="divide-y divide-white/[0.08]">
+            {remainingItems.map(item => <div key={item.kind === 'event' ? item.event.id : `bday-${item.entry.name}-${item.entry.date}`} className="touch-action-pan-y">{renderItem(item)}</div>)}
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -760,17 +836,24 @@ function EventList({ events, calendarEntries, songLeaderMap, setlistInfoMap, onE
       initial="hidden"
       animate="show"
       variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}
-      className={layout === 'grid' ? 'touch-action-pan-y grid gap-2.5 md:grid-cols-2 xl:grid-cols-3' : 'touch-action-pan-y divide-y divide-white/[0.08]'}
+      className="touch-action-pan-y space-y-3"
     >
-      {merged.map((item) => (
-        <motion.div
-          key={item.kind === 'event' ? item.event.id : `bday-${item.entry.name}-${item.entry.date}`}
-          variants={itemAnim}
-          className="touch-action-pan-y"
-        >
-          {renderItem(item)}
-        </motion.div>
-      ))}
+      {layout === 'grid' ? (
+        <div className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-3">
+          {merged.map(item => <motion.div key={item.kind === 'event' ? item.event.id : `bday-${item.entry.name}-${item.entry.date}`} variants={itemAnim}>{renderItem(item)}</motion.div>)}
+        </div>
+      ) : <>
+        {featuredEvents.length > 0 ? (
+          <div className="grid grid-cols-2 gap-2.5 border-b border-white/[0.08] pb-4">
+            {featuredEvents.map(item => <motion.div key={item.event.id} variants={itemAnim} className="min-w-0">{renderItem(item, true)}</motion.div>)}
+          </div>
+        ) : null}
+        {remainingItems.length > 0 ? (
+          <div className="divide-y divide-white/[0.08]">
+            {remainingItems.map(item => <motion.div key={item.kind === 'event' ? item.event.id : `bday-${item.entry.name}-${item.entry.date}`} variants={itemAnim}>{renderItem(item)}</motion.div>)}
+          </div>
+        ) : null}
+      </>}
     </motion.div>
   );
 }
@@ -832,7 +915,10 @@ function EventDesktopCardGroups({ events, calendarEntries, songLeaderMap, setlis
   onLifecycleChange?: (event: Event) => void;
   showPast?: boolean;
 }) {
-  const monthGroups = groupEventItemsByMonth(getEventListItems(events, calendarEntries, showPast) as EventListItem[]);
+  const allItems = getEventListItems(events, calendarEntries, showPast) as EventListItem[];
+  const featuredEvents = allItems.filter((item): item is Extract<EventListItem, { kind: 'event' }> => item.kind === 'event').slice(0, 4);
+  const featuredEventIds = new Set(featuredEvents.map(item => item.event.id));
+  const monthGroups = groupEventItemsByMonth(allItems.filter(item => item.kind !== 'event' || !featuredEventIds.has(item.event.id)));
 
   return (
     <motion.div
@@ -841,6 +927,23 @@ function EventDesktopCardGroups({ events, calendarEntries, songLeaderMap, setlis
       transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
       className="space-y-8"
     >
+      {featuredEvents.length > 0 ? (
+        <section className="grid grid-cols-2 gap-3 border-b border-white/[0.08] pb-6">
+          {featuredEvents.map(item => (
+            <EventCard
+              key={item.event.id}
+              event={item.event}
+              calendarEntries={calendarEntries}
+              songLeaderMap={songLeaderMap}
+              setlistInfoMap={setlistInfoMap}
+              onEventClick={onEventClick}
+              onLifecycleChange={onLifecycleChange}
+              isPast={showPast}
+              variant="featured"
+            />
+          ))}
+        </section>
+      ) : null}
       {monthGroups.map((group) => (
         <section key={group.month} className="space-y-3">
           <div className="flex items-center gap-3">

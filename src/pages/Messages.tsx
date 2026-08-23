@@ -1402,14 +1402,17 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
     const rect = el.getBoundingClientRect();
     const viewport = window.visualViewport;
     const viewportWidth = viewport?.width ?? window.innerWidth;
-    const viewportHeight = viewport?.height ?? window.innerHeight;
     const viewportOffsetLeft = viewport?.offsetLeft ?? 0;
     const viewportOffsetTop = viewport?.offsetTop ?? 0;
     const composerTop = rect.top - viewportOffsetTop;
     const isPhone = viewportWidth < 640;
     const width = Math.min(Math.max(rect.width + (isPhone ? 104 : 56), isPhone ? 320 : 260), viewportWidth - 16);
     const left = Math.min(Math.max(rect.left - viewportOffsetLeft - (isPhone ? 52 : 28), 8), viewportWidth - width - 8);
-    const bottom = Math.max(8, viewportHeight - composerTop + 8);
+    // The picker is portaled to the layout viewport, while the mobile chat
+    // pane itself follows visualViewport. Anchor from the composer's physical
+    // rect so the menu stays above it when the iOS keyboard shrinks the visual
+    // viewport instead of being pushed below the keyboard.
+    const bottom = Math.max(8, window.innerHeight - rect.top + 8);
     const maxHeight = Math.min(isPhone ? 360 : 300, Math.max(isPhone ? 180 : 144, composerTop - 16));
     setEditableDropdownRect({ bottom, left, width, maxHeight });
   }, []);

@@ -94,14 +94,16 @@ export function MentionTextarea({
     const rect = el.getBoundingClientRect();
     const viewport = window.visualViewport;
     const viewportWidth = viewport?.width ?? window.innerWidth;
-    const viewportHeight = viewport?.height ?? window.innerHeight;
     const viewportOffsetLeft = viewport?.offsetLeft ?? 0;
     const viewportOffsetTop = viewport?.offsetTop ?? 0;
     const composerTop = rect.top - viewportOffsetTop;
     const isPhone = viewportWidth < 640;
     const width = Math.min(Math.max(rect.width + (isPhone ? 104 : 0), isPhone ? 320 : 260), viewportWidth - 16);
     const left = Math.min(Math.max(rect.left - viewportOffsetLeft - (isPhone ? 52 : 0), 8), viewportWidth - width - 8);
-    const bottom = Math.max(8, viewportHeight - composerTop + 8);
+    // This portal is positioned in the layout viewport. Use the composer's
+    // physical position so a mobile visualViewport resize cannot place the
+    // picker below the software keyboard.
+    const bottom = Math.max(8, window.innerHeight - rect.top + 8);
     const maxHeight = Math.min(isPhone ? 360 : 320, Math.max(isPhone ? 180 : 144, composerTop - 16));
 
     setDropdownRect({

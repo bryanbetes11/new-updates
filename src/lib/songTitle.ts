@@ -1,5 +1,5 @@
 export const sanitizeSongTitle = (title: string): string => title
-  .replace(/(Bro\.?|Sis\.?|Brother|Sister)\s*/gi, '')
+  .replace(/^\s*(?:Bro\.?|Sis\.?|Brother|Sister)\s+/i, '')
   .replace(/\bSTand\b/g, 'Stand')
   .replace(/\bKatapaTan\b/g, 'Katapatan')
   .replace(/\bKatapan\b/g, 'Katapatan')

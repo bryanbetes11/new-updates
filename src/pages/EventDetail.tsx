@@ -33,6 +33,7 @@ import { getPendingUserEventAssignments, getUserEventAssignments, shouldBlockEve
 import { getPostEventObservationViewers } from '../lib/postEventObservationViews';
 import { normalizeSongTitle } from '../lib/songTitle';
 import { buildSongProposalConflicts, buildSongProposalReservations, type SongProposalConflict, type SongProposalReservation, type SongProposalSetlistRow } from '../lib/songProposalConflicts';
+import { getEffectiveSongLyrics, getSongLyricsSource } from '../lib/songLyrics';
 
 import type { Event, EventAssignment, Setlist, SetlistSong, Song, ServiceFormat, SetlistCheckReport, PostEventObservation, PostEventObservationCategory, PostEventObservationStatus, PostEventObservationView } from '../types';
 import { inferServiceFormat, SERVICE_FORMAT_LABELS } from '../lib/setlistCheckerEngine';
@@ -2640,7 +2641,7 @@ const openLyricsModal = (ss: SetlistSong) => {
     }));
   };
 
-  const missingLyricsSongs = setlistSongs.filter(ss => !ss.songs?.lyrics?.trim());
+  const missingLyricsSongs = setlistSongs.filter(ss => !getEffectiveSongLyrics(ss.songs));
   const hasMissingLyrics = missingLyricsSongs.length > 0;
   const missingLyricsLabel = missingLyricsSongs
     .map(ss => ss.songs?.title || 'Untitled song')
@@ -4257,7 +4258,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                     title: ss.songs?.title || '',
                     artist: ss.songs?.artist || '',
                     slot: (ss.song_category || 'Worship') as 'Opening' | 'Praise' | 'Worship' | 'Closing' | 'Offering' | 'Special' | 'Others',
-                    lyrics: ss.songs?.lyrics || undefined,
+                    lyrics: getEffectiveSongLyrics(ss.songs) || undefined,
                   }))}
                   theme={serviceTheme}
                   language="english"
@@ -4485,7 +4486,8 @@ const openLyricsModal = (ss: SetlistSong) => {
                         const ReadinessIcon = readiness.Icon;
                         const displayKey = ss.performed_key || ss.songs?.song_key || '';
                         const keyChanged = ss.performed_key && ss.songs?.song_key && ss.performed_key !== ss.songs.song_key;
-                        const lyricsMissing = !ss.songs?.lyrics?.trim();
+                        const lyricsSource = getSongLyricsSource(ss.songs);
+                        const lyricsMissing = lyricsSource === 'missing';
                         const videoUrl = ss.youtube_url || ss.songs?.youtube_url || '';
                         const keyBadgeClass = `text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${keyChanged ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'}`;
                         const editableKeyBadgeClass = `inline-flex items-center gap-1 text-[10px] font-black px-1.5 py-0.5 rounded shrink-0 transition-colors ${keyChanged ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/45' : 'bg-brand-50 text-brand-700 ring-1 ring-brand-200/70 hover:bg-brand-100 dark:bg-brand-950/40 dark:text-brand-300 dark:ring-brand-700/40 dark:hover:bg-brand-950/60'}`;
@@ -4540,16 +4542,16 @@ const openLyricsModal = (ss: SetlistSong) => {
                               </span>
                               {showSetlistEditControls && <button
                                 onClick={() => openLyricsModal(ss)}
-                                title={ss.songs?.lyrics ? 'Edit lyrics' : 'Add lyrics'}
-                                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold transition-colors shrink-0 ${
-                                  ss.songs?.lyrics
-                                    ? 'bg-green-50 text-green-600 hover:text-green-700 ring-1 ring-green-200/70 dark:bg-green-950/60 dark:text-green-400 dark:hover:text-green-300 dark:ring-green-700/40'
-                                    : 'bg-amber-50 text-amber-600 hover:text-amber-700 ring-1 ring-amber-200/70 dark:bg-amber-950/60 dark:text-amber-400 dark:hover:text-amber-300 dark:ring-amber-700/40'
-                                }`}
-                              >
-                                <FileText className="h-4 w-4" />
-                                <span>{ss.songs?.lyrics ? 'Edit Lyrics' : 'Add Lyrics'}</span>
-                              </button>}
+                                 title={lyricsSource === 'saved' ? 'Edit lyrics' : lyricsSource === 'chart' ? 'Lyrics are available from the chord chart' : 'Add lyrics'}
+                                 className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold transition-colors shrink-0 ${
+                                   lyricsSource !== 'missing'
+                                     ? 'bg-green-50 text-green-600 hover:text-green-700 ring-1 ring-green-200/70 dark:bg-green-950/60 dark:text-green-400 dark:hover:text-green-300 dark:ring-green-700/40'
+                                     : 'bg-amber-50 text-amber-600 hover:text-amber-700 ring-1 ring-amber-200/70 dark:bg-amber-950/60 dark:text-amber-400 dark:hover:text-amber-300 dark:ring-amber-700/40'
+                                 }`}
+                               >
+                                 <FileText className="h-4 w-4" />
+                                 <span>{lyricsSource === 'saved' ? 'Edit Lyrics' : lyricsSource === 'chart' ? 'Chart Lyrics' : 'Add Lyrics'}</span>
+                               </button>}
                               {showSetlistEditControls && <button
                                 onClick={() => openChartModal(ss)}
                                 title={getSetlistSongChartText(ss) ? 'Open chart' : 'Add chart'}
@@ -5796,8 +5798,8 @@ const openLyricsModal = (ss: SetlistSong) => {
             {selectedSongForConfig && (() => {
               const song = songs.find(s => s.id === selectedSongForConfig);
               return song ? (
-                <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/50">
-                  <SongArtwork song={song} youtubeUrl={songConfig.youtube_url || song.youtube_url} className="h-14 w-14 rounded-xl" />
+                <div className="flex items-center gap-4">
+                  <SongArtwork song={song} youtubeUrl={songConfig.youtube_url || song.youtube_url} className="h-16 w-16 shrink-0 rounded-xl" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-base font-bold text-gray-900 dark:text-white">{song.title}</p>
                     <p className={`mt-0.5 truncate text-sm ${song.artist?.trim() ? 'text-gray-500 dark:text-gray-400' : 'font-semibold text-amber-600 dark:text-amber-400'}`}>
@@ -5824,6 +5826,37 @@ const openLyricsModal = (ss: SetlistSong) => {
                 <p className="mt-1.5 text-xs text-amber-700 dark:text-amber-300">The artist helps us match the right version and thumbnail.</p>
               </div>
             )}
+            {selectedSongForConfig && (() => {
+              const song = songs.find(item => item.id === selectedSongForConfig);
+              const lyrics = getEffectiveSongLyrics(song);
+              const lyricsSource = getSongLyricsSource(song);
+
+              return (
+                <div>
+                  <div className="mb-1.5 flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Lyrics</p>
+                    {lyricsSource !== 'missing' && (
+                      <span className="shrink-0 text-[11px] text-gray-500 dark:text-gray-400">
+                        {lyricsSource === 'chart' ? 'From chord chart' : 'Saved lyrics'}
+                      </span>
+                    )}
+                  </div>
+                  {lyrics ? (
+                    <div
+                      className="max-h-36 overflow-y-auto whitespace-pre-wrap rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs leading-relaxed text-gray-700 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-300 sm:max-h-44"
+                      tabIndex={0}
+                      aria-label={`Lyrics preview for ${song?.title || 'selected song'}`}
+                    >
+                      {lyrics}
+                    </div>
+                  ) : (
+                    <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                      No lyrics or chord chart lyrics are available yet. Add the song, then add its lyrics manually before submitting the setlist.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Key for this set</label>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">

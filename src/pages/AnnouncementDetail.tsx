@@ -1,11 +1,11 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
-import { motion, AnimatePresence, type Variants } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion, type Variants } from 'framer-motion';
 import {
   ArrowLeft, Eye, MessageCircle, Send,
   AlertTriangle, AlertCircle, Image, Pencil, Trash2, MoreVertical, Lock,
-  CornerDownRight, X, ChevronLeft, Megaphone
+  CornerDownRight, X, ChevronLeft, Megaphone, Smile
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -16,8 +16,11 @@ import { Select } from '../components/Select';
 import { Avatar } from '../components/Avatar';
 import { FormattedText } from '../components/FormattedText';
 import { MentionTextarea } from '../components/MentionTextarea';
+import { EmojiReactionPicker, type ReactionEmoji } from '../components/EmojiReactionPicker';
+import { ReactionFlightAnimation, type ReactionFlightPath } from '../components/ReactionFlightAnimation';
 import { useSmartBack } from '../lib/navigationHistory';
-import type { Announcement, AnnouncementComment, AnnouncementView } from '../types';
+import { groupEmojiReactions } from '../lib/reactions';
+import type { Announcement, AnnouncementComment, AnnouncementCommentReaction, AnnouncementView } from '../types';
 
 interface ContentBlock {
   type: 'text' | 'image';
@@ -27,6 +30,11 @@ interface ContentBlock {
 type AnnouncementWithBlocks = Announcement & {
   content_blocks?: ContentBlock[];
   is_leaders_only?: boolean;
+};
+
+type CommentReactionFlight = ReactionFlightPath & {
+  commentId: string;
+  token: number;
 };
 
 const PRIORITY_CONFIG = {
@@ -78,6 +86,13 @@ function CommentItem({
   onSaveEdit,
   onCancelEdit,
   onDelete,
+  reactionPickerCommentId,
+  pendingReactionReveal,
+  reactionLanding,
+  reactionFlight,
+  onToggleReactionPicker,
+  onReact,
+  onReactionFlightComplete,
   isReply,
 }: {
   comment: AnnouncementComment;
@@ -92,6 +107,13 @@ function CommentItem({
   onSaveEdit: (id: string) => void;
   onCancelEdit: () => void;
   onDelete: (id: string) => void;
+  reactionPickerCommentId: string | null;
+  pendingReactionReveal: { commentId: string; emoji: string } | null;
+  reactionLanding: { commentId: string; emoji: string; token: number } | null;
+  reactionFlight: CommentReactionFlight | null;
+  onToggleReactionPicker: (id: string) => void;
+  onReact: (comment: AnnouncementComment, emoji: ReactionEmoji, sourceElement?: HTMLElement) => void;
+  onReactionFlightComplete: (flight: CommentReactionFlight) => void;
   isReply?: boolean;
 }) {
   const [swipeOffset, setSwipeOffset] = useState(0);
@@ -99,6 +121,18 @@ function CommentItem({
   const swipeRef = useRef<SwipeState>({ startX: 0, currentX: 0, swiping: false });
   const containerRef = useRef<HTMLDivElement>(null);
   const isOwn = user?.id === comment.user_id;
+  const isAwaitingReactionLanding = pendingReactionReveal?.commentId === comment.id;
+  const visibleReactions = isAwaitingReactionLanding
+    ? (comment.announcement_comment_reactions || []).filter(reaction => !(
+        reaction.user_id === user?.id && reaction.emoji === pendingReactionReveal.emoji
+      ))
+    : (comment.announcement_comment_reactions || []);
+  const reactionGroups = groupEmojiReactions(visibleReactions);
+  const needsLandingPlaceholder = Boolean(
+    isAwaitingReactionLanding
+    && !reactionGroups.some(reaction => reaction.emoji === pendingReactionReveal?.emoji)
+  );
+  const isReactionPickerOpen = reactionPickerCommentId === comment.id;
   const REVEAL_THRESHOLD = 72;
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
@@ -135,7 +169,11 @@ function CommentItem({
   };
 
   return (
-    <div data-app-nonselect="true" className={`relative ${isReply ? '' : 'border-b border-black/[0.03] dark:border-white/[0.04] last:border-0'}`}>
+    <div
+      data-app-nonselect="true"
+      data-comment-reaction-root={comment.id}
+      className={`relative ${isReply ? '' : 'border-b border-black/[0.03] dark:border-white/[0.04] last:border-0'}`}
+    >
       <div className="overflow-hidden">
         <div
           ref={containerRef}
@@ -160,10 +198,22 @@ function CommentItem({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap mb-1">
                 <p className="text-sm font-bold text-gray-900 dark:text-white leading-none">
-                  {comment.profiles?.first_name} {comment.profiles?.last_name}
+                  {comment.profiles?.first_name}<span className="hidden sm:inline"> {comment.profiles?.last_name}</span>
                 </p>
                 <span className="text-[11px] text-gray-400 dark:text-gray-500">{format(parseISO(comment.created_at), 'MMM d, h:mm a')}</span>
                 <div className="ml-auto flex items-center gap-2">
+                  {editingCommentId !== comment.id && (
+                    <button
+                      type="button"
+                      onClick={() => onToggleReactionPicker(comment.id)}
+                      className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-black/[0.035] hover:text-brand-600 dark:hover:bg-white/[0.04] dark:hover:text-brand-400"
+                      aria-label={`React to ${comment.profiles?.first_name || 'this'}'s comment`}
+                      aria-expanded={isReactionPickerOpen}
+                      aria-haspopup="menu"
+                    >
+                      <Smile className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                   {editingCommentId !== comment.id && (
                     <button
                       type="button"
@@ -222,9 +272,54 @@ function CommentItem({
                   </div>
                 </div>
               ) : (
-                <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
-                  <FormattedText text={comment.content} />
-                </p>
+                <>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                    <FormattedText text={comment.content} />
+                  </p>
+                  {(reactionGroups.length > 0 || needsLandingPlaceholder) && (
+                    <div className="relative mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+                      {reactionGroups.map(reaction => {
+                        const isActive = reaction.users.includes(user?.id || '');
+                        const isLanding = reactionLanding?.commentId === comment.id && reactionLanding.emoji === reaction.emoji;
+                        return (
+                          <motion.button
+                            key={reaction.emoji}
+                            type="button"
+                            onClick={() => onReact(comment, reaction.emoji as ReactionEmoji)}
+                            data-reaction-emoji={reaction.emoji}
+                            initial={isLanding ? { scale: 0.72, opacity: 0.35 } : false}
+                            animate={isLanding
+                              ? { scale: [0.72, 1.16, 0.96, 1], opacity: [0.35, 1, 1, 1] }
+                              : { scale: 1, opacity: 1 }}
+                            transition={isLanding
+                              ? { duration: 0.36, times: [0, 0.48, 0.72, 1], ease: [0.16, 1, 0.3, 1] }
+                              : { duration: 0.16 }}
+                            className={`inline-flex h-8 items-center gap-1 rounded-full px-2.5 text-xs font-bold transition-all active:scale-95 ${
+                              isActive
+                                ? 'bg-brand-500/15 text-brand-700 ring-1 ring-brand-500/30 dark:text-brand-300'
+                                : 'bg-gray-100 text-gray-600 ring-1 ring-gray-200/80 hover:bg-gray-200 dark:bg-white/[0.055] dark:text-white/60 dark:ring-white/[0.07] dark:hover:bg-white/[0.1]'
+                            }`}
+                            aria-pressed={isActive}
+                            aria-label={`${isActive ? 'Remove' : 'Add'} ${reaction.emoji} reaction. ${reaction.count} total`}
+                          >
+                            <span>{reaction.emoji}</span>
+                            <span>{reaction.count}</span>
+                          </motion.button>
+                        );
+                      })}
+                      {needsLandingPlaceholder && pendingReactionReveal && (
+                        <span
+                          aria-hidden="true"
+                          data-reaction-emoji={pendingReactionReveal.emoji}
+                          className="invisible inline-flex h-8 items-center gap-1 rounded-full px-2.5 text-xs font-bold"
+                        >
+                          <span>{pendingReactionReveal.emoji}</span>
+                          <span>1</span>
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -254,6 +349,30 @@ function CommentItem({
           </div>
         )}
       </div>
+
+      <AnimatePresence>
+        {isReactionPickerOpen && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.94, y: -4 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.94, y: -4 }}
+            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+            className="absolute right-3 top-14 z-40 origin-top-right"
+          >
+            <EmojiReactionPicker onPick={(emoji, event) => onReact(comment, emoji, event.currentTarget)} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {reactionFlight?.commentId === comment.id && (
+          <ReactionFlightAnimation
+            key={reactionFlight.token}
+            flight={reactionFlight}
+            onComplete={() => onReactionFlightComplete(reactionFlight)}
+          />
+        )}
+      </AnimatePresence>
 
       {replies.length > 0 && (
         <div className="bg-gray-50/60 dark:bg-white/[0.015]">
@@ -309,6 +428,13 @@ function CommentItem({
                 onSaveEdit={onSaveEdit}
                 onCancelEdit={onCancelEdit}
                 onDelete={onDelete}
+                reactionPickerCommentId={reactionPickerCommentId}
+                pendingReactionReveal={pendingReactionReveal}
+                reactionLanding={reactionLanding}
+                reactionFlight={reactionFlight}
+                onToggleReactionPicker={onToggleReactionPicker}
+                onReact={onReact}
+                onReactionFlightComplete={onReactionFlightComplete}
                 isReply
               />
             </div>
@@ -341,6 +467,7 @@ export function AnnouncementDetail() {
   const smartBack = useSmartBack('/announcements');
   const { user } = useAuth();
   const { toast } = useToast();
+  const prefersReducedMotion = useReducedMotion();
   const [announcement, setAnnouncement] = useState<AnnouncementWithBlocks | null>(null);
   const [comments, setComments] = useState<AnnouncementComment[]>([]);
   const [views, setViews] = useState<AnnouncementView[]>([]);
@@ -363,6 +490,11 @@ export function AnnouncementDetail() {
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editCommentContent, setEditCommentContent] = useState('');
   const [savingComment, setSavingComment] = useState(false);
+  const [reactionPickerCommentId, setReactionPickerCommentId] = useState<string | null>(null);
+  const [pendingReactionReveal, setPendingReactionReveal] = useState<{ commentId: string; emoji: string } | null>(null);
+  const [reactionLanding, setReactionLanding] = useState<{ commentId: string; emoji: string; token: number } | null>(null);
+  const [reactionFlight, setReactionFlight] = useState<CommentReactionFlight | null>(null);
+  const reactionMutationsRef = useRef(new Set<string>());
   const [userProfile, setUserProfile] = useState<{ first_name: string; last_name: string; avatar_url: string | null } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const commentInputRef = useRef<HTMLTextAreaElement>(null);
@@ -382,7 +514,7 @@ export function AnnouncementDetail() {
     if (!id) return;
     const { data } = await supabase
       .from('announcement_comments')
-      .select('*, profiles!announcement_comments_user_id_fkey(first_name, last_name, avatar_url), reply_comment:reply_to(id, content, user_id, profiles!announcement_comments_user_id_fkey(first_name, last_name, avatar_url))')
+      .select('*, profiles!announcement_comments_user_id_fkey(first_name, last_name, avatar_url), announcement_comment_reactions(id, org_id, announcement_id, comment_id, user_id, emoji, created_at), reply_comment:reply_to(id, content, user_id, profiles!announcement_comments_user_id_fkey(first_name, last_name, avatar_url))')
       .eq('announcement_id', id)
       .order('created_at');
     setComments((data || []) as AnnouncementComment[]);
@@ -421,6 +553,16 @@ export function AnnouncementDetail() {
           event: '*',
           schema: 'public',
           table: 'announcement_comments',
+          filter: `announcement_id=eq.${id}`,
+        },
+        () => { loadComments(); }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'announcement_comment_reactions',
           filter: `announcement_id=eq.${id}`,
         },
         () => { loadComments(); }
@@ -557,6 +699,138 @@ export function AnnouncementDetail() {
     }, 50);
   };
 
+  const handleCommentReaction = async (comment: AnnouncementComment, emoji: ReactionEmoji, sourceElement?: HTMLElement) => {
+    if (!user || !id) return;
+    if (reactionMutationsRef.current.has(comment.id)) return;
+
+    reactionMutationsRef.current.add(comment.id);
+    const previousReactions = comment.announcement_comment_reactions || [];
+    const existing = comment.announcement_comment_reactions?.find(
+      reaction => reaction.user_id === user.id && reaction.emoji === emoji
+    );
+    const optimisticId = `optimistic-${comment.id}-${user.id}-${emoji}`;
+    const reactionRoot = sourceElement?.closest<HTMLElement>('[data-comment-reaction-root]') || null;
+    const rootRect = reactionRoot?.getBoundingClientRect();
+    const sourceRect = sourceElement?.getBoundingClientRect();
+    const flightOrigin = rootRect && sourceRect
+      ? { x: sourceRect.left - rootRect.left + sourceRect.width / 2, y: sourceRect.top - rootRect.top + sourceRect.height / 2 }
+      : null;
+    const shouldAnimateFlight = !existing && !prefersReducedMotion && Boolean(reactionRoot && flightOrigin);
+
+    if (shouldAnimateFlight) {
+      setPendingReactionReveal({ commentId: comment.id, emoji });
+    }
+
+    setComments(current => current.map(item => item.id === comment.id
+      ? {
+          ...item,
+          announcement_comment_reactions: existing
+            ? (item.announcement_comment_reactions || []).filter(reaction => reaction.id !== existing.id)
+            : [
+                ...(item.announcement_comment_reactions || []),
+                {
+                  id: optimisticId,
+                  org_id: '',
+                  announcement_id: id,
+                  comment_id: comment.id,
+                  user_id: user.id,
+                  emoji,
+                  created_at: new Date().toISOString(),
+                },
+              ],
+        }
+      : item));
+
+    if (shouldAnimateFlight && reactionRoot && flightOrigin) {
+      window.requestAnimationFrame(() => {
+        const target = Array.from(reactionRoot.querySelectorAll<HTMLElement>('[data-reaction-emoji]'))
+          .find(element => element.dataset.reactionEmoji === emoji);
+        if (!target) {
+          setPendingReactionReveal(null);
+          setReactionPickerCommentId(null);
+          return;
+        }
+        const currentRootRect = reactionRoot.getBoundingClientRect();
+        const targetRect = target.getBoundingClientRect();
+        setReactionFlight({
+          commentId: comment.id,
+          emoji,
+          token: Date.now(),
+          from: flightOrigin,
+          to: {
+            x: targetRect.left - currentRootRect.left + targetRect.width / 2,
+            y: targetRect.top - currentRootRect.top + targetRect.height / 2,
+          },
+        });
+      });
+    } else {
+      setReactionPickerCommentId(null);
+    }
+
+    try {
+      const { data, error } = existing
+        ? await supabase
+            .from('announcement_comment_reactions')
+            .delete()
+            .eq('id', existing.id)
+            .select('id')
+            .maybeSingle()
+        : await supabase
+            .from('announcement_comment_reactions')
+            .insert({
+              announcement_id: id,
+              comment_id: comment.id,
+              user_id: user.id,
+              emoji,
+            })
+            .select('id, org_id, announcement_id, comment_id, user_id, emoji, created_at')
+            .single();
+
+      if (error || (existing && !data)) {
+        throw error || new Error('The reaction was not removed.');
+      }
+
+      if (!existing && data) {
+        setComments(current => current.map(item => item.id === comment.id
+          ? {
+              ...item,
+              announcement_comment_reactions: (item.announcement_comment_reactions || []).map(reaction =>
+                reaction.id === optimisticId ? data as AnnouncementCommentReaction : reaction
+              ),
+            }
+          : item));
+      }
+    } catch (error) {
+      console.error('Update announcement comment reaction error:', error);
+      setComments(current => current.map(item => item.id === comment.id
+        ? { ...item, announcement_comment_reactions: previousReactions }
+        : item));
+      setReactionFlight(current => current?.commentId === comment.id ? null : current);
+      setPendingReactionReveal(current => current?.commentId === comment.id ? null : current);
+      setReactionLanding(current => current?.commentId === comment.id ? null : current);
+      setReactionPickerCommentId(null);
+      toast('error', 'Could not update reaction');
+    } finally {
+      reactionMutationsRef.current.delete(comment.id);
+      await loadComments();
+    }
+  };
+
+  const handleReactionFlightComplete = (completedFlight: CommentReactionFlight) => {
+    const landing = {
+      commentId: completedFlight.commentId,
+      emoji: completedFlight.emoji,
+      token: completedFlight.token,
+    };
+    setPendingReactionReveal(current => current?.commentId === completedFlight.commentId ? null : current);
+    setReactionLanding(landing);
+    setReactionFlight(current => current?.token === completedFlight.token ? null : current);
+    setReactionPickerCommentId(current => current === completedFlight.commentId ? null : current);
+    window.setTimeout(() => {
+      setReactionLanding(current => current?.token === landing.token ? null : current);
+    }, 420);
+  };
+
   const rootComments = comments.filter(c => !c.reply_to);
   const repliesMap = comments.reduce<Record<string, AnnouncementComment[]>>((acc, c) => {
     if (c.reply_to) {
@@ -677,7 +951,9 @@ export function AnnouncementDetail() {
                       className="ring-1 ring-black/[0.06] dark:ring-white/[0.08]"
                     />
                     <div>
-                      <p className="text-[13px] font-bold text-gray-900 dark:text-white leading-none tracking-tight">{announcement.profiles?.first_name} {announcement.profiles?.last_name}</p>
+                      <p className="text-[13px] font-bold text-gray-900 dark:text-white leading-none tracking-tight">
+                        {announcement.profiles?.first_name}<span className="hidden sm:inline"> {announcement.profiles?.last_name}</span>
+                      </p>
                       <p className="text-[11px] font-mono text-gray-400 dark:text-white/30 mt-1 tracking-wide">{format(parseISO(announcement.created_at), 'EEE · MMM d, yyyy')}</p>
                     </div>
                   </div>
@@ -809,6 +1085,13 @@ export function AnnouncementDetail() {
                       onSaveEdit={handleSaveComment}
                       onCancelEdit={() => { setEditingCommentId(null); setEditCommentContent(''); }}
                       onDelete={(commentId) => { setDeletingCommentId(commentId); setShowDeleteCommentConfirm(true); }}
+                      reactionPickerCommentId={reactionPickerCommentId}
+                      pendingReactionReveal={pendingReactionReveal}
+                      reactionLanding={reactionLanding}
+                      reactionFlight={reactionFlight}
+                      onToggleReactionPicker={(commentId) => setReactionPickerCommentId(current => current === commentId ? null : commentId)}
+                      onReact={(comment, emoji, sourceElement) => { void handleCommentReaction(comment, emoji, sourceElement); }}
+                      onReactionFlightComplete={handleReactionFlightComplete}
                     />
                   </motion.div>
                 ))}

@@ -49,3 +49,58 @@
 - [x] Verify TypeScript, ESLint, browser layout, interactions, and console state.
 
 final result: passed
+
+---
+
+# Messages Quoted Reply Design QA
+
+## Evidence
+
+- Source visual truth: `C:\Users\Bryan\AppData\Local\Temp\codex-clipboard-45832ac1-085f-4fe5-8b1f-eac1f4df455e.png`, 311 x 152 pixels, supplied Facebook Messenger quoted-reply reference.
+- Implementation screenshot: `design-qa-quoted-reply-mobile.png`, 430 x 932 pixels at a 430 x 932 CSS viewport and device scale 1.
+- Combined focused comparison: `design-qa-quoted-reply-comparison.png`, 690 x 330 pixels. The source is normalized to 320px wide beside a 330px implementation crop.
+- State: authenticated dark-theme General Discussion chat with an incoming quoted reply visible.
+
+## Full-view comparison evidence
+
+- The implementation keeps ServeSync's existing chat layout, avatars, typography family, reaction badges, composer, and message ownership colors.
+- The quoted preview is now a separate background layer above the new-message bubble instead of being nested inside it.
+- Sender labels and reply-context labels remain readable at the 430px phone viewport without changing the surrounding message density.
+
+## Focused region comparison evidence
+
+- Both designs use a three-level hierarchy: a small reply-context line, a subdued rounded quoted preview, and a stronger foreground reply bubble.
+- The ServeSync implementation intentionally retains its neutral dark surface and emerald ownership semantics instead of copying Messenger's scenic background and purple-gray palette.
+- The quoted preview renders at the annotated 12px size; the reply-context line remains 10px to preserve hierarchy.
+
+## Required fidelity surfaces
+
+- Fonts and typography: the existing ServeSync font is retained. Quoted content is 12px with compact line height, the context label is 10px semibold, and the foreground message remains 14px.
+- Spacing and layout rhythm: the quote is inset 12px, padded above the foreground bubble, and overlapped by 8px to produce the attached stacked relationship shown in the reference.
+- Colors and visual tokens: existing dark chat surfaces and emerald states are preserved. Explicit dark-mode opacity values provide readable sender, context, and quote text.
+- Image quality and asset fidelity: no new image assets were needed; existing user avatars remain unchanged. The reference background is contextual Messenger content rather than part of the quoted-reply component.
+- Copy and content: the implementation adds the same `{sender} replied to {person}` relationship while preserving real message text and the existing click-to-original accessible label.
+
+## Findings
+
+- No actionable P0, P1, or P2 differences remain for the requested quoted-reply component.
+- P3: Messenger uses a filled reply-arrow glyph and a different proprietary type treatment. ServeSync retains its existing Lucide reply icon and product typography for system consistency.
+
+## Comparison history
+
+1. Initial implementation finding: the quoted preview was inside the foreground message bubble, which did not match the reference's layered composition. Fix: moved the context and quote into a separate background layer and applied an 8px attachment overlap.
+2. First visual pass finding: sender names, reply-context labels, and quoted content were too faint because unsupported opacity suffixes fell back to dark gray. Fix: switched to explicit Tailwind arbitrary opacity values and raised sender-name contrast.
+3. Annotation finding: quoted content was 11px. Fix: increased only quoted content to 12px while retaining the smaller context label.
+4. Post-fix evidence: the 430 x 932 browser render shows the layered hierarchy, visible sender and context labels, 12px quote text, working navigation to the original message, and no browser console errors.
+
+## Implementation checklist
+
+- [x] Separate the quote from the foreground message bubble.
+- [x] Preserve click-to-original behavior.
+- [x] Increase quoted content to 12px.
+- [x] Improve sender and reply-context visibility.
+- [x] Verify at 430 x 932 with the in-app browser.
+- [x] Verify quoted-reply navigation and browser console state.
+- [x] Pass TypeScript, targeted ESLint, and diff formatting checks.
+
+final result: passed

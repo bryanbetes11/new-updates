@@ -293,16 +293,37 @@ export function useMessages(conversationId: string | null) {
   }, [toast, user]);
 
   const toggleReaction = useCallback(async (messageId: string, emoji: string) => {
-    if (!user) return;
+    if (!user) return false;
     const msg = messages.find(m => m.id === messageId);
+    if (!msg) return false;
     const existing = msg?.reactions.find(r => r.emoji === emoji && r.user_id === user.id);
-    if (existing) {
-      await supabase.from('message_reactions').delete()
-        .eq('message_id', messageId).eq('user_id', user.id).eq('emoji', emoji);
-    } else {
-      await supabase.from('message_reactions').insert({ message_id: messageId, user_id: user.id, emoji });
+    const previousReactions = msg.reactions;
+
+    setMessages(current => current.map(message => message.id === messageId
+      ? {
+          ...message,
+          reactions: existing
+            ? message.reactions.filter(reaction => !(reaction.emoji === emoji && reaction.user_id === user.id))
+            : [...message.reactions, { emoji, user_id: user.id }],
+        }
+      : message));
+
+    const { error } = existing
+      ? await supabase.from('message_reactions').delete()
+          .eq('message_id', messageId).eq('user_id', user.id).eq('emoji', emoji)
+      : await supabase.from('message_reactions').insert({ message_id: messageId, user_id: user.id, emoji });
+
+    if (error) {
+      console.error('Failed to update message reaction:', error);
+      setMessages(current => current.map(message => message.id === messageId
+        ? { ...message, reactions: previousReactions }
+        : message));
+      toast('error', 'Could not update reaction');
+      return false;
     }
-  }, [user, messages]);
+
+    return true;
+  }, [user, messages, toast]);
 
   return {
     messages,

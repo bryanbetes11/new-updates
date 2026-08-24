@@ -343,6 +343,7 @@ export interface SetlistSong {
 
 export interface Announcement {
   id: string;
+  org_id?: string;
   title: string;
   content: string;
   priority: 'normal' | 'high' | 'urgent';
@@ -363,6 +364,17 @@ export interface AnnouncementComment {
   created_at: string;
   profiles?: Profile;
   reply_comment?: AnnouncementComment;
+  announcement_comment_reactions?: AnnouncementCommentReaction[];
+}
+
+export interface AnnouncementCommentReaction {
+  id: string;
+  org_id: string;
+  announcement_id: string;
+  comment_id: string;
+  user_id: string;
+  emoji: string;
+  created_at: string;
 }
 
 export interface AnnouncementView {

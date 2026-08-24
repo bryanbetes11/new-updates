@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion, type PanInfo } from 'framer-motion';
 import {
   ArrowLeft, Send, ImageIcon, X, Pin, CornerUpLeft, Camera,
   MessageCircle, Plus, Search, Trash2, MoreHorizontal, ChevronRight, Check,
@@ -19,6 +19,7 @@ import { Avatar } from '../components/Avatar';
 import { EventArtwork } from '../components/EventArtwork';
 import { Modal } from '../components/Modal';
 import { MentionTextarea } from '../components/MentionTextarea';
+import { ReactionFlightAnimation, type ReactionFlightPath } from '../components/ReactionFlightAnimation';
 import {
   createChatEventReference,
   getChatCommandQuery,
@@ -124,13 +125,18 @@ interface MessageActionAnchorRect {
   bottom: number;
   width: number;
   height: number;
+  menuOverlap?: number;
+  horizontalNudge?: number;
 }
+
+type MessageReactionFlight = ReactionFlightPath & {
+  messageId: string;
+  token: number;
+};
 
 interface MessageActionOverlayProps {
   open: boolean;
   anchorRect: MessageActionAnchorRect | null;
-  senderName: string;
-  preview: string;
   canCopy: boolean;
   isMine: boolean;
   isPinned: boolean;
@@ -157,11 +163,11 @@ function clampToViewport(value: number, minimum: number, maximum: number) {
   return Math.min(Math.max(value, minimum), Math.max(minimum, maximum));
 }
 
+const MESSAGE_FOCUS_BACKDROP_CLASS = 'pointer-events-auto fixed bg-black/20 animate-fade-in dark:bg-black/45';
+
 function MessageActionOverlay({
   open,
   anchorRect,
-  senderName,
-  preview,
   canCopy,
   isMine,
   isPinned,
@@ -173,7 +179,6 @@ function MessageActionOverlay({
   onDelete,
 }: MessageActionOverlayProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
   const onCloseRef = useRef(onClose);
   const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
   const [placement, setPlacement] = useState<MessageActionPlacement | null>(null);
@@ -210,7 +215,7 @@ function MessageActionOverlay({
     const handleResize = () => setViewport({ width: window.innerWidth, height: window.innerHeight });
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('resize', handleResize);
-    closeButtonRef.current?.focus({ preventScroll: true });
+    dialogRef.current?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true });
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
@@ -224,15 +229,16 @@ function MessageActionOverlay({
     if (!open || !anchorRect) return;
     const animationFrame = window.requestAnimationFrame(() => {
       const dialogHeight = dialogRef.current?.getBoundingClientRect().height || 330;
-      const width = Math.min(360, Math.max(280, Math.min(anchorRect.width + 96, viewport.width - (MESSAGE_ACTION_MARGIN * 2))));
-      const centeredLeft = anchorRect.left + ((anchorRect.width - width) / 2);
-      const left = clampToViewport(centeredLeft, MESSAGE_ACTION_MARGIN, viewport.width - width - MESSAGE_ACTION_MARGIN);
-      const roomBelow = viewport.height - anchorRect.bottom - MESSAGE_ACTION_MARGIN;
+      const width = Math.min(212, Math.max(196, Math.min(anchorRect.width, viewport.width - (MESSAGE_ACTION_MARGIN * 2))));
+      const menuAnchorBottom = anchorRect.bottom - (anchorRect.menuOverlap || 0);
+      const roomBelow = viewport.height - menuAnchorBottom - MESSAGE_ACTION_MARGIN;
       const roomAbove = anchorRect.top - MESSAGE_ACTION_MARGIN;
       const opensAbove = roomBelow < dialogHeight + MESSAGE_ACTION_GAP && roomAbove > roomBelow;
+      const centeredLeft = anchorRect.left + ((anchorRect.width - width) / 2) - (opensAbove ? 0 : (anchorRect.horizontalNudge || 0));
+      const left = clampToViewport(centeredLeft, MESSAGE_ACTION_MARGIN, viewport.width - width - MESSAGE_ACTION_MARGIN);
       const preferredTop = opensAbove
         ? anchorRect.top - dialogHeight - MESSAGE_ACTION_GAP
-        : anchorRect.bottom + MESSAGE_ACTION_GAP;
+        : menuAnchorBottom + MESSAGE_ACTION_GAP;
       const top = clampToViewport(preferredTop, MESSAGE_ACTION_MARGIN, viewport.height - dialogHeight - MESSAGE_ACTION_MARGIN);
       const pointerLeft = clampToViewport((anchorRect.left + (anchorRect.width / 2)) - left, 28, width - 28);
       setPlacement({ left, top, width, opensAbove, pointerLeft });
@@ -248,61 +254,63 @@ function MessageActionOverlay({
     right: clampToViewport(anchorRect.right + 5, 0, viewport.width),
     bottom: clampToViewport(anchorRect.bottom + 5, 0, viewport.height),
   };
-  const backdropClass = 'pointer-events-auto fixed bg-black/65 backdrop-blur-[5px] animate-fade-in';
   const actionClass = 'flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-[13px] font-bold text-white/72 transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400';
 
   return createPortal(
     <div className="pointer-events-none fixed inset-0 z-[2147483647]" role="presentation" data-app-nonselect="true">
-      <div aria-hidden="true" onClick={onClose} className={backdropClass} style={{ inset: '0 0 auto 0', height: halo.top }} />
-      <div aria-hidden="true" onClick={onClose} className={backdropClass} style={{ inset: `${halo.bottom}px 0 0 0` }} />
-      <div aria-hidden="true" onClick={onClose} className={backdropClass} style={{ left: 0, top: halo.top, width: halo.left, height: halo.bottom - halo.top }} />
-      <div aria-hidden="true" onClick={onClose} className={backdropClass} style={{ left: halo.right, right: 0, top: halo.top, height: halo.bottom - halo.top }} />
+      <div aria-hidden="true" onClick={onClose} className={MESSAGE_FOCUS_BACKDROP_CLASS} style={{ inset: '0 0 auto 0', height: halo.top }} />
+      <div aria-hidden="true" onClick={onClose} className={MESSAGE_FOCUS_BACKDROP_CLASS} style={{ inset: `${halo.bottom}px 0 0 0` }} />
+      <div aria-hidden="true" onClick={onClose} className={MESSAGE_FOCUS_BACKDROP_CLASS} style={{ left: 0, top: halo.top, width: halo.left, height: halo.bottom - halo.top }} />
+      <div aria-hidden="true" onClick={onClose} className={MESSAGE_FOCUS_BACKDROP_CLASS} style={{ left: halo.right, right: 0, top: halo.top, height: halo.bottom - halo.top }} />
 
       <div
         aria-hidden="true"
         onClick={onClose}
-        className="pointer-events-auto fixed rounded-[1.15rem] border border-emerald-300/50 bg-transparent shadow-[0_0_0_1px_rgba(34,197,94,0.14),0_18px_55px_-24px_rgba(34,197,94,0.9)]"
+        className="pointer-events-auto fixed bg-transparent"
         style={{ left: halo.left, top: halo.top, width: halo.right - halo.left, height: halo.bottom - halo.top }}
       />
 
       <div
         ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Options for message from ${senderName}`}
-        className="pointer-events-auto fixed overflow-hidden rounded-[1.35rem] border border-white/[0.10] bg-[#121512]/98 text-white shadow-[0_28px_80px_-24px_rgba(0,0,0,0.95)] ring-1 ring-emerald-400/[0.08] animate-scale-in"
+        className="pointer-events-auto fixed"
         style={placement ? {
           left: placement.left,
           top: placement.top,
           width: placement.width,
-          transformOrigin: placement.opensAbove ? 'bottom center' : 'top center',
-        } : { left: MESSAGE_ACTION_MARGIN, top: anchorRect.bottom + MESSAGE_ACTION_GAP, width: Math.min(360, viewport.width - 24), opacity: 0 }}
+        } : { left: MESSAGE_ACTION_MARGIN, top: anchorRect.bottom + MESSAGE_ACTION_GAP, width: Math.min(212, viewport.width - 24), visibility: 'hidden' }}
         onClick={event => event.stopPropagation()}
       >
-        {placement && (
-          <span
-            aria-hidden="true"
-            className={`absolute h-3 w-3 rotate-45 border-white/[0.10] bg-[#121512] ${placement.opensAbove ? '-bottom-1.5 border-b border-r' : '-top-1.5 border-l border-t'}`}
-            style={{ left: placement.pointerLeft - 6 }}
-          />
-        )}
+        <motion.div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Message options"
+          initial={{ opacity: 0, scale: 0.82, y: placement?.opensAbove ? 12 : -12 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ type: 'spring', stiffness: 470, damping: 30, mass: 0.72 }}
+          className="relative overflow-hidden rounded-[1.35rem] border border-white/[0.07] bg-[#222326]/95 text-white shadow-[0_28px_80px_-24px_rgba(0,0,0,0.95)] ring-1 ring-white/[0.015] backdrop-blur-xl"
+          style={{ transformOrigin: placement?.opensAbove ? 'bottom center' : 'top center' }}
+        >
+          {placement && (
+            <span
+              aria-hidden="true"
+              className={`absolute h-3 w-3 rotate-45 border-white/[0.07] bg-[#222326]/95 ${placement.opensAbove ? '-bottom-1.5 border-b border-r' : '-top-1.5 border-l border-t'}`}
+              style={{ left: placement.pointerLeft - 6 }}
+            />
+          )}
 
-        <div className="relative border-b border-white/[0.07] px-4 pb-3 pt-4">
-          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-300/70">Message options</p>
-          <p className="mt-1 truncate pr-10 text-[14px] font-black tracking-[-0.02em]">{senderName}</p>
-          <p className="mt-0.5 truncate pr-4 text-[11px] font-semibold text-white/42">{preview}</p>
-          <button ref={closeButtonRef} type="button" onClick={onClose} className="absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-xl text-white/45 transition-colors hover:bg-white/[0.07] hover:text-white" aria-label="Close message options">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-2 gap-1.5 p-3">
-          <button type="button" onClick={onReply} className={actionClass}><CornerUpLeft className="h-4 w-4 text-emerald-300" /> Reply</button>
-          <button type="button" onClick={onReact} className={actionClass}><span className="text-[15px] leading-none">😊</span> React</button>
-          {canCopy && <button type="button" onClick={onCopy} className={actionClass}><Copy className="h-4 w-4 text-sky-300" /> Copy</button>}
-          <button type="button" onClick={onTogglePin} className={actionClass}><Pin className="h-4 w-4 text-amber-300" /> {isPinned ? 'Unpin' : 'Pin'}</button>
-          {isMine && <button type="button" onClick={onDelete} className={`${actionClass} col-span-2 text-red-300 hover:bg-red-500/10`}><Trash2 className="h-4 w-4" /> Delete message</button>}
-        </div>
+          <motion.div
+            initial="closed"
+            animate="open"
+            variants={{ open: { transition: { delayChildren: 0.06, staggerChildren: 0.045 } }, closed: {} }}
+            className="flex flex-col gap-0.5 px-5 py-2.5"
+          >
+            <motion.button variants={{ closed: { opacity: 0, y: 8 }, open: { opacity: 1, y: 0 } }} type="button" onClick={onReply} className={actionClass}><CornerUpLeft className="h-4 w-4 text-emerald-300" /> Reply</motion.button>
+            <motion.button variants={{ closed: { opacity: 0, y: 8 }, open: { opacity: 1, y: 0 } }} type="button" onClick={onReact} className={actionClass}><span className="text-[15px] leading-none">😊</span> React</motion.button>
+            {canCopy && <motion.button variants={{ closed: { opacity: 0, y: 8 }, open: { opacity: 1, y: 0 } }} type="button" onClick={onCopy} className={actionClass}><Copy className="h-4 w-4 text-sky-300" /> Copy</motion.button>}
+            <motion.button variants={{ closed: { opacity: 0, y: 8 }, open: { opacity: 1, y: 0 } }} type="button" onClick={onTogglePin} className={actionClass}><Pin className="h-4 w-4 text-amber-300" /> {isPinned ? 'Unpin' : 'Pin'}</motion.button>
+            {isMine && <motion.button variants={{ closed: { opacity: 0, y: 8 }, open: { opacity: 1, y: 0 } }} type="button" onClick={onDelete} className={`${actionClass} text-red-300 hover:bg-red-500/10`}><Trash2 className="h-4 w-4" /> Delete message</motion.button>}
+          </motion.div>
+        </motion.div>
       </div>
     </div>,
     document.body,
@@ -617,18 +625,24 @@ const REPLY_DRAG_THRESHOLD = 56;
 
 // ─── Emoji Picker ────────────────────────────────────────────────────────────
 
-function EmojiPicker({ onPick }: { onPick: (e: string) => void }) {
+function EmojiPicker({ onPick }: { onPick: (emoji: string, sourceElement: HTMLElement) => void }) {
+  const prefersReducedMotion = useReducedMotion();
+
   return (
-    <div data-app-nonselect="true" className="grid w-full grid-cols-7 gap-1 rounded-[1.3rem] border border-gray-200/80 bg-white/98 p-2 shadow-[0_22px_65px_-28px_rgba(0,0,0,0.65)] ring-1 ring-black/[0.025] dark:border-white/[0.10] dark:bg-[#18181b]/98 dark:ring-white/[0.03]">
-      {QUICK_REACTIONS.map(reaction => (
+    <div data-app-nonselect="true" className="grid w-full grid-cols-7 gap-1 rounded-[1.3rem] border border-gray-200/80 bg-white p-2 shadow-[0_24px_70px_-24px_rgba(0,0,0,0.72),0_0_32px_-18px_rgba(52,211,153,0.7)] ring-1 ring-emerald-400/10 dark:border-white/[0.10] dark:bg-[#18181b] dark:ring-emerald-300/10">
+      {QUICK_REACTIONS.map((reaction, index) => (
         <motion.button
           key={reaction.emoji}
           type="button"
-          onClick={() => onPick(reaction.emoji)}
+          onClick={event => onPick(reaction.emoji, event.currentTarget)}
           aria-label={`React with ${reaction.label}`}
+          initial={prefersReducedMotion ? false : { opacity: 0, y: 5, scale: 0.78 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={prefersReducedMotion
+            ? { duration: 0.1 }
+            : { type: 'spring', stiffness: 590, damping: 30, mass: 0.48, delay: 0.045 + (index * 0.022) }}
           whileHover={{ y: -4, scale: 1.1 }}
           whileTap={{ scale: 0.9 }}
-          transition={{ type: 'spring', stiffness: 480, damping: 24 }}
           className="group/reaction flex min-w-0 flex-col items-center gap-1 rounded-xl py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70"
         >
           <span
@@ -655,9 +669,10 @@ function EmojiReactionPopover({
   anchorRect: MessageActionAnchorRect | null;
   boundaryTop: number;
   onClose: () => void;
-  onPick: (emoji: string) => void;
+  onPick: (emoji: string, sourceElement: HTMLElement) => void;
 }) {
   const popoverRef = useRef<HTMLDivElement>(null);
+  const prefersReducedMotion = useReducedMotion();
   const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
   const [style, setStyle] = useState<{ left: number; top: number; width: number; opacity: number; transformOrigin: string } | null>(null);
 
@@ -696,32 +711,34 @@ function EmojiReactionPopover({
 
   if (!open || !anchorRect) return null;
 
-  const halo = {
-    left: clampToViewport(anchorRect.left - 5, 0, viewport.width),
-    top: clampToViewport(anchorRect.top - 5, 0, viewport.height),
-    right: clampToViewport(anchorRect.right + 5, 0, viewport.width),
-    bottom: clampToViewport(anchorRect.bottom + 5, 0, viewport.height),
+  const focusArea = {
+    left: clampToViewport(anchorRect.left - 7, 0, viewport.width),
+    top: clampToViewport(anchorRect.top - 7, 0, viewport.height),
+    right: clampToViewport(anchorRect.right + 7, 0, viewport.width),
+    bottom: clampToViewport(anchorRect.bottom + 7, 0, viewport.height),
   };
-  const backdropClass = 'pointer-events-auto fixed bg-black/65 backdrop-blur-[5px] animate-fade-in';
-
   return createPortal(
     <div className="pointer-events-none fixed inset-0 z-[2147483647]" role="presentation" data-app-nonselect="true">
-      <div aria-hidden="true" onClick={onClose} className={backdropClass} style={{ inset: '0 0 auto 0', height: halo.top }} />
-      <div aria-hidden="true" onClick={onClose} className={backdropClass} style={{ inset: `${halo.bottom}px 0 0 0` }} />
-      <div aria-hidden="true" onClick={onClose} className={backdropClass} style={{ left: 0, top: halo.top, width: halo.left, height: halo.bottom - halo.top }} />
-      <div aria-hidden="true" onClick={onClose} className={backdropClass} style={{ left: halo.right, right: 0, top: halo.top, height: halo.bottom - halo.top }} />
+      <div aria-hidden="true" onClick={onClose} className={MESSAGE_FOCUS_BACKDROP_CLASS} style={{ inset: '0 0 auto 0', height: focusArea.top }} />
+      <div aria-hidden="true" onClick={onClose} className={MESSAGE_FOCUS_BACKDROP_CLASS} style={{ inset: `${focusArea.bottom}px 0 0 0` }} />
+      <div aria-hidden="true" onClick={onClose} className={MESSAGE_FOCUS_BACKDROP_CLASS} style={{ left: 0, top: focusArea.top, width: focusArea.left, height: focusArea.bottom - focusArea.top }} />
+      <div aria-hidden="true" onClick={onClose} className={MESSAGE_FOCUS_BACKDROP_CLASS} style={{ left: focusArea.right, right: 0, top: focusArea.top, height: focusArea.bottom - focusArea.top }} />
       <div
         aria-hidden="true"
         onClick={onClose}
-        className="pointer-events-auto fixed rounded-[1.15rem] border border-emerald-300/50 bg-transparent shadow-[0_0_0_1px_rgba(34,197,94,0.14),0_18px_55px_-24px_rgba(34,197,94,0.9)]"
-        style={{ left: halo.left, top: halo.top, width: halo.right - halo.left, height: halo.bottom - halo.top }}
+        className="pointer-events-auto fixed bg-transparent"
+        style={{ left: focusArea.left, top: focusArea.top, width: focusArea.right - focusArea.left, height: focusArea.bottom - focusArea.top }}
       />
       <motion.div
         ref={popoverRef}
-        initial={{ opacity: 0, scale: 0.9, y: 5 }}
-        animate={{ opacity: style?.opacity ?? 0, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.92, y: 4 }}
-        transition={{ type: 'spring', stiffness: 430, damping: 31 }}
+        initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.94, y: 8 }}
+        animate={prefersReducedMotion
+          ? { opacity: style?.opacity ?? 0 }
+          : { opacity: style?.opacity ?? 0, scale: style ? 1 : 0.94, y: style ? 0 : 8 }}
+        exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: 4 }}
+        transition={prefersReducedMotion
+          ? { duration: 0.12 }
+          : { type: 'spring', stiffness: 510, damping: 35, mass: 0.68 }}
         className="pointer-events-auto fixed"
         style={style || { left: 12, top: anchorRect.bottom + 10, width: Math.min(390, viewport.width - 24), opacity: 0, transformOrigin: 'top center' }}
         onClick={event => event.stopPropagation()}
@@ -3077,7 +3094,7 @@ function ReactionDetailsSheet({
   members: Conversation['members'];
   myUserId: string;
   onClose: () => void;
-  onToggleReaction: (messageId: string, emoji: string) => void | Promise<void>;
+  onToggleReaction: (messageId: string, emoji: string) => void | Promise<unknown>;
 }) {
   const reactions = message.reactions;
 
@@ -3094,26 +3111,28 @@ function ReactionDetailsSheet({
 
   const getMember = (userId: string) => members.find(member => member.user_id === userId);
 
-  return (
+  return createPortal(
     <motion.div
-        className="fixed inset-0 z-[160] flex items-end justify-center bg-black/20 px-0 sm:items-center sm:px-4 dark:bg-black/45"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        onClick={onClose}
+      className="fixed inset-0 z-[2147483646] flex items-center justify-center bg-black/30 px-4 py-[max(1rem,env(safe-area-inset-top))] dark:bg-black/60"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+    >
+      <motion.div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="message-reactions-title"
+        initial={{ y: 12, opacity: 0, scale: 0.96 }}
+        animate={{ y: 0, opacity: 1, scale: 1 }}
+        exit={{ y: 8, opacity: 0, scale: 0.97 }}
+        transition={mobilePanelTransition}
+        onClick={event => event.stopPropagation()}
+        className="flex max-h-[min(72dvh,34rem)] w-full max-w-sm flex-col overflow-hidden rounded-[24px] border border-black/[0.06] bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#1c1b1f]"
       >
-        <motion.div
-          initial={{ y: 38, opacity: 0.96, scale: 0.98 }}
-          animate={{ y: 0, opacity: 1, scale: 1 }}
-          exit={{ y: 30, opacity: 0, scale: 0.98 }}
-          transition={mobilePanelTransition}
-          onClick={event => event.stopPropagation()}
-          className="w-full max-w-md overflow-hidden rounded-t-[28px] border border-black/[0.06] bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#1c1b1f] sm:rounded-[28px]"
-          style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
-        >
-          <div className="flex items-center justify-between border-b border-black/[0.06] px-5 py-3.5 dark:border-white/[0.07]">
+          <div className="flex shrink-0 items-center justify-between border-b border-black/[0.06] px-5 py-3.5 dark:border-white/[0.07]">
             <div>
-              <h3 className="text-[15px] font-extrabold text-gray-950 dark:text-white">Reactions</h3>
+              <h3 id="message-reactions-title" className="text-[15px] font-extrabold text-gray-950 dark:text-white">Reactions</h3>
               <p className="mt-0.5 text-[12px] text-gray-400 dark:text-white/35">
                 {reactions.length} {reactions.length === 1 ? 'reaction' : 'reactions'}
               </p>
@@ -3125,10 +3144,18 @@ function ReactionDetailsSheet({
                   <span>{count}</span>
                 </span>
               ))}
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close reactions"
+                className="ml-0.5 flex h-9 w-9 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 dark:text-white/40 dark:hover:bg-white/[0.08] dark:hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
           </div>
 
-          <div className="min-h-[13.5rem] max-h-[52dvh] overflow-y-auto py-1.5">
+          <div className="min-h-0 flex-1 overflow-y-auto py-1.5">
             {reactionsByUser.map((reactionGroup) => {
               const member = getMember(reactionGroup.userId);
               const isMine = reactionGroup.userId === myUserId;
@@ -3174,8 +3201,10 @@ function ReactionDetailsSheet({
               );
             })}
           </div>
-        </motion.div>
+      </motion.div>
     </motion.div>
+    ,
+    document.body,
   );
 }
 
@@ -3635,6 +3664,10 @@ function ChatWindow({
   const [previewFile, setPreviewFile] = useState<{ url: string; name: string } | null>(null);
   const [reactionDetailsMessageId, setReactionDetailsMessageId] = useState<string | null>(null);
   const [seenDetailsMessageId, setSeenDetailsMessageId] = useState<string | null>(null);
+  const [pendingReactionReveal, setPendingReactionReveal] = useState<{ messageId: string; emoji: string } | null>(null);
+  const [reactionLanding, setReactionLanding] = useState<{ messageId: string; emoji: string; token: number } | null>(null);
+  const [reactionFlight, setReactionFlight] = useState<MessageReactionFlight | null>(null);
+  const reactionMutationsRef = useRef(new Set<string>());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const chatHeaderRef = useRef<HTMLDivElement>(null);
@@ -3645,10 +3678,13 @@ function ChatWindow({
   const draggedMessageId = useRef<string | null>(null);
   const atBottomRef = useRef(true);
   const forceStickToLatestRef = useRef(false);
+  const suppressLatestScrollRef = useRef(false);
+  const releaseLatestScrollTimerRef = useRef<number | null>(null);
   const typingThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingRef = useRef(false);
   const navigate = useNavigate();
+  const prefersReducedMotion = useReducedMotion();
 
   const { profile } = useAuth();
   const {
@@ -3709,8 +3745,27 @@ function ChatWindow({
 
   const openMessageActions = useCallback((messageId: string, anchor?: HTMLElement | null) => {
     const messageBubble = messageBubbleRefs.current[messageId] || anchor;
-    const anchorRect = messageBubble?.getBoundingClientRect();
-    if (!anchorRect) return;
+    const bubbleRect = messageBubble?.getBoundingClientRect();
+    if (!bubbleRect) return;
+    const reactionBar = messageBubble?.querySelector<HTMLElement>('[data-message-reaction-bar="true"]');
+    const reactionBarRect = reactionBar?.getBoundingClientRect();
+    const anchorRect = reactionBarRect
+      ? {
+          left: Math.min(bubbleRect.left, reactionBarRect.left),
+          top: Math.min(bubbleRect.top, reactionBarRect.top),
+          right: Math.max(bubbleRect.right, reactionBarRect.right),
+          bottom: Math.max(bubbleRect.bottom, reactionBarRect.bottom),
+          width: Math.max(bubbleRect.right, reactionBarRect.right) - Math.min(bubbleRect.left, reactionBarRect.left),
+          height: Math.max(bubbleRect.bottom, reactionBarRect.bottom) - Math.min(bubbleRect.top, reactionBarRect.top),
+        }
+      : bubbleRect;
+    const preservedScrollTop = scrollRef.current?.scrollTop;
+    if (releaseLatestScrollTimerRef.current) {
+      window.clearTimeout(releaseLatestScrollTimerRef.current);
+      releaseLatestScrollTimerRef.current = null;
+    }
+    suppressLatestScrollRef.current = true;
+    forceStickToLatestRef.current = false;
     window.getSelection()?.removeAllRanges();
     setMessageActionAnchorRect({
       left: anchorRect.left,
@@ -3719,16 +3774,35 @@ function ChatWindow({
       bottom: anchorRect.bottom,
       width: anchorRect.width,
       height: anchorRect.height,
+      menuOverlap: reactionBarRect ? Math.max(0, reactionBarRect.bottom - bubbleRect.bottom) : 0,
+      horizontalNudge: reactionBarRect ? 24 : 0,
     });
     setActiveMsg(messageId);
     setEmojiMsgId(null);
     setEmojiAnchorRect(null);
     setTappedMsgId(null);
+    if (preservedScrollTop !== undefined) {
+      window.requestAnimationFrame(() => {
+        if (scrollRef.current) scrollRef.current.scrollTop = preservedScrollTop;
+        window.requestAnimationFrame(() => {
+          if (scrollRef.current) scrollRef.current.scrollTop = preservedScrollTop;
+        });
+      });
+    }
   }, []);
 
   const closeMessageActions = useCallback(() => {
     setActiveMsg(null);
     setMessageActionAnchorRect(null);
+    if (releaseLatestScrollTimerRef.current) window.clearTimeout(releaseLatestScrollTimerRef.current);
+    releaseLatestScrollTimerRef.current = window.setTimeout(() => {
+      suppressLatestScrollRef.current = false;
+      releaseLatestScrollTimerRef.current = null;
+    }, 300);
+  }, []);
+
+  useEffect(() => () => {
+    if (releaseLatestScrollTimerRef.current) window.clearTimeout(releaseLatestScrollTimerRef.current);
   }, []);
 
   const closeEmojiPicker = useCallback(() => {
@@ -3737,8 +3811,22 @@ function ChatWindow({
   }, []);
 
   const openEmojiPicker = useCallback((messageId: string) => {
-    const anchorRect = messageBubbleRefs.current[messageId]?.getBoundingClientRect();
-    if (!anchorRect) return;
+    const messageBubble = messageBubbleRefs.current[messageId];
+    const bubbleRect = messageBubble?.getBoundingClientRect();
+    if (!bubbleRect) return;
+    const reactionBarRect = messageBubble
+      ?.querySelector<HTMLElement>('[data-message-reaction-bar]')
+      ?.getBoundingClientRect();
+    const anchorRect = reactionBarRect
+      ? {
+          left: Math.min(bubbleRect.left, reactionBarRect.left),
+          top: Math.min(bubbleRect.top, reactionBarRect.top),
+          right: Math.max(bubbleRect.right, reactionBarRect.right),
+          bottom: Math.max(bubbleRect.bottom, reactionBarRect.bottom),
+          width: Math.max(bubbleRect.right, reactionBarRect.right) - Math.min(bubbleRect.left, reactionBarRect.left),
+          height: Math.max(bubbleRect.bottom, reactionBarRect.bottom) - Math.min(bubbleRect.top, reactionBarRect.top),
+        }
+      : bubbleRect;
     setEmojiAnchorRect({
       left: anchorRect.left,
       top: anchorRect.top,
@@ -3750,6 +3838,80 @@ function ChatWindow({
     setEmojiBoundaryTop(chatHeaderRef.current?.getBoundingClientRect().bottom ?? 0);
     setEmojiMsgId(messageId);
     setTappedMsgId(null);
+  }, []);
+
+  const handleMessageReaction = useCallback(async (messageId: string, emoji: string, sourceElement?: HTMLElement) => {
+    if (reactionMutationsRef.current.has(messageId)) return;
+    const message = messages.find(item => item.id === messageId);
+    if (!message) return;
+
+    reactionMutationsRef.current.add(messageId);
+    const existing = message.reactions.some(reaction => reaction.user_id === myUserId && reaction.emoji === emoji);
+    const sourceRect = sourceElement?.getBoundingClientRect();
+    const flightOrigin = sourceRect
+      ? { x: sourceRect.left + sourceRect.width / 2, y: sourceRect.top + sourceRect.height / 2 }
+      : null;
+    const shouldAnimateFlight = !existing && !prefersReducedMotion && Boolean(flightOrigin);
+
+    if (shouldAnimateFlight) {
+      setPendingReactionReveal({ messageId, emoji });
+    }
+    closeEmojiPicker();
+
+    if (shouldAnimateFlight && flightOrigin) {
+      const startReactionFlight = (attempt = 0) => {
+        const bubble = messageBubbleRefs.current[messageId];
+        const target = bubble
+          ? Array.from(bubble.querySelectorAll<HTMLElement>('[data-reaction-emoji]'))
+              .find(element => element.dataset.reactionEmoji === emoji)
+          : null;
+        if (!target) {
+          if (attempt < 3) {
+            window.requestAnimationFrame(() => startReactionFlight(attempt + 1));
+            return;
+          }
+          setPendingReactionReveal(current => current?.messageId === messageId ? null : current);
+          return;
+        }
+        const targetRect = target.getBoundingClientRect();
+        setReactionFlight({
+          messageId,
+          emoji,
+          token: Date.now(),
+          from: flightOrigin,
+          to: {
+            x: targetRect.left + targetRect.width / 2,
+            y: targetRect.top + targetRect.height / 2,
+          },
+        });
+      };
+      window.requestAnimationFrame(() => startReactionFlight());
+    }
+
+    try {
+      const updated = await toggleReaction(messageId, emoji);
+      if (!updated) {
+        setReactionFlight(current => current?.messageId === messageId ? null : current);
+        setPendingReactionReveal(current => current?.messageId === messageId ? null : current);
+        setReactionLanding(current => current?.messageId === messageId ? null : current);
+      }
+    } finally {
+      reactionMutationsRef.current.delete(messageId);
+    }
+  }, [closeEmojiPicker, messages, myUserId, prefersReducedMotion, toggleReaction]);
+
+  const handleReactionFlightComplete = useCallback((completedFlight: MessageReactionFlight) => {
+    const landing = {
+      messageId: completedFlight.messageId,
+      emoji: completedFlight.emoji,
+      token: completedFlight.token,
+    };
+    setPendingReactionReveal(current => current?.messageId === completedFlight.messageId ? null : current);
+    setReactionLanding(landing);
+    setReactionFlight(current => current?.token === completedFlight.token ? null : current);
+    window.setTimeout(() => {
+      setReactionLanding(current => current?.token === landing.token ? null : current);
+    }, 420);
   }, []);
 
   const startReplyToMessage = useCallback((msg: Message) => {
@@ -3841,18 +4003,25 @@ function ChatWindow({
       requestAnimationFrame(() => requestAnimationFrame(scrollToLatest));
     };
     const handleComposerFocus = () => {
+      if (suppressLatestScrollRef.current) return;
       forceStickToLatestRef.current = true;
       keepLatestVisible(true);
     };
-    const handleKeyboardInsetChange = () => keepLatestVisible(true);
+    const handleKeyboardInsetChange = () => {
+      if (suppressLatestScrollRef.current) return;
+      const composerFocused =
+        document.activeElement instanceof HTMLTextAreaElement ||
+        (document.activeElement instanceof HTMLElement && document.activeElement.dataset.chatComposer === 'true');
+      const keyboardOpen = document.documentElement.classList.contains('messages-keyboard-open');
+      if (!composerFocused || !keyboardOpen) return;
+      keepLatestVisible(true);
+    };
 
     window.addEventListener('messages-composer-focus', handleComposerFocus);
     window.addEventListener('messages-keyboard-inset-change', handleKeyboardInsetChange);
-    window.visualViewport?.addEventListener('resize', handleKeyboardInsetChange);
     return () => {
       window.removeEventListener('messages-composer-focus', handleComposerFocus);
       window.removeEventListener('messages-keyboard-inset-change', handleKeyboardInsetChange);
-      window.visualViewport?.removeEventListener('resize', handleKeyboardInsetChange);
     };
   }, []);
 
@@ -3921,21 +4090,32 @@ function ChatWindow({
   }, [conv.id, onBack, onConfirmDelete]);
 
   const scrollToMessage = useCallback((id: string) => {
+    if (releaseLatestScrollTimerRef.current) {
+      window.clearTimeout(releaseLatestScrollTimerRef.current);
+      releaseLatestScrollTimerRef.current = null;
+    }
+    suppressLatestScrollRef.current = true;
+    forceStickToLatestRef.current = false;
     setShowInfo(false);
     setTimeout(() => {
       const el = messageRefs.current[id];
       const scroller = scrollRef.current;
-      if (!el || !scroller) return;
-      scroller.scrollTo({
-        top: Math.max(0, el.offsetTop - scroller.clientHeight / 2 + el.clientHeight / 2),
-        behavior: 'smooth',
-      });
-      const bubble = messageBubbleRefs.current[id];
-      bubble?.animate([
-        { boxShadow: '0 0 0 0 rgba(16,185,129,0)' },
-        { boxShadow: '0 0 0 3px rgba(16,185,129,0.7)' },
-        { boxShadow: '0 0 0 0 rgba(16,185,129,0)' },
-      ], { duration: 1500, easing: 'ease-out' });
+      if (el && scroller) {
+        scroller.scrollTo({
+          top: Math.max(0, el.offsetTop - scroller.clientHeight / 2 + el.clientHeight / 2),
+          behavior: 'smooth',
+        });
+        const bubble = messageBubbleRefs.current[id];
+        bubble?.animate([
+          { boxShadow: '0 0 0 0 rgba(16,185,129,0)' },
+          { boxShadow: '0 0 0 3px rgba(16,185,129,0.7)' },
+          { boxShadow: '0 0 0 0 rgba(16,185,129,0)' },
+        ], { duration: 1500, easing: 'ease-out' });
+      }
+      releaseLatestScrollTimerRef.current = window.setTimeout(() => {
+        suppressLatestScrollRef.current = false;
+        releaseLatestScrollTimerRef.current = null;
+      }, 900);
     }, 250);
   }, []);
 
@@ -4154,6 +4334,27 @@ function ChatWindow({
           const needsReactionClearance = !showDateDivider && (messages[i - 1]?.reactions.length ?? 0) > 0;
           const isActionsOpen = activeMsg === msg.id;
           const isEmojiOpen = emojiMsgId === msg.id;
+          const isAwaitingReactionLanding = pendingReactionReveal?.messageId === msg.id;
+          const visibleReactions = isAwaitingReactionLanding
+            ? msg.reactions.filter(reaction => !(
+                reaction.user_id === myUserId && reaction.emoji === pendingReactionReveal.emoji
+              ))
+            : msg.reactions;
+          const visibleReactionCounts = visibleReactions.reduce((acc, reaction) => {
+            acc[reaction.emoji] = (acc[reaction.emoji] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>);
+          const needsLandingPlaceholder = Boolean(
+            isAwaitingReactionLanding
+            && !Object.prototype.hasOwnProperty.call(visibleReactionCounts, pendingReactionReveal?.emoji || '')
+          );
+          const hasReplyPreview = Boolean(msg.reply_preview);
+          const isBareMessage = content.type === 'image' || (content.type === 'event_reference' && !content.messageText);
+          const bubbleSurfaceClass = isBareMessage
+            ? 'px-0 py-0 bg-transparent border-0 shadow-none rounded-none'
+            : isMe
+              ? 'px-3.5 py-2 rounded-2xl bg-emerald-500 text-white rounded-br-md'
+              : 'px-3.5 py-2 rounded-2xl bg-gray-100 dark:bg-white/[0.07] text-gray-900 dark:text-white rounded-bl-md border border-gray-200/80 dark:border-white/[0.06]';
           const deleteRequesterName = content.type === 'delete_request'
             ? getFullName(
                 conv.members.find(member => member.user_id === content.requestedBy)?.profile,
@@ -4200,7 +4401,7 @@ function ChatWindow({
                 <div className={`relative group flex min-w-0 flex-col ${isMe ? 'items-end max-w-[82%]' : 'items-start max-w-[72%]'}`}>
                   {/* Sender name (group chats) */}
                   {!isMe && !isGrouped && isGroupChat && (
-                    <span className="text-[11px] font-semibold text-gray-500 dark:text-white/40 mb-1 ml-1">{getSenderName(msg.sender)}</span>
+                    <span className="mb-1 ml-1 text-[11px] font-semibold text-gray-600 dark:text-white/[0.62]">{getSenderName(msg.sender)}</span>
                   )}
 
 
@@ -4210,6 +4411,7 @@ function ChatWindow({
                     {isMe && (
                       <div className="hidden sm:flex opacity-0 group-hover:opacity-100 transition-opacity items-center gap-0.5 mb-1">
                         <button
+                          aria-label={`React to: ${previewContent(msg.content)}`}
                           onClick={e => {
                             e.stopPropagation();
                             if (isEmojiOpen) closeEmojiPicker();
@@ -4221,6 +4423,7 @@ function ChatWindow({
                           <span className="text-[13px]">😊</span>
                         </button>
                         <button
+                          aria-label={`More options for: ${previewContent(msg.content)}`}
                           onClick={e => {
                             e.stopPropagation();
                             if (isActionsOpen) closeMessageActions();
@@ -4280,43 +4483,47 @@ function ChatWindow({
                       }}
                       data-app-nonselect="true"
                       className={`relative mb-0.5 leading-relaxed cursor-default select-none ${
-                        content.type === 'image' || (content.type === 'event_reference' && !content.messageText)
-                          ? 'px-0 py-0 bg-transparent border-0 shadow-none rounded-none'
-                          : isMe
-                            ? 'px-3.5 py-2 rounded-2xl bg-emerald-500 text-white rounded-br-md'
-                            : 'px-3.5 py-2 rounded-2xl bg-gray-100 dark:bg-white/[0.07] text-gray-900 dark:text-white rounded-bl-md border border-gray-200/80 dark:border-white/[0.06]'
-                      } ${msg.is_pinned ? 'ring-1 ring-amber-400/50' : ''}`}
+                        hasReplyPreview ? 'bg-transparent' : bubbleSurfaceClass
+                      } ${!hasReplyPreview && msg.is_pinned ? 'ring-1 ring-amber-400/50' : ''}`}
                     >
                       {msg.reply_preview && (
-                        <button
-                          type="button"
-                          aria-label={`Go to original message from ${msg.reply_preview.sender_name}`}
-                          className={`mb-1.5 block w-full min-w-0 rounded-xl border-l-2 px-2.5 py-1.5 text-left text-[11px] leading-snug transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 ${
-                            isMe
-                              ? 'border-white/70 bg-black/10 text-white/75 hover:bg-black/15'
-                              : 'border-emerald-500 bg-black/[0.035] text-gray-500 hover:bg-black/[0.06] dark:bg-black/20 dark:text-white/50 dark:hover:bg-black/30'
-                          }`}
-                          onClick={event => {
-                            event.stopPropagation();
-                            if (msg.reply_to) scrollToMessage(msg.reply_to);
-                          }}
-                        >
-                          <p className={`mb-0.5 truncate text-[10px] font-semibold ${isMe ? 'text-white/90' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                            {msg.reply_preview.sender_name}
-                          </p>
-                          <p
-                            className="overflow-hidden whitespace-pre-wrap break-words"
-                            style={{
-                              overflowWrap: 'anywhere',
-                              display: '-webkit-box',
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: 'vertical',
+                        <div className={`relative z-0 min-w-0 pb-3 ${isMe ? 'mr-3' : 'ml-3'}`}>
+                          <div className={`mb-1 flex min-w-0 items-center gap-1 px-1 text-[10px] font-semibold leading-none ${
+                            isMe ? 'text-emerald-600 dark:text-emerald-300/75' : 'text-gray-600 dark:text-white/[0.72]'
+                          }`}>
+                            <CornerUpLeft className="h-3 w-3 shrink-0" />
+                            <span className="truncate">
+                              {isMe ? 'You' : getSenderName(msg.sender)} replied to {msg.reply_preview.sender_name}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            aria-label={`Go to original message from ${msg.reply_preview.sender_name}`}
+                            className={`block w-full min-w-0 rounded-[14px] px-3 py-2 text-left text-[12px] leading-snug transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 ${
+                              isMe
+                                ? 'bg-emerald-500/12 text-emerald-950/55 hover:bg-emerald-500/18 dark:bg-emerald-400/10 dark:text-white/50 dark:hover:bg-emerald-400/15'
+                                : 'bg-gray-200/85 text-gray-500 hover:bg-gray-200 dark:bg-white/[0.10] dark:text-white/[0.64] dark:hover:bg-white/[0.13]'
+                            }`}
+                            onClick={event => {
+                              event.stopPropagation();
+                              if (msg.reply_to) scrollToMessage(msg.reply_to);
                             }}
                           >
-                            {replyPreviewContent(msg.reply_preview.content)}
-                          </p>
-                        </button>
+                            <span
+                              className="overflow-hidden whitespace-pre-wrap break-words"
+                              style={{
+                                overflowWrap: 'anywhere',
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                              }}
+                            >
+                              {replyPreviewContent(msg.reply_preview.content)}
+                            </span>
+                          </button>
+                        </div>
                       )}
+                      <div className={hasReplyPreview ? `relative z-[1] -mt-2 ${bubbleSurfaceClass} ${msg.is_pinned ? 'ring-1 ring-amber-400/50' : ''}` : ''}>
                       {content.type === 'image' ? (
                         <img
                           src={content.url}
@@ -4373,22 +4580,20 @@ function ChatWindow({
                       {msg.is_pinned && (
                         <Pin className="absolute -top-2 -right-2 h-3.5 w-3.5 text-amber-500 bg-white dark:bg-[#111013] rounded-full p-0.5" style={{ padding: '2px' }} />
                       )}
+                      </div>
 
                       {/* Reactions — sitting just below the bubble's bottom-right corner */}
-                      {msg.reactions.length > 0 && (
+                      {(visibleReactions.length > 0 || needsLandingPlaceholder) && (
                         <div
+                          data-message-reaction-bar="true"
                           className="absolute -bottom-3 -right-1 -mb-2 z-10 flex h-[26px] min-w-[51px] items-center justify-center gap-px rounded-full border border-gray-100 bg-white px-1.5 py-0 shadow-md dark:border-white/[0.1] dark:bg-[#1c1c1e]"
                           onClick={e => e.stopPropagation()}
                         >
-                          {Object.entries(
-                            msg.reactions.reduce((acc, r) => {
-                              acc[r.emoji] = (acc[r.emoji] || 0) + 1;
-                              return acc;
-                            }, {} as Record<string, number>)
-                          ).map(([emoji, count]) => {
-                            const iMineReacted = msg.reactions.some(r => r.emoji === emoji && r.user_id === myUserId);
+                          {Object.entries(visibleReactionCounts).map(([emoji, count]) => {
+                            const iMineReacted = visibleReactions.some(r => r.emoji === emoji && r.user_id === myUserId);
+                            const isLanding = reactionLanding?.messageId === msg.id && reactionLanding.emoji === emoji;
                             return (
-                              <button
+                              <motion.button
                                 key={emoji}
                                 onPointerDown={event => event.stopPropagation()}
                                 onClick={event => {
@@ -4396,6 +4601,14 @@ function ChatWindow({
                                   setTappedMsgId(null);
                                   setReactionDetailsMessageId(msg.id);
                                 }}
+                                data-reaction-emoji={emoji}
+                                initial={isLanding ? { scale: 0.72, opacity: 0.35 } : false}
+                                animate={isLanding
+                                  ? { scale: [0.72, 1.16, 0.96, 1], opacity: [0.35, 1, 1, 1] }
+                                  : { scale: 1, opacity: iMineReacted ? 1 : 0.7 }}
+                                transition={isLanding
+                                  ? { duration: 0.36, times: [0, 0.48, 0.72, 1], ease: [0.16, 1, 0.3, 1] }
+                                  : { duration: 0.16 }}
                                 className={`flex min-h-6 items-center gap-0.5 rounded-full px-1 text-[13px] transition-transform active:scale-90 ${!iMineReacted ? 'opacity-70' : ''}`}
                                 aria-label={`Show ${count} ${emoji} ${count === 1 ? 'reaction' : 'reactions'}`}
                               >
@@ -4403,9 +4616,18 @@ function ChatWindow({
                                 {count > 1 && (
                                   <span className="ml-0.5 text-[10px] font-semibold text-gray-500 dark:text-white/50">{count}</span>
                                 )}
-                              </button>
+                              </motion.button>
                             );
                           })}
+                          {needsLandingPlaceholder && pendingReactionReveal && (
+                            <span
+                              aria-hidden="true"
+                              data-reaction-emoji={pendingReactionReveal.emoji}
+                              className="invisible flex min-h-6 items-center gap-0.5 rounded-full px-1 text-[13px]"
+                            >
+                              {pendingReactionReveal.emoji}
+                            </span>
+                          )}
                         </div>
                       )}
                     </motion.div>
@@ -4414,6 +4636,7 @@ function ChatWindow({
                     {!isMe && (
                       <div className="hidden sm:flex opacity-0 group-hover:opacity-100 transition-opacity items-center gap-0.5 mb-1">
                         <button
+                          aria-label={`React to: ${previewContent(msg.content)}`}
                           onClick={e => {
                             e.stopPropagation();
                             if (isEmojiOpen) closeEmojiPicker();
@@ -4425,6 +4648,7 @@ function ChatWindow({
                           <span className="text-[13px]">😊</span>
                         </button>
                         <button
+                          aria-label={`More options for: ${previewContent(msg.content)}`}
                           onClick={e => {
                             e.stopPropagation();
                             if (isActionsOpen) closeMessageActions();
@@ -4530,8 +4754,6 @@ function ChatWindow({
       <MessageActionOverlay
         open={Boolean(activeMessage && messageActionAnchorRect)}
         anchorRect={messageActionAnchorRect}
-        senderName={activeMessage ? getSenderName(activeMessage.sender) : 'Message'}
-        preview={activeMessage ? previewContent(activeMessage.content) : ''}
         canCopy={activeMessageContent?.type === 'text'}
         isMine={activeMessage?.sender_id === myUserId}
         isPinned={Boolean(activeMessage?.is_pinned)}
@@ -4562,13 +4784,26 @@ function ChatWindow({
         anchorRect={emojiAnchorRect}
         boundaryTop={emojiBoundaryTop}
         onClose={closeEmojiPicker}
-        onPick={emoji => {
-          if (emojiMsgId) void toggleReaction(emojiMsgId, emoji);
-          closeEmojiPicker();
+        onPick={(emoji, sourceElement) => {
+          if (emojiMsgId) void handleMessageReaction(emojiMsgId, emoji, sourceElement);
         }}
       />
 
-      {!showInfo && !showEventDetail && !detailsSheetOpen && (
+      {createPortal(
+        <AnimatePresence>
+          {reactionFlight && (
+            <ReactionFlightAnimation
+              key={reactionFlight.token}
+              flight={reactionFlight}
+              fixed
+              onComplete={() => handleReactionFlightComplete(reactionFlight)}
+            />
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
+
+      {!showInfo && !showEventDetail && (
         <>
           <InputBar
             conversationId={conv.id}

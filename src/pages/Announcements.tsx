@@ -1,11 +1,11 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import {
   Megaphone, Plus, Eye, AlertTriangle, AlertCircle,
   Pin, Lock, MessageCircle, Smile, ChevronRight, Loader2,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -14,8 +14,11 @@ import { AnnouncementsSkeleton } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
 import { Avatar } from '../components/Avatar';
 import { AnnouncementComposerForm } from '../components/AnnouncementComposerForm';
+import { EmojiReactionPicker, type ReactionEmoji } from '../components/EmojiReactionPicker';
+import { ReactionFlightAnimation } from '../components/ReactionFlightAnimation';
 import type { Announcement, AnnouncementReaction, AnnouncementPin, AnnouncementView } from '../types';
 import { withRequestTimeout } from '../lib/requestTimeout';
+import { groupEmojiReactions } from '../lib/reactions';
 
 type AnnouncementWithBlocks = Announcement & {
   content_blocks?: { type: 'text' | 'image'; content: string }[];
@@ -28,18 +31,7 @@ function emptyListResponse() {
   return { data: [], error: null, count: null, status: 200, statusText: 'OK' };
 }
 
-const QUICK_EMOJIS = ['👍', '❤️', '🙏', '🔥', '😂', '✅'];
 type NewsFilter = 'all' | 'unread' | 'pinned' | 'urgent';
-
-function groupReactions(reactions: AnnouncementReaction[]) {
-  const map: Record<string, { emoji: string; count: number; users: string[] }> = {};
-  reactions.forEach(r => {
-    if (!map[r.emoji]) map[r.emoji] = { emoji: r.emoji, count: 0, users: [] };
-    map[r.emoji].count++;
-    map[r.emoji].users.push(r.user_id);
-  });
-  return Object.values(map);
-}
 
 const PRIORITY_CONFIG = {
   urgent: {
@@ -78,16 +70,29 @@ const itemVariants = {
   show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] } },
 };
 
+type ReactionFlight = {
+  announcementId: string;
+  emoji: string;
+  token: number;
+  from: { x: number; y: number };
+  to: { x: number; y: number };
+};
+
 export function Announcements() {
   const { user, isLeader } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
+  const prefersReducedMotion = useReducedMotion();
   const [announcements, setAnnouncements] = useState<AnnouncementWithBlocks[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [emojiPickerId, setEmojiPickerId] = useState<string | null>(null);
+  const [reactionCelebration, setReactionCelebration] = useState<ReactionFlight | null>(null);
+  const [pendingReactionReveal, setPendingReactionReveal] = useState<{ announcementId: string; emoji: string } | null>(null);
+  const [reactionLanding, setReactionLanding] = useState<{ announcementId: string; emoji: string; token: number } | null>(null);
+  const reactionMutationsRef = useRef(new Set<string>());
   const [newsFilter, setNewsFilter] = useState<NewsFilter>('all');
   const [viewerAnnouncement, setViewerAnnouncement] = useState<Pick<Announcement, 'id' | 'title'> | null>(null);
   const [announcementViewers, setAnnouncementViewers] = useState<AnnouncementView[]>([]);
@@ -174,14 +179,129 @@ export function Announcements() {
     return () => { supabase.removeChannel(channel); };
   }, [fetchAnnouncements]);
 
-  const handleReact = async (e: React.MouseEvent, announcementId: string, emoji: string) => {
-    e.stopPropagation();
+  const handleToggleReactionPicker = (event: React.MouseEvent<HTMLButtonElement>, announcementId: string) => {
+    event.stopPropagation();
+    const shouldOpen = emojiPickerId !== announcementId;
+    const card = event.currentTarget.closest('[data-announcement-card]');
+    setEmojiPickerId(shouldOpen ? announcementId : null);
+
+    if (shouldOpen && card) {
+      window.requestAnimationFrame(() => {
+        card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      });
+    }
+  };
+
+  const handleReact = async (announcementId: string, emoji: string, sourceElement?: HTMLElement) => {
     if (!user) return;
+    if (reactionMutationsRef.current.has(announcementId)) return;
+
     const announcement = announcements.find(a => a.id === announcementId);
+    if (!announcement) return;
+
+    reactionMutationsRef.current.add(announcementId);
+    const previousReactions = announcement.announcement_reactions || [];
     const existing = announcement?.announcement_reactions?.find(r => r.user_id === user.id && r.emoji === emoji);
-    if (existing) await supabase.from('announcement_reactions').delete().eq('id', existing.id);
-    else await supabase.from('announcement_reactions').insert({ announcement_id: announcementId, user_id: user.id, emoji });
-    setEmojiPickerId(null);
+    const optimisticId = `optimistic-${announcementId}-${user.id}-${emoji}`;
+    const card = sourceElement?.closest<HTMLElement>('[data-announcement-card]') || null;
+    const cardRect = card?.getBoundingClientRect();
+    const sourceRect = sourceElement?.getBoundingClientRect();
+    const flightOrigin = cardRect && sourceRect
+      ? { x: sourceRect.left - cardRect.left + sourceRect.width / 2, y: sourceRect.top - cardRect.top + sourceRect.height / 2 }
+      : null;
+    const shouldAnimateFlight = !existing && !prefersReducedMotion && Boolean(card && flightOrigin);
+
+    if (shouldAnimateFlight) {
+      setPendingReactionReveal({ announcementId, emoji });
+    }
+
+    setAnnouncements(current => current.map(item => {
+      if (item.id !== announcementId) return item;
+      return {
+        ...item,
+        announcement_reactions: existing
+          ? (item.announcement_reactions || []).filter(reaction => reaction.id !== existing.id)
+          : [
+              ...(item.announcement_reactions || []),
+              {
+                id: optimisticId,
+                announcement_id: announcementId,
+                user_id: user.id,
+                emoji,
+                created_at: new Date().toISOString(),
+              },
+            ],
+      };
+    }));
+
+    if (shouldAnimateFlight && card && flightOrigin) {
+      window.requestAnimationFrame(() => {
+        const target = Array.from(card.querySelectorAll<HTMLElement>('[data-reaction-emoji]'))
+          .find(element => element.dataset.reactionEmoji === emoji);
+        if (!target) {
+          setPendingReactionReveal(null);
+          setEmojiPickerId(null);
+          return;
+        }
+        const currentCardRect = card.getBoundingClientRect();
+        const targetRect = target.getBoundingClientRect();
+        setReactionCelebration({
+          announcementId,
+          emoji,
+          token: Date.now(),
+          from: flightOrigin,
+          to: {
+            x: targetRect.left - currentCardRect.left + targetRect.width / 2,
+            y: targetRect.top - currentCardRect.top + targetRect.height / 2,
+          },
+        });
+      });
+    }
+
+    if (!shouldAnimateFlight) setEmojiPickerId(null);
+    try {
+      const { data, error } = existing
+        ? await supabase
+            .from('announcement_reactions')
+            .delete()
+            .eq('id', existing.id)
+            .select('id')
+            .maybeSingle()
+        : await supabase
+            .from('announcement_reactions')
+            .insert({ announcement_id: announcementId, user_id: user.id, emoji })
+            .select('id, announcement_id, user_id, emoji, created_at')
+            .single();
+
+      if (error || (existing && !data)) {
+        throw error || new Error('The reaction was not removed.');
+      }
+
+      if (!existing && data) {
+        setAnnouncements(current => current.map(item => item.id === announcementId
+          ? {
+              ...item,
+              announcement_reactions: (item.announcement_reactions || []).map(reaction =>
+                reaction.id === optimisticId ? data as AnnouncementReaction : reaction
+              ),
+            }
+          : item));
+      }
+
+    } catch (error) {
+      console.error('Update announcement reaction error:', error);
+      setReactionCelebration(current => current?.announcementId === announcementId ? null : current);
+      setPendingReactionReveal(current => current?.announcementId === announcementId ? null : current);
+      setReactionLanding(current => current?.announcementId === announcementId ? null : current);
+      setEmojiPickerId(null);
+      setAnnouncements(current => current.map(item => item.id === announcementId
+        ? { ...item, announcement_reactions: previousReactions }
+        : item));
+      toast('error', 'Could not update reaction');
+    } finally {
+      reactionMutationsRef.current.delete(announcementId);
+      await fetchAnnouncements();
+    }
   };
 
   const handlePin = async (e: React.MouseEvent, announcement: AnnouncementWithBlocks) => {
@@ -297,8 +417,6 @@ export function Announcements() {
       .trim();
   };
 
-  const firstImageUrl = (a: AnnouncementWithBlocks) => a.content_blocks?.find(b => b.type === 'image')?.content || null;
-
   if (loading) return <div className="page-container"><AnnouncementsSkeleton /></div>;
 
   return (
@@ -375,11 +493,20 @@ export function Announcements() {
             {sortedFiltered.map((a) => {
               const viewCount = a.announcement_views?.length || 0;
               const commentCount = a.announcement_comments?.length || 0;
-              const thumbnail = firstImageUrl(a);
               const isUnread = user && !a.announcement_views?.some(v => v.user_id === user.id);
               const isPinned = (a.announcement_pins?.length || 0) > 0;
               const isLeadersOnly = (a as AnnouncementWithBlocks).is_leaders_only;
-              const reactionGroups = groupReactions(a.announcement_reactions || []);
+              const isAwaitingReactionLanding = pendingReactionReveal?.announcementId === a.id;
+              const visibleReactions = isAwaitingReactionLanding
+                ? (a.announcement_reactions || []).filter(reaction => !(
+                    reaction.user_id === user?.id && reaction.emoji === pendingReactionReveal.emoji
+                  ))
+                : (a.announcement_reactions || []);
+              const reactionGroups = groupEmojiReactions(visibleReactions);
+              const needsLandingPlaceholder = Boolean(
+                isAwaitingReactionLanding
+                && !reactionGroups.some(reaction => reaction.emoji === pendingReactionReveal?.emoji)
+              );
               const pConfig = PRIORITY_CONFIG[a.priority as keyof typeof PRIORITY_CONFIG] ?? PRIORITY_CONFIG.normal;
               const PriorityIcon = pConfig.icon;
               const hasStatus = isPinned || a.priority !== 'normal' || isLeadersOnly || isUnread;
@@ -387,8 +514,15 @@ export function Announcements() {
               return (
                 <motion.div
                   key={a.id}
+                  data-announcement-card
                   variants={itemVariants}
-                  className="group relative overflow-hidden rounded-lg border border-white/[0.075] bg-[#101010] shadow-[0_12px_30px_-26px_rgba(0,0,0,0.95)] transition-all duration-200 hover:-translate-y-px hover:border-white/[0.13] hover:bg-[#181818] hover:shadow-[0_18px_38px_-24px_rgba(0,0,0,0.95)] focus-within:border-white/[0.16] lg:min-h-[5.5rem]"
+                  whileHover={{ y: -2 }}
+                  transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                  className={`group relative overflow-hidden rounded-xl border bg-[linear-gradient(135deg,#121212_0%,#0e0e0e_72%)] shadow-[0_16px_38px_-32px_rgba(0,0,0,0.95)] transition-[border-color,background-color,box-shadow] duration-300 hover:shadow-[0_22px_46px_-30px_rgba(0,0,0,0.98)] ${
+                    emojiPickerId === a.id
+                      ? 'border-[#1ed760]/55 ring-1 ring-[#1ed760]/25 shadow-[0_22px_48px_-28px_rgba(30,215,96,0.28)]'
+                      : 'border-white/[0.075] hover:border-white/[0.15] focus-within:border-white/[0.18]'
+                  }`}
                 >
                   {(isPinned || a.priority !== 'normal') && (
                     <div
@@ -404,30 +538,8 @@ export function Announcements() {
                       className="w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1ed760]/75"
                       onClick={() => navigate(`/announcements/${a.id}`)}
                     >
-                      <div className="grid gap-3 px-3 pb-1 pt-2.5 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-3.5 sm:px-3.5 sm:py-3 lg:pr-[18.5rem]">
-                        <div className="flex items-start gap-3 sm:contents">
-                          <div className={`relative h-[3.25rem] w-[3.25rem] shrink-0 overflow-hidden rounded-md ring-1 ring-inset ring-white/[0.09] sm:h-16 sm:w-16 ${
-                            a.priority === 'urgent'
-                              ? 'bg-[radial-gradient(circle_at_25%_20%,rgba(239,68,68,0.32),transparent_58%),#171111]'
-                              : a.priority === 'high'
-                                ? 'bg-[radial-gradient(circle_at_25%_20%,rgba(245,158,11,0.3),transparent_58%),#17140f]'
-                                : isPinned
-                                  ? 'bg-[radial-gradient(circle_at_25%_20%,rgba(30,215,96,0.3),transparent_58%),#101713]'
-                                  : 'bg-[radial-gradient(circle_at_25%_20%,rgba(30,215,96,0.22),transparent_60%),#151515]'
-                          }`}>
-                            {thumbnail ? (
-                              <>
-                                <img src={thumbnail} alt="" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" />
-                                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-white/[0.08]" />
-                              </>
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center text-[#1ed760]">
-                                <Megaphone className="h-5 w-5 sm:h-6 sm:w-6" />
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="min-w-0 flex-1">
+                      <div className="grid gap-3 px-4 py-3 sm:grid-cols-[1fr_auto] sm:items-center sm:px-5 sm:py-4">
+                          <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                               {isPinned && (
                                 <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-[0.16em] text-[#68e895] sm:text-[10px]">
@@ -471,10 +583,9 @@ export function Announcements() {
                                 </span>
                               )}
                             </div>
-                          </div>
                         </div>
 
-                        <div className="hidden items-center gap-2 justify-self-end text-white/28 transition-colors group-hover:text-white/60 sm:flex lg:hidden">
+                        <div className="hidden items-center gap-2 justify-self-end text-white/28 transition-colors duration-300 group-hover:translate-x-0.5 group-hover:text-white/65 sm:flex">
                           <span className="text-[10px] font-black uppercase tracking-[0.14em] opacity-0 transition-opacity group-hover:opacity-100">
                             Open
                           </span>
@@ -485,13 +596,42 @@ export function Announcements() {
                       </div>
                     </button>
 
+                    <AnimatePresence initial={false}>
+                      {emojiPickerId === a.id && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                          className="overflow-hidden border-t border-[#1ed760]/15 bg-[#1ed760]/[0.035]"
+                        >
+                          <div className="flex px-3 py-2 sm:px-4">
+                            <EmojiReactionPicker
+                              onPick={(emoji: ReactionEmoji, event) => void handleReact(a.id, emoji, event.currentTarget)}
+                            />
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
                     {/* Reaction row */}
-                    <div className="ml-[4rem] flex min-w-0 items-center gap-1.5 overflow-x-auto pb-2.5 pr-2.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:ml-[5rem] sm:pb-3 sm:pr-3.5 lg:absolute lg:right-3 lg:top-1/2 lg:z-20 lg:ml-0 lg:max-w-[17.25rem] lg:-translate-y-1/2 lg:pb-0 lg:pr-0">
-                      {reactionGroups.map(r => (
-                        <button
+                    <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto border-t border-white/[0.055] px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:px-4">
+                      {reactionGroups.map(r => {
+                        const isLanding = reactionLanding?.announcementId === a.id && reactionLanding.emoji === r.emoji;
+                        return (
+                        <motion.button
                           key={r.emoji}
                           type="button"
-                          onClick={e => handleReact(e, a.id, r.emoji)}
+                          layout
+                          initial={isLanding ? { scale: 0.72, opacity: 0.35 } : false}
+                          animate={isLanding
+                            ? { scale: [0.72, 1.16, 0.96, 1], opacity: [0.35, 1, 1, 1] }
+                            : { scale: 1, opacity: 1 }}
+                          transition={isLanding
+                            ? { duration: 0.36, times: [0, 0.48, 0.72, 1], ease: [0.16, 1, 0.3, 1] }
+                            : { duration: 0.16 }}
+                          onClick={() => void handleReact(a.id, r.emoji)}
+                          data-reaction-emoji={r.emoji}
                           className={`inline-flex h-11 shrink-0 items-center gap-1 rounded-full px-3 text-xs font-bold transition-all active:scale-[0.95] sm:h-9 ${
                             r.users.includes(user?.id || '')
                               ? 'bg-[#1ed760]/20 text-[#7cffaa] ring-1 ring-[#1ed760]/30'
@@ -501,13 +641,24 @@ export function Announcements() {
                           aria-pressed={r.users.includes(user?.id || '')}
                         >
                           {r.emoji} <span>{r.count}</span>
-                        </button>
-                      ))}
+                        </motion.button>
+                      );
+                      })}
+
+                      {needsLandingPlaceholder && pendingReactionReveal && (
+                        <span
+                          aria-hidden="true"
+                          data-reaction-emoji={pendingReactionReveal.emoji}
+                          className="invisible inline-flex h-11 shrink-0 items-center gap-1 rounded-full px-3 text-xs font-bold sm:h-9"
+                        >
+                          {pendingReactionReveal.emoji} <span>1</span>
+                        </span>
+                      )}
 
                       <div className="relative shrink-0">
                         <button
                           type="button"
-                          onClick={e => { e.stopPropagation(); setEmojiPickerId(emojiPickerId === a.id ? null : a.id); }}
+                          onClick={event => handleToggleReactionPicker(event, a.id)}
                           className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/[0.055] text-xs text-white/42 ring-1 ring-white/[0.06] transition-colors hover:bg-white/[0.1] hover:text-white/70 sm:h-9 sm:w-9"
                           aria-label="Add a reaction"
                           aria-expanded={emojiPickerId === a.id}
@@ -515,31 +666,6 @@ export function Announcements() {
                         >
                           <Smile className="h-3.5 w-3.5" />
                         </button>
-                        <AnimatePresence>
-                          {emojiPickerId === a.id && (
-                            <motion.div
-                              initial={{ opacity: 0, scale: 0.9, y: 4 }}
-                              animate={{ opacity: 1, scale: 1, y: 0 }}
-                              exit={{ opacity: 0, scale: 0.9, y: 4 }}
-                              transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
-                              className="absolute bottom-full left-0 z-20 mb-1.5 flex items-center gap-1 rounded-2xl bg-[#232325] p-2 shadow-xl ring-1 ring-white/[0.08]"
-                              role="menu"
-                            >
-                              {QUICK_EMOJIS.map(e => (
-                                <button
-                                  key={e}
-                                  type="button"
-                                  onClick={ev => handleReact(ev, a.id, e)}
-                                  className="flex h-11 w-11 items-center justify-center rounded-xl text-lg transition-transform hover:scale-110 hover:bg-white/[0.08]"
-                                  aria-label={`React with ${e}`}
-                                  role="menuitem"
-                                >
-                                  {e}
-                                </button>
-                              ))}
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
                       </div>
 
                       <div className="ml-auto flex shrink-0 items-center gap-1.5 pl-1">
@@ -571,6 +697,30 @@ export function Announcements() {
                         )}
                       </div>
                     </div>
+
+                    <AnimatePresence>
+                      {reactionCelebration?.announcementId === a.id && (
+                        <ReactionFlightAnimation
+                          key={reactionCelebration.token}
+                          flight={reactionCelebration}
+                          onComplete={() => {
+                            const landing = {
+                              announcementId: reactionCelebration.announcementId,
+                              emoji: reactionCelebration.emoji,
+                              token: reactionCelebration.token,
+                            };
+                            setPendingReactionReveal(current => current?.announcementId === landing.announcementId ? null : current);
+                            setReactionLanding(landing);
+                            setReactionCelebration(current => current?.token === reactionCelebration.token ? null : current);
+                            setEmojiPickerId(current => current === a.id ? null : current);
+                            window.setTimeout(() => {
+                              setReactionLanding(current => current?.token === landing.token ? null : current);
+                            }, 420);
+                          }}
+                        />
+                      )}
+                    </AnimatePresence>
+
                   </div>
                 </motion.div>
               );

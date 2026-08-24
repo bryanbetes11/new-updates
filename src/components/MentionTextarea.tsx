@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { supabase } from '../lib/supabase';
 import { Avatar } from './Avatar';
 import { CalendarDays } from 'lucide-react';
+import { findMentionImmediatelyBeforeCursor } from '../lib/mentionInput';
 
 interface Profile {
   id: string;
@@ -44,11 +45,11 @@ function MentionTextOverlay({ text, profiles }: { text: string; profiles: Profil
   const parts = escaped.length > 0 ? text.split(new RegExp(`(${escaped.join('|')})`, 'gi')) : [text];
 
   return (
-    <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-[1] overflow-hidden px-3.5 py-2 text-[15px] leading-relaxed whitespace-pre-wrap break-words sm:text-[14px]">
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-[1] overflow-hidden px-3.5 py-2.5 text-base leading-6 whitespace-pre-wrap break-words">
       {parts.map((part, index) => {
         const isMention = mentionDisplays.some(display => display.toLowerCase() === part.toLowerCase());
         return isMention
-          ? <span key={`${part}-${index}`} className="rounded bg-emerald-500/10 font-semibold text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-300">{part.replace(/_/g, ' ')}</span>
+          ? <span key={`${part}-${index}`} className="rounded bg-emerald-500/10 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-300">{part.replace(/_/g, ' ')}</span>
           : <span key={`${part}-${index}`} className="text-gray-900 dark:text-white">{part}</span>;
       })}
     </div>
@@ -236,18 +237,23 @@ export function MentionTextarea({
 
     if (e.key === 'Backspace' && e.currentTarget.selectionStart === e.currentTarget.selectionEnd) {
       const cursor = e.currentTarget.selectionStart;
-      const before = value.slice(0, cursor);
-      const mention = before.match(/@[^\s@]+(?: [^\s@]+)*$/)?.[0];
-      if (!mention) {
+      const mentionRange = findMentionImmediatelyBeforeCursor(
+        value,
+        cursor,
+        profiles.flatMap(profile => {
+          const handle = profile.mentionHandle ?? `${profile.first_name} ${profile.last_name}`
+            .trim()
+            .replace(/\s+/g, '_');
+          return [handle, handle.replace(/_/g, ' ')];
+        }),
+      );
+      if (!mentionRange) {
         onKeyDown?.(e);
         return;
       }
       e.preventDefault();
-      const parts = mention.slice(1).split(' ');
-      const replacement = parts.length > 1 ? `@${parts.slice(0, -1).join(' ')}` : '';
-      const start = cursor - mention.length;
-      const nextValue = `${value.slice(0, start)}${replacement}${value.slice(cursor)}`;
-      const nextCursor = start + replacement.length;
+      const nextValue = `${value.slice(0, mentionRange.start)}${value.slice(mentionRange.end)}`;
+      const nextCursor = mentionRange.start;
       onChange(nextValue);
       requestAnimationFrame(() => {
         const el = ref.current;

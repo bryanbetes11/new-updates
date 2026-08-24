@@ -403,6 +403,7 @@ export function EventDetail() {
   const { user, profile, roles, userRoles, organization, loading: authLoading, isLeader, isOrgAdmin, isAdmin, isAdminCoordinator, isProductionDirector, isPlatformOwner } = useAuth();
   const { toast } = useToast();
   const canUseServiceModePilot = isOrgAdmin || isAdmin || isPlatformOwner;
+  const canDeleteRevisionComments = isOrgAdmin || isAdmin || isPlatformOwner;
 
   const isMissingSetlistSubmissionTableError = useCallback((message?: string | null) => {
     if (!message) return false;
@@ -467,6 +468,7 @@ export function EventDetail() {
   const [replyingToRevisionComment, setReplyingToRevisionComment] = useState<SetlistRevisionComment | null>(null);
   const revisionCommentInputRef = useRef<HTMLTextAreaElement>(null);
   const [postingRevisionComment, setPostingRevisionComment] = useState(false);
+  const [deletingRevisionCommentId, setDeletingRevisionCommentId] = useState<string | null>(null);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [editingSongId, setEditingSongId] = useState<string | null>(null);
@@ -2309,6 +2311,37 @@ export function EventDetail() {
     setPostingRevisionComment(false);
   };
 
+  const handleDeleteRevisionComment = async (comment: SetlistRevisionComment) => {
+    if (!setlist || !canDeleteRevisionComments || deletingRevisionCommentId) return;
+
+    const hasReplies = revisionComments.some(reply => reply.reply_to === comment.id);
+    const prompt = hasReplies
+      ? 'Delete this comment and all replies to it? This cannot be undone.'
+      : 'Delete this comment? This cannot be undone.';
+    if (!window.confirm(prompt)) return;
+
+    setDeletingRevisionCommentId(comment.id);
+    const { data, error } = await supabase
+      .from('setlist_revision_comments')
+      .delete()
+      .eq('id', comment.id)
+      .select('id');
+
+    if (error) {
+      toast('error', error.message || 'Could not delete the revision comment');
+    } else if (!data?.length) {
+      toast('error', 'The comment could not be deleted or is no longer available');
+    } else {
+      if (replyingToRevisionComment?.id === comment.id) {
+        setReplyingToRevisionComment(null);
+        setRevisionCommentText('');
+      }
+      await fetchRevisionComments(setlist.id);
+      toast('success', hasReplies ? 'Comment and replies deleted' : 'Comment deleted');
+    }
+    setDeletingRevisionCommentId(null);
+  };
+
   const handleReject = async () => {
     await handleSetlistAction('rejected', rejectReason);
     setShowRejectModal(false);
@@ -4047,7 +4080,23 @@ const openLyricsModal = (ss: SetlistSong) => {
                         <p className="shrink-0 truncate text-xs font-semibold text-gray-900 dark:text-white">{authorName}</p>
                         <p className="min-w-0 truncate text-[11px] text-gray-500 before:mr-1.5 before:text-gray-400 before:content-['|'] dark:text-gray-400 dark:before:text-gray-600">{format(parseISO(comment.created_at), 'MMM d, yyyy · h:mm a')}</p>
                       </div>
-                      <button type="button" onClick={() => startRevisionCommentReply(comment)} className="text-xs font-semibold text-amber-600 hover:text-amber-700 dark:text-amber-400">Reply</button>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button type="button" onClick={() => startRevisionCommentReply(comment)} className="px-1.5 py-1 text-xs font-semibold text-amber-600 hover:text-amber-700 dark:text-amber-400">Reply</button>
+                        {canDeleteRevisionComments && (
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteRevisionComment(comment)}
+                            disabled={deletingRevisionCommentId !== null}
+                            aria-label={`Delete comment by ${authorName}`}
+                            title="Delete comment"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:text-gray-500 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                          >
+                            {deletingRevisionCommentId === comment.id
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              : <Trash2 className="h-3.5 w-3.5" />}
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <p className="mt-1 whitespace-pre-wrap break-words pl-7 text-sm leading-5 text-gray-700 dark:text-gray-200"><FormattedText text={comment.content} /></p>
                   </div>

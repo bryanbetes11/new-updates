@@ -15,6 +15,7 @@ interface ModalProps {
   closeOnEscape?: boolean;
   titleAlign?: 'left' | 'center';
   bodyClassName?: string;
+  dialogClassName?: string;
   onBack?: () => void;
   backLabel?: string;
 }
@@ -163,6 +164,7 @@ export function Modal({
   closeOnEscape = true,
   titleAlign = 'left',
   bodyClassName = '',
+  dialogClassName = '',
   onBack,
   backLabel = 'Back',
 }: ModalProps) {
@@ -319,7 +321,7 @@ export function Modal({
       <div className={`fixed inset-0 bg-black/50 backdrop-blur-sm ${backdropClass}`} />
       <div
         ref={dialogRef}
-        className={`modal-dialog-viewport relative w-full ${desktopSizes[size]} ${isMobilePage ? 'h-[100dvh] rounded-none sm:h-auto sm:rounded-2xl' : isMobileDialog ? 'mx-4 rounded-[28px]' : 'rounded-t-[28px] sm:rounded-2xl'} bg-white dark:bg-[#1c1b1e] ring-1 ring-black/[0.06] dark:ring-white/[0.08] ${sheetClass} ${isMobilePage ? 'max-h-[100dvh] sm:max-h-[85vh]' : 'max-h-[92dvh] sm:max-h-[85vh]'} flex flex-col overflow-hidden ${isMobilePage || isMobileDialog ? '' : 'sm:mx-4'}`}
+        className={`modal-dialog-viewport relative min-h-0 w-full ${desktopSizes[size]} ${isMobilePage ? 'h-[100dvh] rounded-none sm:h-auto sm:rounded-2xl' : isMobileDialog ? 'mx-4 rounded-[28px]' : 'rounded-t-[28px] sm:rounded-2xl'} bg-white dark:bg-[#1c1b1e] ring-1 ring-black/[0.06] dark:ring-white/[0.08] ${sheetClass} ${isMobilePage ? 'max-h-[100dvh] sm:max-h-[85vh]' : 'max-h-[92dvh] sm:max-h-[85vh]'} flex flex-col overflow-hidden ${isMobilePage || isMobileDialog ? '' : 'sm:mx-4'} ${dialogClassName}`}
         style={{
           boxShadow: '0 24px 64px -16px rgba(0,0,0,0.3), 0 8px 24px -8px rgba(0,0,0,0.15)',
         }}
@@ -375,7 +377,7 @@ export function Modal({
           <div className="absolute top-3 left-1/2 -translate-x-1/2 w-8 h-1 rounded-full bg-gray-200 dark:bg-gray-700 sm:hidden z-10" />
         )}
         <div
-          className={`overflow-y-auto overflow-x-hidden flex-1 px-5 py-5 scrollbar-thin overscroll-contain touch-action-pan-y ${bodyClassName}`}
+          className={`min-h-0 overflow-y-auto overflow-x-hidden flex-1 px-5 py-5 scrollbar-thin overscroll-contain touch-action-pan-y ${bodyClassName}`}
           style={isMobilePage ? { paddingBottom: 'calc(env(safe-area-inset-bottom) + 1.25rem)' } : undefined}
           data-modal-body
         >

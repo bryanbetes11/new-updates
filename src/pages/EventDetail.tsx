@@ -18,6 +18,8 @@ import { dispatchBadgeCountsRefresh } from '../lib/realtimeSignals';
 import { SongChartViewer } from '../components/SongChartViewer';
 import { SongArtwork } from '../components/SongArtwork';
 import { EventArtwork } from '../components/EventArtwork';
+import { FormattedText } from '../components/FormattedText';
+import { MentionTextarea } from '../components/MentionTextarea';
 import { VoiceKeyDetector } from '../components/VoiceKeyDetector';
 import { withSaveTimeout } from '../lib/saveTimeout';
 import { clearActiveServiceMode, getActiveServiceMode, saveActiveServiceMode } from '../lib/serviceModeResume';
@@ -30,6 +32,7 @@ import { getPendingAssignmentUserCount } from '../lib/eventAssignmentReminder';
 import { getPendingUserEventAssignments, getUserEventAssignments, shouldBlockEventDetails } from '../lib/eventAssignmentGate';
 import { getPostEventObservationViewers } from '../lib/postEventObservationViews';
 import { normalizeSongTitle } from '../lib/songTitle';
+import { buildSongProposalConflicts, buildSongProposalReservations, type SongProposalConflict, type SongProposalReservation, type SongProposalSetlistRow } from '../lib/songProposalConflicts';
 
 import type { Event, EventAssignment, Setlist, SetlistSong, Song, ServiceFormat, SetlistCheckReport, PostEventObservation, PostEventObservationCategory, PostEventObservationStatus, PostEventObservationView } from '../types';
 import { inferServiceFormat, SERVICE_FORMAT_LABELS } from '../lib/setlistCheckerEngine';
@@ -228,6 +231,42 @@ type SetlistBuilderSong = {
   artist: string;
 };
 
+function formatProposalSubmissionTime(value: string) {
+  try {
+    return formatInTimeZone(new Date(value), 'Asia/Manila', 'MMM d, h:mm a');
+  } catch {
+    return 'time unavailable';
+  }
+}
+
+function getProposalReservationMessage(reservation: SongProposalReservation) {
+  const first = reservation.firstSubmission;
+  return `${first.submitterName} already proposed this song for ${first.eventTitle} on ${formatProposalSubmissionTime(first.submittedAt)}. Choose a different song to avoid duplicate active proposals.`;
+}
+
+function SongProposalConflictBadge({ conflict, onOpen }: { conflict: SongProposalConflict; onOpen: () => void }) {
+  const currentIsFirst = conflict.currentSubmission.setlistId === conflict.firstSubmission.setlistId;
+  const first = conflict.firstSubmission;
+  const tooltip = currentIsFirst
+    ? `${first.submitterName} submitted this song first on ${formatProposalSubmissionTime(first.submittedAt)}. Open all ${conflict.totalSubmissions} proposals.`
+    : `${first.submitterName} submitted this song before ${conflict.currentSubmission.submitterName}. Open all ${conflict.totalSubmissions} proposals.`;
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={`inline-flex min-w-0 max-w-full items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${currentIsFirst
+        ? 'bg-sky-50 text-sky-700 ring-sky-200/70 hover:bg-sky-100 dark:bg-sky-950/45 dark:text-sky-300 dark:ring-sky-700/40 dark:hover:bg-sky-900/55'
+        : 'bg-amber-50 text-amber-700 ring-amber-200/70 hover:bg-amber-100 dark:bg-amber-950/55 dark:text-amber-300 dark:ring-amber-700/40 dark:hover:bg-amber-900/55'} transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400`}
+      title={tooltip}
+      aria-label={tooltip}
+    >
+      <Clock className="h-3 w-3 shrink-0" />
+      <span className="truncate">{currentIsFirst ? 'First submitted' : 'Earlier proposal'} · {first.submitterName} · {conflict.totalSubmissions} proposals</span>
+    </button>
+  );
+}
+
 let assignmentDraftSequence = 0;
 const createAssignmentDraftRow = (): AssignmentDraftRow => ({
   id: `assignment-draft-${++assignmentDraftSequence}`,
@@ -424,6 +463,7 @@ export function EventDetail() {
   const [revisionComments, setRevisionComments] = useState<SetlistRevisionComment[]>([]);
   const [revisionCommentText, setRevisionCommentText] = useState('');
   const [replyingToRevisionComment, setReplyingToRevisionComment] = useState<SetlistRevisionComment | null>(null);
+  const revisionCommentInputRef = useRef<HTMLTextAreaElement>(null);
   const [postingRevisionComment, setPostingRevisionComment] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
@@ -431,6 +471,10 @@ export function EventDetail() {
   const [editSongForm, setEditSongForm] = useState({ artist: '', category: '', youtube_url: '', performed_key: '' });
   const [savingSongEdit, setSavingSongEdit] = useState(false);
   const [songUsage, setSongUsage] = useState<Record<string, SongUsageAge>>({});
+  const [songProposalConflicts, setSongProposalConflicts] = useState<Record<string, SongProposalConflict>>({});
+  const [songProposalReservations, setSongProposalReservations] = useState<Record<string, SongProposalReservation>>({});
+  const [selectedSongProposals, setSelectedSongProposals] = useState<{ songTitle: string; conflict: SongProposalConflict } | null>(null);
+  const [selectedSongReservationDetails, setSelectedSongReservationDetails] = useState<{ songTitle: string; reservation: SongProposalReservation } | null>(null);
   const [showEditEvent, setShowEditEvent] = useState(false);
   const [editForm, setEditForm] = useState({ title: '', description: '', event_type: '', event_date: '', start_time: '', end_time: '', song_leader_id: '', linked_event_id: '' });
   const [savingEventEdit, setSavingEventEdit] = useState(false);
@@ -757,7 +801,7 @@ export function EventDetail() {
   const fetchAll = useCallback(async () => {
     if (!id) return;
     try {
-      const [eventRes, assignRes, membersRes, memberRolesRes, memberSettingsRes, setlistRes, songsRes, allSetlistsRes, sundayServicesRes, convRes, observationsRes, observationRepliesRes, observationViewsRes] = await Promise.all([
+      const [eventRes, assignRes, membersRes, memberRolesRes, memberSettingsRes, setlistRes, songsRes, allSetlistsRes, proposalSetlistsRes, sundayServicesRes, convRes, observationsRes, observationRepliesRes, observationViewsRes] = await Promise.all([
         supabase.from('events').select('*').eq('id', id).maybeSingle(),
         supabase.from('event_assignments').select('*, events(*), profiles(first_name, last_name, gender, avatar_url), roles(name)').eq('event_id', id),
         supabase.from('profiles').select('id, first_name, last_name, ministry_status').eq('ministry_status', 'active'),
@@ -772,6 +816,13 @@ export function EventDetail() {
           .maybeSingle(),
         supabase.from('songs').select('*').order('title'),
         supabase.from('setlists').select('id, status, event_id, events(event_date), setlist_songs(song_id)').eq('status', 'approved'),
+        supabase
+          .from('setlists')
+          .select('id, status, event_id, submitted_at, events!inner(title, event_date), submitter:profiles!setlists_created_by_fkey(first_name, last_name), setlist_songs(song_id)')
+          .in('status', ['pending_review', 'approved', 'revision_requested'])
+          .not('submitted_at', 'is', null)
+          .gte('events.event_date', getManilaTodayKey())
+          .order('submitted_at', { ascending: true }),
         supabase.from('events').select('*').eq('event_type', 'Sunday Service').gte('event_date', new Date().toISOString().split('T')[0]).order('event_date'),
         supabase.from('conversations').select('id').eq('event_id', id).eq('type', 'event').not('name', 'like', '[Admin Test] %').maybeSingle(),
         supabase
@@ -876,6 +927,16 @@ export function EventDetail() {
       }
       setSongs(songsRes.data || []);
       setSundayServices(sundayServicesRes.data || []);
+
+      if (proposalSetlistsRes.error) {
+        console.error('Failed to load competing song proposals:', proposalSetlistsRes.error);
+        setSongProposalConflicts({});
+        setSongProposalReservations({});
+      } else {
+        const proposalRows = (proposalSetlistsRes.data || []) as unknown as SongProposalSetlistRow[];
+        setSongProposalConflicts(buildSongProposalConflicts(proposalRows, setlistRes.data?.id));
+        setSongProposalReservations(buildSongProposalReservations(proposalRows, setlistRes.data?.id));
+      }
 
       const usage: Record<string, SongUsageAge> = {};
       ((allSetlistsRes.data || []) as ApprovedSetlistUsage[]).forEach(sl => {
@@ -1807,6 +1868,11 @@ export function EventDetail() {
   };
 
   const openSongConfig = (songId: string) => {
+    const proposalReservation = songProposalReservations[songId];
+    if (proposalReservation) {
+      toast('error', getProposalReservationMessage(proposalReservation));
+      return;
+    }
     const song = songs.find(s => s.id === songId);
     const stagedSong = setlistBuilderSongs.find(draft => draft.song_id === songId);
     setSelectedSongForConfig(songId);
@@ -1847,6 +1913,11 @@ export function EventDetail() {
 
   const saveSetlistBuilder = async () => {
     if (!id || !user || savingSetlistBuilder || setlistBuilderSongs.length === 0) return;
+    const reservedDraft = setlistBuilderSongs.find(draft => songProposalReservations[draft.song_id]);
+    if (reservedDraft) {
+      toast('error', getProposalReservationMessage(songProposalReservations[reservedDraft.song_id]));
+      return;
+    }
     setSavingSetlistBuilder(true);
     try {
       let targetSetlist = setlist;
@@ -1922,6 +1993,11 @@ export function EventDetail() {
 
   const confirmAddSong = async () => {
     if (!selectedSongForConfig || addingSetlistSong) return;
+    const proposalReservation = songProposalReservations[selectedSongForConfig];
+    if (proposalReservation) {
+      toast('error', getProposalReservationMessage(proposalReservation));
+      return;
+    }
     const selectedSong = songs.find(song => song.id === selectedSongForConfig);
     const artist = songConfig.artist.trim();
     if (!artist) {
@@ -2237,6 +2313,25 @@ export function EventDetail() {
     setAdminOnlyChatTest(false);
     if (!adminOnlyChatTest) setEventConversationId(data as string);
     navigate(`/messages/${data}`);
+  };
+
+  const startRevisionCommentReply = (comment: SetlistRevisionComment) => {
+    setReplyingToRevisionComment(comment);
+    const mentionHandle = [comment.profiles?.first_name, comment.profiles?.last_name]
+      .filter(Boolean)
+      .join('_');
+    if (mentionHandle) {
+      setRevisionCommentText(current => {
+        const mention = `@${mentionHandle}`;
+        if (current.trimStart().startsWith(mention)) return current;
+        return `${mention} ${current}`;
+      });
+    }
+    window.setTimeout(() => {
+      const input = revisionCommentInputRef.current;
+      input?.focus();
+      input?.setSelectionRange(input.value.length, input.value.length);
+    }, 0);
   };
 
   const handleDeleteEvent = async () => {
@@ -3087,6 +3182,10 @@ const openLyricsModal = (ss: SetlistSong) => {
       ? orderedSetlistSongs
       : linkedReferenceSongs;
   const eventDetailSongs = serviceModeSongs;
+  const selectedProposalSubmissions = selectedSongProposals
+    ? [selectedSongProposals.conflict.currentSubmission, ...selectedSongProposals.conflict.otherSubmissions]
+      .sort((left, right) => Date.parse(left.submittedAt) - Date.parse(right.submittedAt))
+    : [];
   const eventDetailArtworkSongs = eventDetailSongs.slice(0, 4).map(ss => ({
     title: ss.songs?.title,
     artist: ss.songs?.artist,
@@ -3922,7 +4021,7 @@ const openLyricsModal = (ss: SetlistSong) => {
           );
         })()}
 
-        {setlist && (canReviewSetlist || isSongLeader) && (setlist.status === 'revision_requested' || revisionComments.length > 0) && (
+        {setlist && (canReviewSetlist || isSongLeader) && setlist.status !== 'rejected' && (setlist.status === 'revision_requested' || revisionComments.length > 0 || !!setlist.review_note || !!setlist.approval_notes) && (
           <div className="card overflow-hidden animate-slide-up">
             <div className="border-b border-gray-200/70 px-3.5 py-3 dark:border-white/[0.08] sm:px-4">
               <div className="flex items-center justify-between gap-3">
@@ -3934,7 +4033,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                 </div>
                 <span className="badge badge-yellow shrink-0">{revisionComments.length}</span>
               </div>
-              {setlist.status === 'revision_requested' && (
+              {(setlist.review_note || setlist.approval_notes) && (
                 <div className="mt-2.5 flex items-start gap-2 rounded-xl border border-amber-300/50 bg-amber-50/80 px-3 py-2.5 dark:border-amber-700/35 dark:bg-amber-900/15">
                   <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
                   <div className="min-w-0 flex-1">
@@ -3957,9 +4056,9 @@ const openLyricsModal = (ss: SetlistSong) => {
                         <p className="shrink-0 truncate text-xs font-semibold text-gray-900 dark:text-white">{authorName}</p>
                         <p className="min-w-0 truncate text-[11px] text-gray-500 before:mr-1.5 before:text-gray-400 before:content-['|'] dark:text-gray-400 dark:before:text-gray-600">{format(parseISO(comment.created_at), 'MMM d, yyyy · h:mm a')}</p>
                       </div>
-                      <button type="button" onClick={() => setReplyingToRevisionComment(comment)} className="text-xs font-semibold text-amber-600 hover:text-amber-700 dark:text-amber-400">Reply</button>
+                      <button type="button" onClick={() => startRevisionCommentReply(comment)} className="text-xs font-semibold text-amber-600 hover:text-amber-700 dark:text-amber-400">Reply</button>
                     </div>
-                    <p className="mt-1 whitespace-pre-wrap break-words pl-7 text-sm leading-5 text-gray-700 dark:text-gray-200">{comment.content}</p>
+                    <p className="mt-1 whitespace-pre-wrap break-words pl-7 text-sm leading-5 text-gray-700 dark:text-gray-200"><FormattedText text={comment.content} /></p>
                   </div>
                 );
               })}
@@ -3970,11 +4069,13 @@ const openLyricsModal = (ss: SetlistSong) => {
                   <button type="button" onClick={() => setReplyingToRevisionComment(null)} className="font-semibold">Cancel</button>
                 </div>
               )}
-              <textarea
+              <MentionTextarea
+                textareaRef={revisionCommentInputRef}
                 value={revisionCommentText}
-                onChange={event => setRevisionCommentText(event.target.value)}
-                placeholder={replyingToRevisionComment ? 'Write a reply…' : 'Add a comment about the requested revisions…'}
-                className="input-field min-h-16 resize-y whitespace-pre-wrap"
+                onChange={setRevisionCommentText}
+                placeholder={replyingToRevisionComment ? 'Write a reply… (type @ to mention)' : 'Add a comment… (type @ to mention)'}
+                className={`input-field whitespace-pre-wrap ${replyingToRevisionComment ? 'min-h-11 resize-none overflow-y-hidden' : 'min-h-16 resize-y'}`}
+                rows={replyingToRevisionComment ? 1 : 2}
                 maxLength={4000}
               />
               <div className="flex justify-end">
@@ -4379,6 +4480,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                     <div className="space-y-1">
                       {setlistSongs.sort((a, b) => a.position - b.position).map((ss, i) => {
                         const usage = songUsage[ss.song_id];
+                        const proposalConflict = canReviewSetlist ? songProposalConflicts[ss.song_id] : undefined;
                         const readiness = getSongReadinessBadge(usage);
                         const ReadinessIcon = readiness.Icon;
                         const displayKey = ss.performed_key || ss.songs?.song_key || '';
@@ -4418,7 +4520,10 @@ const openLyricsModal = (ss: SetlistSong) => {
                                     <span className={keyBadgeClass}>{displayKey}</span>
                                   ))}
                                 </div>
-                                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{ss.songs?.artist || 'No artist listed'}</p>
+                                <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+                                  <p className="shrink-0 truncate text-xs text-gray-500 dark:text-gray-400">{ss.songs?.artist || 'No artist listed'}</p>
+                                  {proposalConflict && <SongProposalConflictBadge conflict={proposalConflict} onOpen={() => setSelectedSongProposals({ songTitle: ss.songs?.title || 'Song', conflict: proposalConflict })} />}
+                                </div>
                               </div>
                               {videoUrl && (
                                 <a href={videoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 transition-colors shrink-0" title="Open video" aria-label={`Open video for ${ss.songs?.title || 'song'}`}>
@@ -4489,14 +4594,17 @@ const openLyricsModal = (ss: SetlistSong) => {
                                       Lyrics needed
                                     </span>
                                   )}
-                                  <span
-                                    className={`mt-1 inline-flex w-fit items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${readiness.className}`}
-                                    title={usage ? `Last used ${usage.days} days ago` : 'No approved setlist usage found'}
-                                  >
-                                    <ReadinessIcon className="h-3 w-3" />
-                                    <span>{readiness.label}</span>
-                                    <span className="opacity-75">- {readiness.detail}</span>
-                                  </span>
+                                  <div className="mt-1 flex min-w-0 flex-wrap gap-1">
+                                    <span
+                                      className={`inline-flex w-fit items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${readiness.className}`}
+                                      title={usage ? `Last used ${usage.days} days ago` : 'No approved setlist usage found'}
+                                    >
+                                      <ReadinessIcon className="h-3 w-3" />
+                                      <span>{readiness.label}</span>
+                                      <span className="opacity-75">- {readiness.detail}</span>
+                                    </span>
+                                    {proposalConflict && <SongProposalConflictBadge conflict={proposalConflict} onOpen={() => setSelectedSongProposals({ songTitle: ss.songs?.title || 'Song', conflict: proposalConflict })} />}
+                                  </div>
                                 </div>
                                 <div className="flex shrink-0 items-center gap-0.5">
                                   {videoUrl && (
@@ -4587,26 +4695,22 @@ const openLyricsModal = (ss: SetlistSong) => {
                         <>
                           <div className="w-full border-t border-gray-100 dark:border-gray-800 my-1" />
                           <p className="w-full text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Leader Review</p>
-                          <button onClick={() => handleSetlistAction('approved')} className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 transition-colors">
-                            <ThumbsUp className="h-3.5 w-3.5" /> Approve Setlist
-                          </button>
-                          <button onClick={() => setShowRevisionRequest(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700 transition-colors">
-                            <AlertCircle className="h-3.5 w-3.5" /> Request Revision
-                          </button>
-                          <button onClick={() => setShowRejectModal(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 transition-colors">
-                            <X className="h-3.5 w-3.5" /> Reject Setlist
-                          </button>
+                          <div className="flex w-full flex-nowrap gap-2 sm:w-auto">
+                            <button aria-label="Approve Setlist" onClick={() => handleSetlistAction('approved')} className="inline-flex min-h-11 min-w-0 flex-1 items-center justify-center gap-1 rounded-lg bg-green-600 px-2 text-xs font-medium text-white transition-colors hover:bg-green-700 sm:min-h-0 sm:flex-none sm:gap-1.5 sm:px-3 sm:py-1.5">
+                              <ThumbsUp className="h-3.5 w-3.5 shrink-0" /> <span className="sm:hidden">Approve</span><span className="hidden sm:inline">Approve Setlist</span>
+                            </button>
+                            <button aria-label="Request Revision" onClick={() => setShowRevisionRequest(true)} className="inline-flex min-h-11 min-w-0 flex-1 items-center justify-center gap-1 rounded-lg bg-amber-600 px-2 text-xs font-medium text-white transition-colors hover:bg-amber-700 sm:min-h-0 sm:flex-none sm:gap-1.5 sm:px-3 sm:py-1.5">
+                              <AlertCircle className="h-3.5 w-3.5 shrink-0" /> <span className="sm:hidden">Revise</span><span className="hidden sm:inline">Request Revision</span>
+                            </button>
+                            <button aria-label="Reject Setlist" onClick={() => setShowRejectModal(true)} className="inline-flex min-h-11 min-w-0 flex-1 items-center justify-center gap-1 rounded-lg bg-red-600 px-2 text-xs font-medium text-white transition-colors hover:bg-red-700 sm:min-h-0 sm:flex-none sm:gap-1.5 sm:px-3 sm:py-1.5">
+                              <X className="h-3.5 w-3.5 shrink-0" /> <span className="sm:hidden">Reject</span><span className="hidden sm:inline">Reject Setlist</span>
+                            </button>
+                          </div>
                         </>
                       )}
                     </div>
                   </div>
 
-                  {(setlist.review_note || setlist.approval_notes) && !['revision_requested', 'rejected', 'approved'].includes(setlist.status) && (
-                    <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
-                      <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Notes</p>
-                      <p className="whitespace-pre-wrap break-words text-sm leading-6 text-gray-500 dark:text-gray-400">{setlist.review_note || setlist.approval_notes}</p>
-                    </div>
-                  )}
                 </div>
 
                 {showSetlistEditControls && (canSubmitSetlist || canManageSetlist) && setlistSongs.length > 0 && (
@@ -5541,30 +5645,49 @@ const openLyricsModal = (ss: SetlistSong) => {
                 .map(song => {
                   const usage = songUsage[song.id];
                   const isSafe = !usage || usage.days >= SONG_READY_DAYS;
+                  const proposalReservation = songProposalReservations[song.id];
                   return (
                     <button
                       key={song.id}
-                      onClick={() => openSongConfig(song.id)}
-                      className="flex items-center gap-3 w-full p-3 rounded-xl text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                      type="button"
+                      onClick={() => proposalReservation
+                        ? setSelectedSongReservationDetails({ songTitle: song.title, reservation: proposalReservation })
+                        : openSongConfig(song.id)}
+                      aria-label={proposalReservation ? `View duplicate proposal details for ${song.title}` : undefined}
+                      title={proposalReservation ? getProposalReservationMessage(proposalReservation) : undefined}
+                      className={`flex w-full items-start gap-3 rounded-xl p-3 text-left transition-colors ${proposalReservation
+                        ? 'cursor-not-allowed bg-amber-50/80 opacity-80 ring-1 ring-inset ring-amber-300/80 dark:bg-amber-500/[0.08] dark:ring-amber-500/30'
+                        : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`}
                     >
-                      <SongArtwork song={song} youtubeUrl={song.youtube_url} className="h-11 w-11 rounded-lg" />
+                      <SongArtwork song={song} youtubeUrl={song.youtube_url} className="h-11 w-11 shrink-0 rounded-lg" />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-gray-900 dark:text-white">{song.title}</p>
-                        <p className={`text-xs ${song.artist?.trim() ? 'text-gray-500 dark:text-gray-400' : 'font-semibold text-amber-600 dark:text-amber-400'}`}>
-                          {song.artist?.trim() || 'Artist required before use'}
-                        </p>
+                        <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+                          <span className={`truncate text-xs ${song.artist?.trim() ? 'text-gray-500 dark:text-gray-400' : 'font-semibold text-amber-600 dark:text-amber-400'}`}>
+                            {song.artist?.trim() || 'Artist required before use'}
+                          </span>
+                          {proposalReservation && (
+                            <span className="inline-flex min-w-0 shrink items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-300">
+                              <span className="text-gray-300 dark:text-gray-600" aria-hidden="true">·</span>
+                              <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />
+                              <span className="truncate">Duplicate - Open to see details</span>
+                            </span>
+                          )}
+                        </div>
                       </div>
                       {usage ? (
-                        <span className={`inline-flex items-center gap-1 text-xs font-medium shrink-0 ${isSafe ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                        <span className={`mt-0.5 inline-flex items-center gap-1 text-xs font-medium shrink-0 ${isSafe ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                           {isSafe ? <CheckCircle className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
                           {usage.days}d
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-xs text-gray-400 shrink-0">
+                        <span className="mt-0.5 inline-flex items-center gap-1 text-xs text-gray-400 shrink-0">
                           <CheckCircle className="h-3.5 w-3.5" />
                         </span>
                       )}
-                      <Plus className="h-4 w-4 text-gray-400 shrink-0" />
+                      {proposalReservation
+                        ? <Lock className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-300" aria-hidden="true" />
+                        : <Plus className="mt-0.5 h-4 w-4 text-gray-400 shrink-0" />}
                     </button>
                   );
                 })}
@@ -6879,43 +7002,168 @@ const openLyricsModal = (ss: SetlistSong) => {
           </div>
         </Modal>
 
-        <Modal open={showRevisionRequest} onClose={() => setShowRevisionRequest(false)} title="Request Setlist Revision" size="sm">
+        <Modal
+          open={selectedSongReservationDetails !== null}
+          onClose={() => setSelectedSongReservationDetails(null)}
+          title={`${selectedSongReservationDetails?.songTitle || 'Song'} is unavailable`}
+          size="sm"
+          mobileView="dialog"
+        >
+          {selectedSongReservationDetails && (() => {
+            const submission = selectedSongReservationDetails.reservation.firstSubmission;
+            const additionalProposalCount = selectedSongReservationDetails.reservation.totalSubmissions - 1;
+            return (
+              <div className="space-y-4">
+                <div className="flex items-start gap-3 rounded-2xl border border-amber-200/80 bg-amber-50/80 p-3.5 dark:border-amber-500/20 dark:bg-amber-500/[0.08]">
+                  <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">
+                    <Lock className="h-4 w-4" aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-gray-900 dark:text-white">Already in an active proposal</p>
+                    <p className="mt-1 text-xs leading-relaxed text-gray-600 dark:text-gray-300">
+                      This song cannot be selected because adding it would create a duplicate active proposal.
+                    </p>
+                  </div>
+                </div>
+                <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
+                  <dt className="text-gray-500 dark:text-gray-400">Proposed by</dt>
+                  <dd className="truncate font-semibold text-gray-900 dark:text-white">{submission.submitterName}</dd>
+                  <dt className="text-gray-500 dark:text-gray-400">Event</dt>
+                  <dd className="truncate font-semibold text-gray-900 dark:text-white">{submission.eventTitle}</dd>
+                  <dt className="text-gray-500 dark:text-gray-400">Submitted</dt>
+                  <dd className="font-semibold text-gray-900 dark:text-white">{formatProposalSubmissionTime(submission.submittedAt)}</dd>
+                  <dt className="text-gray-500 dark:text-gray-400">Status</dt>
+                  <dd className="font-semibold text-gray-900 dark:text-white">{statusLabels[submission.status] || submission.status.replace(/_/g, ' ')}</dd>
+                </dl>
+                {additionalProposalCount > 0 && (
+                  <p className="rounded-xl bg-gray-50 px-3 py-2 text-xs text-gray-600 dark:bg-white/[0.04] dark:text-gray-300">
+                    This song also appears in {additionalProposalCount} other active {additionalProposalCount === 1 ? 'proposal' : 'proposals'}.
+                  </p>
+                )}
+                <div className="grid grid-cols-2 gap-2 border-t border-gray-200/70 pt-4 dark:border-white/[0.08]">
+                  <button type="button" onClick={() => setSelectedSongReservationDetails(null)} className="btn-secondary min-h-11 w-full justify-center">Close</button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedSongReservationDetails(null);
+                      setShowSetlist(false);
+                      navigate(`/events/${submission.eventId}`);
+                    }}
+                    className="btn-primary min-h-11 w-full justify-center"
+                  >
+                    View Proposal
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+        </Modal>
+
+        <Modal
+          open={selectedSongProposals !== null}
+          onClose={() => setSelectedSongProposals(null)}
+          title={`Song Proposals · ${selectedSongProposals?.songTitle || ''}`}
+          size="md"
+          mobileView="dialog"
+        >
           <div className="space-y-4">
+            <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+              This song appears in {selectedSongProposals?.conflict.totalSubmissions || 0} active upcoming setlists. First submission uses the original proposal time, not approval time.
+            </p>
+            <div className="space-y-2.5">
+              {selectedProposalSubmissions.map((submission, index) => {
+                const isCurrent = submission.setlistId === selectedSongProposals?.conflict.currentSubmission.setlistId;
+                return (
+                  <div key={submission.setlistId} className="rounded-2xl border border-gray-200/75 bg-gray-50/80 p-3.5 dark:border-white/[0.08] dark:bg-white/[0.035]">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <p className="truncate text-sm font-bold text-gray-900 dark:text-white">{submission.submitterName}</p>
+                          {index === 0 && <span className="badge badge-blue text-[10px]">First</span>}
+                          {isCurrent && <span className="badge badge-yellow text-[10px]">Current</span>}
+                        </div>
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{submission.eventTitle} · {submission.eventDate ? format(parseISO(submission.eventDate), 'MMM d, yyyy') : 'Date unavailable'}</p>
+                        <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">Submitted {formatProposalSubmissionTime(submission.submittedAt)} · {statusLabels[submission.status] || submission.status.replace(/_/g, ' ')}</p>
+                      </div>
+                      {isCurrent ? (
+                        <span className="shrink-0 rounded-lg bg-gray-100 px-2.5 py-2 text-xs font-semibold text-gray-500 dark:bg-white/[0.06] dark:text-gray-400">You are here</span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedSongProposals(null);
+                            navigate(`/events/${submission.eventId}`);
+                          }}
+                          className="btn-secondary min-h-10 shrink-0 px-3 text-xs"
+                        >
+                          View Setlist
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </Modal>
+
+        <Modal
+          open={showRevisionRequest}
+          onClose={() => setShowRevisionRequest(false)}
+          title="Request Setlist Revision"
+          size="lg"
+          mobileView="dialog"
+          dialogClassName="sm:!max-w-2xl"
+          bodyClassName="sm:px-6 sm:py-6"
+        >
+          <div className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Reason for revision</label>
+              <label htmlFor="setlist-revision-reason" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Reason for revision</label>
               <textarea
+                id="setlist-revision-reason"
                 value={revisionReason}
                 onChange={e => setRevisionReason(e.target.value)}
-                className="input-field h-24 resize-none"
+                className="input-field min-h-36 resize-y sm:min-h-44"
                 placeholder="Explain what needs to be revised..."
+                data-modal-initial-focus
                 required
               />
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">The song leader will be notified and can see this reason.</p>
+              <p className="mt-1.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">The song leader will be notified and can see this reason.</p>
             </div>
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setShowRevisionRequest(false)} className="btn-secondary">Cancel</button>
-              <button onClick={handleRevisionRequest} disabled={!revisionReason.trim()} className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 rounded-lg transition-colors">
+            <div className="grid grid-cols-2 gap-2 border-t border-gray-200/60 pt-4 dark:border-white/[0.06] sm:flex sm:justify-end sm:gap-3">
+              <button onClick={() => setShowRevisionRequest(false)} className="btn-secondary min-h-11 w-full justify-center sm:w-auto">Cancel</button>
+              <button onClick={handleRevisionRequest} disabled={!revisionReason.trim()} className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-700 disabled:opacity-50 sm:w-auto">
                 <AlertCircle className="h-4 w-4" /> Request Revision
               </button>
             </div>
           </div>
         </Modal>
 
-        <Modal open={showRejectModal} onClose={() => setShowRejectModal(false)} title="Reject Setlist" size="sm">
-          <div className="space-y-4">
-            <p className="text-sm text-gray-600 dark:text-gray-400">This setlist will be marked as Rejected. The song leader will be notified.</p>
+        <Modal
+          open={showRejectModal}
+          onClose={() => setShowRejectModal(false)}
+          title="Reject Setlist"
+          size="lg"
+          mobileView="dialog"
+          dialogClassName="sm:!max-w-2xl"
+          bodyClassName="sm:px-6 sm:py-6"
+        >
+          <div className="space-y-5">
+            <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">This setlist will be marked as Rejected. The song leader will be notified.</p>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Reason (optional)</label>
+              <label htmlFor="setlist-reject-reason" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Reason (optional)</label>
               <textarea
+                id="setlist-reject-reason"
                 value={rejectReason}
                 onChange={e => setRejectReason(e.target.value)}
-                className="input-field h-20 resize-none"
+                className="input-field min-h-32 resize-y sm:min-h-40"
                 placeholder="Explain why this setlist is rejected..."
+                data-modal-initial-focus
               />
             </div>
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setShowRejectModal(false)} className="btn-secondary">Cancel</button>
-              <button onClick={handleReject} className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors">
+            <div className="grid grid-cols-2 gap-2 border-t border-gray-200/60 pt-4 dark:border-white/[0.06] sm:flex sm:justify-end sm:gap-3">
+              <button onClick={() => setShowRejectModal(false)} className="btn-secondary min-h-11 w-full justify-center sm:w-auto">Cancel</button>
+              <button onClick={handleReject} className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 sm:w-auto">
                 <X className="h-4 w-4" /> Reject Setlist
               </button>
             </div>

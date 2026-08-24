@@ -30,21 +30,25 @@ interface MentionTextareaProps {
   onPointerDown?: React.PointerEventHandler<HTMLTextAreaElement>;
   onScroll?: React.UIEventHandler<HTMLTextAreaElement>;
   onClick?: React.MouseEventHandler<HTMLTextAreaElement>;
+  maxLength?: number;
 }
 
 function MentionTextOverlay({ text, profiles }: { text: string; profiles: Profile[] }) {
   const mentionDisplays = profiles
-    .map(profile => `@${(profile.mentionHandle ?? `${profile.first_name} ${profile.last_name}`.trim().replace(/\s+/g, '_')).replace(/_/g, ' ')}`)
+    .flatMap(profile => {
+      const handle = profile.mentionHandle ?? `${profile.first_name} ${profile.last_name}`.trim().replace(/\s+/g, '_');
+      return [`@${handle}`, `@${handle.replace(/_/g, ' ')}`];
+    })
     .sort((a, b) => b.length - a.length);
   const escaped = mentionDisplays.map(display => display.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
   const parts = escaped.length > 0 ? text.split(new RegExp(`(${escaped.join('|')})`, 'gi')) : [text];
 
   return (
-    <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden px-3.5 py-2 text-[15px] leading-relaxed whitespace-pre-wrap break-words sm:text-[14px]">
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-[1] overflow-hidden px-3.5 py-2 text-[15px] leading-relaxed whitespace-pre-wrap break-words sm:text-[14px]">
       {parts.map((part, index) => {
         const isMention = mentionDisplays.some(display => display.toLowerCase() === part.toLowerCase());
         return isMention
-          ? <span key={`${part}-${index}`} className="rounded bg-emerald-500/10 font-semibold text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-300">{part}</span>
+          ? <span key={`${part}-${index}`} className="rounded bg-emerald-500/10 font-semibold text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-300">{part.replace(/_/g, ' ')}</span>
           : <span key={`${part}-${index}`} className="text-gray-900 dark:text-white">{part}</span>;
       })}
     </div>
@@ -65,6 +69,7 @@ export function MentionTextarea({
   onPointerDown,
   onScroll,
   onClick,
+  maxLength,
 }: MentionTextareaProps) {
   const internalRef = useRef<HTMLTextAreaElement>(null);
   const ref = externalRef || internalRef;
@@ -156,6 +161,11 @@ export function MentionTextarea({
     el.style.height = `${el.scrollHeight}px`;
   };
 
+  useEffect(() => {
+    const element = ref.current;
+    if (element) autoResize(element);
+  }, [ref, rows, value]);
+
   const syncMentionState = (text: string, cursor: number) => {
     const atMatch = text.slice(0, cursor).match(/@(\w*)$/);
     if (atMatch) {
@@ -185,7 +195,7 @@ export function MentionTextarea({
     const mentionHandle = profile.mentionHandle ?? `${profile.first_name} ${profile.last_name}`
       .trim()
       .replace(/\s+/g, '_');
-    const mention = `@${mentionHandle.replace(/_/g, ' ')}`;
+    const mention = `@${mentionHandle}`;
     const newValue = `${before}${mention} ${after}`;
     onChange(newValue);
     setShowDropdown(false);
@@ -257,7 +267,7 @@ export function MentionTextarea({
   };
 
   return (
-    <div className="relative min-w-0 flex-1 self-stretch">
+    <div className="relative min-w-0 flex-1 self-stretch rounded-xl bg-white dark:bg-[#252428]">
       {value && <MentionTextOverlay text={value} profiles={profiles} />}
       <textarea
         ref={ref}
@@ -276,9 +286,10 @@ export function MentionTextarea({
         onFocus={onFocus}
         onPointerDown={onPointerDown}
         placeholder={placeholder}
-        className={`relative z-[1] block w-full min-w-0 ${value ? '!text-transparent caret-emerald-500' : ''} ${className}`}
+        className={`relative z-[2] block w-full min-w-0 ${value ? '!bg-transparent !text-transparent caret-emerald-500' : ''} ${className}`}
         style={style}
         rows={rows}
+        maxLength={maxLength}
       />
       {showDropdown && filtered.length > 0 && dropdownRect &&
         createPortal(

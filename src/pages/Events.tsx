@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { format, parseISO, startOfDay, subWeeks, previousSunday, addDays, subDays, differenceInDays, eachDayOfInterval } from 'date-fns';
+import { format, parseISO, startOfDay, differenceInDays, eachDayOfInterval } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { motion } from 'framer-motion';
 import { Calendar, Plus, Search, Users, Trash2, CalendarOff, AlertCircle, Clock, X, PartyPopper, Heart, Sparkles, List, CheckCircle } from 'lucide-react';
@@ -23,8 +23,7 @@ import type { Event } from '../types';
 import { hasArtworkArtist } from '../lib/songArtworkEligibility';
 import { hasEventScheduleEnded, isEventCompleted } from '../lib/eventLifecycle';
 import { loadSyncedPreference, saveSyncedPreference } from '../lib/syncedPreferences';
-
-const eventTypes = ['Sunday Service', 'Prayer Meeting', 'LGTF (Midweek)', 'Rehearsals', 'Online Devotion', 'Equipping', 'Revamp Session', 'Youth Recharge', 'Custom'];
+import { calculatePolicyProposalDueDate, DEFAULT_EVENT_TEMPLATE_POLICIES, eventTemplateFor, normalizeEventTemplatePolicies, type EventTemplatePolicies } from '../lib/eventPolicy';
 
 interface AssignmentRow { user_id: string; role_id: string; }
 interface CalendarEntry { type: 'birthday' | 'leave'; date: string; name: string; status?: string; }
@@ -990,7 +989,7 @@ function EventDesktopCardGroups({ events, calendarEntries, songLeaderMap, setlis
 }
 
 export function Events() {
-  const { user, isLeader, roles } = useAuth();
+  const { user, isLeader, roles, profile } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -1016,6 +1015,16 @@ export function Events() {
   const [customName, setCustomName] = useState('');
   const [sundayServices, setSundayServices] = useState<Event[]>([]);
   const [lifecycleNow, setLifecycleNow] = useState(() => new Date());
+  const [eventTemplates, setEventTemplates] = useState<EventTemplatePolicies | null>(null);
+  const availableEventTypes = Object.keys(eventTemplates || DEFAULT_EVENT_TEMPLATE_POLICIES);
+
+  useEffect(() => {
+    if (!profile?.org_id) return;
+    let active = true;
+    void supabase.from('organization_policy_settings').select('event_templates').eq('org_id', profile.org_id).maybeSingle()
+      .then(({ data }) => { if (active) setEventTemplates(normalizeEventTemplatePolicies(data?.event_templates)); });
+    return () => { active = false; };
+  }, [profile?.org_id]);
 
   const fetchEvents = useCallback(async () => {
     try {
@@ -1220,29 +1229,11 @@ export function Events() {
 
   const removeAssignmentRow = (index: number) => setAssignmentRows(prev => prev.filter((_, i) => i !== index));
 
-  const calculateProposalDueDate = (eventDate: string, eventType: string): string | null => {
-    if (!eventDate) return null;
-    const date = parseISO(eventDate);
-    if (eventType === 'Sunday Service') return `${format(subWeeks(date, 3), 'yyyy-MM-dd')}T15:59:00Z`;
-    if (eventType === 'LGTF (Midweek)' || eventType === 'Prayer Meeting') {
-      let sunday = previousSunday(date);
-      if (sunday.getTime() === date.getTime()) sunday = addDays(sunday, -7);
-      return `${format(sunday, 'yyyy-MM-dd')}T15:59:00Z`;
-    }
-    if (eventType === 'Youth Recharge') return `${format(subDays(date, 7), 'yyyy-MM-dd')}T15:59:00Z`;
-    return null;
-  };
+  const calculateProposalDueDate = (eventDate: string, eventType: string): string | null => calculatePolicyProposalDueDate(eventDate, eventType, eventTemplates);
 
   const getDefaultTimes = (eventType: string) => {
-    const map: Record<string, { start: string; end: string }> = {
-      'Sunday Service': { start: '07:30', end: '11:30' },
-      'LGTF (Midweek)': { start: '19:30', end: '21:00' },
-      'Prayer Meeting': { start: '18:30', end: '19:30' },
-      'Online Devotion': { start: '21:00', end: '22:00' },
-      'Equipping': { start: '19:30', end: '21:00' },
-      'Youth Recharge': { start: '16:00', end: '18:00' },
-    };
-    return map[eventType] || { start: '', end: '' };
+    const template = eventTemplateFor(eventType, eventTemplates);
+    return { start: template.start_time, end: template.end_time };
   };
 
   const handleEventTypeChange = (newType: string) => {
@@ -1566,7 +1557,7 @@ export function Events() {
 
               <div>
                 <label className="block text-[12px] font-semibold text-gray-600 dark:text-white/55 mb-1.5">Type</label>
-                <Select value={form.event_type} onChange={handleEventTypeChange} options={eventTypes.map(t => ({ value: t, label: t }))} placeholder="Select type" />
+                <Select value={form.event_type} onChange={handleEventTypeChange} options={availableEventTypes.map(t => ({ value: t, label: t }))} placeholder="Select type" />
               </div>
 
               {form.event_type === 'Custom' && (

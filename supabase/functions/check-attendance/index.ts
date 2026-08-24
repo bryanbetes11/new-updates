@@ -25,6 +25,7 @@ interface Assignment {
 
 interface Event {
   id: string;
+  org_id: string;
   title: string;
   event_date: string;
   event_type: string;
@@ -48,10 +49,28 @@ interface NotificationInsert {
 
 interface PendingScanSession {
   id: string;
+  org_id: string;
   user_id: string;
   created_at: string;
   expires_at: string;
 }
+
+interface AttendancePolicy {
+  org_id: string;
+  attendance_open_minutes_before: number;
+  attendance_grace_minutes: number;
+  attendance_incomplete_scan_minutes: number;
+  attendance_pre_start_reminder_minutes: number;
+  attendance_auto_absent_after_days: number;
+}
+
+const defaultAttendancePolicy: Omit<AttendancePolicy, "org_id"> = {
+  attendance_open_minutes_before: 30,
+  attendance_grace_minutes: 5,
+  attendance_incomplete_scan_minutes: 2,
+  attendance_pre_start_reminder_minutes: 5,
+  attendance_auto_absent_after_days: 2,
+};
 
 interface AttendanceInsert {
   event_id: string;
@@ -145,7 +164,7 @@ Deno.serve(async (req: Request) => {
       const { data: events, error: eventsError } = await supabase
         .from("events")
         .select(`
-          id, title, event_date, event_type, start_time, linked_event_id,
+          id, org_id, title, event_date, event_type, start_time, linked_event_id,
           event_assignments(user_id, status, profiles(first_name, last_name))
         `)
         .eq("event_date", phToday)
@@ -153,19 +172,34 @@ Deno.serve(async (req: Request) => {
 
       if (eventsError) throw eventsError;
 
+      const eventRows = (events || []) as Event[];
+      const orgIds = [...new Set(eventRows.map((event) => event.org_id))];
+      const { data: policyRows, error: policiesError } = orgIds.length
+        ? await supabase
+          .from("organization_policy_settings")
+          .select("org_id, attendance_open_minutes_before, attendance_grace_minutes, attendance_incomplete_scan_minutes, attendance_pre_start_reminder_minutes, attendance_auto_absent_after_days")
+          .in("org_id", orgIds)
+        : { data: [], error: null };
+      if (policiesError) throw policiesError;
+      const policyByOrg = new Map<string, AttendancePolicy>();
+      for (const policy of (policyRows || []) as AttendancePolicy[]) {
+        policyByOrg.set(policy.org_id, policy);
+      }
+
       let notificationsSent = 0;
       const notifications: NotificationInsert[] = [];
 
-      for (const event of (events || []) as Event[]) {
+      for (const event of eventRows) {
         if (!event.start_time) continue;
 
         const isRehearsalLinked = event.event_type === "Rehearsal" && event.linked_event_id;
         const eventDisplay = isRehearsalLinked ? "Sunday Service Rehearsal" : event.title;
         const eventTimeFormatted = formatTime12Hour(event.start_time);
         const eventStart = getManilaDateTime(event.event_date, event.start_time);
-        const openAt = new Date(eventStart.getTime() - 30 * 60 * 1000);
-        const fiveMinutesBefore = new Date(eventStart.getTime() - 5 * 60 * 1000);
-        const graceEndingSoon = new Date(eventStart.getTime() + 4 * 60 * 1000);
+        const policy = policyByOrg.get(event.org_id) || { org_id: event.org_id, ...defaultAttendancePolicy };
+        const openAt = new Date(eventStart.getTime() - policy.attendance_open_minutes_before * 60 * 1000);
+        const preStartReminder = new Date(eventStart.getTime() - policy.attendance_pre_start_reminder_minutes * 60 * 1000);
+        const graceEndingSoon = new Date(eventStart.getTime() + Math.max(policy.attendance_grace_minutes - 1, 0) * 60 * 1000);
 
         for (const assignment of getAccountableAssignments(event)) {
           const { data: existingAttendance } = await supabase
@@ -185,7 +219,7 @@ Deno.serve(async (req: Request) => {
               body: `Attendance for ${eventDisplay} is open. When you arrive at church, open ServeSync and scan the printed church QR.`,
             },
             {
-              trigger: isWithinMinute(now, fiveMinutesBefore),
+              trigger: isWithinMinute(now, preStartReminder),
               type: "attendance_five_min_reminder",
               title: "Attendance Reminder",
               body: `${eventDisplay} starts at ${eventTimeFormatted}. If you are at church, scan the printed church QR and tap Check In.`,
@@ -194,7 +228,7 @@ Deno.serve(async (req: Request) => {
               trigger: isWithinMinute(now, graceEndingSoon),
               type: "attendance_grace_final_reminder",
               title: "Present Grace Period Ending",
-              body: `${eventDisplay} already started. Scan the church QR and tap Check In now; check-ins after the 5-minute grace period are recorded as Late.`,
+              body: `${eventDisplay} already started. Scan the church QR and tap Check In now; check-ins after the ${policy.attendance_grace_minutes}-minute grace period are recorded as Late.`,
             },
           ];
 
@@ -225,17 +259,18 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      const incompleteThreshold = new Date(now.getTime() - 2 * 60 * 1000).toISOString();
       const { data: pendingScanSessions, error: pendingScanError } = await supabase
         .from("attendance_qr_scan_sessions")
-        .select("id, user_id, created_at, expires_at")
+        .select("id, org_id, user_id, created_at, expires_at")
         .is("consumed_at", null)
-        .lte("created_at", incompleteThreshold)
         .gt("expires_at", now.toISOString());
 
       if (pendingScanError) throw pendingScanError;
 
       for (const session of (pendingScanSessions || []) as PendingScanSession[]) {
+        const policy = policyByOrg.get(session.org_id) || { org_id: session.org_id, ...defaultAttendancePolicy };
+        const incompleteThreshold = new Date(now.getTime() - policy.attendance_incomplete_scan_minutes * 60 * 1000);
+        if (new Date(session.created_at) > incompleteThreshold) continue;
         const dedupeKey = `attendance-scan-incomplete:${session.id}`;
         const { data: existing } = await supabase
           .from("notifications")
@@ -368,24 +403,35 @@ Deno.serve(async (req: Request) => {
         remindersSent,
       };
     } else if (action === "mark_absent") {
-      const twoDaysAgo = new Date(manilaNow);
-      twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
-      const twoDaysAgoStr = twoDaysAgo.toISOString().split("T")[0];
-
-      const { data: events, error: eventsError } = await supabase
+      const candidateEvents = await supabase
         .from("events")
         .select(`
-          id, title, event_date,
+          id, org_id, title, event_date,
           event_assignments(user_id, status)
         `)
-        .eq("event_date", twoDaysAgoStr);
+        .lt("event_date", phToday);
 
-      if (eventsError) throw eventsError;
+      if (candidateEvents.error) throw candidateEvents.error;
+      const candidateRows = (candidateEvents.data || []) as Event[];
+      const candidateOrgIds = [...new Set(candidateRows.map((event) => event.org_id))];
+      const { data: absencePolicyRows, error: absencePoliciesError } = candidateOrgIds.length
+        ? await supabase
+          .from("organization_policy_settings")
+          .select("org_id, attendance_open_minutes_before, attendance_grace_minutes, attendance_incomplete_scan_minutes, attendance_pre_start_reminder_minutes, attendance_auto_absent_after_days")
+          .in("org_id", candidateOrgIds)
+        : { data: [], error: null };
+      if (absencePoliciesError) throw absencePoliciesError;
+      const absencePolicyByOrg = new Map<string, AttendancePolicy>();
+      for (const policy of (absencePolicyRows || []) as AttendancePolicy[]) absencePolicyByOrg.set(policy.org_id, policy);
 
       let absencesMarked = 0;
       const attendanceRecords: AttendanceInsert[] = [];
 
-      for (const event of (events || []) as Event[]) {
+      for (const event of candidateRows) {
+        const policy = absencePolicyByOrg.get(event.org_id) || { org_id: event.org_id, ...defaultAttendancePolicy };
+        const dueDate = new Date(manilaNow);
+        dueDate.setDate(dueDate.getDate() - policy.attendance_auto_absent_after_days);
+        if (event.event_date !== dueDate.toISOString().split("T")[0]) continue;
         for (const assignment of getAccountableAssignments(event)) {
           const { data: existingAttendance } = await supabase
             .from("event_attendance")
@@ -423,8 +469,8 @@ Deno.serve(async (req: Request) => {
 
       result = {
         action: "mark_absent",
-        targetDate: twoDaysAgoStr,
-        eventsChecked: events?.length || 0,
+        targetDate: phToday,
+        eventsChecked: candidateRows.length,
         absencesMarked,
       };
     }

@@ -82,10 +82,9 @@ function getManilaDateTimeFields(date = new Date(Date.now() + 60 * 60 * 1000)) {
 
 export function SurveyManagement() {
   const {
-    isProductionDirector,
-    isMusicDirector,
-    isStageDirector,
-    isAdminCoordinator,
+    isOrgAdmin,
+    isPlatformOwner,
+    isAdmin,
   } = useAuth();
   const { toast } = useToast();
   const [campaigns, setCampaigns] = useState<SurveyCampaign[]>([]);
@@ -110,9 +109,8 @@ export function SurveyManagement() {
   const [scheduleDate, setScheduleDate] = useState(initialSchedule.date);
   const [scheduleTime, setScheduleTime] = useState(initialSchedule.time);
   const [previewRevision, setPreviewRevision] = useState(0);
-  const canManage = isProductionDirector;
-  const canViewResults =
-    canManage || isMusicDirector || isStageDirector || isAdminCoordinator;
+  const canManage = isOrgAdmin || isPlatformOwner || isAdmin;
+  const canViewResults = canManage;
   const [tab, setTab] = useState<"campaign" | "progress" | "results">(() =>
     canManage ? "campaign" : "results",
   );
@@ -474,7 +472,7 @@ export function SurveyManagement() {
       <div className="page-container page-bottom-pad px-5 py-16 text-center">
         <ShieldCheck className="mx-auto h-10 w-10 text-gray-400" />
         <h1 className="mt-4 text-xl font-black dark:text-white">
-          Leadership access required
+          Admin access required
         </h1>
       </div>
     );

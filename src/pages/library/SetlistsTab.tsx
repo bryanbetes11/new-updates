@@ -6,7 +6,7 @@ import {
   Music, Upload, CheckCircle, AlertTriangle, Calendar, Search,
   ChevronDown, Trash2, Square, CheckSquare, X,
   Clock, Music2, ArrowUpDown,
-  ExternalLink, Globe2, ClipboardPaste, Pencil, FileText, ShieldCheck,
+  ExternalLink, Globe2, ClipboardPaste, Pencil, FileText,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -219,7 +219,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   const [duplicateEditReturn, setDuplicateEditReturn] = useState<{ groupKey: string; keeperId: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const chartFileRef = useRef<HTMLInputElement>(null);
-  const canUseChartImportPilot = isOrgAdmin || isAdmin || isPlatformOwner;
+  const canManageSongLibrary = isOrgAdmin || isAdmin || isPlatformOwner;
   const openChartStorageKey = user?.id ? `${SONG_CHART_OPEN_STORAGE_PREFIX}:${user.id}` : '';
   const ownerFilter = new URLSearchParams(location.search).get('owner');
   const showMyCreatedSets = !isSongsOnly && ownerFilter === 'me';
@@ -369,7 +369,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
     const artist = editLibrarySongForm.artist.trim();
     const songKey = editLibrarySongForm.song_key.trim();
     const youtubeUrl = editLibrarySongForm.youtube_url.trim();
-    const canRenameSong = editingLibrarySong.created_by === user?.id || canUseChartImportPilot;
+    const canRenameSong = editingLibrarySong.created_by === user?.id || canManageSongLibrary;
     const titleChanged = normalizeSongTitle(title) !== normalizeSongTitle(editingLibrarySong.title);
 
     if (canRenameSong && !title) {
@@ -716,7 +716,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   });
 
   const handleChartUpload = async (files: FileList | null) => {
-    if (!files || files.length === 0 || !user || !canUseChartImportPilot) return;
+    if (!files || files.length === 0 || !user || !canManageSongLibrary) return;
     setChartImportPreparing(true);
     try {
       const chartFiles: Array<{ name: string; text: string }> = [];
@@ -856,7 +856,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   };
 
   const commitChartImport = async () => {
-    if (!user || !canUseChartImportPilot || chartImportSaving) return;
+    if (!user || !canManageSongLibrary || chartImportSaving) return;
     const selectedCandidates = chartImportCandidates.filter(candidate => candidate.action !== 'skip');
     if (selectedCandidates.length === 0) {
       toast('info', 'Choose at least one chart to import');
@@ -1155,7 +1155,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   };
 
   const handleMergeDuplicateSongs = async () => {
-    if (!canUseChartImportPilot || duplicateMergeSaving || !selectedDuplicateGroup || !duplicateKeeperId) return;
+    if (!canManageSongLibrary || duplicateMergeSaving || !selectedDuplicateGroup || !duplicateKeeperId) return;
     const keeper = selectedDuplicateGroup.songs.find(song => song.id === duplicateKeeperId);
     if (!keeper) return;
     if (!keeper.artist.trim()) {
@@ -1810,11 +1810,11 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   return (
     <div className="space-y-5 pb-2">
 
-      {canUseChartImportPilot && (
+      {canManageSongLibrary && (
         <input ref={chartFileRef} type="file" accept=".cho" multiple className="hidden" onChange={e => handleChartUpload(e.target.files)} />
       )}
 
-      {canUseChartImportPilot && (
+      {canManageSongLibrary && (
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1825,12 +1825,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
             <FileText className="h-5 w-5" />
           </span>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-black text-white">Import SongBookPro charts</p>
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/15 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] text-amber-200 ring-1 ring-amber-300/20">
-                <ShieldCheck className="h-3 w-3" /> Admin pilot
-              </span>
-            </div>
+            <p className="text-sm font-black text-white">Import SongBookPro charts</p>
             <p className="mt-1 text-xs leading-5 text-white/45">Choose multiple .cho files, review duplicates and existing matches, then import only the versions you approve.</p>
           </div>
           <button
@@ -1880,7 +1875,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
             </button>
           );
         })}
-        {canUseChartImportPilot && duplicateSongGroups.length > 0 && (
+        {canManageSongLibrary && duplicateSongGroups.length > 0 && (
           <button
             type="button"
             onClick={openDuplicateReview}
@@ -2540,7 +2535,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
 
       <Modal open={editingLibrarySong !== null} onClose={closeEditLibrarySong} title="Edit song details" size="md">
         {editingLibrarySong && (() => {
-          const canRenameSong = editingLibrarySong.created_by === user?.id || canUseChartImportPilot;
+          const canRenameSong = editingLibrarySong.created_by === user?.id || canManageSongLibrary;
           return (
           <div className="space-y-5">
             <div className="flex items-center gap-3 rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-3">
@@ -2576,7 +2571,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                     Only the original creator can rename a shared song.
                   </span>
                 )}
-                {canUseChartImportPilot && editingLibrarySong.created_by !== user?.id && (
+                {canManageSongLibrary && editingLibrarySong.created_by !== user?.id && (
                   <span className="mt-1.5 block text-[11px] font-semibold text-emerald-300/55">
                     Admin title editing is enabled for library cleanup.
                   </span>

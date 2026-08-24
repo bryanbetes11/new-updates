@@ -448,6 +448,24 @@ export interface NotificationSystemSettings {
   updated_at: string;
 }
 
+export interface OrganizationPolicySettings {
+  org_id: string;
+  attendance_open_minutes_before: number;
+  attendance_grace_minutes: number;
+  attendance_scan_session_minutes: number;
+  attendance_incomplete_scan_minutes: number;
+  default_setlist_due_days_before: number;
+  event_templates: Record<string, {
+    start_time: string;
+    end_time: string;
+    setlist_due_days_before: number | null;
+    service_format: ServiceFormat;
+  }>;
+  setlist_submission_mode: 'advisory' | 'block_rejected';
+  updated_by: string | null;
+  updated_at: string;
+}
+
 export interface PushSubscription {
   id: string;
   user_id: string;

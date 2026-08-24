@@ -2,10 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Activity,
   ArrowLeftRight,
   BookOpen,
-  BellRing,
   Calendar,
   CheckCircle2,
   Eye,
@@ -17,7 +15,6 @@ import {
   Layers3,
   LayoutDashboard,
   MessageCircle,
-  ScanLine,
   Music2,
   Plus,
   RefreshCw,
@@ -122,9 +119,6 @@ const SwapsNavIcon: NavIcon = ({ className, style }) => (
 );
 const TeamNavIcon: NavIcon = ({ className, style }) => (
   <Users className={className} style={style} />
-);
-const NotificationNavIcon: NavIcon = ({ className, style }) => (
-  <BellRing className={className} style={style} />
 );
 const ACTIVE_STATE_NAV_ICONS = new Set<NavIcon>([
   HomeIcon,
@@ -322,11 +316,6 @@ export function Navigation({
     user,
     isLeader,
     isOrgAdmin,
-    isAdmin,
-    isProductionDirector,
-    isMusicDirector,
-    isStageDirector,
-    isAdminCoordinator,
     isPlatformOwner,
     capabilities,
     canApproveLeave,
@@ -783,8 +772,7 @@ export function Navigation({
     };
   }, [globalSearchOpen, globalSearchQuery]);
 
-  const leadershipHomePath =
-    isOrgAdmin && !isLeader ? "/leadership/church" : "/leadership/overview";
+  const leadershipHomePath = "/leadership/overview";
   const sidebarManagementItems: NavItem[] = [
     ...(isLeader || isOrgAdmin
       ? [
@@ -837,49 +825,14 @@ export function Navigation({
           },
         ]
       : []),
-    ...(isOrgAdmin || isPlatformOwner || capabilities.manage_notifications
-      ? [
-          ...(isOrgAdmin || isPlatformOwner
-            ? [
-                {
-                  path: "/leadership/attendance-qr",
-                  label: "Attendance QR",
-                  icon: ScanLine,
-                  tone: "from-cyan-500/85 via-blue-900 to-black",
-                },
-              ]
-            : []),
-          {
-            path: "/leadership/notifications",
-            label: "Notification Controls",
-            icon: NotificationNavIcon,
-            tone: "from-emerald-500/85 via-teal-900 to-black",
-          },
-        ]
-      : []),
-    ...(isOrgAdmin || isPlatformOwner || isAdmin
-      ? [
-          {
-            path: "/activity-log",
-            label: "Activity History",
-            icon: Activity,
-            tone: "from-sky-500/85 via-blue-900 to-black",
-          },
-        ]
-      : []),
-    ...(isProductionDirector ||
-    isMusicDirector ||
-    isStageDirector ||
-    isAdminCoordinator
-      ? [
-          {
-            path: "/leadership/surveys",
-            label: "Ministry Reflections",
-            icon: CheckCircle2,
-            tone: "from-emerald-500/85 via-green-900 to-black",
-          },
-        ]
-      : []),
+  ];
+  const sidebarAdminItems: NavItem[] = [
+    ...(isOrgAdmin || isPlatformOwner ? [{
+      path: "/admin/settings",
+      label: "Admin Settings",
+      icon: Settings,
+      tone: "from-emerald-500/85 via-teal-900 to-black",
+    }] : []),
   ];
   const displayName = profile?.nickname || profile?.first_name || "";
   const fullName =
@@ -1061,14 +1014,6 @@ export function Navigation({
       color: "#10b981",
     },
     {
-      icon: Activity,
-      label: "Activity Log",
-      desc: "Church activity",
-      path: "/activity-log",
-      show: isPlatformOwner || isOrgAdmin || isAdmin,
-      color: "#0ea5e9",
-    },
-    {
       icon: BookOpen,
       label: "Songs",
       desc: "Song library and chord charts",
@@ -1154,40 +1099,15 @@ export function Navigation({
       show: isLeader || isOrgAdmin || capabilities.manage_accountability,
       color: "#f59e0b",
     },
+  ].filter((item) => item.show);
+
+  const adminMenuItems: typeof baseProfileMenuItems = [
     {
-      icon: ScanLine,
-      label: "Attendance QR",
-      desc: "Manage the church check-in QR",
-      path: "/leadership/attendance-qr",
+      icon: Settings,
+      label: "Admin Settings",
+      desc: "Church policies and access controls",
+      path: "/admin/settings",
       show: isOrgAdmin || isPlatformOwner,
-      color: "#06b6d4",
-    },
-    {
-      icon: BellRing,
-      label: "Notification Controls",
-      desc: "Manage organization alerts",
-      path: "/leadership/notifications",
-      show: isOrgAdmin || isPlatformOwner || capabilities.manage_notifications,
-      color: "#10b981",
-    },
-    {
-      icon: Activity,
-      label: "Activity History",
-      desc: "Review church activity",
-      path: "/activity-log",
-      show: isOrgAdmin || isPlatformOwner || isAdmin,
-      color: "#0ea5e9",
-    },
-    {
-      icon: CheckCircle2,
-      label: "Ministry Reflections",
-      desc: "Review authorized ministry feedback",
-      path: "/leadership/surveys",
-      show:
-        isProductionDirector ||
-        isMusicDirector ||
-        isStageDirector ||
-        isAdminCoordinator,
       color: "#10b981",
     },
   ].filter((item) => item.show);
@@ -2095,6 +2015,44 @@ export function Navigation({
                           })}
                         </div>
                       )}
+
+                      {adminMenuItems.length > 0 && (
+                        <div className="pt-3">
+                          <div className="px-3 pb-2">
+                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-gray-400 dark:text-gray-400">
+                              Admin
+                            </p>
+                          </div>
+                          {adminMenuItems.map((item) => {
+                            const Icon = item.icon;
+                            return (
+                              <button
+                                key={item.path || item.label}
+                                onClick={() => openProfileMenuAction(item)}
+                                className="group flex w-full items-center gap-3.5 rounded-2xl px-3 py-3.5 text-left transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.055]"
+                              >
+                                <span className="relative flex h-7 w-7 shrink-0 items-center justify-center text-gray-900 dark:text-white">
+                                  <Icon className="h-5 w-5" />
+                                  {!!item.badge && item.badge > 0 && (
+                                    <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-black leading-none text-white">
+                                      {item.badge > 9 ? "9+" : item.badge}
+                                    </span>
+                                  )}
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-[16px] font-bold text-gray-900 dark:text-white">
+                                    {item.label}
+                                  </span>
+                                  <span className="mt-0.5 block truncate text-[11px] font-semibold text-gray-500 dark:text-gray-300">
+                                    {item.desc}
+                                  </span>
+                                </span>
+                                <ChevronRight className="h-[18px] w-[18px] shrink-0 text-gray-400 transition-colors group-hover:text-gray-700 dark:text-gray-500 dark:group-hover:text-gray-200" />
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
 
                     <div className="border-t border-black/[0.06] px-3 pb-3 pt-3 dark:border-white/[0.08]">
@@ -2246,6 +2204,21 @@ export function Navigation({
                   {sidebarManagementItems.map((item) =>
                     renderNavItem(item, collapsed),
                   )}
+                </div>
+              </div>
+            )}
+            {sidebarAdminItems.length > 0 && (
+              <div className="mt-5">
+                {!collapsed && (
+                  <div className="mb-2 px-2.5">
+                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-white/36">
+                      Admin
+                    </p>
+                  </div>
+                )}
+                {collapsed && <div className="h-3" />}
+                <div className="space-y-1.5">
+                  {sidebarAdminItems.map((item) => renderNavItem(item, collapsed))}
                 </div>
               </div>
             )}

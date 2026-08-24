@@ -96,6 +96,7 @@ export function Layout() {
   const isUnavailableMembersPage = location.pathname === "/unavailable-members";
   const isActivityLogPage = location.pathname === "/activity-log";
   const isLeadershipPage = location.pathname.startsWith("/leadership");
+  const isAdminPage = location.pathname.startsWith("/admin");
   const isWideShellPage =
     isDashboardPage ||
     isEventsPage ||
@@ -110,7 +111,8 @@ export function Layout() {
     isNotificationsPage ||
     isProfilePage ||
     isActivityLogPage ||
-    isLeadershipPage;
+    isLeadershipPage ||
+    isAdminPage;
   const hideNavMobile = staticHideNav || isAnnouncementDetail;
   const shouldShiftForMobileMenu =
     user && !staticHideNav && !isMessagesConversation && mobileOpen;

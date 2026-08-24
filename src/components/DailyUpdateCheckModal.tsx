@@ -1,6 +1,6 @@
 import { AlertCircle, CheckCircle2, RefreshCw, Sparkles } from 'lucide-react';
 import { Modal } from './Modal';
-import { APP_BUILD_ID, APP_VERSION_LABEL } from '../lib/appUpdate';
+import { APP_BUILD_ID, APP_BUILD_NUMBER, APP_VERSION_LABEL } from '../lib/appUpdate';
 
 export type DailyUpdateCheckStatus = 'checking' | 'current' | 'available' | 'error';
 
@@ -66,7 +66,7 @@ export function DailyUpdateCheckModal({
             <Icon className={`h-6 w-6 ${isChecking ? 'animate-spin motion-reduce:animate-none' : ''}`} />
           </div>
           <p className="mt-4 text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-emerald-300/75">
-            {APP_VERSION_LABEL} · Build {APP_BUILD_ID}
+            {APP_VERSION_LABEL} · Build {APP_BUILD_NUMBER} · {APP_BUILD_ID}
           </p>
           <h3 className="mt-2 text-[20px] font-black tracking-[-0.035em] text-white">{title}</h3>
           <p className="mx-auto mt-2 max-w-sm text-[13px] leading-relaxed text-white/50">{description}</p>

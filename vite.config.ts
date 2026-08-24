@@ -7,6 +7,10 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const packageJson = JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf8')) as { version: string };
+const releaseNotes = JSON.parse(readFileSync(path.resolve(__dirname, 'release-notes.json'), 'utf8')) as {
+  headline: string;
+  highlights: string[];
+};
 const appVersion = packageJson.version;
 
 function getGitBuildId() {
@@ -21,21 +25,37 @@ function getGitBuildId() {
   }
 }
 
+function getGitBuildNumber() {
+  try {
+    return Number.parseInt(execFileSync('git', ['rev-list', '--count', 'HEAD'], {
+      cwd: __dirname,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim(), 10) || 0;
+  } catch {
+    return 0;
+  }
+}
+
 const appBuildId = (
   process.env.SERVESYNC_BUILD_ID
   || process.env.VERCEL_GIT_COMMIT_SHA
   || process.env.COMMIT_REF
   || getGitBuildId()
 ).slice(0, 12);
+const appBuildNumber = Number.parseInt(process.env.SERVESYNC_BUILD_NUMBER || '', 10) || getGitBuildNumber();
 const appPublishedAt = process.env.SERVESYNC_PUBLISHED_AT || new Date().toISOString();
 const minimumSupportedVersion = process.env.SERVESYNC_MINIMUM_VERSION || '0.0.0';
 
 const versionManifest = {
   version: appVersion,
   buildId: appBuildId,
+  buildNumber: appBuildNumber,
   cacheVersion: `${appVersion}-${appBuildId}`,
   publishedAt: appPublishedAt,
   minimumSupportedVersion,
+  releaseHeadline: releaseNotes.headline,
+  releaseHighlights: releaseNotes.highlights.slice(0, 3),
 };
 
 // https://vitejs.dev/config/
@@ -56,8 +76,11 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
     __APP_BUILD_ID__: JSON.stringify(appBuildId),
+    __APP_BUILD_NUMBER__: JSON.stringify(appBuildNumber),
     __APP_PUBLISHED_AT__: JSON.stringify(appPublishedAt),
     __APP_MINIMUM_SUPPORTED_VERSION__: JSON.stringify(minimumSupportedVersion),
+    __APP_RELEASE_HEADLINE__: JSON.stringify(releaseNotes.headline),
+    __APP_RELEASE_HIGHLIGHTS__: JSON.stringify(releaseNotes.highlights.slice(0, 3)),
   },
   resolve: {
     alias: [

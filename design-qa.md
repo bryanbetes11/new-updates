@@ -1,41 +1,51 @@
-# Attendance Event Grid Design QA
+# Setlist Review Responsive UI Design QA
 
-- Source visual truths: `C:/Users/Bryan/AppData/Local/Temp/codex-clipboard-f614c007-bff0-44a9-8209-a9fd66f481ed.png` (verified event grid) and `C:/Users/Bryan/AppData/Local/Temp/codex-clipboard-d0bcb64b-b8e4-4b13-b2c7-dee4f5a84dbd.png` (live scanner)
-- Implementation route: `http://127.0.0.1:5174/attendance/scan`
-- Intended viewport: 430 x 932 CSS px, mobile, dark theme
-- Source pixels: 945 x 2048; implementation screenshot: unavailable
-- State: church QR verified, upcoming and open scheduled attendance events
+## Evidence
+
+- Source visual truth: Browser Comment 1 desktop attachment at 1919 x 1192, followed by the annotated request to make the dialog a bit larger; Browser Comment 1 mobile attachment at 390 x 844 for the Leader Review controls.
+- Desktop implementation: `.codex-audits/setlist-revision-modal-desktop-final.png` at 1919 x 1192 pixels, CSS viewport 1919 x 1192, device scale captured by the in-app browser.
+- Mobile implementation: `.codex-audits/setlist-review-actions-mobile.png` at 390 x 844 pixels, CSS viewport 390 x 844, device scale captured by the in-app browser.
+- State: authenticated Event Detail, pending-review setlist, dark theme; Request Revision dialog open for the desktop comparison and Leader Review controls visible for the mobile comparison.
+- Density normalization: source and implementation were compared at matching CSS viewport dimensions; no resampling was needed.
 
 ## Full-view comparison evidence
 
-The verified-state source shows the event grid constrained inside a large rounded card with 20px internal padding; the implementation removes that outer surface so the grid can use the full content width. The scanner source also shows an empty grey actions strip beneath the camera; the implementation now renders that area only when a camera error exists. The event-grid state remains gated behind a physical QR scan, so the selected in-app Browser could not be programmatically advanced through that camera-only state in this turn.
+- Desktop: the final dialog remains centered and compact relative to the 1919px canvas while expanding from the first 576px iteration to 672px. The overlay, page context, dark surfaces, corner radius, header, action placement, and overall visual hierarchy remain consistent with the source.
+- Mobile: Approve, Revise, and Reject occupy one non-wrapping row within the 390px viewport. The surrounding setlist controls and content retain their original layout, and there is no horizontal document overflow.
 
-## Focused-region comparison evidence
+## Focused region comparison evidence
 
-Blocked: a rendered event-grid screenshot could not be captured without scanning the printed church QR. Source-code inspection confirms the intended geometry, but code inspection is not accepted as visual comparison evidence.
+- Desktop dialog measured 672 x 440 CSS px; its revision textarea measured 624 x 176 CSS px. The Reject dialog also measured 672px wide with a 624 x 160 CSS px textarea.
+- Mobile action buttons each measured 98 x 44 CSS px, preserving equal visual weight and touch-target height.
+- Mobile dialog measured 358 x 404 CSS px at 390 x 844, with 16px side margins and no horizontal overflow.
 
 ## Required fidelity surfaces
 
-- Fonts and typography: compact 13px extra-bold event titles, 11px metadata, and 9–10px overlay labels mirror the reference hierarchy while using ServeSync's existing type system.
-- Spacing and layout rhythm: the outer card and its 20px inset are removed; two equal mobile columns now use the full page content width with a 12px gap, 20px row rhythm, square artwork, and compact metadata.
-- Colors and visual tokens: existing dark surfaces and event gradients are retained; green communicates check-in availability and amber communicates a future opening window.
-- Image quality and asset fidelity: the existing `EventArtwork` component supplies real four-cover setlist collages and event-type gradient fallbacks without placeholder art.
-- Copy and content: attendance-specific date, opening countdown, exact opening time, recorded status, and explicit Check In action replace the reference's response/setlist labels.
+- Fonts and typography: existing ServeSync type family, weights, sizes, and hierarchy are unchanged. Short mobile labels prevent wrapping without reducing legibility.
+- Spacing and layout rhythm: desktop width is moderately increased; mobile uses equal-width actions, 8px gaps, and 44px controls. Dialog padding, header rhythm, and action separation remain aligned with the existing modal system.
+- Colors and visual tokens: existing green, amber, red, neutral, border, and dark-surface tokens are preserved.
+- Image quality and asset fidelity: no image assets were introduced or replaced; existing Lucide action icons remain sharp and correctly sized.
+- Copy and content: full desktop labels remain Approve Setlist, Request Revision, and Reject Setlist. Phone labels intentionally shorten to Approve, Revise, and Reject while accessible names retain the full actions.
 
 ## Findings
 
-- [Blocked] No post-change browser-rendered screenshot of the QR-verified event grid is available for a same-state visual comparison. The camera-only attendance policy correctly prevents using a saved QR image as a shortcut.
+- No actionable P0, P1, or P2 differences remain.
+- P3: the disabled Request Revision label wraps inside the 390px modal action button. This is acceptable because the user's one-line request applies to the three Leader Review controls, which now remain on one row; the modal itself has adequate height and no overflow.
 
 ## Comparison history
 
-No P0/P1/P2 visual iteration was completed because the rendered comparison state could not be captured.
+1. Initial source finding: the 384px small dialog was too cramped on a large screen. Fix: switched the two review dialogs to the responsive large-dialog treatment and enlarged their textareas and controls.
+2. First implementation finding: 576px was improved but still slightly small at 1919px. Fix: added a scoped dialog class override and increased only these two desktop dialogs to 672px.
+3. Mobile source finding: full Leader Review labels wrapped to a second row. Fix: introduced a single equal-width row with Approve, Revise, and Reject mobile labels, retaining full accessible and desktop names.
+4. Post-fix evidence: 672px desktop dialogs, three 98 x 44 mobile actions on one row, 358px mobile dialog, no horizontal overflow, and no browser console errors.
 
-## Implementation verification
+## Implementation checklist
 
-- TypeScript application type-check passed.
-- All 19 test files passed.
-- ESLint passed with one pre-existing warning in `NotificationSettings.tsx`.
-- Production Vite build passed.
-- Live data check confirmed upcoming events include both setlist-collage and gradient-fallback cases.
+- [x] Moderately enlarge Request Revision on larger screens.
+- [x] Apply the same responsive sizing to Reject Setlist.
+- [x] Keep phone dialogs within the viewport.
+- [x] Keep Approve, Revise, and Reject on one mobile row.
+- [x] Preserve full accessible names and desktop labels.
+- [x] Verify TypeScript, ESLint, browser layout, interactions, and console state.
 
-final result: blocked
+final result: passed

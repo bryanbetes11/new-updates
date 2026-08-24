@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { format, parseISO, differenceInDays, subWeeks, previousSunday, addDays, subDays } from 'date-fns';
+import { addDays, format, parseISO, differenceInDays } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { animate, motion, useMotionValue, AnimatePresence, type PanInfo } from 'framer-motion';
 import { ArrowLeft, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, ListOrdered, Pause, Play, Settings2, MoreHorizontal, Upload, Calendar, Loader2, BellRing, Eye, Lock, Unlock, Wifi, WifiOff } from 'lucide-react';
@@ -32,6 +32,7 @@ import { getPendingAssignmentUserCount } from '../lib/eventAssignmentReminder';
 import { getPendingUserEventAssignments, getUserEventAssignments, shouldBlockEventDetails } from '../lib/eventAssignmentGate';
 import { getPostEventObservationViewers } from '../lib/postEventObservationViews';
 import { normalizeSongTitle } from '../lib/songTitle';
+import { calculatePolicyProposalDueDate, DEFAULT_EVENT_TEMPLATE_POLICIES, eventTemplateFor, normalizeEventTemplatePolicies, type EventTemplatePolicies, type SetlistSubmissionMode } from '../lib/eventPolicy';
 import { buildSongProposalConflicts, buildSongProposalReservations, type SongProposalConflict, type SongProposalReservation, type SongProposalSetlistRow } from '../lib/songProposalConflicts';
 import { getEffectiveSongLyrics, getSongLyricsSource } from '../lib/songLyrics';
 
@@ -479,6 +480,27 @@ export function EventDetail() {
   const [showEditEvent, setShowEditEvent] = useState(false);
   const [editForm, setEditForm] = useState({ title: '', description: '', event_type: '', event_date: '', start_time: '', end_time: '', song_leader_id: '', linked_event_id: '' });
   const [savingEventEdit, setSavingEventEdit] = useState(false);
+  const [eventTemplates, setEventTemplates] = useState<EventTemplatePolicies | null>(null);
+  const [setlistSubmissionMode, setSetlistSubmissionMode] = useState<SetlistSubmissionMode>('block_rejected');
+  const availableEventTypes = Object.keys(eventTemplates || DEFAULT_EVENT_TEMPLATE_POLICIES);
+
+  useEffect(() => {
+    if (!profile?.org_id) return;
+    let active = true;
+    void supabase
+      .from('organization_policy_settings')
+      .select('event_templates, setlist_submission_mode')
+      .eq('org_id', profile.org_id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!active) return;
+        setEventTemplates(normalizeEventTemplatePolicies(data?.event_templates));
+        if (data?.setlist_submission_mode === 'advisory' || data?.setlist_submission_mode === 'block_rejected') {
+          setSetlistSubmissionMode(data.setlist_submission_mode);
+        }
+      });
+    return () => { active = false; };
+  }, [profile?.org_id]);
   const [savingLifecycleOverride, setSavingLifecycleOverride] = useState(false);
   const [lifecycleConfirmOverride, setLifecycleConfirmOverride] = useState<EventLifecycleOverride | null>(null);
   const [lifecycleNow, setLifecycleNow] = useState(() => new Date());
@@ -2575,43 +2597,11 @@ const openLyricsModal = (ss: SetlistSong) => {
     toast('success', order?.length ? 'Arrangement saved' : 'Default arrangement restored');
   };
 
-  const calculateProposalDueDate = (eventDate: string, eventType: string): string | null => {
-    if (!eventDate) return null;
-    const date = parseISO(eventDate);
-
-    if (eventType === 'Sunday Service') {
-      const dueDate = subWeeks(date, 3);
-      return `${format(dueDate, 'yyyy-MM-dd')}T15:59:00Z`;
-    } else if (eventType === 'LGTF (Midweek)' || eventType === 'Prayer Meeting') {
-      let sunday = previousSunday(date);
-      if (sunday.getTime() === date.getTime()) {
-        sunday = addDays(sunday, -7);
-      }
-      return `${format(sunday, 'yyyy-MM-dd')}T15:59:00Z`;
-    } else if (eventType === 'Youth Recharge') {
-      const dueDate = subDays(date, 7);
-      return `${format(dueDate, 'yyyy-MM-dd')}T15:59:00Z`;
-    }
-    return null;
-  };
+  const calculateProposalDueDate = (eventDate: string, eventType: string): string | null => calculatePolicyProposalDueDate(eventDate, eventType, eventTemplates);
 
   const getDefaultTimes = (eventType: string): { start: string; end: string } => {
-    switch (eventType) {
-      case 'Sunday Service':
-        return { start: '07:30', end: '11:30' };
-      case 'LGTF (Midweek)':
-        return { start: '19:30', end: '21:00' };
-      case 'Prayer Meeting':
-        return { start: '18:30', end: '19:30' };
-      case 'Online Devotion':
-        return { start: '21:00', end: '22:00' };
-      case 'Equipping':
-        return { start: '19:30', end: '21:00' };
-      case 'Youth Recharge':
-        return { start: '16:00', end: '18:00' };
-      default:
-        return { start: '', end: '' };
-    }
+    const template = eventTemplateFor(eventType, eventTemplates);
+    return { start: template.start_time, end: template.end_time };
   };
 
   const openEditEvent = () => {
@@ -4284,6 +4274,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                   onSubmitProposal={canSubmitSetlist ? () => handleSetlistAction('pending_review') : undefined}
                   canSubmit={!hasMissingLyrics && canSubmitSetlist && ['draft', 'revision_requested'].includes(setlist.status)}
                   setlistStatus={setlist.status}
+                  submissionMode={setlistSubmissionMode}
                 />
                 </motion.div>
               ) : (
@@ -7210,16 +7201,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                 <Select
                   value={editForm.event_type}
                   onChange={handleEditEventTypeChange}
-                  options={[
-                    { value: 'Sunday Service', label: 'Sunday Service' },
-                    { value: 'Prayer Meeting', label: 'Prayer Meeting' },
-                    { value: 'LGTF (Midweek)', label: 'LGTF (Midweek)' },
-                    { value: 'Rehearsals', label: 'Rehearsals' },
-                    { value: 'Online Devotion', label: 'Online Devotion' },
-                    { value: 'Equipping', label: 'Equipping' },
-                    { value: 'Revamp Session', label: 'Revamp Session' },
-                    { value: 'Youth Recharge', label: 'Youth Recharge' },
-                  ]}
+                  options={availableEventTypes.map((type) => ({ value: type, label: type }))}
                   placeholder="Select event type"
                 />
               </div>

@@ -29,12 +29,53 @@ interface LiveQrState {
   present_grace_minutes: number;
 }
 
+function BrandedQr({
+  image,
+  mode,
+  churchName,
+}: {
+  image: string;
+  mode: 'live' | 'test';
+  churchName?: string | null;
+}) {
+  const live = mode === 'live';
+  const accent = live ? 'emerald' : 'amber';
+  const label = live ? 'Official attendance' : 'Safe test scan';
+
+  return (
+    <div className={`relative mx-auto mt-5 w-full max-w-[336px] overflow-hidden rounded-[28px] border bg-white p-3 shadow-xl ${live ? 'border-emerald-400/50 shadow-emerald-950/25' : 'border-amber-400/50 shadow-black/25'}`}>
+      <div className={`absolute inset-x-0 top-0 h-1.5 ${live ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+      <div className="flex items-center justify-between gap-3 px-2 pb-3 pt-2 text-left">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-white ${live ? 'bg-emerald-500' : 'bg-amber-500'}`}>
+            <QrCode className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-[11px] font-black uppercase tracking-[0.13em] text-slate-900">ServeSync</p>
+            <p className="truncate text-[10px] font-semibold text-slate-500">{churchName || 'Church attendance'}</p>
+          </div>
+        </div>
+        <span className={`shrink-0 rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.09em] ${live ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{label}</span>
+      </div>
+      <div className={`relative overflow-hidden rounded-2xl border p-2 ${live ? 'border-emerald-100 bg-emerald-50' : 'border-amber-100 bg-amber-50'}`}>
+        <img src={image} alt={live ? 'Live reusable ServeSync church attendance QR code' : 'Reusable ServeSync attendance test QR code'} className="block w-full rounded-xl bg-white p-2" />
+        <span className={`pointer-events-none absolute left-2 top-2 h-7 w-7 rounded-tl-xl border-l-[3px] border-t-[3px] ${live ? 'border-emerald-500' : 'border-amber-500'}`} />
+        <span className={`pointer-events-none absolute bottom-2 right-2 h-7 w-7 rounded-br-xl border-b-[3px] border-r-[3px] ${live ? 'border-emerald-500' : 'border-amber-500'}`} />
+      </div>
+      <div className="flex items-center justify-between gap-3 px-2 pb-1 pt-3 text-[10px] font-semibold text-slate-500">
+        <span>Scan • review • check in</span>
+        <span className={`h-1.5 w-1.5 rounded-full ${accent === 'emerald' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+      </div>
+    </div>
+  );
+}
+
 function localDateTimeValue(date: Date): string {
   return format(date, "yyyy-MM-dd'T'HH:mm");
 }
 
 export function AttendanceQrPilot() {
-  const { isOrgAdmin, isPlatformOwner } = useAuth();
+  const { isOrgAdmin, isPlatformOwner, organization } = useAuth();
   const { toast } = useToast();
   const canUsePilot = isOrgAdmin || isPlatformOwner;
   const [pilotState, setPilotState] = useState<PilotState | null>(null);
@@ -191,7 +232,7 @@ export function AttendanceQrPilot() {
                 <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-500"><ShieldCheck className="h-6 w-6" /></div>
                 <h2 className="mt-3 font-bold">Live reusable church QR</h2>
                 <p className="mt-1 text-xs text-gray-500">This writes to official attendance. Members see only events they are scheduled for.</p>
-                {liveQrImage && <img src={liveQrImage} alt="Live reusable ServeSync church attendance QR code" className="mx-auto mt-4 w-full max-w-[300px] rounded-2xl bg-white p-3" />}
+                {liveQrImage && <BrandedQr image={liveQrImage} mode="live" churchName={organization?.name} />}
                 {liveQrImage && (
                   <a href={liveQrImage} download="servesync-live-church-attendance-qr.png" className="btn-primary mt-4 inline-flex min-h-11 w-full items-center justify-center">
                     <Download className="h-4 w-4" /> Download live QR
@@ -204,7 +245,7 @@ export function AttendanceQrPilot() {
                 <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 text-amber-500"><QrCode className="h-6 w-6" /></div>
                 <h2 className="mt-3 font-bold">Isolated test QR</h2>
                 <p className="mt-1 text-xs text-gray-500">Use this only with the test events on the left.</p>
-                {qrImage && <img src={qrImage} alt="Reusable ServeSync attendance test QR code" className="mx-auto mt-4 w-full max-w-[300px] rounded-2xl bg-white p-3" />}
+                {qrImage && <BrandedQr image={qrImage} mode="test" churchName={organization?.name} />}
                 {qrImage && (
                   <a href={qrImage} download="servesync-attendance-test-qr.png" className="btn-secondary mt-4 inline-flex min-h-11 w-full items-center justify-center">
                     <Download className="h-4 w-4" /> Download test QR

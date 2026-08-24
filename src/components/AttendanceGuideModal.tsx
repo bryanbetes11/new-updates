@@ -113,7 +113,7 @@ const slides = [
     content: (
       <div className="space-y-3">
         <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
-          Attendance opens <span className="font-bold text-gray-900 dark:text-white">30 minutes before</span> each event. Checking in before the five-minute grace period ends is shown as <span className="font-bold text-green-600 dark:text-green-400">On-time</span>.
+          Your church controls the attendance opening and grace windows. Checking in during the configured grace period is shown as <span className="font-bold text-green-600 dark:text-green-400">On-time</span>.
         </p>
         <div className="rounded-xl overflow-hidden ring-1 ring-black/[0.06] dark:ring-white/[0.07]">
           <div className="bg-gray-50 dark:bg-white/[0.03] px-3 py-2 border-b border-black/[0.04] dark:border-white/[0.05]">
@@ -121,8 +121,8 @@ const slides = [
           </div>
           <div className="divide-y divide-black/[0.04] dark:divide-white/[0.04]">
             {[
-              { when: '30 min before event', status: 'On-time', color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-950/30' },
-              { when: 'Through the 5-min grace period', status: 'On-time', color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-950/30' },
+              { when: 'When attendance opens', status: 'On-time', color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-950/30' },
+              { when: 'Through the church grace period', status: 'On-time', color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-950/30' },
               { when: 'After event starts', status: 'Late', color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/30' },
               { when: 'No valid check-in after the policy window', status: 'Auto-Absent', color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-950/30' },
             ].map(row => (

@@ -5,6 +5,7 @@ import {
   Star, ArrowLeft, Send, Flag, ArrowRight,
 } from 'lucide-react';
 import type { SetlistCheckReport } from '../../types';
+import type { SetlistSubmissionMode } from '../../lib/eventPolicy';
 
 interface SetlistReportProps {
   report: SetlistCheckReport;
@@ -13,6 +14,7 @@ interface SetlistReportProps {
   onSubmitProposal?: () => void;
   canSubmit: boolean;
   setlistStatus: string;
+  submissionMode?: SetlistSubmissionMode;
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -185,6 +187,7 @@ export function SetlistReport({
   onSubmitProposal,
   canSubmit,
   setlistStatus,
+  submissionMode = 'block_rejected',
 }: SetlistReportProps) {
   const [expandedSongs, setExpandedSongs] = useState<Set<number>>(new Set());
   const [showReviseWarning, setShowReviseWarning] = useState(false);
@@ -194,7 +197,7 @@ export function SetlistReport({
   const canShowSubmit =
     canSubmit &&
     ['draft', 'revision_requested'].includes(setlistStatus) &&
-    report.verdict !== 'REJECT';
+    (submissionMode === 'advisory' || report.verdict !== 'REJECT');
 
   const toggleSong = (idx: number) => {
     setExpandedSongs(prev => {

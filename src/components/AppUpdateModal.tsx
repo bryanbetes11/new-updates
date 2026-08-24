@@ -1,11 +1,14 @@
-import { Download, Sparkles, Wrench } from 'lucide-react';
+import { Download, Sparkles } from 'lucide-react';
 import { Modal } from './Modal';
-import { APP_UPDATE_FEATURES, APP_UPDATE_FIXES } from '../lib/appUpdate';
 
 interface AppUpdateModalProps {
   open: boolean;
   currentVersion: string;
   targetVersion: string;
+  currentBuildNumber?: number;
+  targetBuildNumber?: number;
+  headline?: string;
+  highlights?: string[];
   onUpdate: () => void;
   onLater: () => void;
   applying: boolean;
@@ -33,6 +36,10 @@ export function AppUpdateModal({
   open,
   currentVersion,
   targetVersion,
+  currentBuildNumber,
+  targetBuildNumber,
+  headline,
+  highlights = [],
   onUpdate,
   onLater,
   applying,
@@ -67,30 +74,21 @@ export function AppUpdateModal({
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-mono uppercase tracking-[0.18em] text-gray-400 dark:text-white/30">
               <span>Installed {formatVersionLabel(currentVersion)}</span>
               <span>Latest {formatVersionLabel(targetVersion)}</span>
+              {currentBuildNumber ? <span>Build {currentBuildNumber}</span> : null}
+              {targetBuildNumber ? <span>New build {targetBuildNumber}</span> : null}
             </div>
           </div>
         </div>
 
-        <div className="max-h-[min(46dvh,26rem)] overflow-y-auto rounded-2xl border border-gray-200/80 bg-gray-50/80 dark:border-white/[0.08] dark:bg-white/[0.04] divide-y divide-gray-200/80 dark:divide-white/[0.06]">
-          {APP_UPDATE_FEATURES.length > 0 && (
-            <div className="p-4">
-              <div className="mb-3 flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-emerald-500" />
-                <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-gray-700 dark:text-white/70">New Features</p>
-              </div>
-              <ChangeList items={APP_UPDATE_FEATURES} color="bg-emerald-500" />
+        {highlights.length > 0 && (
+          <div className="rounded-2xl border border-gray-200/80 bg-gray-50/80 p-4 dark:border-white/[0.08] dark:bg-white/[0.04]">
+            <div className="mb-3 flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-emerald-500" />
+              <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-gray-700 dark:text-white/70">{headline || 'What changed'}</p>
             </div>
-          )}
-          {APP_UPDATE_FIXES.length > 0 && (
-            <div className="p-4">
-              <div className="mb-3 flex items-center gap-2">
-                <Wrench className="h-4 w-4 text-amber-500" />
-                <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-gray-700 dark:text-white/70">Fixes</p>
-              </div>
-              <ChangeList items={APP_UPDATE_FIXES} color="bg-amber-400" />
-            </div>
-          )}
-        </div>
+            <ChangeList items={highlights.slice(0, 3)} color="bg-emerald-500" />
+          </div>
+        )}
 
         <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row">
           {!required && (

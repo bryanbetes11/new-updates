@@ -27,6 +27,9 @@ import { ReleaseNotesModal } from "./components/ReleaseNotesModal";
 import { DailyUpdateCheckModal, type DailyUpdateCheckStatus } from "./components/DailyUpdateCheckModal";
 import {
   APP_DAILY_UPDATE_CHECK_KEY,
+  APP_BUILD_NUMBER,
+  APP_RELEASE_HEADLINE,
+  APP_RELEASE_HIGHLIGHTS,
   APP_RELEASE_NOTES_SEEN_KEY,
   APP_VERSION,
   APP_VERSION_LABEL,
@@ -173,6 +176,11 @@ const SetlistDeadlines = lazy(() =>
 const OrganizationSettings = lazy(() =>
   import("./pages/leadership/OrganizationSettings").then(
     ({ OrganizationSettings }) => ({ default: OrganizationSettings }),
+  ),
+);
+const AdminSettings = lazy(() =>
+  import("./pages/leadership/AdminSettings").then(
+    ({ AdminSettings }) => ({ default: AdminSettings }),
   ),
 );
 const OrganizationBilling = lazy(() =>
@@ -490,6 +498,9 @@ export default function App() {
   const [applyingUpdate, setApplyingUpdate] = useState(false);
   const [installedVersion, setInstalledVersion] = useState<string | null>(null);
   const [targetVersion, setTargetVersion] = useState(APP_VERSION);
+  const [targetBuildNumber, setTargetBuildNumber] = useState(APP_BUILD_NUMBER);
+  const [targetReleaseHeadline, setTargetReleaseHeadline] = useState(APP_RELEASE_HEADLINE);
+  const [targetReleaseHighlights, setTargetReleaseHighlights] = useState(APP_RELEASE_HIGHLIGHTS);
   const [updateRequired, setUpdateRequired] = useState(false);
 
   useEffect(() => {
@@ -497,6 +508,9 @@ export default function App() {
       const update = (event as CustomEvent<PendingAppUpdate>).detail;
       setInstalledVersion(getInstalledAppVersion());
       setTargetVersion(update?.version || APP_VERSION);
+      setTargetBuildNumber(update?.buildNumber || APP_BUILD_NUMBER);
+      setTargetReleaseHeadline(update?.releaseHeadline || APP_RELEASE_HEADLINE);
+      setTargetReleaseHighlights(update?.releaseHighlights || APP_RELEASE_HIGHLIGHTS);
       setUpdateRequired(Boolean(update?.required));
       setShowAppUpdate(true);
     };
@@ -507,6 +521,9 @@ export default function App() {
     const pendingUpdate = getPendingAppUpdate();
     if (hasPendingAppUpdate() && pendingUpdate) {
       setTargetVersion(pendingUpdate.version);
+      setTargetBuildNumber(pendingUpdate.buildNumber);
+      setTargetReleaseHeadline(pendingUpdate.releaseHeadline);
+      setTargetReleaseHighlights(pendingUpdate.releaseHighlights);
       setUpdateRequired(pendingUpdate.required);
       setShowAppUpdate(true);
     }
@@ -535,6 +552,10 @@ export default function App() {
                 open={showAppUpdate}
                 currentVersion={installedVersion || APP_VERSION_LABEL}
                 targetVersion={targetVersion}
+                currentBuildNumber={APP_BUILD_NUMBER}
+                targetBuildNumber={targetBuildNumber}
+                headline={targetReleaseHeadline}
+                highlights={targetReleaseHighlights}
                 required={updateRequired}
                 onLater={() => setShowAppUpdate(false)}
                 onUpdate={() => {
@@ -656,7 +677,7 @@ export default function App() {
                       />
                       <Route
                         path="/leadership/church"
-                        element={<OrganizationSettings />}
+                        element={<Navigate to="/admin/church" replace />}
                       />
                       <Route
                         path="/leadership/billing"
@@ -664,11 +685,18 @@ export default function App() {
                       />
                       <Route
                         path="/leadership/notifications"
-                        element={<NotificationSettings />}
+                        element={<Navigate to="/admin/notifications" replace />}
                       />
+                      <Route path="/admin" element={<Navigate to="/admin/settings" replace />} />
+                      <Route path="/admin/settings" element={<AdminSettings />} />
+                      <Route path="/admin/church" element={<OrganizationSettings />} />
+                      <Route path="/admin/notifications" element={<NotificationSettings />} />
+                      <Route path="/admin/attendance-qr" element={<AttendanceQrPilot />} />
+                      <Route path="/admin/reflections" element={<SurveyManagement />} />
+                      <Route path="/admin/billing" element={<OrganizationBilling />} />
                       <Route
                         path="/leadership/surveys"
-                        element={<SurveyManagement />}
+                        element={<Navigate to="/admin/reflections" replace />}
                       />
 
                       <Route

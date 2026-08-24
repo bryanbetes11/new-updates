@@ -2,6 +2,8 @@ import { Calendar, CheckCircle2, Sparkles, Wrench } from 'lucide-react';
 import { Modal } from './Modal';
 import {
   APP_BUILD_ID,
+  APP_BUILD_NUMBER,
+  APP_RELEASE_HEADLINE,
   APP_UPDATE_FEATURES,
   APP_UPDATE_FIXES,
   APP_UPDATE_PUBLISHED_AT,
@@ -58,10 +60,10 @@ export function ReleaseNotesModal({ open, onClose }: ReleaseNotesModalProps) {
             </div>
             <div className="min-w-0">
               <p className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-emerald-700 dark:text-emerald-300/80">ServeSync {APP_VERSION_LABEL}</p>
-              <h2 className="mt-1 text-[20px] font-black tracking-[-0.035em] text-gray-950 dark:text-white sm:text-[23px]">A smoother start, every time.</h2>
+              <h2 className="mt-1 text-[20px] font-black tracking-[-0.035em] text-gray-950 dark:text-white sm:text-[23px]">{APP_RELEASE_HEADLINE}</h2>
               <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-500 dark:text-white/40">
                 <span className="inline-flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />{formatPublishedDate(APP_UPDATE_PUBLISHED_AT)}</span>
-                <span className="font-mono">Build {APP_BUILD_ID}</span>
+                <span className="font-mono">Build {APP_BUILD_NUMBER} · {APP_BUILD_ID}</span>
               </div>
             </div>
           </div>
@@ -74,12 +76,12 @@ export function ReleaseNotesModal({ open, onClose }: ReleaseNotesModalProps) {
           <ReleaseList items={APP_UPDATE_FEATURES} type="feature" />
         </section>
 
-        <section aria-labelledby="release-fixes-title">
+        {APP_UPDATE_FIXES.length > 0 && <section aria-labelledby="release-fixes-title">
           <h3 id="release-fixes-title" className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-700 dark:text-white/65">
             <Wrench className="h-4 w-4 text-amber-500" /> Improvements
           </h3>
           <ReleaseList items={APP_UPDATE_FIXES} type="fix" />
-        </section>
+        </section>}
 
         <button
           type="button"

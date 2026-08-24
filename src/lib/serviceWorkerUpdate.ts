@@ -1,8 +1,11 @@
 import {
   APP_BUILD_ID,
+  APP_BUILD_NUMBER,
   APP_CACHE_VERSION,
   APP_MINIMUM_SUPPORTED_VERSION,
   APP_UPDATE_PUBLISHED_AT,
+  APP_RELEASE_HEADLINE,
+  APP_RELEASE_HIGHLIGHTS,
   APP_VERSION,
   isAppVersionBelow,
 } from './appUpdate';
@@ -14,9 +17,12 @@ const INSTALLED_APP_VERSION_KEY = 'servesync-installed-app-version';
 export interface AppVersionManifest {
   version: string;
   buildId: string;
+  buildNumber: number;
   cacheVersion: string;
   publishedAt: string;
   minimumSupportedVersion: string;
+  releaseHeadline: string;
+  releaseHighlights: string[];
 }
 
 export interface PendingAppUpdate extends AppVersionManifest {
@@ -31,9 +37,12 @@ export type AppUpdateCheckResult =
 const currentManifest: AppVersionManifest = {
   version: APP_VERSION,
   buildId: APP_BUILD_ID,
+  buildNumber: APP_BUILD_NUMBER,
   cacheVersion: APP_CACHE_VERSION,
   publishedAt: APP_UPDATE_PUBLISHED_AT,
   minimumSupportedVersion: APP_MINIMUM_SUPPORTED_VERSION,
+  releaseHeadline: APP_RELEASE_HEADLINE,
+  releaseHighlights: APP_RELEASE_HIGHLIGHTS,
 };
 
 let pendingRegistration: ServiceWorkerRegistration | null = null;
@@ -105,6 +114,7 @@ function normalizeManifest(value: unknown): AppVersionManifest | null {
   if (
     typeof candidate.version !== 'string'
     || typeof candidate.buildId !== 'string'
+    || typeof candidate.buildNumber !== 'number'
     || typeof candidate.cacheVersion !== 'string'
     || typeof candidate.publishedAt !== 'string'
   ) return null;
@@ -112,11 +122,18 @@ function normalizeManifest(value: unknown): AppVersionManifest | null {
   return {
     version: candidate.version,
     buildId: candidate.buildId,
+    buildNumber: candidate.buildNumber,
     cacheVersion: candidate.cacheVersion,
     publishedAt: candidate.publishedAt,
     minimumSupportedVersion: typeof candidate.minimumSupportedVersion === 'string'
       ? candidate.minimumSupportedVersion
       : '0.0.0',
+    releaseHeadline: typeof candidate.releaseHeadline === 'string'
+      ? candidate.releaseHeadline
+      : 'A new ServeSync build is ready.',
+    releaseHighlights: Array.isArray(candidate.releaseHighlights)
+      ? candidate.releaseHighlights.filter((item): item is string => typeof item === 'string').slice(0, 3)
+      : [],
   };
 }
 

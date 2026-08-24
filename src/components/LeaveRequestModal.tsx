@@ -12,13 +12,19 @@ interface LeaveRequestModalProps {
 }
 
 export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModalProps) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
   const [leaveType, setLeaveType] = useState<'single' | 'range'>('single');
   const [formDate, setFormDate] = useState('');
   const [formStartDate, setFormStartDate] = useState('');
   const [formEndDate, setFormEndDate] = useState('');
   const [formReason, setFormReason] = useState('');
+  const [leavePolicy, setLeavePolicy] = useState({
+    approval_required: true,
+    reason_required: true,
+    allow_date_ranges: true,
+    minimum_notice_days: 0,
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -28,6 +34,16 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
     setFormEndDate('');
     setFormReason('');
   }, [open]);
+
+  useEffect(() => {
+    if (!open || !profile?.org_id) return;
+    let active = true;
+    void supabase.from('organization_policy_settings').select('leave_policy').eq('org_id', profile.org_id).maybeSingle().then(({ data }) => {
+      if (!active || !data?.leave_policy || typeof data.leave_policy !== 'object' || Array.isArray(data.leave_policy)) return;
+      setLeavePolicy(current => ({ ...current, ...(data.leave_policy as Partial<typeof leavePolicy>) }));
+    });
+    return () => { active = false; };
+  }, [open, profile?.org_id]);
 
   const resetForm = () => {
     setLeaveType('single');
@@ -51,7 +67,7 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
 
   const handleSubmit = async () => {
     if (!user) return;
-    const isValid = formReason.trim() && (leaveType === 'single' ? formDate : (formStartDate && formEndDate));
+    const isValid = (!leavePolicy.reason_required || formReason.trim()) && (leaveType === 'single' ? formDate : (formStartDate && formEndDate));
     if (!isValid) return;
 
     const payload = leaveType === 'single'
@@ -61,7 +77,7 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
           unavailable_date: formDate,
           start_date: null,
           end_date: null,
-          reason: formReason,
+          reason: formReason.trim() || null,
           status: 'pending',
         }
       : {
@@ -70,7 +86,7 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
           unavailable_date: null,
           start_date: formStartDate,
           end_date: formEndDate,
-          reason: formReason,
+          reason: formReason.trim() || null,
           status: 'pending',
         };
 
@@ -79,14 +95,14 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
       toast('error', error.message.includes('duplicate') ? 'Date already marked' : 'Failed to submit');
       return;
     }
-    toast('success', 'Leave request submitted for approval');
+    toast('success', leavePolicy.approval_required ? 'Leave request submitted for approval' : 'Leave request approved automatically');
 
     resetForm();
     handleClose();
     onSuccess?.();
   };
 
-  const isSubmitDisabled = !formReason.trim() || (leaveType === 'single' ? !formDate : (!formStartDate || !formEndDate));
+  const isSubmitDisabled = (leavePolicy.reason_required && !formReason.trim()) || (leaveType === 'single' ? !formDate : (!formStartDate || !formEndDate));
 
   return (
     <Modal
@@ -115,13 +131,14 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
             </button>
             <button
               onClick={() => handleLeaveTypeChange('range')}
+              disabled={!leavePolicy.allow_date_ranges}
               className={`py-2.5 px-3 rounded-lg font-medium text-sm transition-colors ${
                 leaveType === 'range'
                   ? 'bg-brand-600 text-white'
-                  : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                  : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-45'
               }`}
             >
-              Multiple Dates
+              Multiple Dates{!leavePolicy.allow_date_ranges ? ' (disabled)' : ''}
             </button>
           </div>
         </div>
@@ -154,7 +171,7 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
         {/* Reason */}
         <div>
           <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5">
-            Reason <span className="text-red-500">*</span>
+            Reason {leavePolicy.reason_required && <span className="text-red-500">*</span>}
           </label>
           <input
             type="text"
@@ -169,7 +186,7 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
         </div>
 
         <p className="text-xs text-gray-400 dark:text-gray-500">
-          Your leave request will be sent to leaders for approval.
+          {leavePolicy.approval_required ? 'Your leave request will be sent to leaders for approval.' : 'Valid leave requests are approved automatically by your church policy.'}
         </p>
 
         {/* Actions */}

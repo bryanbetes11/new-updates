@@ -47,6 +47,43 @@ interface EventRecord {
   setlists: SetlistRecord[];
 }
 
+interface SetlistReminderPolicy {
+  enabled: boolean;
+  seven_days: boolean;
+  three_days: boolean;
+  day_before: boolean;
+  due_day: boolean;
+  overdue: boolean;
+  leadership_escalation: boolean;
+}
+
+const defaultSetlistReminderPolicy: SetlistReminderPolicy = {
+  enabled: true,
+  seven_days: true,
+  three_days: true,
+  day_before: true,
+  due_day: true,
+  overdue: true,
+  leadership_escalation: true,
+};
+
+function normalizeSetlistReminderPolicy(value: unknown): SetlistReminderPolicy {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return defaultSetlistReminderPolicy;
+  }
+
+  const source = value as Partial<SetlistReminderPolicy>;
+  return {
+    enabled: source.enabled !== false,
+    seven_days: source.seven_days !== false,
+    three_days: source.three_days !== false,
+    day_before: source.day_before !== false,
+    due_day: source.due_day !== false,
+    overdue: source.overdue !== false,
+    leadership_escalation: source.leadership_escalation !== false,
+  };
+}
+
 function getManilaNow(baseNow = new Date()): Date {
   const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Manila",
@@ -130,17 +167,18 @@ function hasSubmittedProposal(setlists: SetlistRecord[] | null | undefined): boo
   );
 }
 
-function getReminderDefinition(now: Date, dueDate: Date, slot: ReminderSlot): {
+function getReminderDefinition(now: Date, dueDate: Date, slot: ReminderSlot, policy: SetlistReminderPolicy): {
   key: string;
   title: string;
   bodyPrefix: string;
 } | null {
-  if (!slot) return null;
+  if (!slot || !policy.enabled) return null;
 
   const daysUntilDue = dayDiffFromNow(now, dueDate);
   const isOverdue = now.getTime() > dueDate.getTime();
 
   if (isOverdue) {
+    if (!policy.overdue) return null;
     if (slot === "midday") return null;
     return {
       key: `overdue_${formatManilaYmd(now)}_${slot}`,
@@ -152,7 +190,7 @@ function getReminderDefinition(now: Date, dueDate: Date, slot: ReminderSlot): {
     };
   }
 
-  if (daysUntilDue === 7 && slot === "morning") {
+  if (policy.seven_days && daysUntilDue === 7 && slot === "morning") {
     return {
       key: "due_7_days",
       title: "Setlist Proposal Due in 1 Week",
@@ -160,7 +198,7 @@ function getReminderDefinition(now: Date, dueDate: Date, slot: ReminderSlot): {
     };
   }
 
-  if (daysUntilDue === 3 && slot === "morning") {
+  if (policy.three_days && daysUntilDue === 3 && slot === "morning") {
     return {
       key: "due_3_days",
       title: "Setlist Proposal Due in 3 Days",
@@ -168,7 +206,7 @@ function getReminderDefinition(now: Date, dueDate: Date, slot: ReminderSlot): {
     };
   }
 
-  if (daysUntilDue === 1) {
+  if (policy.day_before && daysUntilDue === 1) {
     return {
       key: `due_1_day_${slot}`,
       title:
@@ -186,7 +224,7 @@ function getReminderDefinition(now: Date, dueDate: Date, slot: ReminderSlot): {
     };
   }
 
-  if (daysUntilDue === 0) {
+  if (policy.due_day && daysUntilDue === 0) {
     return {
       key: `due_today_${formatManilaYmd(now)}_${slot}`,
       title:
@@ -299,6 +337,22 @@ Deno.serve(async (req: Request) => {
     const { data: events, error: eventsError } = await eventsQuery;
     if (eventsError) throw new Error(eventsError.message);
 
+    const organizationIds = [...new Set((events || []).map((event) => event.org_id))];
+    const policyByOrg = new Map<string, SetlistReminderPolicy>();
+    if (organizationIds.length > 0) {
+      const { data: policies, error: policiesError } = await supabase
+        .from("organization_policy_settings")
+        .select("org_id, setlist_reminder_policy")
+        .in("org_id", organizationIds);
+      if (policiesError) throw new Error(policiesError.message);
+      for (const organizationPolicy of policies || []) {
+        policyByOrg.set(
+          organizationPolicy.org_id,
+          normalizeSetlistReminderPolicy(organizationPolicy.setlist_reminder_policy),
+        );
+      }
+    }
+
     const notifications: Array<Record<string, unknown>> = [];
 
     for (const event of (events || []) as EventRecord[]) {
@@ -307,14 +361,15 @@ Deno.serve(async (req: Request) => {
       if (hasSubmittedProposal(event.setlists)) continue;
 
       const dueDate = new Date(event.proposal_due_date);
-      const reminderDefinition = getReminderDefinition(phNow, dueDate, slot);
+      const reminderPolicy = policyByOrg.get(event.org_id) || defaultSetlistReminderPolicy;
+      const reminderDefinition = getReminderDefinition(phNow, dueDate, slot, reminderPolicy);
       if (!reminderDefinition) continue;
 
       const songLeader = getSongLeaderRecipient(event);
       if (!songLeader) continue;
 
       const shouldAlertLeadership =
-        reminderDefinition.key.startsWith("overdue_") && slot === "morning";
+        reminderPolicy.leadership_escalation && reminderDefinition.key.startsWith("overdue_") && slot === "morning";
 
       const existingNotification = await supabase
         .from("notifications")

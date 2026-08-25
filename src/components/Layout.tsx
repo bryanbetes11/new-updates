@@ -20,6 +20,7 @@ import {
   shouldUseAppleTouchFeedback,
   triggerHaptic,
 } from "../lib/haptics";
+import { initializeInteractionSounds, playGlobalClickSound, setInteractionSoundsEnabled } from "../lib/interactionSounds";
 
 export function Layout() {
   const { user } = useAuth();
@@ -27,6 +28,23 @@ export function Layout() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const mobileChromeHidden = false;
+
+  useEffect(() => {
+    initializeInteractionSounds();
+    if (!user) return;
+
+    let active = true;
+    void supabase
+      .from("notification_preferences")
+      .select("sound_effects_enabled")
+      .eq("user_id", user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (active && data) setInteractionSoundsEnabled(data.sound_effects_enabled);
+      });
+
+    return () => { active = false; };
+  }, [user]);
 
   useEffect(() => {
     const useAppleTouchFeedback = shouldUseAppleTouchFeedback();
@@ -55,11 +73,19 @@ export function Layout() {
       if (strength) triggerHaptic(strength);
     };
 
+    const handleGlobalClickSound = (event: MouseEvent) => {
+      const interactive = getInteractionTarget(event.target);
+      if (!interactive) return;
+      playGlobalClickSound();
+    };
+
     document.addEventListener("pointerdown", handleTouchPress, { passive: true });
     document.addEventListener("pointerup", handleTouchInteraction, { passive: true });
+    document.addEventListener("click", handleGlobalClickSound, { passive: true });
     return () => {
       document.removeEventListener("pointerdown", handleTouchPress);
       document.removeEventListener("pointerup", handleTouchInteraction);
+      document.removeEventListener("click", handleGlobalClickSound);
       if (useAppleTouchFeedback) {
         delete document.documentElement.dataset.touchFeedback;
       }

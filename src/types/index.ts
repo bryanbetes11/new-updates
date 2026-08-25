@@ -449,6 +449,7 @@ export interface NotificationPreference {
   quiet_end: string;
   timezone: string;
   muted_types: string[];
+  sound_effects_enabled: boolean;
   updated_at: string;
 }
 

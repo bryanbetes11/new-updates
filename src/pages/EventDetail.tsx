@@ -38,6 +38,7 @@ import { calculatePolicyProposalDueDate, DEFAULT_EVENT_TEMPLATE_POLICIES, eventT
 import { buildSongProposalConflicts, buildSongProposalReservations, type SongProposalConflict, type SongProposalReservation, type SongProposalSetlistRow } from '../lib/songProposalConflicts';
 import { getEffectiveSongLyrics, getSongLyricsSource } from '../lib/songLyrics';
 import { groupEmojiReactions } from '../lib/reactions';
+import { playInteractionSound } from '../lib/interactionSounds';
 
 import type { Event, EventAssignment, Setlist, SetlistSong, Song, ServiceFormat, SetlistCheckReport, PostEventObservation, PostEventObservationCategory, PostEventObservationStatus, PostEventObservationView } from '../types';
 import { inferServiceFormat, SERVICE_FORMAT_LABELS } from '../lib/setlistCheckerEngine';
@@ -2495,6 +2496,8 @@ export function EventDetail() {
             }
           : item));
       }
+      if (existing) playInteractionSound('reactionRemove');
+      else if (!shouldAnimateFlight) playInteractionSound('reactionLand');
     } catch (error) {
       console.error('Update setlist revision comment reaction error:', error);
       setRevisionComments(current => current.map(item => item.id === comment.id
@@ -2521,6 +2524,7 @@ export function EventDetail() {
     setRevisionReactionLanding(landing);
     setRevisionReactionFlight(current => current?.token === completedFlight.token ? null : current);
     setRevisionReactionPickerCommentId(current => current === completedFlight.commentId ? null : current);
+    playInteractionSound('reactionLand');
     window.setTimeout(() => {
       setRevisionReactionLanding(current => current?.token === landing.token ? null : current);
     }, 420);
@@ -4285,7 +4289,10 @@ const openLyricsModal = (ss: SetlistSong) => {
                         <div className="relative flex shrink-0 items-center gap-0.5">
                           <button
                             type="button"
-                            onClick={() => setRevisionReactionPickerCommentId(current => current === comment.id ? null : comment.id)}
+                            onClick={() => {
+                              if (revisionReactionPickerCommentId !== comment.id) playInteractionSound('reactionOpen');
+                              setRevisionReactionPickerCommentId(current => current === comment.id ? null : comment.id);
+                            }}
                             className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-black/[0.035] hover:text-amber-600 dark:hover:bg-white/[0.05] dark:hover:text-amber-400 sm:h-7 sm:w-7"
                             aria-label={`React to ${authorName}'s comment`}
                             aria-expanded={isReactionPickerOpen}

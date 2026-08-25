@@ -20,6 +20,7 @@ import { EventArtwork } from '../components/EventArtwork';
 import { Modal } from '../components/Modal';
 import { MentionTextarea } from '../components/MentionTextarea';
 import { ReactionFlightAnimation, type ReactionFlightPath } from '../components/ReactionFlightAnimation';
+import { playInteractionSound, primeInteractionSounds } from '../lib/interactionSounds';
 import {
   createChatEventReference,
   getChatCommandQuery,
@@ -3798,7 +3799,7 @@ function ChatWindow({
 
   useEffect(() => clearMessageLongPress, [clearMessageLongPress]);
 
-  const openMessageActions = useCallback((messageId: string, anchor?: HTMLElement | null) => {
+  const openMessageActions = useCallback((messageId: string, anchor?: HTMLElement | null, withFeedback = false) => {
     const messageBubble = messageBubbleRefs.current[messageId] || anchor;
     const bubbleRect = messageBubble?.getBoundingClientRect();
     if (!bubbleRect) return;
@@ -3836,6 +3837,7 @@ function ChatWindow({
     setEmojiMsgId(null);
     setEmojiAnchorRect(null);
     setTappedMsgId(null);
+    if (withFeedback) playInteractionSound('longPress');
     if (preservedScrollTop !== undefined) {
       window.requestAnimationFrame(() => {
         if (scrollRef.current) scrollRef.current.scrollTop = preservedScrollTop;
@@ -3893,6 +3895,7 @@ function ChatWindow({
     setEmojiBoundaryTop(chatHeaderRef.current?.getBoundingClientRect().bottom ?? 0);
     setEmojiMsgId(messageId);
     setTappedMsgId(null);
+    playInteractionSound('reactionOpen');
   }, []);
 
   const handleMessageReaction = useCallback(async (messageId: string, emoji: string, sourceElement?: HTMLElement) => {
@@ -3949,6 +3952,10 @@ function ChatWindow({
         setReactionFlight(current => current?.messageId === messageId ? null : current);
         setPendingReactionReveal(current => current?.messageId === messageId ? null : current);
         setReactionLanding(current => current?.messageId === messageId ? null : current);
+      } else if (existing) {
+        playInteractionSound('reactionRemove');
+      } else if (!shouldAnimateFlight) {
+        playInteractionSound('reactionLand');
       }
     } finally {
       reactionMutationsRef.current.delete(messageId);
@@ -3964,6 +3971,7 @@ function ChatWindow({
     setPendingReactionReveal(current => current?.messageId === completedFlight.messageId ? null : current);
     setReactionLanding(landing);
     setReactionFlight(current => current?.token === completedFlight.token ? null : current);
+    playInteractionSound('reactionLand');
     window.setTimeout(() => {
       setReactionLanding(current => current?.token === landing.token ? null : current);
     }, 420);
@@ -4523,6 +4531,7 @@ function ChatWindow({
                       }}
                       onPointerDown={e => {
                         if (e.pointerType !== 'touch' && e.pointerType !== 'pen') return;
+                        void primeInteractionSounds();
                         clearMessageLongPress();
                         window.getSelection()?.removeAllRanges();
                         msgLongPressOrigin.current = { x: e.clientX, y: e.clientY };
@@ -4530,7 +4539,7 @@ function ChatWindow({
                         msgLongPressTimer.current = setTimeout(() => {
                           msgLongPressTimer.current = null;
                           msgLongPressOrigin.current = null;
-                          openMessageActions(msg.id, anchor);
+                          openMessageActions(msg.id, anchor, true);
                         }, 500);
                       }}
                       onPointerMove={e => {

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BellRing, ChevronDown, Clock3, Loader2, Save, ShieldCheck } from 'lucide-react';
+import { BellRing, ChevronDown, Clock3, Loader2, Save, ShieldCheck, Volume2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import { playInteractionSound, setInteractionSoundsEnabled } from '../lib/interactionSounds';
 
 type Rule = {
   type: string;
@@ -22,6 +23,7 @@ type Preference = {
   quiet_end: string;
   timezone: string;
   muted_types: string[];
+  sound_effects_enabled: boolean;
 };
 
 const defaultPreference: Preference = {
@@ -31,6 +33,7 @@ const defaultPreference: Preference = {
   quiet_end: '07:00',
   timezone: 'Asia/Manila',
   muted_types: [],
+  sound_effects_enabled: true,
 };
 
 const categoryLabels: Record<string, string> = {
@@ -69,7 +72,7 @@ export function NotificationPreferencesSetting() {
           .order('label'),
         supabase
           .from('notification_preferences')
-          .select('in_app_enabled, quiet_hours_enabled, quiet_start, quiet_end, timezone, muted_types')
+          .select('in_app_enabled, quiet_hours_enabled, quiet_start, quiet_end, timezone, muted_types, sound_effects_enabled')
           .eq('user_id', user.id)
           .maybeSingle(),
       ]);
@@ -158,6 +161,26 @@ export function NotificationPreferencesSetting() {
             className="h-5 w-5 rounded border-gray-300 accent-emerald-600"
           />
         </label>
+
+        <div className="flex items-center justify-between gap-4 rounded-2xl bg-gray-50 p-4 dark:bg-white/[0.035]">
+          <span className="min-w-0">
+            <span className="flex items-center gap-2 text-sm font-bold text-gray-900 dark:text-white"><Volume2 className="h-4 w-4 text-emerald-600 dark:text-emerald-300" /> Interaction sounds</span>
+            <span className="mt-0.5 block text-xs leading-5 text-gray-500 dark:text-white/45">Low-volume feedback for navigation, buttons, message long-presses, and reactions. It stays on this device and never sends messages or notifications.</span>
+          </span>
+          <span className="flex shrink-0 items-center gap-2">
+            <button type="button" onClick={() => playInteractionSound('reactionLand')} className="rounded-lg px-2.5 py-1.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 dark:text-emerald-300 dark:hover:bg-emerald-400/10">Test sound</button>
+            <input
+              type="checkbox"
+              checked={preference.sound_effects_enabled}
+              onChange={event => {
+                const sound_effects_enabled = event.target.checked;
+                setPreference(current => ({ ...current, sound_effects_enabled }));
+                setInteractionSoundsEnabled(sound_effects_enabled);
+              }}
+              className="h-5 w-5 shrink-0 rounded border-gray-300 accent-emerald-600"
+            />
+          </span>
+        </div>
 
         <div className="rounded-2xl bg-gray-50 p-4 dark:bg-white/[0.035]">
           <label className="flex items-center justify-between gap-4">

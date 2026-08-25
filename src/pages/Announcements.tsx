@@ -19,6 +19,7 @@ import { ReactionFlightAnimation } from '../components/ReactionFlightAnimation';
 import type { Announcement, AnnouncementReaction, AnnouncementPin, AnnouncementView } from '../types';
 import { withRequestTimeout } from '../lib/requestTimeout';
 import { groupEmojiReactions } from '../lib/reactions';
+import { playInteractionSound } from '../lib/interactionSounds';
 
 type AnnouncementWithBlocks = Announcement & {
   content_blocks?: { type: 'text' | 'image'; content: string }[];
@@ -184,6 +185,7 @@ export function Announcements() {
     const shouldOpen = emojiPickerId !== announcementId;
     const card = event.currentTarget.closest('[data-announcement-card]');
     setEmojiPickerId(shouldOpen ? announcementId : null);
+    if (shouldOpen) playInteractionSound('reactionOpen');
 
     if (shouldOpen && card) {
       window.requestAnimationFrame(() => {
@@ -287,6 +289,8 @@ export function Announcements() {
             }
           : item));
       }
+      if (existing) playInteractionSound('reactionRemove');
+      else if (!shouldAnimateFlight) playInteractionSound('reactionLand');
 
     } catch (error) {
       console.error('Update announcement reaction error:', error);
@@ -731,6 +735,7 @@ export function Announcements() {
                             setReactionLanding(landing);
                             setReactionCelebration(current => current?.token === reactionCelebration.token ? null : current);
                             setEmojiPickerId(current => current === a.id ? null : current);
+                            playInteractionSound('reactionLand');
                             window.setTimeout(() => {
                               setReactionLanding(current => current?.token === landing.token ? null : current);
                             }, 420);

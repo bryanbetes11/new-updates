@@ -20,6 +20,7 @@ import { EmojiReactionPicker, type ReactionEmoji } from '../components/EmojiReac
 import { ReactionFlightAnimation, type ReactionFlightPath } from '../components/ReactionFlightAnimation';
 import { useSmartBack } from '../lib/navigationHistory';
 import { groupEmojiReactions } from '../lib/reactions';
+import { playInteractionSound } from '../lib/interactionSounds';
 import type { Announcement, AnnouncementComment, AnnouncementCommentReaction, AnnouncementView } from '../types';
 
 interface ContentBlock {
@@ -804,6 +805,8 @@ export function AnnouncementDetail() {
             }
           : item));
       }
+      if (existing) playInteractionSound('reactionRemove');
+      else if (!shouldAnimateFlight) playInteractionSound('reactionLand');
     } catch (error) {
       console.error('Update announcement comment reaction error:', error);
       setComments(current => current.map(item => item.id === comment.id
@@ -830,6 +833,7 @@ export function AnnouncementDetail() {
     setReactionLanding(landing);
     setReactionFlight(current => current?.token === completedFlight.token ? null : current);
     setReactionPickerCommentId(current => current === completedFlight.commentId ? null : current);
+    playInteractionSound('reactionLand');
     window.setTimeout(() => {
       setReactionLanding(current => current?.token === landing.token ? null : current);
     }, 420);
@@ -1093,7 +1097,10 @@ export function AnnouncementDetail() {
                       pendingReactionReveal={pendingReactionReveal}
                       reactionLanding={reactionLanding}
                       reactionFlight={reactionFlight}
-                      onToggleReactionPicker={(commentId) => setReactionPickerCommentId(current => current === commentId ? null : commentId)}
+                      onToggleReactionPicker={(commentId) => {
+                        if (reactionPickerCommentId !== commentId) playInteractionSound('reactionOpen');
+                        setReactionPickerCommentId(current => current === commentId ? null : commentId);
+                      }}
                       onReact={(comment, emoji, sourceElement) => { void handleCommentReaction(comment, emoji, sourceElement); }}
                       onReactionFlightComplete={handleReactionFlightComplete}
                     />

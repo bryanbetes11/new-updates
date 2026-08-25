@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import type { MouseEvent } from 'react';
+import { primeInteractionSounds } from '../lib/interactionSounds';
 
 export const REACTION_OPTIONS = [
   { emoji: '👍', label: 'Like', surface: 'from-sky-400/30 to-blue-500/10' },
@@ -39,6 +40,7 @@ export function EmojiReactionPicker({
             : undefined}
           whileHover={{ y: -2, scale: 1.05 }}
           whileTap={{ scale: 0.92 }}
+          onPointerDown={() => { void primeInteractionSounds(); }}
           onClick={event => onPick(option.emoji, event)}
           className="group flex min-h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl px-0.5 text-center transition-colors hover:bg-gray-100 dark:hover:bg-white/[0.07]"
           aria-label={`React with ${option.label}`}

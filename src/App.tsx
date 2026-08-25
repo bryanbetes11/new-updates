@@ -29,7 +29,6 @@ import {
   checkForAppUpdate,
   getPendingAppUpdate,
   hasPendingAppUpdate,
-  type PendingAppUpdate,
 } from "./lib/serviceWorkerUpdate";
 import { getLastAppRoute, isRememberableAppRoute, rememberLastAppRoute } from "./lib/appStartup";
 import {
@@ -330,7 +329,7 @@ function LastRouteTracker() {
 // Keep a currently open PWA responsive to a newly deployed build without
 // polling aggressively enough to distract the person using it.
 const BACKGROUND_UPDATE_CHECK_INITIAL_DELAY_MS = 3 * 1000;
-const BACKGROUND_UPDATE_CHECK_INTERVAL_MS = 60 * 1000;
+const BACKGROUND_UPDATE_CHECK_INTERVAL_MS = 30 * 1000;
 const MIN_BACKGROUND_UPDATE_CHECK_GAP_MS = 5 * 1000;
 
 function BackgroundAppUpdateWatcher() {
@@ -436,12 +435,9 @@ function ResumeSyncIndicator() {
 export default function App() {
   const [showAppUpdate, setShowAppUpdate] = useState(false);
   const [applyingUpdate, setApplyingUpdate] = useState(false);
-  const [updateRequired, setUpdateRequired] = useState(false);
 
   useEffect(() => {
-    const handleUpdateAvailable = (event: Event) => {
-      const update = (event as CustomEvent<PendingAppUpdate>).detail;
-      setUpdateRequired(Boolean(update?.required));
+    const handleUpdateAvailable = () => {
       setShowAppUpdate(true);
     };
 
@@ -449,7 +445,6 @@ export default function App() {
 
     const pendingUpdate = getPendingAppUpdate();
     if (hasPendingAppUpdate() && pendingUpdate) {
-      setUpdateRequired(pendingUpdate.required);
       setShowAppUpdate(true);
     }
 
@@ -474,8 +469,6 @@ export default function App() {
               <BackgroundAppUpdateWatcher />
               <AppUpdateModal
                 open={showAppUpdate}
-                required={updateRequired}
-                onLater={() => setShowAppUpdate(false)}
                 onUpdate={() => {
                   setApplyingUpdate(true);
                   void applyPendingAppUpdate();

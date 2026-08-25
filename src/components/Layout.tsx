@@ -7,6 +7,7 @@ import {
 import { Outlet, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Navigation } from "./Navigation";
+import { InteractionSoundSetupModal } from "./InteractionSoundSetupModal";
 import { useAuth } from "../contexts/AuthContext";
 import { BillingStatusBanner } from "./BillingStatusBanner";
 import { PushReadinessBanner } from "./PushReadinessBanner";
@@ -20,13 +21,20 @@ import {
   shouldUseAppleTouchFeedback,
   triggerHaptic,
 } from "../lib/haptics";
-import { initializeInteractionSounds, playGlobalClickSound, setInteractionSoundsEnabled } from "../lib/interactionSounds";
+import {
+  initializeInteractionSounds,
+  playGlobalClickSound,
+  primeInteractionSounds,
+  setInteractionSoundsEnabled,
+  setInteractionSoundsVolume,
+} from "../lib/interactionSounds";
 
 export function Layout() {
   const { user } = useAuth();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [soundSetupOpen, setSoundSetupOpen] = useState(false);
   const mobileChromeHidden = false;
 
   useEffect(() => {
@@ -36,11 +44,20 @@ export function Layout() {
     let active = true;
     void supabase
       .from("notification_preferences")
-      .select("sound_effects_enabled")
+      .select("sound_effects_enabled, sound_effects_volume, sound_effects_configured")
       .eq("user_id", user.id)
       .maybeSingle()
       .then(({ data }) => {
-        if (active && data) setInteractionSoundsEnabled(data.sound_effects_enabled);
+        if (!active) return;
+        if (data) {
+          setInteractionSoundsEnabled(data.sound_effects_enabled);
+          setInteractionSoundsVolume((data.sound_effects_volume ?? 55) / 100);
+          setSoundSetupOpen(!data.sound_effects_configured);
+        } else {
+          // New accounts receive defaults in the panel, but should still get the
+          // first-run choice before interaction sounds start feeling unexpected.
+          setSoundSetupOpen(true);
+        }
       });
 
     return () => { active = false; };
@@ -73,6 +90,14 @@ export function Layout() {
       if (strength) triggerHaptic(strength);
     };
 
+    const handleAudioPriming = () => {
+      void primeInteractionSounds();
+    };
+
+    const handleAppResume = () => {
+      if (document.visibilityState === "visible") void primeInteractionSounds();
+    };
+
     const handleGlobalClickSound = (event: MouseEvent) => {
       const interactive = getInteractionTarget(event.target);
       if (!interactive) return;
@@ -80,12 +105,18 @@ export function Layout() {
     };
 
     document.addEventListener("pointerdown", handleTouchPress, { passive: true });
+    document.addEventListener("pointerdown", handleAudioPriming, { passive: true });
     document.addEventListener("pointerup", handleTouchInteraction, { passive: true });
     document.addEventListener("click", handleGlobalClickSound, { passive: true });
+    document.addEventListener("visibilitychange", handleAppResume);
+    window.addEventListener("pageshow", handleAppResume);
     return () => {
       document.removeEventListener("pointerdown", handleTouchPress);
+      document.removeEventListener("pointerdown", handleAudioPriming);
       document.removeEventListener("pointerup", handleTouchInteraction);
       document.removeEventListener("click", handleGlobalClickSound);
+      document.removeEventListener("visibilitychange", handleAppResume);
+      window.removeEventListener("pageshow", handleAppResume);
       if (useAppleTouchFeedback) {
         delete document.documentElement.dataset.touchFeedback;
       }
@@ -119,6 +150,7 @@ export function Layout() {
   const isRequestLeavePage = location.pathname === "/request-leave";
   const isNotificationsPage = location.pathname === "/notifications";
   const isProfilePage = location.pathname === "/profile";
+  const isSoundSettingsPage = location.pathname === "/settings/sounds";
   const isUnavailableMembersPage = location.pathname === "/unavailable-members";
   const isActivityLogPage = location.pathname === "/activity-log";
   const isLeadershipPage = location.pathname.startsWith("/leadership");
@@ -136,6 +168,7 @@ export function Layout() {
     isRequestLeavePage ||
     isNotificationsPage ||
     isProfilePage ||
+    isSoundSettingsPage ||
     isActivityLogPage ||
     isLeadershipPage ||
     isAdminPage;
@@ -330,7 +363,7 @@ export function Layout() {
     <div className="min-h-screen bg-[#050505]">
       <ConnectionStatus />
       {user && !staticHideNav && (
-        <Navigation
+      <Navigation
           hideMobile={hideNavMobile}
           hideMobileAll={isMessagesConversation}
           hideMobileHeader={isEventDetail || isMessagesPage}
@@ -341,6 +374,7 @@ export function Layout() {
           mobileChromeHidden={mobileChromeHidden}
         />
       )}
+      <InteractionSoundSetupModal open={soundSetupOpen} onClose={() => setSoundSetupOpen(false)} />
 
       <motion.main
         animate={{

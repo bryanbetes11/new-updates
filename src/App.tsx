@@ -123,6 +123,9 @@ const Sets = lazy(() =>
 const Profile = lazy(() =>
   import("./pages/Profile").then(({ Profile }) => ({ default: Profile })),
 );
+const SoundSettings = lazy(() =>
+  import("./pages/SoundSettings").then(({ SoundSettings }) => ({ default: SoundSettings })),
+);
 const RequestLeave = lazy(() =>
   import("./pages/RequestLeave").then(({ RequestLeave }) => ({
     default: RequestLeave,
@@ -634,6 +637,7 @@ export default function App() {
                         element={<UnavailableMembers />}
                       />
                       <Route path="/profile" element={<Profile />} />
+                      <Route path="/settings/sounds" element={<SoundSettings />} />
                       <Route
                         path="/change-password"
                         element={<ChangePassword />}

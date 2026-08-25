@@ -14,6 +14,7 @@ interface ModalProps {
   closeOnBackdrop?: boolean;
   closeOnEscape?: boolean;
   titleAlign?: 'left' | 'center';
+  headerIcon?: ReactNode;
   bodyClassName?: string;
   dialogClassName?: string;
   onBack?: () => void;
@@ -139,10 +140,9 @@ function focusInitialElement(dialog: HTMLElement) {
   const preferredElement = dialog.querySelector<HTMLElement>(
     '[data-modal-initial-focus], [data-autofocus], [autofocus]',
   );
-  const firstFocusableElement = getFocusableElements(dialog)[0];
   const target = preferredElement && isAvailableForFocus(preferredElement)
     ? preferredElement
-    : firstFocusableElement || dialog;
+    : dialog;
 
   focusElement(target);
 }
@@ -163,6 +163,7 @@ export function Modal({
   closeOnBackdrop = true,
   closeOnEscape = true,
   titleAlign = 'left',
+  headerIcon,
   bodyClassName = '',
   dialogClassName = '',
   onBack,
@@ -342,6 +343,11 @@ export function Modal({
               <div className="absolute top-3 left-1/2 -translate-x-1/2 w-8 h-1 rounded-full bg-gray-200 dark:bg-gray-700 sm:hidden" />
             )}
             <div className={`flex min-w-0 items-center gap-2 ${titleAlign === 'center' ? 'contents' : ''}`}>
+              {headerIcon && titleAlign !== 'center' && (
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-500/[0.12] text-emerald-600 dark:text-emerald-300">
+                  {headerIcon}
+                </span>
+              )}
               {onBack && titleAlign !== 'center' && (
                 <button
                   type="button"

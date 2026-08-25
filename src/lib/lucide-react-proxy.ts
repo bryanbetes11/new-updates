@@ -147,6 +147,7 @@ export { default as Users2 } from 'lucide-react/dist/esm/icons/users-2.js';
 export { default as UserX } from 'lucide-react/dist/esm/icons/user-x.js';
 export { default as Video } from 'lucide-react/dist/esm/icons/video.js';
 export { default as Volume2 } from 'lucide-react/dist/esm/icons/volume-2.js';
+export { default as VolumeX } from 'lucide-react/dist/esm/icons/volume-x.js';
 export { default as Wifi } from 'lucide-react/dist/esm/icons/wifi.js';
 export { default as WifiOff } from 'lucide-react/dist/esm/icons/wifi-off.js';
 export { default as Wrench } from 'lucide-react/dist/esm/icons/wrench.js';

@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowRight, Bell, Check, X } from 'lucide-react';
+import { ArrowRight, Bell, Check, Volume2, VolumeX, X } from 'lucide-react';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import type { Notification } from '../types';
 import { PushNotificationSetting } from './PushNotificationSetting';
+import { Modal } from './Modal';
+import { setInteractionSoundsEnabled } from '../lib/interactionSounds';
+import { useToast } from '../contexts/ToastContext';
 
 const PREVIEW_LIMIT = 5;
 
@@ -26,10 +29,13 @@ export function NotificationBell() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [soundMuteConfirmOpen, setSoundMuteConfirmOpen] = useState(false);
+  const [mutingSounds, setMutingSounds] = useState(false);
   const [panelPosition, setPanelPosition] = useState({ top: 72, right: 12, caretRight: 12 });
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   const fetchNotifications = useCallback(async () => {
     if (!user) {
@@ -176,6 +182,24 @@ export function NotificationBell() {
     window.dispatchEvent(new Event('notifications-updated'));
   };
 
+  const turnOffSounds = async () => {
+    if (!user || !profile?.org_id) return;
+    setMutingSounds(true);
+    const { error } = await supabase.from('notification_preferences').upsert({
+      user_id: user.id,
+      org_id: profile.org_id,
+      sound_effects_enabled: false,
+    }, { onConflict: 'user_id' });
+    setMutingSounds(false);
+    if (error) {
+      toast('error', 'Could not turn off interaction sounds');
+      return;
+    }
+    setInteractionSoundsEnabled(false);
+    setSoundMuteConfirmOpen(false);
+    toast('success', 'Interaction sounds turned off');
+  };
+
   return (
     <>
       <button
@@ -237,6 +261,18 @@ export function NotificationBell() {
               </div>
               <div className="ml-auto flex items-center gap-1.5">
                 <PushNotificationSetting surface="compact" />
+                <button
+                  type="button"
+                  onClick={() => setSoundMuteConfirmOpen(true)}
+                  className="relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/[0.14] text-emerald-300 transition-colors hover:bg-emerald-500/[0.22] hover:text-emerald-200"
+                  aria-label="Turn off interaction sounds"
+                  title="Turn off interaction sounds"
+                >
+                  <Volume2 className="h-4 w-4" />
+                  <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-400 text-gray-950 ring-2 ring-[#1b1b1f]">
+                    <Check className="h-2.5 w-2.5" strokeWidth={3} />
+                  </span>
+                </button>
                 <button
                   type="button"
                   onClick={() => void markAllRead()}
@@ -304,6 +340,38 @@ export function NotificationBell() {
         </div>,
         document.body,
       )}
+      <Modal
+        open={soundMuteConfirmOpen}
+        onClose={() => { if (!mutingSounds) setSoundMuteConfirmOpen(false); }}
+        title="Turn off interaction sounds?"
+        headerIcon={<VolumeX className="h-4 w-4" />}
+        size="sm"
+        mobileView="dialog"
+      >
+        <div className="space-y-5">
+          <p className="text-sm leading-6 text-gray-800 dark:text-white">
+            This will mute taps, long presses, and reaction feedback on this device. You can turn them back on or choose a different level in Settings → Sounds & feedback.
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={() => void turnOffSounds()}
+              disabled={mutingSounds}
+              className="min-h-11 rounded-xl border border-gray-200 bg-gray-50 px-4 text-sm font-semibold text-gray-600 transition hover:bg-gray-100 hover:text-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:opacity-50 dark:border-white/[0.1] dark:bg-white/[0.05] dark:text-white/70 dark:hover:bg-white/[0.09] dark:hover:text-white/90"
+            >
+              {mutingSounds ? 'Turning Off…' : 'Turn Off Sounds'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSoundMuteConfirmOpen(false)}
+              disabled={mutingSounds}
+              className="min-h-11 rounded-xl bg-rose-600 px-4 text-sm font-black text-white transition hover:bg-rose-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 disabled:opacity-50"
+            >
+              Keep Sounds On
+            </button>
+          </div>
+        </div>
+      </Modal>
     </>
   );
 }

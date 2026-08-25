@@ -450,6 +450,8 @@ export interface NotificationPreference {
   timezone: string;
   muted_types: string[];
   sound_effects_enabled: boolean;
+  sound_effects_volume: number;
+  sound_effects_configured: boolean;
   updated_at: string;
 }
 

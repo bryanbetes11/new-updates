@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components -- The provider and its companion hook intentionally share this context module. */
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react';
 import { CheckCircle, AlertTriangle, Info, X, XCircle } from 'lucide-react';
 import { createStableId } from '../lib/createStableId';
 
@@ -39,6 +39,8 @@ const TOAST_EXIT_MS = 280;
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const swipeStartYRef = useRef(new Map<string, number>());
+  const recentlySwipedRef = useRef(new Set<string>());
 
   const removeToast = useCallback((id: string) => {
     setToasts(prev => prev.map(t => t.id === id ? { ...t, leaving: true } : t));
@@ -65,6 +67,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map(t => {
           const Icon = icons[t.type];
           const runAction = () => {
+            if (recentlySwipedRef.current.has(t.id)) return;
             if (!t.onClick) return;
             t.onClick();
             removeToast(t.id);
@@ -79,6 +82,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 e.preventDefault();
                 runAction();
               }}
+              onPointerDown={(event) => {
+                if (event.pointerType === 'touch') swipeStartYRef.current.set(t.id, event.clientY);
+              }}
+              onPointerUp={(event) => {
+                const startY = swipeStartYRef.current.get(t.id);
+                swipeStartYRef.current.delete(t.id);
+                if (event.pointerType !== 'touch' || startY === undefined || startY - event.clientY < 52) return;
+                recentlySwipedRef.current.add(t.id);
+                removeToast(t.id);
+                window.setTimeout(() => recentlySwipedRef.current.delete(t.id), 320);
+              }}
+              onPointerCancel={() => swipeStartYRef.current.delete(t.id)}
               className={`pointer-events-auto ${t.leaving ? 'animate-toast-out pointer-events-none' : 'animate-toast-in'} flex items-center gap-3 rounded-full px-4 py-3 ring-1 backdrop-blur-xl ${colors[t.type]} ${t.onClick && !t.leaving ? 'cursor-pointer hover:-translate-y-0.5 hover:scale-[1.01] active:translate-y-0 active:scale-[0.99] transition-transform' : ''}`}
               style={{
                 boxShadow:

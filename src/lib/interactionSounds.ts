@@ -1,12 +1,16 @@
 export type InteractionSound = 'tap' | 'longPress' | 'reactionOpen' | 'reactionLand' | 'reactionRemove';
 
 const STORAGE_KEY = 'servesync:interaction-sounds-enabled';
+const VOLUME_STORAGE_KEY = 'servesync:interaction-sounds-volume';
 
 let soundEffectsEnabled = true;
+let soundEffectsVolume = 0.55;
 let audioContext: AudioContext | null = null;
 let fallbackAudio: HTMLAudioElement | null = null;
 let fallbackUrl: string | null = null;
 let lastSoundAt = Number.NEGATIVE_INFINITY;
+let lastDedicatedSoundAt = Number.NEGATIVE_INFINITY;
+let lastGlobalTapAt = Number.NEGATIVE_INFINITY;
 
 const soundProfiles: Record<InteractionSound, {
   frequency: number;
@@ -16,7 +20,7 @@ const soundProfiles: Record<InteractionSound, {
   type: OscillatorType;
 }> = {
   tap: { frequency: 480, endFrequency: 560, duration: 0.034, gain: 0.026, type: 'sine' },
-  longPress: { frequency: 260, endFrequency: 220, duration: 0.046, gain: 0.032, type: 'triangle' },
+  longPress: { frequency: 260, endFrequency: 220, duration: 0.054, gain: 0.04, type: 'triangle' },
   reactionOpen: { frequency: 420, endFrequency: 520, duration: 0.04, gain: 0.026, type: 'sine' },
   reactionLand: { frequency: 580, endFrequency: 760, duration: 0.066, gain: 0.04, type: 'sine' },
   reactionRemove: { frequency: 320, endFrequency: 235, duration: 0.04, gain: 0.025, type: 'triangle' },
@@ -26,6 +30,12 @@ function canUseAudio() {
   return typeof window !== 'undefined'
     && typeof document !== 'undefined'
     && document.visibilityState === 'visible';
+}
+
+function getVolumeMultiplier() {
+  // Make the selectable levels meaningfully distinct: quiet remains subtle,
+  // while the upper end is noticeably easier to hear in a busy environment.
+  return 0.2 + soundEffectsVolume * 1.8;
 }
 
 function getAudioContext() {
@@ -64,7 +74,7 @@ function createFallbackWav(profile: (typeof soundProfiles)[InteractionSound]) {
     const progress = index / sampleCount;
     const frequency = profile.frequency + (profile.endFrequency - profile.frequency) * progress;
     const envelope = Math.sin(Math.PI * progress) ** 1.5;
-    const sample = Math.sin(2 * Math.PI * frequency * index / sampleRate) * envelope * profile.gain * 4;
+    const sample = Math.sin(2 * Math.PI * frequency * index / sampleRate) * envelope * profile.gain * getVolumeMultiplier() * 4;
     view.setInt16(44 + index * 2, Math.max(-1, Math.min(1, sample)) * 0x7fff, true);
   }
 
@@ -81,7 +91,7 @@ function playFallbackTone(profile: (typeof soundProfiles)[InteractionSound]) {
     document.body.appendChild(fallbackAudio);
   }
   fallbackAudio.preload = 'auto';
-  fallbackAudio.volume = 0.72;
+  fallbackAudio.volume = Math.max(0.05, soundEffectsVolume);
   const url = URL.createObjectURL(createFallbackWav(profile));
   if (fallbackUrl) URL.revokeObjectURL(fallbackUrl);
   fallbackUrl = url;
@@ -103,10 +113,23 @@ export function setInteractionSoundsEnabled(enabled: boolean) {
   }
 }
 
+export function setInteractionSoundsVolume(volume: number) {
+  soundEffectsVolume = Math.min(1, Math.max(0, volume));
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(VOLUME_STORAGE_KEY, String(soundEffectsVolume));
+  }
+}
+
+export function getInteractionSoundsVolume() {
+  return soundEffectsVolume;
+}
+
 export function initializeInteractionSounds() {
   if (typeof window === 'undefined') return;
   const saved = window.localStorage.getItem(STORAGE_KEY);
   if (saved !== null) soundEffectsEnabled = saved !== 'false';
+  const savedVolume = Number(window.localStorage.getItem(VOLUME_STORAGE_KEY));
+  if (Number.isFinite(savedVolume)) setInteractionSoundsVolume(savedVolume);
 }
 
 export async function primeInteractionSounds() {
@@ -140,7 +163,7 @@ function playTone(
   oscillator.frequency.setValueAtTime(frequency, now);
   oscillator.frequency.exponentialRampToValueAtTime(Math.max(endFrequency, 1), now + duration);
   gainNode.gain.setValueAtTime(0.0001, now);
-  gainNode.gain.exponentialRampToValueAtTime(gain, now + 0.006);
+  gainNode.gain.exponentialRampToValueAtTime(gain * getVolumeMultiplier(), now + 0.006);
   gainNode.gain.exponentialRampToValueAtTime(0.0001, now + duration);
 
   oscillator.connect(gainNode);
@@ -150,9 +173,10 @@ function playTone(
 }
 
 export function playInteractionSound(sound: InteractionSound) {
-  if (!soundEffectsEnabled) return;
+  if (!soundEffectsEnabled || soundEffectsVolume <= 0) return;
 
   lastSoundAt = performance.now();
+  if (sound !== 'tap') lastDedicatedSoundAt = lastSoundAt;
   const profile = soundProfiles[sound];
   const context = getAudioContext();
   if (!context) {
@@ -173,7 +197,10 @@ export function playInteractionSound(sound: InteractionSound) {
 }
 
 export function playGlobalClickSound() {
-  // Avoid a second generic tap when a control has its own richer feedback.
-  if (performance.now() - lastSoundAt < 95) return;
+  const now = performance.now();
+  // Avoid a second generic tap when a control has its own richer feedback,
+  // while still acknowledging quick intentional navigation changes.
+  if (now - lastDedicatedSoundAt < 95 || now - lastGlobalTapAt < 42) return;
+  lastGlobalTapAt = now;
   playInteractionSound('tap');
 }

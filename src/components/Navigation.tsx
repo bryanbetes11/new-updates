@@ -26,6 +26,7 @@ import {
   UserPlus,
   Users,
   Video,
+  Volume2,
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -1415,6 +1416,26 @@ export function Navigation({
 
           <section>
             <p className="mb-2 px-1 text-[10px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
+              Feedback
+            </p>
+            <button
+              type="button"
+              onClick={() => handleNav('/settings/sounds')}
+              className="flex w-full items-center gap-3 rounded-[1.4rem] border border-black/[0.06] bg-white/72 px-3.5 py-3.5 text-left transition-colors hover:bg-white dark:border-white/[0.08] dark:bg-white/[0.045] dark:hover:bg-white/[0.07]"
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-400/[0.13] text-emerald-700 dark:text-emerald-200">
+                <Volume2 className="h-5 w-5" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[14px] font-black text-gray-900 dark:text-white">Sound & feedback</span>
+                <span className="mt-0.5 block text-[11px] font-semibold text-gray-500 dark:text-white/45">Test and adjust interaction volume</span>
+              </span>
+              <ChevronRight className="h-4 w-4 text-gray-400 dark:text-white/40" />
+            </button>
+          </section>
+
+          <section>
+            <p className="mb-2 px-1 text-[10px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
               Device Alerts
             </p>
             <PushNotificationSetting surface="drawer" />
@@ -1601,6 +1622,24 @@ export function Navigation({
                     Current
                   </span>
                   <ChevronRight className="h-4 w-4 text-white/28 transition-colors group-hover:text-white/72" />
+                </button>
+              </div>
+
+              <div className="border-b border-white/[0.08] p-2">
+                <button
+                  type="button"
+                  onClick={() => handleNav('/settings/sounds')}
+                  className="flex w-full items-center gap-3 rounded-[0.7rem] px-3 py-2.5 text-left transition-colors hover:bg-white/[0.06]"
+                  role="menuitem"
+                >
+                  <span className="flex h-9 w-9 items-center justify-center rounded-[0.65rem] bg-emerald-400/[0.13] text-emerald-200">
+                    <Volume2 className="h-[18px] w-[18px]" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[13px] font-black text-white">Sound & feedback</span>
+                    <span className="mt-0.5 block text-[10px] font-semibold text-white/42">Volume and interaction sounds</span>
+                  </span>
+                  <ChevronRight className="h-4 w-4 text-white/30" />
                 </button>
               </div>
 

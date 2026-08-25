@@ -3854,6 +3854,10 @@ const openLyricsModal = (ss: SetlistSong) => {
           />
         </div>
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_-6%,rgba(255,255,255,0.22),transparent_32%),radial-gradient(circle_at_70%_18%,rgba(239,68,68,0.20),transparent_36%),radial-gradient(circle_at_24%_24%,rgba(245,158,11,0.13),transparent_38%),linear-gradient(180deg,rgba(0,0,0,0.02)_0%,rgba(0,0,0,0.12)_18%,rgba(5,5,5,0.82)_57%,#050505_78%,#050505_100%)]" />
+        <div
+          className="absolute inset-x-0 top-0 h-[calc(env(safe-area-inset-top)+5rem)] bg-gradient-to-b from-black/[0.08] via-black/[0.04] to-transparent backdrop-blur-2xl"
+          aria-hidden="true"
+        />
       </div>
       <motion.div
         animate={isLeaving ? { opacity: 0, y: -12, filter: 'blur(8px)' } : { opacity: 1, y: 0, filter: 'blur(0px)' }}

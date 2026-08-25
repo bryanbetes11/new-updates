@@ -8,10 +8,22 @@ import { useAuth } from '../contexts/AuthContext';
 import type { Notification } from '../types';
 import { PushNotificationSetting } from './PushNotificationSetting';
 import { Modal } from './Modal';
-import { setInteractionSoundsEnabled } from '../lib/interactionSounds';
+import {
+  getInteractionSoundsVolume,
+  playInteractionSound,
+  setInteractionSoundsEnabled,
+  setInteractionSoundsVolume,
+} from '../lib/interactionSounds';
 import { useToast } from '../contexts/ToastContext';
 
 const PREVIEW_LIMIT = 5;
+const SOUND_VOLUME_LEVELS = [
+  { label: 'Quiet', value: 20 },
+  { label: 'Soft', value: 40 },
+  { label: 'Balanced', value: 55 },
+  { label: 'Louder', value: 80 },
+  { label: 'Full', value: 100 },
+] as const;
 
 function notificationDestination(notification: Notification) {
   if (notification.data?.conversation_id) {
@@ -30,7 +42,8 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [soundMuteConfirmOpen, setSoundMuteConfirmOpen] = useState(false);
-  const [mutingSounds, setMutingSounds] = useState(false);
+  const [savingSoundPreference, setSavingSoundPreference] = useState(false);
+  const [soundVolume, setSoundVolume] = useState(() => Math.round(getInteractionSoundsVolume() * 100));
   const [panelPosition, setPanelPosition] = useState({ top: 72, right: 12, caretRight: 12 });
   const buttonRef = useRef<HTMLButtonElement>(null);
   const { user, profile } = useAuth();
@@ -184,13 +197,13 @@ export function NotificationBell() {
 
   const turnOffSounds = async () => {
     if (!user || !profile?.org_id) return;
-    setMutingSounds(true);
+    setSavingSoundPreference(true);
     const { error } = await supabase.from('notification_preferences').upsert({
       user_id: user.id,
       org_id: profile.org_id,
       sound_effects_enabled: false,
     }, { onConflict: 'user_id' });
-    setMutingSounds(false);
+    setSavingSoundPreference(false);
     if (error) {
       toast('error', 'Could not turn off interaction sounds');
       return;
@@ -198,6 +211,35 @@ export function NotificationBell() {
     setInteractionSoundsEnabled(false);
     setSoundMuteConfirmOpen(false);
     toast('success', 'Interaction sounds turned off');
+  };
+
+  const chooseSoundVolume = (nextVolume: number) => {
+    setSoundVolume(nextVolume);
+    setInteractionSoundsEnabled(true);
+    setInteractionSoundsVolume(nextVolume / 100);
+    playInteractionSound('reactionLand');
+  };
+
+  const saveSoundVolume = async () => {
+    if (!user || !profile?.org_id) return;
+    setSavingSoundPreference(true);
+    const { error } = await supabase.from('notification_preferences').upsert({
+      user_id: user.id,
+      org_id: profile.org_id,
+      sound_effects_enabled: true,
+      sound_effects_volume: soundVolume,
+      sound_effects_configured: true,
+    }, { onConflict: 'user_id' });
+    setSavingSoundPreference(false);
+
+    if (error) {
+      toast('error', 'Could not update interaction sound volume');
+      return;
+    }
+
+    setSoundMuteConfirmOpen(false);
+    const level = SOUND_VOLUME_LEVELS.find(item => item.value === soundVolume)?.label.toLowerCase();
+    toast('success', `${level ? `${level[0].toUpperCase()}${level.slice(1)}` : 'Custom'} interaction sounds selected`);
   };
 
   return (
@@ -263,7 +305,10 @@ export function NotificationBell() {
                 <PushNotificationSetting surface="compact" />
                 <button
                   type="button"
-                  onClick={() => setSoundMuteConfirmOpen(true)}
+                  onClick={() => {
+                    setSoundVolume(Math.round(getInteractionSoundsVolume() * 100));
+                    setSoundMuteConfirmOpen(true);
+                  }}
                   className="relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/[0.14] text-emerald-300 transition-colors hover:bg-emerald-500/[0.22] hover:text-emerald-200"
                   aria-label="Turn off interaction sounds"
                   title="Turn off interaction sounds"
@@ -342,29 +387,55 @@ export function NotificationBell() {
       )}
       <Modal
         open={soundMuteConfirmOpen}
-        onClose={() => { if (!mutingSounds) setSoundMuteConfirmOpen(false); }}
+        onClose={() => { if (!savingSoundPreference) void saveSoundVolume(); }}
         title="Turn off interaction sounds?"
         headerIcon={<VolumeX className="h-4 w-4" />}
-        size="sm"
+        size="md"
         mobileView="dialog"
+        closeOnBackdrop={false}
+        closeOnEscape={false}
       >
         <div className="space-y-5">
           <p className="text-sm leading-6 text-gray-800 dark:text-white">
             This will mute taps, long presses, and reaction feedback on this device. You can turn them back on or choose a different level in Settings → Sounds & feedback.
           </p>
+          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/[0.08] dark:bg-white/[0.04]">
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-sm font-black text-gray-900 dark:text-white">Try a quieter level instead</p>
+              <span className="text-xs font-bold text-gray-600 dark:text-white/70">{soundVolume}%</span>
+            </div>
+            <div className="mt-3 grid grid-cols-5 gap-1.5" role="group" aria-label="Choose interaction sound volume">
+              {SOUND_VOLUME_LEVELS.map(level => {
+                const selected = soundVolume === level.value;
+                return (
+                  <button
+                    key={level.value}
+                    type="button"
+                    aria-pressed={selected}
+                    disabled={savingSoundPreference}
+                    onClick={() => chooseSoundVolume(level.value)}
+                    className={`group flex min-h-12 flex-col items-center justify-center gap-1.5 rounded-xl px-1 text-[10px] font-bold transition ${selected ? 'bg-emerald-500/[0.12] text-emerald-700 ring-1 ring-emerald-500/45 dark:text-emerald-300' : 'text-gray-500 hover:bg-gray-200/70 dark:text-white/48 dark:hover:bg-white/[0.07]'} disabled:opacity-55`}
+                  >
+                    <span className={`h-1.5 w-full max-w-8 rounded-full transition-all ${selected ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.55)]' : 'bg-gray-300 group-hover:bg-gray-400 dark:bg-white/20 dark:group-hover:bg-white/35'}`} />
+                    <span>{level.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
             <button
               type="button"
               onClick={() => void turnOffSounds()}
-              disabled={mutingSounds}
+              disabled={savingSoundPreference}
               className="min-h-11 rounded-xl border border-gray-200 bg-gray-50 px-4 text-sm font-semibold text-gray-600 transition hover:bg-gray-100 hover:text-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:opacity-50 dark:border-white/[0.1] dark:bg-white/[0.05] dark:text-white/70 dark:hover:bg-white/[0.09] dark:hover:text-white/90"
             >
-              {mutingSounds ? 'Turning Off…' : 'Turn Off Sounds'}
+              {savingSoundPreference ? 'Saving…' : 'Turn Off Sounds'}
             </button>
             <button
               type="button"
-              onClick={() => setSoundMuteConfirmOpen(false)}
-              disabled={mutingSounds}
+              onClick={() => void saveSoundVolume()}
+              disabled={savingSoundPreference}
               className="min-h-11 rounded-xl bg-rose-600 px-4 text-sm font-black text-white transition hover:bg-rose-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 disabled:opacity-50"
             >
               Keep Sounds On

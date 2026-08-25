@@ -312,7 +312,7 @@ export function OrganizationSettings() {
 
             <div>
               <label className="block text-[11px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-2">Assign Roles</label>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5">
                 {roleOptions.map(role => {
                   const selected = inviteForm.role_ids.includes(role.id);
                   return (
@@ -321,7 +321,8 @@ export function OrganizationSettings() {
                       type="button"
                       onClick={() => handleToggleInviteRole(role.id)}
                       disabled={billingRestricted}
-                      className={`inline-flex min-h-11 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-all ring-1 ${
+                      aria-pressed={selected}
+                      className={`inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-all ring-1 sm:min-h-9 ${
                         selected
                           ? role.is_leadership
                             ? 'bg-amber-50 dark:bg-amber-900/20 ring-amber-300 dark:ring-amber-700 text-amber-700 dark:text-amber-300'
@@ -336,20 +337,22 @@ export function OrganizationSettings() {
               </div>
             </div>
 
-            <label className="inline-flex min-h-11 items-center gap-2 rounded-xl text-sm text-gray-700 dark:text-gray-300">
-              <input
-                type="checkbox"
-                checked={inviteForm.is_admin}
-                onChange={e => setInviteForm(prev => ({ ...prev, is_admin: e.target.checked }))}
-                className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
-                disabled={billingRestricted}
-              />
-              Grant church-admin access
-            </label>
+            <div className="flex flex-col gap-3 border-t border-gray-200 pt-4 dark:border-white/[0.08] sm:flex-row sm:items-center sm:justify-between">
+              <label className="inline-flex min-h-11 items-center gap-2 rounded-lg text-sm text-gray-700 dark:text-gray-300">
+                <input
+                  type="checkbox"
+                  checked={inviteForm.is_admin}
+                  onChange={e => setInviteForm(prev => ({ ...prev, is_admin: e.target.checked }))}
+                  className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                  disabled={billingRestricted}
+                />
+                Grant church-admin access
+              </label>
 
-            <button onClick={handleCreateInvite} disabled={creatingInvite || billingRestricted} className="btn-primary min-h-11 justify-center text-sm sm:justify-start">
-              {creatingInvite ? <><Loader2 className="h-4 w-4 animate-spin" /> Creating...</> : <><Plus className="h-4 w-4" /> Create Invite</>}
-            </button>
+              <button onClick={handleCreateInvite} disabled={creatingInvite || billingRestricted} className="btn-primary min-h-11 w-full justify-center px-3.5 text-xs sm:min-h-10 sm:w-auto">
+                {creatingInvite ? <><Loader2 className="h-4 w-4 animate-spin" /> Creating...</> : <><Plus className="h-4 w-4" /> Create Invite</>}
+              </button>
+            </div>
           </div>
 
           <div className="rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden">
@@ -442,11 +445,11 @@ export function OrganizationSettings() {
           </div>
           <div>
             <p className="mb-2 text-[11px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35">Assign Roles</p>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-1.5">
               {roleOptions.map(role => {
                 const selected = inviteForm.role_ids.includes(role.id);
                 return (
-                  <button key={role.id} type="button" onClick={() => handleToggleInviteRole(role.id)} disabled={billingRestricted} className={`inline-flex min-h-11 items-center rounded-xl px-3 text-xs font-medium ring-1 transition-all ${selected ? 'bg-emerald-500/15 text-emerald-500 ring-emerald-500/35' : 'bg-white dark:bg-white/[0.05] text-gray-600 dark:text-white/55 ring-gray-200 dark:ring-white/10'}`}>
+                  <button key={role.id} type="button" onClick={() => handleToggleInviteRole(role.id)} disabled={billingRestricted} aria-pressed={selected} className={`inline-flex min-h-11 items-center rounded-lg px-2.5 text-[11px] font-semibold ring-1 transition-all sm:min-h-9 ${selected ? 'bg-emerald-500/15 text-emerald-500 ring-emerald-500/35' : 'bg-white dark:bg-white/[0.05] text-gray-600 dark:text-white/55 ring-gray-200 dark:ring-white/10'}`}>
                     {role.name}
                   </button>
                 );

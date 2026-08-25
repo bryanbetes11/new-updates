@@ -1270,7 +1270,7 @@ export function Dashboard() {
         variants={container}
         initial="initial"
         animate="animate"
-        className="relative mx-auto w-full max-w-2xl space-y-5 px-4 pt-1 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:px-6 sm:pt-5 sm:space-y-6 md:max-w-[860px] md:px-8 lg:max-w-6xl lg:pb-24 xl:max-w-[1560px]"
+        className="relative mx-auto w-full max-w-2xl space-y-5 px-4 pt-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:px-6 sm:pt-5 sm:space-y-6 md:max-w-[860px] md:px-8 lg:max-w-6xl lg:pb-24 xl:max-w-[1560px]"
       >
 
         <HomeAppUpdateCard />

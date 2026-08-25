@@ -379,18 +379,21 @@ export function Layout() {
       )}
       <InteractionSoundSetupModal open={soundSetupOpen} onClose={() => setSoundSetupOpen(false)} />
 
-      <motion.main
-        animate={{
-          marginLeft: 0,
-          width: "100%",
-          x: shouldShiftForMobileMenu ? "min(82vw, 340px)" : 0,
+      <main
+        className={`desktop-sidebar-main ${isEventDetail ? "event-detail-main" : "overflow-x-clip"} ${isMessagesPage ? "box-border flex flex-col min-h-[100dvh] overflow-hidden bg-white dark:bg-[#111013] lg:fixed lg:inset-0 lg:h-[100dvh]" : ""}`}
+        style={{
+          ...mainStyle,
+          // Do not leave a neutral transform or filter on the shared shell.
+          // Mobile PWAs can rasterize that otherwise-idle layer, softening
+          // the fixed header even after the drawer has closed.
+          transform: shouldShiftForMobileMenu
+            ? "translateX(min(82vw, 340px))"
+            : undefined,
           filter: shouldShiftForMobileMenu
             ? "blur(1.25px) brightness(0.78)"
-            : "none",
+            : undefined,
+          transition: "transform 0.26s cubic-bezier(0.22, 1, 0.36, 1), filter 0.26s cubic-bezier(0.22, 1, 0.36, 1)",
         }}
-        transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
-        className={`desktop-sidebar-main ${isEventDetail ? "event-detail-main" : "overflow-x-clip"} ${isMessagesPage ? "box-border flex flex-col min-h-[100dvh] overflow-hidden bg-white dark:bg-[#111013] lg:fixed lg:inset-0 lg:h-[100dvh]" : ""}`}
-        style={mainStyle}
       >
         {isMessagesPage ? (
           <div className="flex flex-col flex-1 min-h-0 h-full">
@@ -463,7 +466,7 @@ export function Layout() {
             </div>
           </div>
         )}
-      </motion.main>
+      </main>
     </div>
   );
 }

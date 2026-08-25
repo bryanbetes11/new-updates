@@ -2568,7 +2568,7 @@ function ConvInfoPanel({
   return (
     <div className="flex flex-col h-full bg-[#f5f5f7] dark:bg-[#0d0d0f]">
       {/* Header */}
-      <div className="relative z-20 shrink-0 flex items-center gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+25px)] sm:pt-[calc(env(safe-area-inset-top)+12px)] bg-white dark:bg-[#111013] border-b border-gray-100 dark:border-white/[0.06] lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96 lg:pt-4">
+      <div className="relative z-20 shrink-0 flex items-center gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+10px)] sm:pt-[calc(env(safe-area-inset-top)+12px)] bg-white dark:bg-[#111013] border-b border-gray-100 dark:border-white/[0.06] lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96 lg:pt-4">
         <button
           onClick={() => {
             if (infoView !== 'main') {
@@ -3503,7 +3503,7 @@ function EventDetailPanel({ eventId, onClose, onViewFullEvent, mode = 'event', f
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50 dark:bg-[#0d0d0f]">
       {/* Header — padded below the status bar on iOS/Android */}
       <div
-        className="relative z-20 flex items-center justify-between gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+25px)] sm:pt-[calc(env(safe-area-inset-top)+12px)] bg-white dark:bg-[#111013] border-b border-gray-200/60 dark:border-white/[0.06] shrink-0 lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96 lg:pt-4"
+        className="relative z-20 flex items-center justify-between gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+10px)] sm:pt-[calc(env(safe-area-inset-top)+12px)] bg-white dark:bg-[#111013] border-b border-gray-200/60 dark:border-white/[0.06] shrink-0 lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96 lg:pt-4"
       >
         <button
           onClick={onClose}
@@ -4269,7 +4269,7 @@ function ChatWindow({
     <div className="relative flex flex-col h-full min-h-0 overflow-hidden bg-white dark:bg-[#111013]">
       <div ref={chatHeaderRef} className="relative z-20 shrink-0 bg-white dark:bg-[#111013] lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96">
         {/* Header */}
-        <div className="flex items-center gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+25px)] sm:pt-[calc(env(safe-area-inset-top)+12px)] border-b border-gray-100 dark:border-white/[0.06] lg:pt-4">
+        <div className="flex items-center gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+10px)] sm:pt-[calc(env(safe-area-inset-top)+12px)] border-b border-gray-100 dark:border-white/[0.06] lg:pt-4">
           <button
             onClick={onBack}
             className="lg:hidden shrink-0 h-8 w-8 flex items-center justify-center rounded-full text-gray-500 dark:text-white/40 hover:bg-gray-100 dark:hover:bg-white/[0.07] transition-colors"
@@ -5383,7 +5383,7 @@ export function Messages() {
         >
         {/* List header */}
         <div
-          className="relative z-20 shrink-0 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+25px)] sm:pt-[max(env(safe-area-inset-top),1rem)] lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96 lg:pt-4"
+          className="relative z-20 shrink-0 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+10px)] sm:pt-[max(env(safe-area-inset-top),1rem)] lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96 lg:pt-4"
         >
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-[20px] font-bold text-gray-900 dark:text-white tracking-[-0.02em]">Messages</h1>

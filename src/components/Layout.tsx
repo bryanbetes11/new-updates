@@ -154,6 +154,7 @@ export function Layout() {
   const isNotificationsPage = location.pathname === "/notifications";
   const isProfilePage = location.pathname === "/profile";
   const isSoundSettingsPage = location.pathname === "/settings/sounds";
+  const isPushNotificationSettingsPage = location.pathname === "/settings/notifications";
   const isUnavailableMembersPage = location.pathname === "/unavailable-members";
   const isActivityLogPage = location.pathname === "/activity-log";
   const isLeadershipPage = location.pathname.startsWith("/leadership");
@@ -172,6 +173,7 @@ export function Layout() {
     isNotificationsPage ||
     isProfilePage ||
     isSoundSettingsPage ||
+    isPushNotificationSettingsPage ||
     isActivityLogPage ||
     isLeadershipPage ||
     isAdminPage;

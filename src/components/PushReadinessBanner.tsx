@@ -64,7 +64,7 @@ export function PushReadinessBanner() {
       </div>
       <button
         type="button"
-        onClick={() => navigate('/profile')}
+        onClick={() => navigate('/settings/notifications?setup=push')}
         className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-400 px-3 py-2 text-xs font-black text-black transition hover:bg-amber-300"
       >
         Set up <ArrowRight className="h-3.5 w-3.5" />

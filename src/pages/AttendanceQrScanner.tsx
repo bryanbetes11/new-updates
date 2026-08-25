@@ -9,6 +9,7 @@ import { EventArtwork } from '../components/EventArtwork';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { parseAttendanceQrPayload } from '../lib/attendanceQrPilot';
+import { playInteractionSound } from '../lib/interactionSounds';
 import { supabase } from '../lib/supabase';
 
 interface EligibleAttendanceEvent {
@@ -156,6 +157,9 @@ export function AttendanceQrScanner() {
     setSessionToken(data?.session_token || '');
     setScanMode(mode);
     setEvents(enrichedEvents);
+    // Confirm that the church QR itself was accepted. This intentionally does
+    // not fire for invalid codes or for the later attendance-recording action.
+    playInteractionSound('scanSuccess');
     setShowScanSuccess(true);
   }, [canUsePilot, stopScanner, toast]);
 

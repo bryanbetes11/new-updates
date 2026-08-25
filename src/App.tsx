@@ -112,6 +112,9 @@ const Profile = lazy(() =>
 const SoundSettings = lazy(() =>
   import("./pages/SoundSettings").then(({ SoundSettings }) => ({ default: SoundSettings })),
 );
+const PushNotificationSettings = lazy(() =>
+  import("./pages/PushNotificationSettings").then(({ PushNotificationSettings }) => ({ default: PushNotificationSettings })),
+);
 const RequestLeave = lazy(() =>
   import("./pages/RequestLeave").then(({ RequestLeave }) => ({
     default: RequestLeave,
@@ -545,6 +548,7 @@ export default function App() {
                       />
                       <Route path="/profile" element={<Profile />} />
                       <Route path="/settings/sounds" element={<SoundSettings />} />
+                      <Route path="/settings/notifications" element={<PushNotificationSettings />} />
                       <Route
                         path="/change-password"
                         element={<ChangePassword />}

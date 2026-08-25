@@ -37,12 +37,12 @@
     <meta name="twitter:title" content="ServeSync" />
     <meta name="twitter:description" content="Open the event setlist, assignments, and team details in ServeSync." />
     <meta name="twitter:image" content="/servesync-logo-latest.png?v=2026-05-10-pwa-update-flow-v2" />
-    <link rel="manifest" href="/manifest.json?v=2026-08-25-pwa-surface-v1" />
+    <link rel="manifest" href="/manifest.json?v=2026-08-25-pwa-surface-v2" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <!-- Keep the installed iOS PWA status bar opaque. A translucent status bar
-         can composite the fixed app header underneath it at a softened
-         resolution, leaving a blurred/ghosted strip across every screen. -->
-    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <!-- Let detail pages extend their artwork through the installed iOS PWA
+         status-bar safe area. Standard pages provide their own solid top
+         surface, while Event Detail supplies the continuous artwork gradient. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="ServeSync" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2026-05-10-pwa-update-flow-v2" />
     <meta name="mobile-web-app-capable" content="yes" />

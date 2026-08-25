@@ -1,4 +1,4 @@
-export type InteractionSound = 'tap' | 'longPress' | 'reactionOpen' | 'reactionLand' | 'reactionRemove';
+export type InteractionSound = 'tap' | 'longPress' | 'reactionOpen' | 'reactionLand' | 'reactionRemove' | 'scanSuccess';
 
 const STORAGE_KEY = 'servesync:interaction-sounds-enabled';
 const VOLUME_STORAGE_KEY = 'servesync:interaction-sounds-volume';
@@ -24,6 +24,9 @@ const soundProfiles: Record<InteractionSound, {
   reactionOpen: { frequency: 420, endFrequency: 520, duration: 0.04, gain: 0.026, type: 'sine' },
   reactionLand: { frequency: 580, endFrequency: 760, duration: 0.066, gain: 0.04, type: 'sine' },
   reactionRemove: { frequency: 320, endFrequency: 235, duration: 0.04, gain: 0.025, type: 'triangle' },
+  // A slightly longer upward chime distinguishes a verified church QR from
+  // ordinary taps without becoming a repeated scanner beep.
+  scanSuccess: { frequency: 620, endFrequency: 880, duration: 0.115, gain: 0.045, type: 'sine' },
 };
 
 function canUseAudio() {
@@ -172,6 +175,32 @@ function playTone(
   oscillator.stop(now + duration + 0.01);
 }
 
+function playScanSuccessChime(context: AudioContext) {
+  const now = context.currentTime;
+  const notes = [
+    { start: 0, frequency: 494, endFrequency: 586, duration: 0.065, gain: 0.028 },
+    { start: 0.078, frequency: 659, endFrequency: 784, duration: 0.105, gain: 0.042 },
+  ];
+
+  notes.forEach((note) => {
+    const oscillator = context.createOscillator();
+    const gainNode = context.createGain();
+    const startAt = now + note.start;
+
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(note.frequency, startAt);
+    oscillator.frequency.exponentialRampToValueAtTime(note.endFrequency, startAt + note.duration);
+    gainNode.gain.setValueAtTime(0.0001, startAt);
+    gainNode.gain.exponentialRampToValueAtTime(note.gain * getVolumeMultiplier(), startAt + 0.008);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, startAt + note.duration);
+
+    oscillator.connect(gainNode);
+    gainNode.connect(context.destination);
+    oscillator.start(startAt);
+    oscillator.stop(startAt + note.duration + 0.012);
+  });
+}
+
 export function playInteractionSound(sound: InteractionSound) {
   if (!soundEffectsEnabled || soundEffectsVolume <= 0) return;
 
@@ -190,6 +219,11 @@ export function playInteractionSound(sound: InteractionSound) {
     // This keeps the first user gesture audible in restrictive webviews.
     playFallbackTone(profile);
     void primeInteractionSounds();
+    return;
+  }
+
+  if (sound === 'scanSuccess') {
+    playScanSuccessChime(context);
     return;
   }
 

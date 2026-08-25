@@ -3842,7 +3842,7 @@ const openLyricsModal = (ss: SetlistSong) => {
   return (
     <div className="page-container page-bottom-pad relative isolate overflow-x-clip bg-[#050505]">
       <div
-        className="pointer-events-none fixed inset-x-0 top-0 z-0 h-[calc(env(safe-area-inset-top)+22rem)] overflow-hidden bg-[#050505] lg:hidden"
+        className="pointer-events-none fixed inset-x-0 top-0 z-0 h-[calc(env(safe-area-inset-top)+30rem)] overflow-hidden bg-[#050505] lg:hidden"
         aria-hidden="true"
       >
         <div className="absolute inset-x-[-35%] top-[-11rem] flex justify-center">
@@ -3853,7 +3853,7 @@ const openLyricsModal = (ss: SetlistSong) => {
             className="h-80 w-80 scale-[2.45] rounded-[2rem] opacity-70 blur-3xl saturate-[1.75]"
           />
         </div>
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_-6%,rgba(255,255,255,0.22),transparent_32%),radial-gradient(circle_at_70%_18%,rgba(239,68,68,0.20),transparent_36%),radial-gradient(circle_at_24%_24%,rgba(245,158,11,0.13),transparent_38%),linear-gradient(180deg,rgba(0,0,0,0.02)_0%,rgba(0,0,0,0.12)_18%,#050505_48%,#050505_100%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_-6%,rgba(255,255,255,0.22),transparent_32%),radial-gradient(circle_at_70%_18%,rgba(239,68,68,0.20),transparent_36%),radial-gradient(circle_at_24%_24%,rgba(245,158,11,0.13),transparent_38%),linear-gradient(180deg,rgba(0,0,0,0.02)_0%,rgba(0,0,0,0.12)_18%,rgba(5,5,5,0.82)_57%,#050505_78%,#050505_100%)]" />
       </div>
       <motion.div
         animate={isLeaving ? { opacity: 0, y: -12, filter: 'blur(8px)' } : { opacity: 1, y: 0, filter: 'blur(0px)' }}

@@ -288,7 +288,7 @@ export function OrganizationSettings() {
           <div>
             <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1">Membership</p>
             <h2 className="text-lg font-bold text-gray-900 dark:text-white">Invite Members</h2>
-            <p className="text-sm text-gray-500 dark:text-white/45 mt-1">Create invite links now. The full join-by-invite signup flow is the next onboarding phase.</p>
+            <p className="text-sm text-gray-500 dark:text-white/45 mt-1">Create a private invite link for each person. They must use the invited email address to join this church workspace.</p>
           </div>
           <div className="h-11 w-11 rounded-2xl bg-sky-50 dark:bg-sky-500/[0.12] text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0">
             <Mail className="h-5 w-5" />

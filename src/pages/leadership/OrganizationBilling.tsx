@@ -97,7 +97,7 @@ function generateBillingReference(slug: string, planCode: string) {
 }
 
 export function OrganizationBilling() {
-  const { user, organization, isOrgAdmin, refreshProfile } = useAuth();
+  const { organization, isOrgAdmin, refreshProfile } = useAuth();
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
@@ -205,38 +205,14 @@ export function OrganizationBilling() {
 
     setSubmitting(true);
 
-    const paymentMethod = paymentChannel === 'gcash' ? 'manual_gcash' : 'manual_bank_transfer';
-
-    const { error: orgError } = await supabase
-      .from('organizations')
-      .update({
-        billing_plan: selectedPlan.code,
-        billing_interval: selectedPlan.interval,
-        payment_method: paymentMethod,
-        billing_status: organization.is_billing_exempt ? 'exempt' : 'submitted',
-        seats_purchased: selectedPlan.seats,
-      })
-      .eq('id', organization.id);
-
-    if (orgError) {
-      setSubmitting(false);
-      toast('error', 'Failed to update billing plan');
-      return;
-    }
-
-    const { error: submissionError } = await supabase
-      .from('organization_payment_submissions')
-      .insert({
-        org_id: organization.id,
-        submitted_by: user?.id,
-        plan_code: selectedPlan.code,
-        amount: selectedPlan.price,
-        billing_reference: billingReference,
-        payer_name: payerName.trim() || null,
-        payment_channel: paymentChannel,
-        reference_number: referenceNumber.trim(),
-        note: note.trim() || null,
-      });
+    const { error: submissionError } = await supabase.rpc('submit_organization_payment', {
+      p_plan_code: selectedPlan.code,
+      p_billing_reference: billingReference,
+      p_payer_name: payerName.trim(),
+      p_payment_channel: paymentChannel,
+      p_reference_number: referenceNumber.trim(),
+      p_note: note.trim() || null,
+    });
 
     setSubmitting(false);
 

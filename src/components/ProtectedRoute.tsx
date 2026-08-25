@@ -8,6 +8,7 @@ export function ProtectedRoute() {
 
   if (loading) return <PageLoader />;
   if (!user) return <Navigate to="/login" replace />;
+  if (!hasOrganization) return <Navigate to="/create-church" replace />;
 
   const billingStatus = organization?.billing_status || organization?.subscription_status;
   const isSuspended = hasOrganization && !isPlatformOwner && billingStatus === 'suspended';

@@ -1,19 +1,18 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Cake, Upload, X, Shield } from 'lucide-react';
-import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
 import { DatePicker } from '../components/DatePicker';
+import { LaunchFlowShell } from '../components/LaunchFlowShell';
+import { launchInfoRowClass, launchInputClass, launchPrimaryButtonClass } from '../lib/launchFlowStyles';
 
-const inputClass = `w-full h-12 px-4 rounded-xl text-[14px]
-  bg-gray-50 dark:bg-white/[0.05]
-  border border-gray-200 dark:border-white/[0.08]
-  text-gray-900 dark:text-white
-  placeholder-gray-400 dark:placeholder-white/20
-  focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/50
-  transition-all duration-200`;
+const steps = [
+  { label: 'Church invite', detail: 'Join the correct private workspace' },
+  { label: 'Member account', detail: 'Secure your ServeSync access' },
+  { label: 'Your profile', detail: 'Share the details your team needs' },
+];
 
 export function Onboarding() {
   const { user, profile, refreshProfile } = useAuth();
@@ -102,42 +101,26 @@ export function Onboarding() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f5f5f7] dark:bg-[#0d0d0f] transition-colors duration-300">
-
-      <div className="flex justify-center min-h-screen px-6 py-16">
-        <div className="w-full max-w-[420px]">
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <div className="relative bg-white dark:bg-white/[0.025] rounded-3xl border border-gray-200/80 dark:border-white/[0.06] p-8 shadow-[0_2px_8px_rgba(0,0,0,0.05),0_16px_48px_rgba(0,0,0,0.06)] dark:shadow-none transition-colors duration-300">
-              {/* Top-edge highlight */}
-              <div className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.07] dark:via-white/[0.12] to-transparent" />
-
-              {/* Header */}
-              <div className="flex items-center gap-3 mb-8">
-                <img
-                  src="/servesync-logo-new.png"
-                  alt="ServeSync"
-                  className="h-10 w-10 rounded-[22%] shadow-sm shadow-black/10 dark:shadow-black/30 shrink-0"
-                />
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-600 dark:text-emerald-500/70 mb-0.5 transition-colors duration-300">
-                    Profile Setup
-                  </p>
-                  <h1 className="text-[20px] font-bold text-gray-900 dark:text-white tracking-[-0.02em] leading-tight transition-colors duration-300">
-                    Tell us about yourself
-                  </h1>
-                </div>
-              </div>
+    <LaunchFlowShell
+      eyebrow="Member setup"
+      title="Make your profile useful on service day."
+      description="Add only the details your leaders need for scheduling, communication, birthdays, and ministry coordination. Your church controls roles separately."
+      steps={steps}
+      currentStep={2}
+    >
+      <div className="mx-auto w-full max-w-xl">
+        <div className="mb-8">
+          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#63ee91]">Step 3 of 3</p>
+          <h2 className="mt-2 text-3xl font-black tracking-[-0.04em]">Tell your team who you are</h2>
+          <p className="mt-3 text-sm leading-6 text-white/48">You can update these details later from your profile.</p>
+        </div>
 
               <div className="space-y-5">
 
                 {/* Avatar upload */}
                 <div>
-                  <label className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-3 transition-colors duration-300">
-                    Profile Photo <span className="normal-case font-normal text-gray-300 dark:text-white/20">(optional)</span>
+                  <label className="mb-3 block text-[11px] font-black uppercase tracking-[0.14em] text-white/36">
+                    Profile photo <span className="normal-case font-semibold tracking-normal text-white/22">optional</span>
                   </label>
                   <label className="flex items-center gap-4 cursor-pointer group">
                     <input type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />
@@ -158,16 +141,16 @@ export function Onboarding() {
                           </button>
                         </>
                       ) : (
-                        <div className="h-16 w-16 rounded-full bg-gray-100 dark:bg-white/[0.06] border-2 border-dashed border-gray-300 dark:border-white/[0.12] flex items-center justify-center group-hover:border-emerald-400/60 dark:group-hover:border-emerald-500/40 transition-colors duration-200">
-                          <Upload className="h-5 w-5 text-gray-400 dark:text-white/20 group-hover:text-emerald-500 dark:group-hover:text-emerald-400 transition-colors duration-200" />
+                        <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-dashed border-white/[0.13] bg-white/[0.055] transition-colors group-hover:border-[#1ed760]/60">
+                          <Upload className="h-5 w-5 text-white/24 transition-colors group-hover:text-[#63ee91]" />
                         </div>
                       )}
                     </div>
                     <div>
-                      <p className="text-[13px] font-medium text-gray-700 dark:text-white/60 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors duration-200">
+                      <p className="text-[13px] font-black text-white/68 transition-colors group-hover:text-[#63ee91]">
                         {avatarPreview ? 'Change photo' : 'Upload a photo'}
                       </p>
-                      <p className="text-[12px] text-gray-400 dark:text-white/25 mt-0.5 transition-colors duration-300">
+                      <p className="mt-0.5 text-[12px] text-white/28">
                         JPG, PNG or GIF · Max 5MB
                       </p>
                     </div>
@@ -176,7 +159,7 @@ export function Onboarding() {
 
                 {/* Gender */}
                 <div>
-                  <label className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
+                  <label className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-white/36">
                     I am a…
                   </label>
                   <div className="flex gap-2">
@@ -187,8 +170,8 @@ export function Onboarding() {
                         onClick={() => setForm({ ...form, gender: g })}
                         className={`flex-1 h-11 rounded-xl text-[14px] font-medium transition-all duration-200 ${
                           form.gender === g
-                            ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/25'
-                            : 'bg-gray-50 dark:bg-white/[0.05] border border-gray-200 dark:border-white/[0.08] text-gray-600 dark:text-white/40 hover:border-emerald-400/50 dark:hover:border-emerald-500/30 hover:text-emerald-600 dark:hover:text-emerald-400'
+                            ? 'bg-[#1ed760] text-black'
+                            : 'border border-white/[0.09] bg-white/[0.055] text-white/45 hover:border-[#1ed760]/45 hover:text-white/75'
                         }`}
                       >
                         {g === 'male' ? 'Male' : 'Female'}
@@ -200,27 +183,29 @@ export function Onboarding() {
                 {/* First + Last name */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
+                    <label htmlFor="onboarding-first-name" className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-white/36">
                       First Name
                     </label>
                     <input
+                      id="onboarding-first-name"
                       type="text"
                       value={form.first_name}
                       onChange={e => setForm({ ...form, first_name: e.target.value })}
-                      className={inputClass}
+                      className={launchInputClass}
                       placeholder="First"
                       required
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
+                    <label htmlFor="onboarding-last-name" className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-white/36">
                       Last Name
                     </label>
                     <input
+                      id="onboarding-last-name"
                       type="text"
                       value={form.last_name}
                       onChange={e => setForm({ ...form, last_name: e.target.value })}
-                      className={inputClass}
+                      className={launchInputClass}
                       placeholder="Last"
                     />
                   </div>
@@ -229,26 +214,28 @@ export function Onboarding() {
                 {/* Second + Middle name */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
-                      Second Name <span className="normal-case font-normal text-gray-300 dark:text-white/20">opt.</span>
+                    <label htmlFor="onboarding-second-name" className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-white/36">
+                      Second name <span className="normal-case font-semibold tracking-normal text-white/22">optional</span>
                     </label>
                     <input
+                      id="onboarding-second-name"
                       type="text"
                       value={form.second_name}
                       onChange={e => setForm({ ...form, second_name: e.target.value })}
-                      className={inputClass}
+                      className={launchInputClass}
                       placeholder="Optional"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
-                      Middle Name <span className="normal-case font-normal text-gray-300 dark:text-white/20">opt.</span>
+                    <label htmlFor="onboarding-middle-name" className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-white/36">
+                      Middle name <span className="normal-case font-semibold tracking-normal text-white/22">optional</span>
                     </label>
                     <input
+                      id="onboarding-middle-name"
                       type="text"
                       value={form.middle_name}
                       onChange={e => setForm({ ...form, middle_name: e.target.value })}
-                      className={inputClass}
+                      className={launchInputClass}
                       placeholder="Optional"
                     />
                   </div>
@@ -256,45 +243,47 @@ export function Onboarding() {
 
                 {/* Nickname */}
                 <div>
-                  <label className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
-                    Nickname <span className="normal-case font-normal text-gray-300 dark:text-white/20">(optional)</span>
+                  <label htmlFor="onboarding-nickname" className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-white/36">
+                    Nickname <span className="normal-case font-semibold tracking-normal text-white/22">optional</span>
                   </label>
                   <input
+                    id="onboarding-nickname"
                     type="text"
                     value={form.nickname}
                     onChange={e => setForm({ ...form, nickname: e.target.value })}
-                    className={inputClass}
+                    className={launchInputClass}
                     placeholder="What should we call you?"
                   />
                 </div>
 
                 {/* Phone */}
                 <div>
-                  <label className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
-                    Phone <span className="normal-case font-normal text-gray-300 dark:text-white/20">(optional)</span>
+                  <label htmlFor="onboarding-phone" className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-white/36">
+                    Phone <span className="normal-case font-semibold tracking-normal text-white/22">optional</span>
                   </label>
                   <input
+                    id="onboarding-phone"
                     type="tel"
                     value={form.phone}
                     onChange={e => setForm({ ...form, phone: e.target.value })}
-                    className={inputClass}
+                    className={launchInputClass}
                     placeholder="Your phone number"
                   />
                 </div>
 
                 {/* Birthday */}
                 <div>
-                  <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
+                  <label className="mb-2 flex items-center gap-1.5 text-[11px] font-black uppercase tracking-[0.14em] text-white/36">
                     <Cake className="h-3.5 w-3.5" />
-                    Birthday <span className="normal-case font-normal text-gray-300 dark:text-white/20">(optional)</span>
+                    Birthday <span className="normal-case font-semibold tracking-normal text-white/22">optional</span>
                   </label>
                   <DatePicker value={form.birthday} onChange={v => setForm({ ...form, birthday: v })} placeholder="Select your birthday" />
                 </div>
 
                 {/* Info note */}
-                <div className="flex items-start gap-3 p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-500/[0.07] border border-emerald-100 dark:border-emerald-500/[0.12] transition-colors duration-300">
-                  <Shield className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-                  <p className="text-[13px] text-emerald-700 dark:text-emerald-300/80 leading-relaxed transition-colors duration-300">
+                <div className={launchInfoRowClass}>
+                  <Shield className="mt-1 h-4 w-4 shrink-0 text-[#63ee91]" />
+                  <p>
                     Ministry roles and church access are assigned by your church admin after you join.
                   </p>
                 </div>
@@ -304,19 +293,16 @@ export function Onboarding() {
                   <button
                     onClick={handleFinish}
                     disabled={loading || !form.first_name}
-                    className="w-full h-12 rounded-xl text-[14px] font-semibold flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed bg-emerald-500 hover:bg-emerald-600 dark:hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20"
+                    className={`${launchPrimaryButtonClass} w-full`}
                   >
                     {loading
-                      ? <><span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Setting up…</>
+                      ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-black/20 border-t-black" />Setting up…</>
                       : <>Get Started <ArrowRight className="h-4 w-4" /></>}
                   </button>
                 </div>
 
               </div>
-            </div>
-          </motion.div>
-        </div>
       </div>
-    </div>
+    </LaunchFlowShell>
   );
 }

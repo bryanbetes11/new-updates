@@ -1,20 +1,25 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { Eye, EyeOff, ArrowLeft, ArrowRight, Cake, Mail, Shield } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Eye, EyeOff, ArrowRight, Cake, Mail, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
 import { DatePicker } from '../components/DatePicker';
 import { useSmartBack } from '../lib/navigationHistory';
+import { LaunchFlowShell } from '../components/LaunchFlowShell';
+import { launchInfoRowClass, launchInputClass, launchLabelClass, launchPrimaryButtonClass, launchSecondaryButtonClass } from '../lib/launchFlowStyles';
 
-const inputClass = `w-full h-12 px-4 rounded-xl text-[14px]
-  bg-gray-50 dark:bg-white/[0.05]
-  border border-gray-200 dark:border-white/[0.08]
-  text-gray-900 dark:text-white
-  placeholder-gray-400 dark:placeholder-white/20
-  focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/50
-  transition-all duration-200`;
+const churchSteps = [
+  { label: 'Admin account', detail: 'Create and verify the first administrator' },
+  { label: 'Church workspace', detail: 'Name the church and secure its space' },
+  { label: 'Invite the team', detail: 'Bring members in through private links' },
+];
+
+const memberSteps = [
+  { label: 'Church invite', detail: 'Open the private link from your leader' },
+  { label: 'Member account', detail: 'Create the account tied to the invite' },
+  { label: 'Your profile', detail: 'Add the details your team needs' },
+];
 
 export function Register() {
   const [firstName, setFirstName] = useState('');
@@ -29,22 +34,26 @@ export function Register() {
   const smartBack = useSmartBack('/login');
   const location = useLocation();
   const params = new URLSearchParams(location.search);
-  const redirectTo = params.get('redirect') || '/onboarding';
+  const requestedRedirect = params.get('redirect') || '';
   const inviteEmail = params.get('email') || '';
-  const isInviteJoinFlow = Boolean(inviteEmail) && redirectTo.startsWith('/invite/');
+  const isInviteJoinFlow = Boolean(inviteEmail) && /^\/invite\/[a-zA-Z0-9-]+$/.test(requestedRedirect);
+  const isCreateChurchFlow = params.get('create_church') === '1' && requestedRedirect === '/create-church';
+  const redirectTo = isInviteJoinFlow ? requestedRedirect : isCreateChurchFlow ? '/create-church' : '/onboarding';
+  const registrationAllowed = isInviteJoinFlow || isCreateChurchFlow;
 
   useEffect(() => {
     if (inviteEmail) setEmail(inviteEmail);
   }, [inviteEmail]);
 
-  if (user) {
-    navigate(redirectTo, { replace: true });
-    return null;
-  }
+  useEffect(() => {
+    if (user) navigate(redirectTo, { replace: true });
+  }, [navigate, redirectTo, user]);
+
+  if (user) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isInviteJoinFlow) {
+    if (!registrationAllowed) {
       toast('error', 'Registration is invite-only right now');
       return;
     }
@@ -72,201 +81,90 @@ export function Register() {
     setLoading(false);
     toast(
       'success',
-      'Account created. Continue to accept your church invite.',
+      session
+        ? isCreateChurchFlow
+          ? 'Account created. Now create your church workspace.'
+          : 'Account created. Continue to accept your church invite.'
+        : 'Account created. Confirm your email, then sign in to continue.',
     );
     navigate(redirectTo);
   };
 
+  const steps = isCreateChurchFlow ? churchSteps : memberSteps;
+  const currentStep = isCreateChurchFlow ? 0 : isInviteJoinFlow ? 1 : 0;
+
   return (
-    <div className="min-h-screen bg-[#f5f5f7] dark:bg-[#0d0d0f] transition-colors duration-300">
-
-      {/* Back button — fixed top-left */}
-      <div className="fixed left-4 top-[max(1rem,env(safe-area-inset-top))] z-30">
-        <button
-          onClick={smartBack}
-          className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-gray-200/70 bg-white/90 px-3 py-2 text-[13px] font-medium text-gray-500 shadow-sm backdrop-blur-md transition-all duration-200 hover:text-gray-800 dark:border-white/[0.09] dark:bg-white/[0.07] dark:text-white/40 dark:hover:text-white/70"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back
-        </button>
-      </div>
-
-      <div className="flex items-center justify-center min-h-screen px-6 py-20">
-        <div className="w-full max-w-[380px]">
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <div className="relative bg-white dark:bg-white/[0.025] rounded-3xl border border-gray-200/80 dark:border-white/[0.06] p-8 shadow-[0_2px_8px_rgba(0,0,0,0.05),0_16px_48px_rgba(0,0,0,0.06)] dark:shadow-none transition-colors duration-300">
-              {/* Top-edge highlight */}
-              <div className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.07] dark:via-white/[0.12] to-transparent" />
-
-              {/* Logo */}
-              <div className="flex justify-center mb-6">
-                <img
-                  src="/servesync-logo-new.png"
-                  alt="ServeSync"
-                  className="h-14 w-14 rounded-[22%] shadow-md shadow-black/10 dark:shadow-black/40"
-                />
-              </div>
-
-              {/* ── INVITE-ONLY STATE ── */}
-              {!isInviteJoinFlow && (
-                <>
-                  <div className="text-center mb-7">
-                    <h1 className="text-[24px] font-bold text-gray-900 dark:text-white tracking-[-0.025em] transition-colors duration-300">
-                      Invite only
-                    </h1>
-                    <p className="mt-2 text-[14px] text-gray-500 dark:text-white/35 leading-relaxed transition-colors duration-300">
-                      New accounts join through a church invite link.
-                    </p>
-                  </div>
-
-                  <div className="flex items-start gap-3 p-4 rounded-2xl bg-sky-50 dark:bg-sky-500/[0.07] border border-sky-100 dark:border-sky-500/[0.12] mb-6 transition-colors duration-300">
-                    <Mail className="h-4 w-4 text-sky-600 dark:text-sky-400 shrink-0 mt-0.5" />
-                    <p className="text-[13px] text-sky-700 dark:text-sky-300/80 leading-relaxed transition-colors duration-300">
-                      Ask your church admin for an invite link to join ServeSync.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2.5">
-                    <Link
-                      to="/login"
-                      className="w-full h-12 rounded-xl text-[14px] font-semibold flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 dark:hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all"
-                    >
-                      Sign In <ArrowRight className="h-4 w-4" />
-                    </Link>
-                    <button
-                      onClick={() => navigate('/')}
-                      className="w-full h-12 rounded-xl text-[14px] font-semibold flex items-center justify-center gap-2 bg-gray-100 dark:bg-white/[0.06] hover:bg-gray-200 dark:hover:bg-white/[0.10] text-gray-700 dark:text-white/70 active:scale-[0.98] transition-all border border-gray-200/80 dark:border-white/[0.06]"
-                    >
-                      Back to Home
-                    </button>
-                  </div>
-                </>
-              )}
-
-              {/* ── FORM: CREATE ACCOUNT ── */}
-              {isInviteJoinFlow && (
-                <>
-                  <div className="text-center mb-7">
-                    <h1 className="text-[24px] font-bold text-gray-900 dark:text-white tracking-[-0.025em] transition-colors duration-300">
-                      Create your account
-                    </h1>
-                    <p className="mt-2 text-[14px] text-gray-500 dark:text-white/35 leading-relaxed transition-colors duration-300">
-                      Joining as {inviteEmail}
-                    </p>
-                  </div>
-
-                  <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                      <label htmlFor="register-first-name" className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
-                        First Name
-                      </label>
-                      <input
-                        id="register-first-name"
-                        type="text"
-                        value={firstName}
-                        onChange={e => setFirstName(e.target.value)}
-                        className={inputClass}
-                        placeholder="Your first name"
-                        autoComplete="given-name"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label htmlFor="register-email" className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
-                        Email address
-                      </label>
-                      <input
-                        id="register-email"
-                        type="email"
-                        value={email}
-                        onChange={e => setEmail(e.target.value)}
-                        className={`${inputClass} ${inviteEmail ? 'opacity-60 cursor-not-allowed' : ''}`}
-                        placeholder="you@example.com"
-                        autoComplete="email"
-                        required
-                        readOnly={Boolean(inviteEmail)}
-                      />
-                    </div>
-
-                    <div>
-                      <label htmlFor="register-password" className="block text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
-                        Password
-                      </label>
-                      <div className="relative">
-                        <input
-                          id="register-password"
-                          type={showPw ? 'text' : 'password'}
-                          value={password}
-                          onChange={e => setPassword(e.target.value)}
-                          className={`${inputClass} pr-12`}
-                          placeholder="Min. 6 characters"
-                          autoComplete="new-password"
-                          required
-                          minLength={6}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPw(!showPw)}
-                          className="absolute right-0 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-xl text-gray-400 transition-colors hover:text-gray-600 dark:text-white/25 dark:hover:text-white/50"
-                          aria-label={showPw ? 'Hide password' : 'Show password'}
-                        >
-                          {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 dark:text-white/30 uppercase tracking-[0.12em] mb-2 transition-colors duration-300">
-                        <Cake className="h-3.5 w-3.5" />
-                        Birthday
-                        <span className="normal-case font-normal text-gray-300 dark:text-white/20">(optional)</span>
-                      </label>
-                      <DatePicker value={birthday} onChange={setBirthday} placeholder="Select your birthday" />
-                    </div>
-
-                    <div className="flex items-start gap-3 p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-500/[0.07] border border-emerald-100 dark:border-emerald-500/[0.12] transition-colors duration-300">
-                      <Shield className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-                      <p className="text-[13px] text-emerald-700 dark:text-emerald-300/80 leading-relaxed transition-colors duration-300">
-                        Your church admin will assign your ministry roles after you join.
-                      </p>
-                    </div>
-
-                    <div className="pt-1">
-                      <button
-                        type="submit"
-                        disabled={loading || !firstName || !email || !password}
-                        className="w-full h-12 rounded-xl text-[14px] font-semibold flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed bg-emerald-500 hover:bg-emerald-600 dark:hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20"
-                      >
-                        {loading
-                          ? <><span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Creating account…</>
-                          : <>Create Account <ArrowRight className="h-4 w-4" /></>}
-                      </button>
-                    </div>
-                  </form>
-                </>
-              )}
-
-              {/* Sign-in link */}
-              <div className="mt-7 pt-6 border-t border-gray-100 dark:border-white/[0.06] transition-colors duration-300">
-                <p className="text-center text-[13px] text-gray-400 dark:text-white/30 transition-colors duration-300">
-                  Already have an account?{' '}
-                  <Link
-                    to={`/login${location.search}`}
-                    className="font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
-                  >
-                    Sign in
-                  </Link>
-                </p>
-              </div>
+    <LaunchFlowShell
+      eyebrow={isCreateChurchFlow ? 'New church' : 'Private membership'}
+      title={isCreateChurchFlow ? 'One account starts the whole workspace.' : 'Join the team without the noise.'}
+      description={isCreateChurchFlow
+        ? 'Verify the first administrator, create the church workspace, then invite members into a calm and private ministry hub.'
+        : 'Church membership begins with a private invitation. Your account stays tied to the correct team from the first step.'}
+      steps={steps}
+      currentStep={currentStep}
+      onBack={smartBack}
+    >
+      <div className="mx-auto w-full max-w-xl">
+        {!registrationAllowed ? (
+          <section aria-labelledby="invite-only-title">
+            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#63ee91]">Private by design</p>
+            <h2 id="invite-only-title" className="mt-2 text-3xl font-black tracking-[-0.04em]">You need a church invite.</h2>
+            <p className="mt-3 text-sm leading-6 text-white/48">New member accounts join through a private link from a church administrator.</p>
+            <div className={`${launchInfoRowClass} mt-7`}>
+              <Mail className="mt-1 h-4 w-4 shrink-0 text-[#63ee91]" />
+              <p>Ask your church admin to send or resend your personal invitation link.</p>
             </div>
-          </motion.div>
-        </div>
+            <div className="mt-7 grid gap-3 sm:grid-cols-2">
+              <Link to="/login" className={launchPrimaryButtonClass}>Sign in <ArrowRight className="h-4 w-4" /></Link>
+              <button type="button" onClick={() => navigate('/')} className={launchSecondaryButtonClass}>Back to home</button>
+            </div>
+          </section>
+        ) : (
+          <section aria-labelledby="create-account-title">
+            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#63ee91]">Step {isCreateChurchFlow ? '1' : '2'} of 3</p>
+            <h2 id="create-account-title" className="mt-2 text-3xl font-black tracking-[-0.04em]">Create your account</h2>
+            <p className="mt-3 text-sm leading-6 text-white/48">{isCreateChurchFlow ? 'This person becomes the first church administrator after verification.' : `This invitation is reserved for ${inviteEmail}.`}</p>
+
+            <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+              <div>
+                <label htmlFor="register-first-name" className={launchLabelClass}>First name</label>
+                <input id="register-first-name" type="text" value={firstName} onChange={e => setFirstName(e.target.value)} className={launchInputClass} placeholder="Your first name" autoComplete="given-name" required />
+              </div>
+              <div>
+                <label htmlFor="register-email" className={launchLabelClass}>Email address</label>
+                <input id="register-email" type="email" value={email} onChange={e => setEmail(e.target.value)} className={`${launchInputClass} ${inviteEmail ? 'cursor-not-allowed opacity-55' : ''}`} placeholder="you@example.com" autoComplete="email" required readOnly={isInviteJoinFlow} />
+              </div>
+              <div>
+                <label htmlFor="register-password" className={launchLabelClass}>Password</label>
+                <div className="relative">
+                  <input id="register-password" type={showPw ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} className={`${launchInputClass} pr-12`} placeholder="At least 6 characters" autoComplete="new-password" required minLength={6} />
+                  <button type="button" onClick={() => setShowPw(value => !value)} className="absolute right-0 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-white/30 transition-colors hover:text-white/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1ed760]/70" aria-label={showPw ? 'Hide password' : 'Show password'}>
+                    {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className={`${launchLabelClass} flex items-center gap-1.5`}><Cake className="h-3.5 w-3.5" /> Birthday <span className="normal-case font-semibold tracking-normal text-white/22">optional</span></label>
+                <DatePicker value={birthday} onChange={setBirthday} placeholder="Select your birthday" />
+              </div>
+
+              <div className={launchInfoRowClass}>
+                <Shield className="mt-1 h-4 w-4 shrink-0 text-[#63ee91]" />
+                <p>{isCreateChurchFlow ? 'After email confirmation, this account becomes the first administrator of the new church workspace.' : 'Your church admin assigns ministry roles after you join.'}</p>
+              </div>
+
+              <button type="submit" disabled={loading || !firstName || !email || !password} className={`${launchPrimaryButtonClass} w-full`}>
+                {loading ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-black/20 border-t-black" />Creating account…</> : <>Create account <ArrowRight className="h-4 w-4" /></>}
+              </button>
+            </form>
+          </section>
+        )}
+
+        <p className="mt-8 border-t border-white/[0.07] pt-6 text-center text-sm text-white/32">
+          Already have an account?{' '}
+          <Link to={`/login${location.search}`} className="font-black text-[#63ee91] transition-colors hover:text-[#8bf5ac]">Sign in</Link>
+        </p>
       </div>
-    </div>
+    </LaunchFlowShell>
   );
 }

@@ -4,6 +4,14 @@ import { Building2, CheckCircle2, Copy, Loader2, LogIn, Shield, UserPlus } from 
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import { LaunchFlowShell } from '../components/LaunchFlowShell';
+import { launchInfoRowClass, launchPrimaryButtonClass, launchSecondaryButtonClass } from '../lib/launchFlowStyles';
+
+const steps = [
+  { label: 'Church invite', detail: 'Confirm the church and invited email' },
+  { label: 'Member account', detail: 'Sign in or create the reserved account' },
+  { label: 'Your profile', detail: 'Finish the details your team needs' },
+];
 
 interface InvitationLookup {
   invitation_id: string;
@@ -117,54 +125,58 @@ export function InviteAccept() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-[#0a0a0a] flex items-center justify-center px-4 py-10">
-      <div className="w-full max-w-lg">
-        <div className="card p-0 overflow-hidden">
-          <div className="px-6 py-6 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-[#141416]">
-            <div className="flex items-center gap-4">
-              <div className="h-12 w-12 rounded-2xl bg-emerald-50 dark:bg-emerald-500/[0.12] text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                <Building2 className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1">Church Invite</p>
-                <h1 className="text-xl font-bold text-gray-900 dark:text-white">Join a Church Team</h1>
-              </div>
-            </div>
+    <LaunchFlowShell
+      eyebrow="Private membership"
+      title="Your church saved you a place."
+      description="Confirm the invitation, use the reserved email, and enter the correct church workspace without exposing another church's people or ministry records."
+      steps={steps}
+      currentStep={0}
+      backTo="/"
+    >
+      <div className="mx-auto w-full max-w-xl">
+        <div className="mb-8 flex items-center gap-4">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#1ed760] text-black">
+            <Building2 className="h-5 w-5" />
+          </span>
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#63ee91]">Step 1 of 3</p>
+            <h2 className="mt-1 text-2xl font-black tracking-[-0.035em]">Review your church invite</h2>
           </div>
+        </div>
 
-          <div className="px-6 py-6 space-y-5">
+          <div className="space-y-5">
             {loading ? (
               <div className="flex items-center justify-center py-10">
-                <Loader2 className="h-6 w-6 animate-spin text-emerald-600 dark:text-emerald-400" />
+                <Loader2 className="h-6 w-6 animate-spin text-[#63ee91]" />
               </div>
             ) : error ? (
               <div className="space-y-4">
-                <div className="rounded-2xl border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-900/10 p-4">
-                  <p className="text-sm font-semibold text-red-700 dark:text-red-300">Invite unavailable</p>
-                  <p className="text-sm text-red-600 dark:text-red-300/80 mt-1">{error}</p>
+                <div className="border-y border-red-400/20 bg-red-500/[0.055] py-4">
+                  <p className="text-sm font-black text-red-300">Invite unavailable</p>
+                  <p className="mt-1 text-sm text-red-200/62">{error}</p>
                 </div>
-                <Link to="/login" className="btn-primary w-full justify-center">
+                <Link to="/login" className={`${launchPrimaryButtonClass} w-full`}>
                   Back to Login
                 </Link>
               </div>
             ) : invitation ? (
               <>
                 <div className="space-y-3">
-                  <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/40 p-4">
-                    <p className="text-[11px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-2">Invitation</p>
-                    <p className="text-lg font-bold text-gray-900 dark:text-white">{invitation.org_name}</p>
-                    <p className="text-sm text-gray-500 dark:text-white/45 mt-1">This invite is for <span className="font-semibold text-gray-700 dark:text-white/70">{invitation.email}</span>.</p>
+                  <div className="border-y border-white/[0.08] py-5">
+                    <p className="mb-2 text-[11px] font-black uppercase tracking-[0.16em] text-white/32">Invitation</p>
+                    <p className="text-2xl font-black tracking-[-0.025em] text-white">{invitation.org_name}</p>
+                    <p className="mt-1 text-sm text-white/42">Reserved for <span className="font-black text-white/72">{invitation.email}</span>.</p>
                   </div>
 
                   {(roleNames.length > 0 || invitation.is_admin) && (
                     <div className="flex flex-wrap gap-2">
                       {roleNames.map(name => (
-                        <span key={name} className="inline-flex rounded-full px-3 py-1.5 text-xs font-medium bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300">
+                        <span key={name} className="inline-flex rounded-full bg-[#1ed760]/12 px-3 py-1.5 text-xs font-black text-[#7cffaa]">
                           {name}
                         </span>
                       ))}
                       {invitation.is_admin && (
-                        <span className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/10 px-3 py-1.5 text-xs font-black text-amber-300">
                           <Shield className="h-3 w-3" /> Church Admin
                         </span>
                       )}
@@ -174,55 +186,55 @@ export function InviteAccept() {
 
                 {!user ? (
                   <div className="space-y-3">
-                    <p className="text-sm text-gray-600 dark:text-white/55">Sign in or create an account using <span className="font-semibold">{invitation.email}</span> to accept this invite.</p>
+                    <p className="text-sm leading-6 text-white/52">Sign in or create an account using <span className="font-black text-white/78">{invitation.email}</span> to accept this invite.</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <Link to={`/login?redirect=${redirect}&email=${encodeURIComponent(invitation.email)}`} className="btn-primary justify-center">
+                      <Link to={`/login?redirect=${redirect}&email=${encodeURIComponent(invitation.email)}`} className={launchPrimaryButtonClass}>
                         <LogIn className="h-4 w-4" /> Sign In
                       </Link>
-                      <Link to={`/register?redirect=${redirect}&email=${encodeURIComponent(invitation.email)}`} className="btn-secondary justify-center">
+                      <Link to={`/register?redirect=${redirect}&email=${encodeURIComponent(invitation.email)}`} className={launchSecondaryButtonClass}>
                         <UserPlus className="h-4 w-4" /> Create Account
                       </Link>
                     </div>
-                    <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/40 p-4 space-y-2">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-white">Which one should I choose?</p>
-                      <p className="text-sm text-gray-600 dark:text-white/55">
+                    <div className={`${launchInfoRowClass} flex-col gap-1`}>
+                      <p className="text-sm font-black text-white">Which one should I choose?</p>
+                      <p className="text-sm text-white/48">
                         Use <span className="font-semibold">Sign In</span> if you already have an account with this email.
                       </p>
-                      <p className="text-sm text-gray-600 dark:text-white/55">
+                      <p className="text-sm text-white/48">
                         Use <span className="font-semibold">Create Account</span> if this is your first time joining.
                       </p>
                     </div>
-                    <button onClick={handleCopyLoginLink} className="btn-ghost w-full justify-center text-sm">
+                    <button onClick={handleCopyLoginLink} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full text-sm font-black text-white/45 transition-colors hover:bg-white/[0.06] hover:text-white/75">
                       <Copy className="h-4 w-4" /> Copy Invite Link
                     </button>
                   </div>
                 ) : emailMismatch ? (
                   <div className="space-y-3">
-                    <div className="rounded-2xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/10 p-4">
-                      <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">Wrong signed-in account</p>
-                      <p className="text-sm text-amber-700/80 dark:text-amber-300/80 mt-1">
+                    <div className="border-y border-amber-400/20 bg-amber-400/[0.055] py-4">
+                      <p className="text-sm font-black text-amber-300">Wrong signed-in account</p>
+                      <p className="mt-1 text-sm text-amber-200/62">
                         You are signed in as {profile?.email}. This invite is for {invitation.email}.
                       </p>
                     </div>
-                    <button onClick={signOut} className="btn-primary w-full justify-center">
+                    <button onClick={signOut} className={`${launchPrimaryButtonClass} w-full`}>
                       Sign Out and Try Again
                     </button>
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-900/10 p-4">
+                    <div className={launchInfoRowClass}>
                       <div className="flex items-start gap-3">
-                        <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                        <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-[#63ee91]" />
                         <div>
-                          <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">Ready to join</p>
-                          <p className="text-sm text-emerald-700/80 dark:text-emerald-300/80 mt-1">
+                          <p className="text-sm font-black text-white">Ready to join</p>
+                          <p className="mt-1 text-sm text-white/48">
                             Continue as {profile?.email} and join {invitation.org_name}.
                           </p>
                         </div>
                       </div>
                     </div>
 
-                    <button onClick={handleAccept} disabled={accepting} className="btn-primary w-full justify-center">
+                    <button onClick={handleAccept} disabled={accepting} className={`${launchPrimaryButtonClass} w-full`}>
                       {accepting ? <><Loader2 className="h-4 w-4 animate-spin" /> Joining...</> : 'Accept Invite'}
                     </button>
                   </div>
@@ -230,8 +242,7 @@ export function InviteAccept() {
               </>
             ) : null}
           </div>
-        </div>
       </div>
-    </div>
+    </LaunchFlowShell>
   );
 }

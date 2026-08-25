@@ -69,6 +69,12 @@ const EventDetail = lazy(() =>
     default: EventDetail,
   })),
 );
+const Landing = lazy(() =>
+  import("./pages/Landing").then(({ Landing }) => ({ default: Landing })),
+);
+const CreateChurch = lazy(() =>
+  import("./pages/CreateChurch").then(({ CreateChurch }) => ({ default: CreateChurch })),
+);
 const AttendanceQrScanner = lazy(() =>
   import("./pages/AttendanceQrScanner").then(({ AttendanceQrScanner }) => ({
     default: AttendanceQrScanner,
@@ -298,18 +304,23 @@ function StartupGate({ children }: { children: ReactNode }) {
 }
 
 function RootRedirect() {
-  const { user } = useAuth();
+  const { user, hasOrganization } = useAuth();
+  if (!user) return <Landing />;
+  if (!hasOrganization) return <Navigate to="/create-church" replace />;
   const storage = getBrowserStorage();
-  const target = user && storage ? getLastAppRoute(storage, user.id) : user ? "/dashboard" : "/login";
+  const target = storage ? getLastAppRoute(storage, user.id) : "/dashboard";
   return <Navigate to={target} replace />;
 }
 
 function LoginRoute() {
-  const { user } = useAuth();
+  const { user, hasOrganization } = useAuth();
   const location = useLocation();
   if (!user) return <Login />;
 
   const redirect = new URLSearchParams(location.search).get("redirect");
+  const isSetupRedirect = redirect === '/create-church' || Boolean(redirect?.startsWith('/invite/'));
+  if (isSetupRedirect) return <Navigate to={redirect!} replace />;
+  if (!hasOrganization) return <Navigate to="/create-church" replace />;
   const storage = getBrowserStorage();
   const fallback = storage ? getLastAppRoute(storage, user.id) : "/dashboard";
   return <Navigate to={redirect && isRememberableAppRoute(redirect) ? redirect : fallback} replace />;
@@ -490,10 +501,7 @@ export default function App() {
               />
               <Route element={<Layout />}>
                 <Route element={<RouteLoadingBoundary />}>
-                  <Route
-                    path="/landing"
-                    element={<RootRedirect />}
-                  />
+                  <Route path="/landing" element={<Landing />} />
                   <Route path="/login" element={<LoginRoute />} />
                   <Route path="/reset-password" element={<ResetPassword />} />
                   <Route path="/auth/confirm" element={<AuthConfirm />} />
@@ -501,7 +509,7 @@ export default function App() {
                   <Route path="/invite/:token" element={<InviteAccept />} />
                   <Route
                     path="/create-church"
-                    element={<RootRedirect />}
+                    element={<CreateChurch />}
                   />
                   <Route element={<ProtectedRoute />}>
                     <Route path="/onboarding" element={<Onboarding />} />

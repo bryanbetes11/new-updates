@@ -240,7 +240,10 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
   const setAdministrator = async (member: MemberWithRoles, enabled: boolean) => {
     if (member.id === user?.id && !enabled) { toast('info', 'You cannot remove your own administrator access.'); return; }
     setSavingSettingsId(member.id);
-    const { error } = await supabase.from('profiles').update({ is_org_admin: enabled }).eq('id', member.id);
+    const { error } = await supabase.rpc('set_org_member_admin', {
+      p_member_id: member.id,
+      p_enabled: enabled,
+    });
     setSavingSettingsId(null);
     if (error) { toast('error', `Administrator access could not be updated: ${error.message}`); return; }
     toast('success', enabled ? `${member.first_name} is now an administrator` : `Administrator access removed from ${member.first_name}`);

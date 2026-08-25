@@ -251,21 +251,24 @@ function DashboardAttentionPanel({
   className?: string;
 }) {
   return (
-    <section className={`rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-4 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)] ${className}`}>
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <AlertCircle className="h-4 w-4 shrink-0 text-[#22c55e]" />
+    <section className={`relative overflow-hidden rounded-2xl border border-white/[0.09] bg-[linear-gradient(135deg,rgba(20,29,27,0.98),rgba(24,24,24,0.98)_58%,rgba(17,24,22,0.98))] p-4 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)] ${className}`}>
+      <div className="pointer-events-none absolute -right-10 -top-12 h-32 w-32 rounded-full bg-[#22c55e]/[0.09] blur-3xl" />
+      <div className="relative mb-3.5 flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#67e8a4]/15 bg-[#22c55e]/10 text-[#67e8a4] shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">
+            <AlertCircle className="h-4 w-4" />
+          </span>
           <div className="min-w-0">
             <h2 className="text-[15px] font-black text-white">Needs Your Attention</h2>
-            <p className="mt-0.5 text-[10px] font-semibold text-white/38">Only actions that still need a response</p>
+            <p className="mt-0.5 text-[11px] font-semibold leading-4 text-white/50">Only actions that still need a response</p>
           </div>
         </div>
         {items.length > 0 ? (
-          <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-[#22c55e] px-2 text-[10px] font-black text-black">{items.length}</span>
+          <span className="flex h-7 min-w-7 items-center justify-center rounded-full border border-[#67e8a4]/20 bg-[#22c55e]/15 px-2 text-[11px] font-black text-[#bbf7d0] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">{items.length}</span>
         ) : null}
       </div>
       {items.length > 0 ? (
-        <div className="space-y-1.5">
+        <div className="relative space-y-2">
           {items.map((attentionItem) => {
             const Icon = attentionItem.icon;
             return (
@@ -273,22 +276,24 @@ function DashboardAttentionPanel({
                 key={attentionItem.id}
                 type="button"
                 onClick={() => onNavigate(attentionItem.path)}
-                className="group flex w-full items-center gap-2.5 rounded-[0.55rem] bg-white/[0.045] px-3 py-2.5 text-left transition-colors hover:bg-white/[0.075] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e]"
+                className="group flex min-h-14 w-full items-center gap-3 rounded-xl border border-white/[0.07] bg-black/15 px-3 py-2.5 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] transition duration-200 hover:-translate-y-px hover:border-white/[0.13] hover:bg-white/[0.055] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e]"
               >
-                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${attentionItem.urgent ? 'bg-amber-300/10 text-amber-200' : 'bg-[#22c55e]/10 text-[#22c55e]'}`}>
+                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${attentionItem.urgent ? 'border-amber-300/15 bg-amber-300/[0.09] text-amber-200' : 'border-[#67e8a4]/15 bg-[#22c55e]/10 text-[#67e8a4]'}`}>
                   <Icon className="h-4 w-4" />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[11px] font-black text-white">{attentionItem.title}</span>
-                  <span className="mt-0.5 block truncate text-[10px] font-semibold text-white/42">{attentionItem.detail}</span>
+                  <span className="block truncate text-[12px] font-black text-white">{attentionItem.title}</span>
+                  <span className="mt-0.5 block truncate text-[10px] font-semibold text-white/48">{attentionItem.detail}</span>
                 </span>
-                <ChevronRight className="h-4 w-4 shrink-0 text-white/35 transition-transform group-hover:translate-x-0.5" />
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.055] text-white/50 transition-colors group-hover:bg-white/[0.09] group-hover:text-white/80">
+                  <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                </span>
               </button>
             );
           })}
         </div>
       ) : (
-        <div className="rounded-[0.55rem] bg-white/[0.045]">
+        <div className="relative rounded-xl border border-white/[0.07] bg-black/15">
           <DashboardEmptyState
             icon={CheckCircle2}
             title="You're all caught up"

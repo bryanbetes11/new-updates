@@ -327,8 +327,11 @@ function LastRouteTracker() {
   return null;
 }
 
-const BACKGROUND_UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
-const MIN_BACKGROUND_UPDATE_CHECK_GAP_MS = 30 * 1000;
+// Keep a currently open PWA responsive to a newly deployed build without
+// polling aggressively enough to distract the person using it.
+const BACKGROUND_UPDATE_CHECK_INITIAL_DELAY_MS = 3 * 1000;
+const BACKGROUND_UPDATE_CHECK_INTERVAL_MS = 60 * 1000;
+const MIN_BACKGROUND_UPDATE_CHECK_GAP_MS = 5 * 1000;
 
 function BackgroundAppUpdateWatcher() {
   const { user } = useAuth();
@@ -353,18 +356,20 @@ function BackgroundAppUpdateWatcher() {
   useEffect(() => {
     if (!user) return;
 
-    const initialCheck = window.setTimeout(checkInBackground, 20_000);
+    const initialCheck = window.setTimeout(checkInBackground, BACKGROUND_UPDATE_CHECK_INITIAL_DELAY_MS);
     const interval = window.setInterval(checkInBackground, BACKGROUND_UPDATE_CHECK_INTERVAL_MS);
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') checkInBackground();
     };
 
     document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', checkInBackground);
     window.addEventListener('online', checkInBackground);
     return () => {
       window.clearTimeout(initialCheck);
       window.clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', checkInBackground);
       window.removeEventListener('online', checkInBackground);
     };
   }, [checkInBackground, user]);

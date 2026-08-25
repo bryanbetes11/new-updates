@@ -16,6 +16,7 @@ interface EventArtworkProps {
   artworkUrls?: string[];
   songs?: EventArtworkSong[] | null;
   className?: string;
+  onArtworkUrlsChange?: (urls: string[]) => void;
 }
 
 const publicArtworkCache = new Map<string, string | null>();
@@ -186,7 +187,7 @@ async function fetchPublicArtwork(song: EventArtworkSong) {
   }
 }
 
-export function EventArtwork({ eventType, title, artworkUrls = [], songs = null, className = '' }: EventArtworkProps) {
+export function EventArtwork({ eventType, title, artworkUrls = [], songs = null, className = '', onArtworkUrlsChange }: EventArtworkProps) {
   const meta = getEventArtworkMeta(eventType, title);
   const Icon = meta.icon;
   const [publicArtworkUrls, setPublicArtworkUrls] = useState<string[]>([]);
@@ -217,6 +218,7 @@ export function EventArtwork({ eventType, title, artworkUrls = [], songs = null,
   const visibleArtworkUrls = [...publicArtworkUrls, ...artworkUrls, ...videoArtworkUrls, ...searchArtworkUrls]
     .filter((url, index, urls): url is string => Boolean(url) && urls.indexOf(url) === index && !failedUrls.has(url))
     .slice(0, 4);
+  const visibleArtworkUrlsKey = visibleArtworkUrls.join('|');
 
   useEffect(() => {
     let cancelled = false;
@@ -239,6 +241,10 @@ export function EventArtwork({ eventType, title, artworkUrls = [], songs = null,
       cancelled = true;
     };
   }, [availableArtworkCount, firstSongs]);
+
+  useEffect(() => {
+    onArtworkUrlsChange?.(visibleArtworkUrls);
+  }, [onArtworkUrlsChange, visibleArtworkUrlsKey]);
 
   if (visibleArtworkUrls.length > 0) {
     return (

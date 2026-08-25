@@ -415,6 +415,105 @@ function ObservationSeenCard({ observationId, authorId, onSeen, children }: Obse
   );
 }
 
+type ArtworkColor = { r: number; g: number; b: number };
+
+function toArtworkColorValue(color: ArtworkColor, opacity: number) {
+  return `rgba(${color.r}, ${color.g}, ${color.b}, ${opacity})`;
+}
+
+function getArtworkColor(url: string): Promise<ArtworkColor | null> {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.crossOrigin = 'anonymous';
+    image.referrerPolicy = 'no-referrer';
+
+    image.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        const size = 28;
+        canvas.width = size;
+        canvas.height = size;
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (!context) {
+          resolve(null);
+          return;
+        }
+
+        context.drawImage(image, 0, 0, size, size);
+        const pixels = context.getImageData(0, 0, size, size).data;
+        const buckets = new Map<string, { weight: number; r: number; g: number; b: number }>();
+
+        for (let index = 0; index < pixels.length; index += 4) {
+          const r = pixels[index];
+          const g = pixels[index + 1];
+          const b = pixels[index + 2];
+          const alpha = pixels[index + 3];
+          const max = Math.max(r, g, b);
+          const min = Math.min(r, g, b);
+          const saturation = max === 0 ? 0 : (max - min) / max;
+          const luminance = (r * 0.2126 + g * 0.7152 + b * 0.0722) / 255;
+
+          // Ignore nearly black, nearly white, and grey pixels so the ambient
+          // color follows the artwork rather than text, borders, or shadows.
+          if (alpha < 180 || luminance < 0.13 || luminance > 0.93 || saturation < 0.16) continue;
+
+          const bucketR = Math.round(r / 32) * 32;
+          const bucketG = Math.round(g / 32) * 32;
+          const bucketB = Math.round(b / 32) * 32;
+          const key = `${bucketR}-${bucketG}-${bucketB}`;
+          const weight = 0.45 + saturation * 1.8 + Math.min(luminance, 0.75) * 0.35;
+          const bucket = buckets.get(key) || { weight: 0, r: 0, g: 0, b: 0 };
+          bucket.weight += weight;
+          bucket.r += r * weight;
+          bucket.g += g * weight;
+          bucket.b += b * weight;
+          buckets.set(key, bucket);
+        }
+
+        const dominant = [...buckets.values()].sort((left, right) => right.weight - left.weight)[0];
+        resolve(dominant && dominant.weight > 0
+          ? {
+              r: Math.round(dominant.r / dominant.weight),
+              g: Math.round(dominant.g / dominant.weight),
+              b: Math.round(dominant.b / dominant.weight),
+            }
+          : null);
+      } catch {
+        // Some third-party image hosts do not permit canvas reads. The blurred
+        // artwork still reflects those covers, so only the color-field accent
+        // is skipped for that image.
+        resolve(null);
+      }
+    };
+    image.onerror = () => resolve(null);
+    image.src = url;
+  });
+}
+
+function useArtworkAmbientColors(urls: string[]) {
+  const [colors, setColors] = useState<ArtworkColor[]>([]);
+  const urlKey = urls.join('|');
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!urlKey) {
+      setColors([]);
+      return undefined;
+    }
+
+    void Promise.all(urls.slice(0, 4).map(getArtworkColor)).then((sampledColors) => {
+      if (cancelled) return;
+      setColors(sampledColors.filter((color): color is ArtworkColor => color !== null));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [urlKey]);
+
+  return colors;
+}
+
 export function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -437,6 +536,11 @@ export function EventDetail() {
   }, []);
 
   const [event, setEvent] = useState<Event | null>(null);
+  const [eventArtworkUrls, setEventArtworkUrls] = useState<string[]>([]);
+  const eventArtworkAmbientColors = useArtworkAmbientColors(eventArtworkUrls);
+  const syncEventArtworkUrls = useCallback((urls: string[]) => {
+    setEventArtworkUrls((current) => current.join('|') === urls.join('|') ? current : urls);
+  }, []);
   const [assignments, setAssignments] = useState<EventAssignment[]>([]);
   const [members, setMembers] = useState<{ id: string; first_name: string; last_name: string; ministry_status: string }[]>([]);
   const [memberRoles, setMemberRoles] = useState<{ user_id: string; role_id: string }[]>([]);
@@ -3404,6 +3508,10 @@ const openLyricsModal = (ss: SetlistSong) => {
     youtube_url: ss.youtube_url || ss.songs?.youtube_url,
     songs: ss.songs,
   }));
+  const primaryArtworkAmbientColor = eventArtworkAmbientColors[0] || null;
+  const secondaryArtworkAmbientColor = eventArtworkAmbientColors[1] || primaryArtworkAmbientColor;
+  const tertiaryArtworkAmbientColor = eventArtworkAmbientColors[2] || secondaryArtworkAmbientColor;
+  const quaternaryArtworkAmbientColor = eventArtworkAmbientColors[3] || primaryArtworkAmbientColor;
   const compactEventFacts = [
     format(parseISO(event.event_date), 'EEE, MMM dd'),
     formatTime12Hour(event.start_time || ''),
@@ -3841,24 +3949,6 @@ const openLyricsModal = (ss: SetlistSong) => {
 
   return (
     <div className="page-container page-bottom-pad relative isolate overflow-x-clip bg-[#050505]">
-      <div
-        className="pointer-events-none fixed inset-x-0 top-[env(safe-area-inset-top)] z-0 h-[30rem] overflow-hidden bg-[#050505] lg:top-0 lg:hidden"
-        aria-hidden="true"
-      >
-        <div className="absolute inset-x-[-35%] top-[-11rem] flex justify-center">
-          <EventArtwork
-            eventType={event.event_type}
-            title={event.title}
-            songs={eventDetailArtworkSongs}
-            className="h-80 w-80 scale-[2.45] rounded-[2rem] opacity-70 blur-3xl saturate-[1.75]"
-          />
-        </div>
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_-6%,rgba(255,255,255,0.22),transparent_32%),radial-gradient(circle_at_70%_18%,rgba(239,68,68,0.20),transparent_36%),radial-gradient(circle_at_24%_24%,rgba(245,158,11,0.13),transparent_38%),linear-gradient(180deg,rgba(0,0,0,0.02)_0%,rgba(0,0,0,0.12)_18%,rgba(5,5,5,0.82)_57%,#050505_78%,#050505_100%)]" />
-        <div
-          className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/[0.08] via-black/[0.04] to-transparent backdrop-blur-2xl"
-          aria-hidden="true"
-        />
-      </div>
       <motion.div
         animate={isLeaving ? { opacity: 0, y: -12, filter: 'blur(8px)' } : { opacity: 1, y: 0, filter: 'blur(0px)' }}
         transition={{ duration: 0.28, ease: [0.4, 0, 1, 1] }}
@@ -3872,22 +3962,61 @@ const openLyricsModal = (ss: SetlistSong) => {
         {!assignmentDetailsBlocked && (
         <motion.div
           {...blurUp(0.08)}
-          className="relative isolate z-10 -mx-4 overflow-visible px-4 pb-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] sm:-mx-6 sm:px-6 sm:pb-5 sm:pt-3 md:-mx-8 md:px-8 lg:mt-0"
+          className="relative isolate z-10 -mx-4 overflow-visible px-4 pb-[15px] pt-[calc(env(safe-area-inset-top)+0.75rem)] sm:-mx-6 sm:px-6 sm:pb-5 sm:pt-3 md:-mx-8 md:px-8 lg:mt-0"
           style={{
             opacity: heroIsPast ? 0.85 : 1,
           }}
         >
-          <div className="pointer-events-none absolute left-1/2 top-0 h-full w-screen -translate-x-1/2 overflow-hidden">
+          <div
+            className="pointer-events-none absolute left-1/2 inset-y-0 w-screen -translate-x-1/2 overflow-hidden lg:hidden"
+          >
             <div className="absolute inset-x-[-35%] top-[-9rem] flex justify-center">
               <EventArtwork
                 eventType={event.event_type}
                 title={event.title}
                 songs={eventDetailArtworkSongs}
-                className="h-80 w-80 scale-[2.45] rounded-[2rem] opacity-70 blur-3xl saturate-[1.75]"
+                onArtworkUrlsChange={syncEventArtworkUrls}
+                className="h-80 w-80 scale-[2.45] rounded-[2rem] opacity-55 blur-3xl brightness-[1.22] saturate-[1.25]"
               />
             </div>
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_-6%,rgba(255,255,255,0.22),transparent_32%),radial-gradient(circle_at_70%_18%,rgba(239,68,68,0.20),transparent_36%),radial-gradient(circle_at_24%_24%,rgba(245,158,11,0.13),transparent_38%),linear-gradient(180deg,rgba(0,0,0,0.02)_0%,rgba(0,0,0,0.12)_34%,#050505_100%)]" />
-            <div className="absolute inset-x-0 bottom-0 h-36 bg-gradient-to-b from-transparent via-[#050505]/82 to-[#050505]" />
+            {primaryArtworkAmbientColor && (
+              <div
+                className="absolute -left-[42%] top-[4%] h-[21rem] w-[38rem] -rotate-[13deg] rounded-[48%] blur-[42px] brightness-[1.18] saturate-[0.88]"
+                style={{ backgroundColor: toArtworkColorValue(primaryArtworkAmbientColor, 0.2) }}
+              />
+            )}
+            {secondaryArtworkAmbientColor && (
+              <div
+                className="absolute -right-[42%] top-[7%] h-[22rem] w-[39rem] rotate-[15deg] rounded-[46%] blur-[46px] brightness-[1.2] saturate-[0.88]"
+                style={{ backgroundColor: toArtworkColorValue(secondaryArtworkAmbientColor, 0.22) }}
+              />
+            )}
+            {tertiaryArtworkAmbientColor && (
+              <div
+                className="absolute -left-[20%] top-[26%] h-[16rem] w-[34rem] rotate-[7deg] rounded-[48%] blur-[40px] brightness-[1.16] saturate-[0.84]"
+                style={{ backgroundColor: toArtworkColorValue(tertiaryArtworkAmbientColor, 0.12) }}
+              />
+            )}
+            {quaternaryArtworkAmbientColor && (
+              <div
+                className="absolute right-[-30%] top-[31%] h-[15rem] w-[33rem] -rotate-[9deg] rounded-[48%] blur-[42px] brightness-[1.16] saturate-[0.84]"
+                style={{ backgroundColor: toArtworkColorValue(quaternaryArtworkAmbientColor, 0.12) }}
+              />
+            )}
+            {primaryArtworkAmbientColor && secondaryArtworkAmbientColor && tertiaryArtworkAmbientColor && quaternaryArtworkAmbientColor && (
+              <div
+                className="absolute inset-0"
+                style={{
+                  background: `radial-gradient(ellipse 92% 58% at 12% 24%, ${toArtworkColorValue(primaryArtworkAmbientColor, 0.14)}, transparent 70%), radial-gradient(ellipse 96% 60% at 88% 23%, ${toArtworkColorValue(secondaryArtworkAmbientColor, 0.16)}, transparent 71%), radial-gradient(ellipse 82% 48% at 24% 54%, ${toArtworkColorValue(tertiaryArtworkAmbientColor, 0.1)}, transparent 68%), radial-gradient(ellipse 88% 50% at 80% 56%, ${toArtworkColorValue(quaternaryArtworkAmbientColor, 0.1)}, transparent 69%), radial-gradient(ellipse 116% 58% at 50% 40%, rgba(255,255,255,0.065), transparent 72%)`,
+                }}
+              />
+            )}
+            <div className="absolute -top-32 -left-24 h-52 w-[18rem] -rotate-[12deg] rounded-[46%] bg-[#050505] blur-[18px]" />
+            <div className="absolute -top-40 left-[24%] h-64 w-[15rem] rotate-[7deg] rounded-[48%] bg-[#050505] blur-[20px]" />
+            <div className="absolute -top-28 right-[-7rem] h-56 w-[18rem] rotate-[15deg] rounded-[48%] bg-[#050505] blur-[20px]" />
+            <div className="absolute -bottom-28 -left-24 h-52 w-[20rem] rotate-[9deg] rounded-[48%] bg-[#050505] blur-[20px]" />
+            <div className="absolute -bottom-36 left-[24%] h-64 w-[17rem] -rotate-[9deg] rounded-[46%] bg-[#050505] blur-[22px]" />
+            <div className="absolute -bottom-24 right-[-8rem] h-52 w-[19rem] -rotate-[14deg] rounded-[48%] bg-[#050505] blur-[20px]" />
           </div>
           <div className="relative">
             <button
@@ -3903,7 +4032,8 @@ const openLyricsModal = (ss: SetlistSong) => {
                 eventType={event.event_type}
                 title={event.title}
                 songs={eventDetailArtworkSongs}
-                className="mx-auto h-44 w-44 shrink-0 rounded-md shadow-[0_22px_60px_-30px_rgba(0,0,0,0.9)] sm:h-56 sm:w-56 lg:mx-0 lg:h-64 lg:w-64 xl:h-72 xl:w-72"
+                onArtworkUrlsChange={syncEventArtworkUrls}
+                className="mx-auto h-56 w-56 shrink-0 rounded-md shadow-[0_22px_60px_-30px_rgba(0,0,0,0.9)] sm:h-60 sm:w-60 lg:mx-0 lg:h-64 lg:w-64 xl:h-72 xl:w-72"
               />
 
               <div className="mt-6 min-w-0 lg:mt-0 lg:flex-1 lg:pb-5">
@@ -4597,7 +4727,7 @@ const openLyricsModal = (ss: SetlistSong) => {
           )
         ) : (
           <div className="animate-slide-up" style={{ animationDelay: '125ms' }}>
-            <div className="overflow-hidden border-t border-gray-200/70 pt-4 dark:border-white/[0.08]">
+            <div className="overflow-hidden border-t border-gray-200/70 pt-0 dark:border-white/[0.08]">
               <AnimatePresence mode="wait" initial={false}>
               {cardView === 'checking' ? (
                 <motion.div

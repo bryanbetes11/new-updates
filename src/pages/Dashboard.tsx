@@ -263,9 +263,6 @@ function DashboardAttentionPanel({
             <p className="mt-0.5 text-[11px] font-semibold leading-4 text-white/50">Only actions that still need a response</p>
           </div>
         </div>
-        {items.length > 0 ? (
-          <span className="flex h-7 min-w-7 items-center justify-center rounded-full border border-[#67e8a4]/20 bg-[#22c55e]/15 px-2 text-[11px] font-black text-[#bbf7d0] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">{items.length}</span>
-        ) : null}
       </div>
       {items.length > 0 ? (
         <div className="relative space-y-2">

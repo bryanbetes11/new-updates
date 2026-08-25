@@ -23,23 +23,10 @@ import {
   recoveryRedirectPath,
 } from "./lib/authRedirect";
 import { AppUpdateModal } from "./components/AppUpdateModal";
-import { ReleaseNotesModal } from "./components/ReleaseNotesModal";
-import { DailyUpdateCheckModal, type DailyUpdateCheckStatus } from "./components/DailyUpdateCheckModal";
-import {
-  APP_DAILY_UPDATE_CHECK_KEY,
-  APP_BUILD_NUMBER,
-  APP_RELEASE_HEADLINE,
-  APP_RELEASE_HIGHLIGHTS,
-  APP_RELEASE_NOTES_ID,
-  APP_RELEASE_NOTES_SEEN_KEY,
-  APP_VERSION,
-  APP_VERSION_LABEL,
-} from "./lib/appUpdate";
 import {
   APP_UPDATE_AVAILABLE_EVENT,
   applyPendingAppUpdate,
   checkForAppUpdate,
-  getInstalledAppVersion,
   getPendingAppUpdate,
   hasPendingAppUpdate,
   type PendingAppUpdate,
@@ -340,107 +327,6 @@ function LastRouteTracker() {
   return null;
 }
 
-function ReleaseNotesExperience({ suppressed }: { suppressed: boolean }) {
-  const { user } = useAuth();
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    if (!user) return;
-    const storage = getBrowserStorage();
-    if (!storage || storage.getItem(APP_RELEASE_NOTES_SEEN_KEY) !== APP_RELEASE_NOTES_ID) setOpen(true);
-  }, [user]);
-
-  const close = () => {
-    getBrowserStorage()?.setItem(APP_RELEASE_NOTES_SEEN_KEY, APP_RELEASE_NOTES_ID);
-    setOpen(false);
-  };
-
-  return <ReleaseNotesModal open={open && !suppressed} onClose={close} />;
-}
-
-function getLocalDateKey() {
-  const date = new Date();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${date.getFullYear()}-${month}-${day}`;
-}
-
-function DailyUpdateCheckExperience({ suppressed }: { suppressed: boolean }) {
-  const { user } = useAuth();
-  const [open, setOpen] = useState(false);
-  const [status, setStatus] = useState<DailyUpdateCheckStatus>("checking");
-  const [latestVersion, setLatestVersion] = useState<string>();
-  const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
-  const attemptedDateRef = useRef<string | null>(null);
-
-  const runDailyCheck = useCallback(async (showCheckingState = true) => {
-    if (showCheckingState) {
-      setStatus("checking");
-      setOpen(true);
-    }
-
-    const result = await checkForAppUpdate();
-    const storage = getBrowserStorage();
-    if (result.status === "up-to-date") {
-      storage?.setItem(APP_DAILY_UPDATE_CHECK_KEY, getLocalDateKey());
-      setStatus("current");
-      setOpen(showCheckingState);
-      return;
-    }
-    if (result.status === "available") {
-      storage?.setItem(APP_DAILY_UPDATE_CHECK_KEY, getLocalDateKey());
-      setLatestVersion(result.manifest.version);
-      setStatus("available");
-      setOpen(showCheckingState);
-      return;
-    }
-
-    setStatus("error");
-    setOpen(showCheckingState);
-  }, []);
-
-  const checkIfDue = useCallback(() => {
-    if (!user) return;
-    const storage = getBrowserStorage();
-    const today = getLocalDateKey();
-    if (storage?.getItem(APP_DAILY_UPDATE_CHECK_KEY) === today || attemptedDateRef.current === today) return;
-
-    attemptedDateRef.current = today;
-    const releaseNotesSeen = storage?.getItem(APP_RELEASE_NOTES_SEEN_KEY) === APP_RELEASE_NOTES_ID;
-    void runDailyCheck(releaseNotesSeen);
-  }, [runDailyCheck, user]);
-
-  useEffect(() => {
-    if (!user) return;
-    const timer = window.setTimeout(checkIfDue, 900);
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") checkIfDue();
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => {
-      window.clearTimeout(timer);
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
-  }, [checkIfDue, user]);
-
-  return (
-    <>
-      <DailyUpdateCheckModal
-        open={open && !suppressed}
-        status={status}
-        latestVersion={latestVersion}
-        onClose={() => setOpen(false)}
-        onRetry={() => void runDailyCheck(true)}
-        onViewReleaseNotes={() => {
-          setOpen(false);
-          setReleaseNotesOpen(true);
-        }}
-      />
-      <ReleaseNotesModal open={releaseNotesOpen && !suppressed} onClose={() => setReleaseNotesOpen(false)} />
-    </>
-  );
-}
-
 const BACKGROUND_UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 const MIN_BACKGROUND_UPDATE_CHECK_GAP_MS = 30 * 1000;
 
@@ -545,34 +431,19 @@ function ResumeSyncIndicator() {
 export default function App() {
   const [showAppUpdate, setShowAppUpdate] = useState(false);
   const [applyingUpdate, setApplyingUpdate] = useState(false);
-  const [installedVersion, setInstalledVersion] = useState<string | null>(null);
-  const [targetVersion, setTargetVersion] = useState(APP_VERSION);
-  const [targetBuildNumber, setTargetBuildNumber] = useState(APP_BUILD_NUMBER);
-  const [targetReleaseHeadline, setTargetReleaseHeadline] = useState(APP_RELEASE_HEADLINE);
-  const [targetReleaseHighlights, setTargetReleaseHighlights] = useState(APP_RELEASE_HIGHLIGHTS);
   const [updateRequired, setUpdateRequired] = useState(false);
 
   useEffect(() => {
     const handleUpdateAvailable = (event: Event) => {
       const update = (event as CustomEvent<PendingAppUpdate>).detail;
-      setInstalledVersion(getInstalledAppVersion());
-      setTargetVersion(update?.version || APP_VERSION);
-      setTargetBuildNumber(update?.buildNumber || APP_BUILD_NUMBER);
-      setTargetReleaseHeadline(update?.releaseHeadline || APP_RELEASE_HEADLINE);
-      setTargetReleaseHighlights(update?.releaseHighlights || APP_RELEASE_HIGHLIGHTS);
       setUpdateRequired(Boolean(update?.required));
       setShowAppUpdate(true);
     };
 
     window.addEventListener(APP_UPDATE_AVAILABLE_EVENT, handleUpdateAvailable);
 
-    setInstalledVersion(getInstalledAppVersion());
     const pendingUpdate = getPendingAppUpdate();
     if (hasPendingAppUpdate() && pendingUpdate) {
-      setTargetVersion(pendingUpdate.version);
-      setTargetBuildNumber(pendingUpdate.buildNumber);
-      setTargetReleaseHeadline(pendingUpdate.releaseHeadline);
-      setTargetReleaseHighlights(pendingUpdate.releaseHighlights);
       setUpdateRequired(pendingUpdate.required);
       setShowAppUpdate(true);
     }
@@ -596,16 +467,8 @@ export default function App() {
             <ResumeSyncIndicator />
             <ToastProvider>
               <BackgroundAppUpdateWatcher />
-              <DailyUpdateCheckExperience suppressed={showAppUpdate} />
-              <ReleaseNotesExperience suppressed={showAppUpdate} />
               <AppUpdateModal
                 open={showAppUpdate}
-                currentVersion={installedVersion || APP_VERSION_LABEL}
-                targetVersion={targetVersion}
-                currentBuildNumber={APP_BUILD_NUMBER}
-                targetBuildNumber={targetBuildNumber}
-                headline={targetReleaseHeadline}
-                highlights={targetReleaseHighlights}
                 required={updateRequired}
                 onLater={() => setShowAppUpdate(false)}
                 onUpdate={() => {

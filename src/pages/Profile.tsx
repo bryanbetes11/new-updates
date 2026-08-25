@@ -6,7 +6,7 @@ import {
   Pencil, Save, LogOut, X, Check, Crown,
   Camera, Loader2, Shield, ChevronDown, Clock,
   MessageSquare, XCircle, CheckCircle, Eye, KeyRound,
-  Phone, Cake, Calendar, AlertCircle, Mail, Info, RefreshCw, Sparkles
+  Phone, Cake, Calendar, AlertCircle, Mail, Info, RefreshCw
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -15,7 +15,6 @@ import { DatePicker } from '../components/DatePicker';
 import { PageLoader } from '../components/LoadingSpinner';
 import { PushNotificationSetting } from '../components/PushNotificationSetting';
 import { NotificationPreferencesSetting } from '../components/NotificationPreferencesSetting';
-import { ReleaseNotesModal } from '../components/ReleaseNotesModal';
 import { RoleBadge, sortRolesLeadershipFirst } from '../components/RoleBadge';
 import { phoneHref } from '../lib/phone';
 import { APP_BUILD_ID, APP_UPDATE_PUBLISHED_AT, APP_VERSION_LABEL } from '../lib/appUpdate';
@@ -86,7 +85,6 @@ export function Profile() {
   const [emailPanelOpen, setEmailPanelOpen] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [emailUpdating, setEmailUpdating] = useState(false);
-  const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
   const [checkingForUpdate, setCheckingForUpdate] = useState(false);
 
   useEffect(() => {
@@ -813,13 +811,6 @@ export function Profile() {
               <div className="flex flex-col gap-2 min-[390px]:flex-row">
                 <button
                   type="button"
-                  onClick={() => setReleaseNotesOpen(true)}
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-4 text-[12px] font-bold text-gray-700 transition-colors hover:bg-gray-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white/70 dark:hover:bg-white/[0.07]"
-                >
-                  <Sparkles className="h-4 w-4 text-emerald-500" /> What’s New
-                </button>
-                <button
-                  type="button"
                   onClick={handleCheckForUpdates}
                   disabled={checkingForUpdate}
                   className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-emerald-500 px-4 text-[12px] font-bold text-white transition-colors hover:bg-emerald-600 disabled:opacity-45"
@@ -833,7 +824,6 @@ export function Profile() {
         </motion.section>
 
       </div>
-      <ReleaseNotesModal open={releaseNotesOpen} onClose={() => setReleaseNotesOpen(false)} />
     </div>
   );
 }

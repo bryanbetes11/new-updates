@@ -4,7 +4,7 @@ import { InteractionSoundSettingsPanel } from '../components/InteractionSoundSet
 export function SoundSettings() {
   return (
     <div className="page-container page-bottom-pad">
-      <div className="app-content-shell mx-auto max-w-2xl space-y-5">
+      <div className="app-content-shell mx-auto max-w-2xl space-y-5 pt-4 sm:pt-5">
         <div className="rounded-3xl border border-gray-200/80 bg-white p-5 shadow-sm dark:border-white/[0.07] dark:bg-white/[0.025] sm:p-7">
           <div className="flex items-start gap-4">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-300">

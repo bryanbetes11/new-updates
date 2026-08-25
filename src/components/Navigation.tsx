@@ -47,6 +47,7 @@ import {
 } from "../lib/mobileNavPreference";
 import { supabase } from "../lib/supabase";
 import { preloadPrimaryRoutes, preloadRoute } from "../lib/routePreload";
+import { playGlobalClickSound } from "../lib/interactionSounds";
 import {
   HomeIcon,
   CalendarIcon,
@@ -440,6 +441,10 @@ export function Navigation({
 
   const handleNav = useCallback(
     (path: string) => {
+      // Route changes can synchronously replace the clicked navigation item
+      // before the document-level click listener observes it. Play the shared
+      // cue here while this is still the active user gesture.
+      playGlobalClickSound();
       void preloadRoute(path);
       navigate(path);
       onMobileOpenChange(false);
@@ -2346,7 +2351,12 @@ export function Navigation({
                 return (
                   <button
                     key={item.path}
-                    onClick={() => navigate(item.path)}
+                    onClick={() => {
+                      // Mobile navigation replaces the route immediately, so
+                      // it needs the cue before navigating as well.
+                      playGlobalClickSound();
+                      navigate(item.path);
+                    }}
                     onPointerDown={() => {
                       void preloadRoute(item.path);
                     }}

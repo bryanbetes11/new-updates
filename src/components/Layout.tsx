@@ -52,7 +52,10 @@ export function Layout() {
         if (data) {
           setInteractionSoundsEnabled(data.sound_effects_enabled);
           setInteractionSoundsVolume((data.sound_effects_volume ?? 55) / 100);
-          setSoundSetupOpen(!data.sound_effects_configured);
+          // Only a completed setup explicitly saved as true skips the first-run
+          // prompt. This keeps the setup available for accounts created before
+          // the preference existed or whose row has not been configured yet.
+          setSoundSetupOpen(data.sound_effects_configured !== true);
         } else {
           // New accounts receive defaults in the panel, but should still get the
           // first-run choice before interaction sounds start feeling unexpected.

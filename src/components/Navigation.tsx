@@ -848,10 +848,13 @@ export function Navigation({
   const bottomNavItems: Array<NavItem & { tabletPortraitOnly?: boolean }> = mobileNavItems;
   const hideMobileChrome = mobileChromeHidden && !mobileOpen;
   const hideBottomMobileNav = hideMobileChrome;
-  const mobileMenuTranslateX = mobileOpen
-    ? "translateX(min(82vw, 340px))"
-    : "translateX(0)";
-  const mobileNavTransform = `${mobileMenuTranslateX} ${hideBottomMobileNav ? "translateY(calc(100% + 10px))" : "translateY(0)"}`;
+  // Leave the shared mobile navigation untransformed while idle. On WebKit
+  // PWAs, even translateX(0) / translateY(0) can promote this sibling of the
+  // fixed header into the same softened compositing layer.
+  const mobileNavTransform =
+    mobileOpen || hideBottomMobileNav
+      ? `${mobileOpen ? "translateX(min(82vw, 340px))" : ""} ${hideBottomMobileNav ? "translateY(calc(100% + 10px))" : ""}`.trim()
+      : undefined;
   const mobileTitle = location.pathname.startsWith("/events")
     ? "Events"
     : location.pathname.startsWith("/announcements")
@@ -2288,30 +2291,28 @@ export function Navigation({
               ? "0 -18px 42px -34px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.08)"
               : undefined,
             transform: mobileNavTransform,
-            filter: mobileOpen ? "blur(1.25px) brightness(0.78)" : "none",
+            filter: mobileOpen ? "blur(1.25px) brightness(0.78)" : undefined,
             opacity: hideBottomMobileNav ? 0 : 1,
             pointerEvents: hideMobileChrome ? "none" : undefined,
             transition:
-              "transform 360ms cubic-bezier(0.16, 1, 0.3, 1), opacity 180ms cubic-bezier(0.4, 0, 0.2, 1), filter 260ms cubic-bezier(0.22, 1, 0.36, 1)",
+              mobileOpen || hideBottomMobileNav
+                ? "transform 360ms cubic-bezier(0.16, 1, 0.3, 1), opacity 180ms cubic-bezier(0.4, 0, 0.2, 1), filter 260ms cubic-bezier(0.22, 1, 0.36, 1)"
+                : undefined,
             willChange:
               mobileOpen || hideBottomMobileNav
                 ? "transform, opacity"
                 : undefined,
           }}
         >
-          <motion.div
-            initial={false}
-            animate={{
-              y: hideMobileChrome ? 128 : 0,
-              scale: hideMobileChrome ? 0.92 : 1,
-              opacity: hideMobileChrome ? 0 : 1,
+          <div
+            style={{
+              transform: hideMobileChrome ? "translateY(128px) scale(0.92)" : undefined,
+              transformOrigin: "center bottom",
+              opacity: hideMobileChrome ? 0 : undefined,
+              transition: hideMobileChrome
+                ? "transform 360ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms cubic-bezier(0.4, 0, 0.2, 1)"
+                : undefined,
             }}
-            transition={{
-              y: { duration: 0.42, ease: [0.16, 1, 0.3, 1] },
-              scale: { duration: 0.36, ease: [0.22, 1, 0.36, 1] },
-              opacity: { duration: 0.2, ease: [0.4, 0, 0.2, 1] },
-            }}
-            style={{ transformOrigin: "center bottom" }}
             className={`relative flex ${useDockedMobileNav ? "justify-stretch px-0" : "justify-center px-8"}`}
           >
             <nav
@@ -2409,7 +2410,7 @@ export function Navigation({
                 );
               })}
             </nav>
-          </motion.div>
+          </div>
         </div>
       )}
 

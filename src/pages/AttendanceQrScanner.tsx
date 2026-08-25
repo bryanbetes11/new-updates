@@ -9,7 +9,7 @@ import { EventArtwork } from '../components/EventArtwork';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { parseAttendanceQrPayload } from '../lib/attendanceQrPilot';
-import { playInteractionSound } from '../lib/interactionSounds';
+import { playInteractionSound, primeInteractionSounds } from '../lib/interactionSounds';
 import { supabase } from '../lib/supabase';
 
 interface EligibleAttendanceEvent {
@@ -85,6 +85,7 @@ export function AttendanceQrScanner() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const scannerRef = useRef<QrScanner | null>(null);
   const processingRef = useRef(false);
+  const scannerAudioReadyRef = useRef<Promise<boolean> | null>(null);
   const [cameraError, setCameraError] = useState('');
   const [scanning, setScanning] = useState(false);
   const [validating, setValidating] = useState(false);
@@ -157,6 +158,9 @@ export function AttendanceQrScanner() {
     setSessionToken(data?.session_token || '');
     setScanMode(mode);
     setEvents(enrichedEvents);
+    // Camera callbacks run asynchronously, so wait for the audio context that
+    // was unlocked while the person opened or touched the scanner.
+    await (scannerAudioReadyRef.current ?? primeInteractionSounds());
     // Confirm that the church QR itself was accepted. This intentionally does
     // not fire for invalid codes or for the later attendance-recording action.
     playInteractionSound('scanSuccess');
@@ -165,6 +169,9 @@ export function AttendanceQrScanner() {
 
   const startScanner = useCallback(async () => {
     if (!user || !videoRef.current || scannerRef.current) return;
+    // Camera scanning callbacks are not treated as a user gesture by mobile
+    // browsers, so prepare the audio context while entering the scanner.
+    scannerAudioReadyRef.current = primeInteractionSounds();
     setCameraError('');
     const scanner = new QrScanner(
       videoRef.current,
@@ -205,6 +212,9 @@ export function AttendanceQrScanner() {
 
   const recordCheckin = async (eventId: string) => {
     if (!scanMode || (scanMode === 'live' ? !sessionToken : !scanToken)) return;
+    // This tap is the most reliable opportunity to unlock Web Audio before the
+    // asynchronous attendance RPC finishes.
+    const checkInAudioReady = primeInteractionSounds();
     setCheckingIn(eventId);
     const { data, error } = scanMode === 'live'
       ? await supabase.rpc('record_qr_attendance_checkin', {
@@ -220,6 +230,11 @@ export function AttendanceQrScanner() {
       toast('error', error.message || 'Could not record your check-in');
       return;
     }
+    // Wait for the user-gesture audio unlock before playing the success cue.
+    await checkInAudioReady;
+    // A verified check-in deserves a clear, distinct confirmation after the
+    // server has actually saved it, not only when the QR was first read.
+    playInteractionSound('scanSuccess');
     setResult(data as CheckinResult);
   };
 
@@ -402,7 +417,14 @@ export function AttendanceQrScanner() {
           </section>
         ) : (
           <section className="card overflow-hidden">
-            <div className="relative aspect-[3/4] max-h-[62vh] bg-black">
+            <div
+              className="relative aspect-[3/4] max-h-[62vh] bg-black"
+              onPointerDownCapture={() => {
+                // A tap on the live camera view is also a valid audio-unlock
+                // gesture on mobile browsers before a QR callback arrives.
+                scannerAudioReadyRef.current = primeInteractionSounds();
+              }}
+            >
               <video ref={videoRef} className="h-full w-full object-cover" muted playsInline />
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center"><div className="h-56 w-56 rounded-3xl border-2 border-emerald-400 shadow-[0_0_0_999px_rgba(0,0,0,0.35)]" /></div>
               <div className="absolute inset-x-0 bottom-5 text-center"><span className="rounded-full bg-black/65 px-4 py-2 text-xs font-semibold text-white backdrop-blur">Point at the church QR code</span></div>

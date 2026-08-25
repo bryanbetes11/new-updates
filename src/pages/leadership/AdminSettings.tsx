@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { CalendarClock, Clock3, Loader2, Music2, Save, ScanLine, Settings2, ShieldCheck, Trash2, UserCheck } from '../../lib/lucide-react-proxy';
+import { Link } from 'react-router-dom';
+import { Bell, Building2, CalendarClock, ChevronRight, Clock3, ClipboardCheck, CreditCard, Loader2, Music2, QrCode, Save, ScanLine, Settings2, ShieldCheck, Trash2, UserCheck } from '../../lib/lucide-react-proxy';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -201,6 +202,34 @@ export function AdminSettings() {
     <div className="app-content-shell space-y-5 py-4 sm:py-6">
       <section className="overflow-hidden rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.16] via-emerald-500/[0.05] to-transparent p-5 sm:p-6">
         <div className="flex items-start gap-4"><span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-900/25"><Settings2 className="h-6 w-6" /></span><div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-300">Organization administration</p><h1 className="mt-1 text-2xl font-black tracking-tight text-gray-950 dark:text-white">Admin Settings</h1><p className="mt-1 max-w-2xl text-sm leading-relaxed text-gray-600 dark:text-white/55">Manage the rules that control how ServeSync operates for your church. Leadership queues stay separate; these controls change organization-wide behavior.</p></div></div>
+      </section>
+
+      <section className="card overflow-hidden">
+        <div className="border-b border-gray-100 p-5 dark:border-white/[0.06]">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-300"><ShieldCheck className="h-5 w-5" /></span>
+            <div>
+              <h2 className="font-black text-gray-900 dark:text-white">Administration tools</h2>
+              <p className="mt-0.5 max-w-3xl text-xs leading-relaxed text-gray-500 dark:text-white/45">Open the operational areas for your church, including the attendance QR code. These shortcuts do not change a policy until you use the relevant tool.</p>
+            </div>
+          </div>
+        </div>
+        <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
+          {[
+            { to: '/admin/attendance-qr', label: 'Attendance QR', detail: 'Create and manage the church check-in QR code.', icon: QrCode, tone: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-300' },
+            { to: '/admin/church', label: 'Church profile', detail: 'Manage organization details and church identity.', icon: Building2, tone: 'bg-violet-500/10 text-violet-600 dark:text-violet-300' },
+            { to: '/admin/notifications', label: 'Notification settings', detail: 'Configure member notification delivery.', icon: Bell, tone: 'bg-amber-500/10 text-amber-600 dark:text-amber-300' },
+            { to: '/admin/reflections', label: 'Member reflections', detail: 'Review and manage ministry reflection prompts.', icon: ClipboardCheck, tone: 'bg-rose-500/10 text-rose-600 dark:text-rose-300' },
+            { to: '/admin/billing', label: 'Organization billing', detail: 'Review your ServeSync organization plan.', icon: CreditCard, tone: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' },
+          ].map((tool) => {
+            const Icon = tool.icon;
+            return <Link key={tool.to} to={tool.to} className="group flex min-h-[104px] items-start gap-3 rounded-2xl border border-gray-200/80 bg-gray-50/70 p-3.5 transition hover:-translate-y-0.5 hover:border-emerald-400/45 hover:bg-emerald-500/[0.035] dark:border-white/[0.07] dark:bg-white/[0.035] dark:hover:bg-emerald-500/[0.07]">
+              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${tool.tone}`}><Icon className="h-5 w-5" /></span>
+              <span className="min-w-0 flex-1"><span className="block text-sm font-black text-gray-900 dark:text-white">{tool.label}</span><span className="mt-0.5 block text-xs leading-relaxed text-gray-500 dark:text-white/45">{tool.detail}</span></span>
+              <ChevronRight className="mt-2 h-4 w-4 shrink-0 text-gray-400 transition group-hover:translate-x-0.5 group-hover:text-emerald-500 dark:text-white/35" />
+            </Link>;
+          })}
+        </div>
       </section>
 
       <section className="card overflow-hidden">

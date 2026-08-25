@@ -178,8 +178,8 @@ function playTone(
 function playScanSuccessChime(context: AudioContext) {
   const now = context.currentTime;
   const notes = [
-    { start: 0, frequency: 494, endFrequency: 586, duration: 0.065, gain: 0.028 },
-    { start: 0.078, frequency: 659, endFrequency: 784, duration: 0.105, gain: 0.042 },
+    { start: 0, frequency: 440, endFrequency: 554, duration: 0.082, gain: 0.07, type: 'triangle' as OscillatorType },
+    { start: 0.092, frequency: 659, endFrequency: 880, duration: 0.15, gain: 0.1, type: 'sine' as OscillatorType },
   ];
 
   notes.forEach((note) => {
@@ -187,7 +187,7 @@ function playScanSuccessChime(context: AudioContext) {
     const gainNode = context.createGain();
     const startAt = now + note.start;
 
-    oscillator.type = 'sine';
+    oscillator.type = note.type;
     oscillator.frequency.setValueAtTime(note.frequency, startAt);
     oscillator.frequency.exponentialRampToValueAtTime(note.endFrequency, startAt + note.duration);
     gainNode.gain.setValueAtTime(0.0001, startAt);

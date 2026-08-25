@@ -4421,6 +4421,8 @@ function ChatWindow({
             && !Object.prototype.hasOwnProperty.call(visibleReactionCounts, pendingReactionReveal?.emoji || '')
           );
           const hasVisibleReactionBadge = visibleReactions.length > 0 || needsLandingPlaceholder;
+          const isSingleReactionBadge = visibleReactions.length + Number(needsLandingPlaceholder) === 1
+            && Object.keys(visibleReactionCounts).length + Number(needsLandingPlaceholder) === 1;
           const hasReplyPreview = Boolean(msg.reply_preview);
           const isBareMessage = content.type === 'image' || (content.type === 'event_reference' && !content.messageText);
           const bubbleSurfaceClass = isBareMessage
@@ -4668,7 +4670,9 @@ function ChatWindow({
                       {hasVisibleReactionBadge && (
                         <div
                           data-message-reaction-bar="true"
-                          className="absolute -bottom-3 -right-1 -mb-2 z-10 flex h-[26px] min-w-[51px] items-center justify-center gap-px rounded-full border border-gray-100 bg-white px-1.5 py-0 shadow-md dark:border-white/[0.1] dark:bg-[#1c1c1e]"
+                          className={`absolute -bottom-3 -right-1 -mb-2 z-10 flex h-[26px] items-center justify-center gap-px rounded-full border border-gray-100 bg-white py-0 shadow-md dark:border-white/[0.1] dark:bg-[#1c1c1e] ${
+                            isSingleReactionBadge ? 'w-[26px] px-0' : 'min-w-[51px] px-1.5'
+                          }`}
                           onClick={e => e.stopPropagation()}
                         >
                           {Object.entries(visibleReactionCounts).map(([emoji, count]) => {

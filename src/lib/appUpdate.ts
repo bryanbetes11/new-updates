@@ -7,8 +7,9 @@ export const APP_VERSION_LABEL = `v${APP_VERSION}`;
 export const APP_UPDATE_PUBLISHED_AT = __APP_PUBLISHED_AT__;
 export const APP_MINIMUM_SUPPORTED_VERSION = __APP_MINIMUM_SUPPORTED_VERSION__;
 export const APP_RELEASE_HEADLINE = __APP_RELEASE_HEADLINE__;
-export const APP_RELEASE_HIGHLIGHTS = __APP_RELEASE_HIGHLIGHTS__.slice(0, 3);
+export const APP_RELEASE_HIGHLIGHTS = __APP_RELEASE_HIGHLIGHTS__.slice(0, 6);
 export const APP_RELEASE_NOTES_SEEN_KEY = 'servesync-release-notes-seen-version';
+export const APP_RELEASE_NOTES_ID = APP_CACHE_VERSION;
 export const APP_DAILY_UPDATE_CHECK_KEY = 'servesync-daily-update-check-date:v1';
 
 function numericVersionParts(version: string) {

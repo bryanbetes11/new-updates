@@ -132,7 +132,7 @@ function normalizeManifest(value: unknown): AppVersionManifest | null {
       ? candidate.releaseHeadline
       : 'A new ServeSync build is ready.',
     releaseHighlights: Array.isArray(candidate.releaseHighlights)
-      ? candidate.releaseHighlights.filter((item): item is string => typeof item === 'string').slice(0, 3)
+      ? candidate.releaseHighlights.filter((item): item is string => typeof item === 'string').slice(0, 6)
       : [],
   };
 }

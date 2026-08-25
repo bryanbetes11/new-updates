@@ -30,6 +30,7 @@ import {
   APP_BUILD_NUMBER,
   APP_RELEASE_HEADLINE,
   APP_RELEASE_HIGHLIGHTS,
+  APP_RELEASE_NOTES_ID,
   APP_RELEASE_NOTES_SEEN_KEY,
   APP_VERSION,
   APP_VERSION_LABEL,
@@ -343,11 +344,11 @@ function ReleaseNotesExperience({ suppressed }: { suppressed: boolean }) {
   useEffect(() => {
     if (!user) return;
     const storage = getBrowserStorage();
-    if (!storage || storage.getItem(APP_RELEASE_NOTES_SEEN_KEY) !== APP_VERSION) setOpen(true);
+    if (!storage || storage.getItem(APP_RELEASE_NOTES_SEEN_KEY) !== APP_RELEASE_NOTES_ID) setOpen(true);
   }, [user]);
 
   const close = () => {
-    getBrowserStorage()?.setItem(APP_RELEASE_NOTES_SEEN_KEY, APP_VERSION);
+    getBrowserStorage()?.setItem(APP_RELEASE_NOTES_SEEN_KEY, APP_RELEASE_NOTES_ID);
     setOpen(false);
   };
 
@@ -402,7 +403,7 @@ function DailyUpdateCheckExperience({ suppressed }: { suppressed: boolean }) {
     if (storage?.getItem(APP_DAILY_UPDATE_CHECK_KEY) === today || attemptedDateRef.current === today) return;
 
     attemptedDateRef.current = today;
-    const releaseNotesSeen = storage?.getItem(APP_RELEASE_NOTES_SEEN_KEY) === APP_VERSION;
+    const releaseNotesSeen = storage?.getItem(APP_RELEASE_NOTES_SEEN_KEY) === APP_RELEASE_NOTES_ID;
     void runDailyCheck(releaseNotesSeen);
   }, [runDailyCheck, user]);
 

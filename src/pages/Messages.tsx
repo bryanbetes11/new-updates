@@ -226,24 +226,24 @@ function MessageActionOverlay({
   }, [open]);
 
   useLayoutEffect(() => {
-    if (!open || !anchorRect) return;
-    const animationFrame = window.requestAnimationFrame(() => {
-      const dialogHeight = dialogRef.current?.getBoundingClientRect().height || 330;
-      const width = Math.min(212, Math.max(196, Math.min(anchorRect.width, viewport.width - (MESSAGE_ACTION_MARGIN * 2))));
-      const menuAnchorBottom = anchorRect.bottom - (anchorRect.menuOverlap || 0);
-      const roomBelow = viewport.height - menuAnchorBottom - MESSAGE_ACTION_MARGIN;
-      const roomAbove = anchorRect.top - MESSAGE_ACTION_MARGIN;
-      const opensAbove = roomBelow < dialogHeight + MESSAGE_ACTION_GAP && roomAbove > roomBelow;
-      const centeredLeft = anchorRect.left + ((anchorRect.width - width) / 2) - (opensAbove ? 0 : (anchorRect.horizontalNudge || 0));
-      const left = clampToViewport(centeredLeft, MESSAGE_ACTION_MARGIN, viewport.width - width - MESSAGE_ACTION_MARGIN);
-      const preferredTop = opensAbove
-        ? anchorRect.top - dialogHeight - MESSAGE_ACTION_GAP
-        : menuAnchorBottom + MESSAGE_ACTION_GAP;
-      const top = clampToViewport(preferredTop, MESSAGE_ACTION_MARGIN, viewport.height - dialogHeight - MESSAGE_ACTION_MARGIN);
-      const pointerLeft = clampToViewport((anchorRect.left + (anchorRect.width / 2)) - left, 28, width - 28);
-      setPlacement({ left, top, width, opensAbove, pointerLeft });
-    });
-    return () => window.cancelAnimationFrame(animationFrame);
+    if (!open || !anchorRect) {
+      setPlacement(null);
+      return;
+    }
+    const dialogHeight = dialogRef.current?.getBoundingClientRect().height || 330;
+    const width = Math.min(212, Math.max(196, Math.min(anchorRect.width, viewport.width - (MESSAGE_ACTION_MARGIN * 2))));
+    const menuAnchorBottom = anchorRect.bottom - (anchorRect.menuOverlap || 0);
+    const roomBelow = viewport.height - menuAnchorBottom - MESSAGE_ACTION_MARGIN;
+    const roomAbove = anchorRect.top - MESSAGE_ACTION_MARGIN;
+    const opensAbove = roomBelow < dialogHeight + MESSAGE_ACTION_GAP && roomAbove > roomBelow;
+    const centeredLeft = anchorRect.left + ((anchorRect.width - width) / 2) - (opensAbove ? 0 : (anchorRect.horizontalNudge || 0));
+    const left = clampToViewport(centeredLeft, MESSAGE_ACTION_MARGIN, viewport.width - width - MESSAGE_ACTION_MARGIN);
+    const preferredTop = opensAbove
+      ? anchorRect.top - dialogHeight - MESSAGE_ACTION_GAP
+      : menuAnchorBottom + MESSAGE_ACTION_GAP;
+    const top = clampToViewport(preferredTop, MESSAGE_ACTION_MARGIN, viewport.height - dialogHeight - MESSAGE_ACTION_MARGIN);
+    const pointerLeft = clampToViewport((anchorRect.left + (anchorRect.width / 2)) - left, 28, width - 28);
+    setPlacement({ left, top, width, opensAbove, pointerLeft });
   }, [anchorRect, canCopy, isMine, open, viewport]);
 
   if (!open || !anchorRect) return null;
@@ -301,14 +301,14 @@ function MessageActionOverlay({
           <motion.div
             initial="closed"
             animate="open"
-            variants={{ open: { transition: { delayChildren: 0.06, staggerChildren: 0.045 } }, closed: {} }}
+            variants={{ open: { transition: { delayChildren: 0.04, staggerChildren: 0.025 } }, closed: {} }}
             className="flex flex-col gap-0.5 px-5 py-2.5"
           >
-            <motion.button variants={{ closed: { opacity: 0, y: 8 }, open: { opacity: 1, y: 0 } }} type="button" onClick={onReply} className={actionClass}><CornerUpLeft className="h-4 w-4 text-emerald-300" /> Reply</motion.button>
-            <motion.button variants={{ closed: { opacity: 0, y: 8 }, open: { opacity: 1, y: 0 } }} type="button" onClick={onReact} className={actionClass}><span className="text-[15px] leading-none">😊</span> React</motion.button>
-            {canCopy && <motion.button variants={{ closed: { opacity: 0, y: 8 }, open: { opacity: 1, y: 0 } }} type="button" onClick={onCopy} className={actionClass}><Copy className="h-4 w-4 text-sky-300" /> Copy</motion.button>}
-            <motion.button variants={{ closed: { opacity: 0, y: 8 }, open: { opacity: 1, y: 0 } }} type="button" onClick={onTogglePin} className={actionClass}><Pin className="h-4 w-4 text-amber-300" /> {isPinned ? 'Unpin' : 'Pin'}</motion.button>
-            {isMine && <motion.button variants={{ closed: { opacity: 0, y: 8 }, open: { opacity: 1, y: 0 } }} type="button" onClick={onDelete} className={`${actionClass} text-red-300 hover:bg-red-500/10`}><Trash2 className="h-4 w-4" /> Delete message</motion.button>}
+            <motion.button variants={{ closed: { opacity: 0, y: 9, scale: 0.96 }, open: { opacity: 1, y: 0, scale: 1 } }} type="button" onClick={onReply} className={actionClass}><CornerUpLeft className="h-4 w-4 text-emerald-300" /> Reply</motion.button>
+            <motion.button variants={{ closed: { opacity: 0, y: 9, scale: 0.96 }, open: { opacity: 1, y: 0, scale: 1 } }} type="button" onClick={onReact} className={actionClass}><span className="text-[15px] leading-none">😊</span> React</motion.button>
+            {canCopy && <motion.button variants={{ closed: { opacity: 0, y: 9, scale: 0.96 }, open: { opacity: 1, y: 0, scale: 1 } }} type="button" onClick={onCopy} className={actionClass}><Copy className="h-4 w-4 text-sky-300" /> Copy</motion.button>}
+            <motion.button variants={{ closed: { opacity: 0, y: 9, scale: 0.96 }, open: { opacity: 1, y: 0, scale: 1 } }} type="button" onClick={onTogglePin} className={actionClass}><Pin className="h-4 w-4 text-amber-300" /> {isPinned ? 'Unpin' : 'Pin'}</motion.button>
+            {isMine && <motion.button variants={{ closed: { opacity: 0, y: 9, scale: 0.96 }, open: { opacity: 1, y: 0, scale: 1 } }} type="button" onClick={onDelete} className={`${actionClass} text-red-300 hover:bg-red-500/10`}><Trash2 className="h-4 w-4" /> Delete message</motion.button>}
           </motion.div>
         </motion.div>
       </div>
@@ -643,18 +643,27 @@ function EmojiPicker({ onPick }: { onPick: (emoji: string, sourceElement: HTMLEl
   const prefersReducedMotion = useReducedMotion();
 
   return (
-    <div data-app-nonselect="true" className="grid w-full grid-cols-7 gap-1 rounded-[1.3rem] border border-gray-200/80 bg-white p-2 shadow-[0_24px_70px_-24px_rgba(0,0,0,0.72),0_0_32px_-18px_rgba(52,211,153,0.7)] ring-1 ring-emerald-400/10 dark:border-white/[0.10] dark:bg-[#18181b] dark:ring-emerald-300/10">
-      {QUICK_REACTIONS.map((reaction, index) => (
+    <motion.div
+      data-app-nonselect="true"
+      initial={prefersReducedMotion ? false : 'closed'}
+      animate="open"
+      variants={{
+        closed: {},
+        open: { transition: { delayChildren: 0.04, staggerChildren: 0.025 } },
+      }}
+      className="grid w-full grid-cols-7 gap-1 rounded-[1.3rem] border border-gray-200/80 bg-white p-2 shadow-[0_24px_70px_-24px_rgba(0,0,0,0.72),0_0_32px_-18px_rgba(52,211,153,0.7)] ring-1 ring-emerald-400/10 dark:border-white/[0.10] dark:bg-[#18181b] dark:ring-emerald-300/10"
+    >
+      {QUICK_REACTIONS.map(reaction => (
         <motion.button
           key={reaction.emoji}
           type="button"
           onClick={event => onPick(reaction.emoji, event.currentTarget)}
           aria-label={`React with ${reaction.label}`}
-          initial={prefersReducedMotion ? false : { opacity: 0, y: -8, scale: 0.82 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={prefersReducedMotion
-            ? { duration: 0.1 }
-            : { type: 'spring', stiffness: 590, damping: 30, mass: 0.48, delay: index * 0.025 }}
+          variants={prefersReducedMotion ? undefined : {
+            closed: { opacity: 0, y: -10, scale: 0.76 },
+            open: { opacity: 1, y: 0, scale: 1 },
+          }}
+          transition={prefersReducedMotion ? { duration: 0.1 } : { type: 'spring', stiffness: 590, damping: 30, mass: 0.48 }}
           whileHover={{ y: -4, scale: 1.1 }}
           whileTap={{ scale: 0.9 }}
           className="group/reaction flex min-w-0 flex-col items-center gap-1 rounded-xl py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70"
@@ -668,7 +677,7 @@ function EmojiPicker({ onPick }: { onPick: (emoji: string, sourceElement: HTMLEl
           <span className="truncate text-[8px] font-bold tracking-[-0.01em] text-gray-400 dark:text-white/38 sm:text-[9px]">{reaction.label}</span>
         </motion.button>
       ))}
-    </div>
+    </motion.div>
   );
 }
 
@@ -688,7 +697,11 @@ function EmojiReactionPopover({
   const popoverRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
   const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
-  const [style, setStyle] = useState<{ left: number; top: number; width: number; opacity: number; transformOrigin: string } | null>(null);
+  const [style, setStyle] = useState<{ key: string; left: number; top: number; width: number; opacity: number; transformOrigin: string } | null>(null);
+  const anchorKey = anchorRect
+    ? [anchorRect.left, anchorRect.top, anchorRect.right, anchorRect.bottom, boundaryTop, viewport.width, viewport.height].join(':')
+    : '';
+  const positionedStyle = style?.key === anchorKey ? style : null;
 
   useEffect(() => {
     if (!open) return;
@@ -705,23 +718,24 @@ function EmojiReactionPopover({
   }, [onClose, open]);
 
   useLayoutEffect(() => {
-    if (!open || !anchorRect) return;
-    const animationFrame = window.requestAnimationFrame(() => {
-      const popover = popoverRef.current?.getBoundingClientRect();
-      const width = Math.min(390, viewport.width - 24);
-      const height = popover?.height || 70;
-      const lowerTopBound = Math.max(12, boundaryTop + 8);
-      const roomAbove = anchorRect.top - lowerTopBound;
-      const roomBelow = viewport.height - anchorRect.bottom - 12;
-      const opensAbove = roomAbove >= height + 10 || roomBelow < height + 10;
-      const preferredTop = opensAbove ? anchorRect.top - height - 10 : anchorRect.bottom + 10;
-      const top = clampToViewport(preferredTop, lowerTopBound, viewport.height - height - 12);
-      const centeredLeft = anchorRect.left + ((anchorRect.width - width) / 2);
-      const left = clampToViewport(centeredLeft, 12, viewport.width - width - 12);
-      setStyle({ left, top, width, opacity: 1, transformOrigin: opensAbove ? 'bottom center' : 'top center' });
-    });
-    return () => window.cancelAnimationFrame(animationFrame);
-  }, [anchorRect, boundaryTop, open, viewport]);
+    if (!open || !anchorRect) {
+      setStyle(null);
+      return;
+    }
+    if (style?.key === anchorKey) return;
+    const popover = popoverRef.current?.getBoundingClientRect();
+    const width = Math.min(390, viewport.width - 24);
+    const height = popover?.height || 70;
+    const lowerTopBound = Math.max(12, boundaryTop + 8);
+    const roomAbove = anchorRect.top - lowerTopBound;
+    const roomBelow = viewport.height - anchorRect.bottom - 12;
+    const opensAbove = roomAbove >= height + 10 || roomBelow < height + 10;
+    const preferredTop = opensAbove ? anchorRect.top - height - 10 : anchorRect.bottom + 10;
+    const top = clampToViewport(preferredTop, lowerTopBound, viewport.height - height - 12);
+    const centeredLeft = anchorRect.left + ((anchorRect.width - width) / 2);
+    const left = clampToViewport(centeredLeft, 12, viewport.width - width - 12);
+    setStyle({ key: anchorKey, left, top, width, opacity: 1, transformOrigin: opensAbove ? 'bottom center' : 'top center' });
+  }, [anchorKey, anchorRect, boundaryTop, open, style?.key, viewport.height, viewport.width]);
 
   if (!open || !anchorRect) return null;
 
@@ -731,6 +745,21 @@ function EmojiReactionPopover({
     right: clampToViewport(anchorRect.right + 7, 0, viewport.width),
     bottom: clampToViewport(anchorRect.bottom + 7, 0, viewport.height),
   };
+
+  if (!positionedStyle) {
+    return createPortal(
+      <div
+        ref={popoverRef}
+        aria-hidden="true"
+        className="pointer-events-none fixed invisible"
+        style={{ left: 12, top: anchorRect.bottom + 10, width: Math.min(390, viewport.width - 24) }}
+      >
+        <EmojiPicker onPick={onPick} />
+      </div>,
+      document.body,
+    );
+  }
+
   return createPortal(
     <div className="pointer-events-none fixed inset-0 z-[2147483647]" role="presentation" data-app-nonselect="true">
       <div aria-hidden="true" onClick={onClose} className={MESSAGE_FOCUS_BACKDROP_CLASS} style={{ inset: '0 0 auto 0', height: focusArea.top }} />
@@ -744,17 +773,16 @@ function EmojiReactionPopover({
         style={{ left: focusArea.left, top: focusArea.top, width: focusArea.right - focusArea.left, height: focusArea.bottom - focusArea.top }}
       />
       <motion.div
-        ref={popoverRef}
         initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.94, y: 8 }}
         animate={prefersReducedMotion
-          ? { opacity: style?.opacity ?? 0 }
-          : { opacity: style?.opacity ?? 0, scale: style ? 1 : 0.94, y: style ? 0 : 8 }}
+          ? { opacity: positionedStyle.opacity }
+          : { opacity: positionedStyle.opacity, scale: 1, y: 0 }}
         exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: 4 }}
         transition={prefersReducedMotion
           ? { duration: 0.12 }
           : { type: 'spring', stiffness: 510, damping: 35, mass: 0.68 }}
         className="pointer-events-auto fixed"
-        style={style || { left: 12, top: anchorRect.bottom + 10, width: Math.min(390, viewport.width - 24), opacity: 0, transformOrigin: 'top center' }}
+        style={positionedStyle}
         onClick={event => event.stopPropagation()}
       >
         <EmojiPicker onPick={onPick} />
@@ -4384,6 +4412,7 @@ function ChatWindow({
             isAwaitingReactionLanding
             && !Object.prototype.hasOwnProperty.call(visibleReactionCounts, pendingReactionReveal?.emoji || '')
           );
+          const hasVisibleReactionBadge = visibleReactions.length > 0 || needsLandingPlaceholder;
           const hasReplyPreview = Boolean(msg.reply_preview);
           const isBareMessage = content.type === 'image' || (content.type === 'event_reference' && !content.messageText);
           const bubbleSurfaceClass = isBareMessage
@@ -4627,7 +4656,7 @@ function ChatWindow({
                       </div>
 
                       {/* Reactions — sitting just below the bubble's bottom-right corner */}
-                      {(visibleReactions.length > 0 || needsLandingPlaceholder) && (
+                      {hasVisibleReactionBadge && (
                         <div
                           data-message-reaction-bar="true"
                           className="absolute -bottom-3 -right-1 -mb-2 z-10 flex h-[26px] min-w-[51px] items-center justify-center gap-px rounded-full border border-gray-100 bg-white px-1.5 py-0 shadow-md dark:border-white/[0.1] dark:bg-[#1c1c1e]"
@@ -4733,7 +4762,7 @@ function ChatWindow({
                     event.stopPropagation();
                     setSeenDetailsMessageId(msg.id);
                   }}
-                  className={`flex items-center gap-1.5 mt-2 rounded-full transition-opacity active:opacity-70 ${isMe ? 'ml-auto mr-1.5 justify-end' : 'ml-8 justify-start'}`}
+                  className={`flex items-center gap-1.5 mt-2 rounded-full transition-[margin,opacity] active:opacity-70 ${isMe ? `ml-auto justify-end ${hasVisibleReactionBadge ? 'mr-16' : 'mr-1.5'}` : 'ml-8 justify-start'}`}
                   aria-label={`Show seen details for ${displaySeers.length} ${displaySeers.length === 1 ? 'person' : 'people'}`}
                 >
                   {displaySeers.map(seer => {

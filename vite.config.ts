@@ -27,7 +27,25 @@ function getGitBuildId() {
 
 function getGitBuildNumber() {
   try {
-    return Number.parseInt(execFileSync('git', ['rev-list', '--count', 'HEAD'], {
+    const isShallow = execFileSync('git', ['rev-parse', '--is-shallow-repository'], {
+      cwd: __dirname,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim() === 'true';
+
+    if (!isShallow) {
+      const commitCount = Number.parseInt(execFileSync('git', ['rev-list', '--count', 'HEAD'], {
+        cwd: __dirname,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim(), 10);
+      if (commitCount > 0) return commitCount;
+    }
+
+    // Deployment providers commonly use shallow clones, where rev-list can
+    // return the same count for every build. The commit timestamp remains
+    // available and changes monotonically with normal main-branch releases.
+    return Number.parseInt(execFileSync('git', ['show', '-s', '--format=%ct', 'HEAD'], {
       cwd: __dirname,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
@@ -37,15 +55,47 @@ function getGitBuildNumber() {
   }
 }
 
+function humanizeReleaseHighlight(subject: string) {
+  const cleaned = subject
+    .replace(/^(feat|fix|refactor|perf|style|chore)(\([^)]*\))?!?:\s*/i, '')
+    .trim()
+    .replace(/[.!?]+$/, '');
+  return cleaned ? `${cleaned.charAt(0).toUpperCase()}${cleaned.slice(1)}.` : '';
+}
+
+function getGitReleaseHighlight() {
+  try {
+    const subject = execFileSync('git', ['show', '-s', '--format=%s', 'HEAD'], {
+      cwd: __dirname,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    return humanizeReleaseHighlight(subject);
+  } catch {
+    return '';
+  }
+}
+
 const appBuildId = (
   process.env.SERVESYNC_BUILD_ID
   || process.env.VERCEL_GIT_COMMIT_SHA
   || process.env.COMMIT_REF
   || getGitBuildId()
 ).slice(0, 12);
-const appBuildNumber = Number.parseInt(process.env.SERVESYNC_BUILD_NUMBER || '', 10) || getGitBuildNumber();
 const appPublishedAt = process.env.SERVESYNC_PUBLISHED_AT || new Date().toISOString();
+const appBuildNumber = Number.parseInt(process.env.SERVESYNC_BUILD_NUMBER || '', 10)
+  || getGitBuildNumber()
+  || Math.floor(new Date(appPublishedAt).getTime() / 1000);
 const minimumSupportedVersion = process.env.SERVESYNC_MINIMUM_VERSION || '0.0.0';
+const latestReleaseHighlight = humanizeReleaseHighlight(
+  process.env.SERVESYNC_RELEASE_HIGHLIGHT
+  || process.env.VERCEL_GIT_COMMIT_MESSAGE
+  || process.env.COMMIT_MESSAGE
+  || getGitReleaseHighlight(),
+);
+const appReleaseHighlights = [latestReleaseHighlight, ...releaseNotes.highlights]
+  .filter((item, index, items) => item && items.indexOf(item) === index)
+  .slice(0, 6);
 
 const versionManifest = {
   version: appVersion,
@@ -55,7 +105,7 @@ const versionManifest = {
   publishedAt: appPublishedAt,
   minimumSupportedVersion,
   releaseHeadline: releaseNotes.headline,
-  releaseHighlights: releaseNotes.highlights.slice(0, 3),
+  releaseHighlights: appReleaseHighlights,
 };
 
 // https://vitejs.dev/config/
@@ -80,7 +130,7 @@ export default defineConfig({
     __APP_PUBLISHED_AT__: JSON.stringify(appPublishedAt),
     __APP_MINIMUM_SUPPORTED_VERSION__: JSON.stringify(minimumSupportedVersion),
     __APP_RELEASE_HEADLINE__: JSON.stringify(releaseNotes.headline),
-    __APP_RELEASE_HIGHLIGHTS__: JSON.stringify(releaseNotes.highlights.slice(0, 3)),
+    __APP_RELEASE_HIGHLIGHTS__: JSON.stringify(appReleaseHighlights),
   },
   resolve: {
     alias: [

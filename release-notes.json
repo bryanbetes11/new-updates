@@ -1,8 +1,10 @@
 {
-  "headline": "A smoother, clearer team experience.",
+  "headline": "Clearer setlists, richer songs, and more expressive conversations.",
   "highlights": [
-    "Chat reactions, message groups, and long-press actions feel steadier across phones and desktops.",
-    "Mentions are clearer while you compose, so you can tell when someone will be notified.",
-    "Events now use a more compact layout that is easier to scan on both mobile and desktop."
+    "Messages, announcements, and revision discussions now share polished reactions with smoother mobile motion.",
+    "Quoted replies, mentions, and comment controls are clearer and easier to use across phones and desktops.",
+    "Setlist reviews now flag duplicate song proposals and make earlier proposals easier to inspect.",
+    "Song selection can preview saved lyrics or chord-chart text without stretching the setup modal.",
+    "Song title edits, admin chart imports, and responsive review dialogs are more reliable."
   ]
 }

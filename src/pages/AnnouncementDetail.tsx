@@ -116,6 +116,7 @@ function CommentItem({
   onReactionFlightComplete: (flight: CommentReactionFlight) => void;
   isReply?: boolean;
 }) {
+  const prefersReducedMotion = useReducedMotion();
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const swipeRef = useRef<SwipeState>({ startX: 0, currentX: 0, swiping: false });
@@ -359,7 +360,10 @@ function CommentItem({
             transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
             className="absolute right-3 top-14 z-40 origin-top-right"
           >
-            <EmojiReactionPicker onPick={(emoji, event) => onReact(comment, emoji, event.currentTarget)} />
+            <EmojiReactionPicker
+              animateEntrance={!prefersReducedMotion}
+              onPick={(emoji, event) => onReact(comment, emoji, event.currentTarget)}
+            />
           </motion.div>
         )}
       </AnimatePresence>

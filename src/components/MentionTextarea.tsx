@@ -22,6 +22,7 @@ interface MentionTextareaProps {
   onChange: (value: string) => void;
   placeholder?: string;
   className?: string;
+  overlayClassName?: string;
   style?: React.CSSProperties;
   rows?: number;
   onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
@@ -34,7 +35,7 @@ interface MentionTextareaProps {
   maxLength?: number;
 }
 
-function MentionTextOverlay({ text, profiles }: { text: string; profiles: Profile[] }) {
+function MentionTextOverlay({ text, profiles, className }: { text: string; profiles: Profile[]; className?: string }) {
   const mentionDisplays = profiles
     .flatMap(profile => {
       const handle = profile.mentionHandle ?? `${profile.first_name} ${profile.last_name}`.trim().replace(/\s+/g, '_');
@@ -45,7 +46,7 @@ function MentionTextOverlay({ text, profiles }: { text: string; profiles: Profil
   const parts = escaped.length > 0 ? text.split(new RegExp(`(${escaped.join('|')})`, 'gi')) : [text];
 
   return (
-    <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-[1] overflow-hidden px-3.5 py-2.5 text-base leading-6 whitespace-pre-wrap break-words">
+    <div aria-hidden="true" className={`pointer-events-none absolute inset-0 z-[1] overflow-hidden whitespace-pre-wrap break-words ${className || 'px-3.5 py-2.5 text-base leading-6'}`}>
       {parts.map((part, index) => {
         const isMention = mentionDisplays.some(display => display.toLowerCase() === part.toLowerCase());
         return isMention
@@ -61,6 +62,7 @@ export function MentionTextarea({
   onChange,
   placeholder,
   className = '',
+  overlayClassName,
   style,
   rows = 1,
   onKeyDown,
@@ -274,7 +276,7 @@ export function MentionTextarea({
 
   return (
     <div className="relative min-w-0 flex-1 self-stretch rounded-xl bg-white dark:bg-[#252428]">
-      {value && <MentionTextOverlay text={value} profiles={profiles} />}
+      {value && <MentionTextOverlay text={value} profiles={profiles} className={overlayClassName} />}
       <textarea
         ref={ref}
         value={value}

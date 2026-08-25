@@ -603,13 +603,31 @@ export function Announcements() {
                           animate={{ height: 'auto', opacity: 1 }}
                           exit={{ height: 0, opacity: 0 }}
                           transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                          className="overflow-hidden border-t border-[#1ed760]/15 bg-[#1ed760]/[0.035]"
+                          className="overflow-hidden border-t border-[#1ed760]/15 bg-[#1ed760]/[0.035] sm:hidden"
                         >
-                          <div className="flex px-3 py-2 sm:px-4">
+                          <div className="flex px-3 py-2">
                             <EmojiReactionPicker
+                              animateEntrance={!prefersReducedMotion}
                               onPick={(emoji: ReactionEmoji, event) => void handleReact(a.id, emoji, event.currentTarget)}
                             />
                           </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    <AnimatePresence initial={false}>
+                      {emojiPickerId === a.id && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.94, y: 6 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.96, y: 4 }}
+                          transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                          className="absolute bottom-[3.25rem] left-3 z-40 hidden origin-bottom-left sm:block"
+                        >
+                          <EmojiReactionPicker
+                            animateEntrance={!prefersReducedMotion}
+                            onPick={(emoji: ReactionEmoji, event) => void handleReact(a.id, emoji, event.currentTarget)}
+                          />
                         </motion.div>
                       )}
                     </AnimatePresence>

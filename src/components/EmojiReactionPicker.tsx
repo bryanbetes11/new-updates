@@ -16,9 +16,11 @@ export type ReactionEmoji = (typeof REACTION_OPTIONS)[number]['emoji'];
 export function EmojiReactionPicker({
   onPick,
   className = '',
+  animateEntrance = false,
 }: {
   onPick: (emoji: ReactionEmoji, event: MouseEvent<HTMLButtonElement>) => void;
   className?: string;
+  animateEntrance?: boolean;
 }) {
   return (
     <div
@@ -26,10 +28,15 @@ export function EmojiReactionPicker({
       role="menu"
       aria-label="Choose a reaction"
     >
-      {REACTION_OPTIONS.map(option => (
+      {REACTION_OPTIONS.map((option, index) => (
         <motion.button
           key={option.emoji}
           type="button"
+          initial={animateEntrance ? { opacity: 0, y: -8, scale: 0.82 } : false}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={animateEntrance
+            ? { delay: index * 0.025, duration: 0.18, ease: [0.16, 1, 0.3, 1] }
+            : undefined}
           whileHover={{ y: -2, scale: 1.05 }}
           whileTap={{ scale: 0.92 }}
           onClick={event => onPick(option.emoji, event)}

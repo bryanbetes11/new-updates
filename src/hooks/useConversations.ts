@@ -29,6 +29,8 @@ export interface Conversation {
   name: string | null;
   photo_url: string | null;
   event_id: string | null;
+  event_date: string | null;
+  event_type: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -70,10 +72,34 @@ export function useConversations() {
 
       const result: Conversation[] = ((data || []) as ConversationRpcRow[]).map((conversation) => ({
         ...conversation,
+        event_date: null,
+        event_type: null,
         members: Array.isArray(conversation.members) ? conversation.members : [],
         last_message: conversation.last_message ?? null,
         unread_count: Number(conversation.unread_count) || 0,
       }));
+
+      const eventIds = [...new Set(result.flatMap(conversation => conversation.event_id ? [conversation.event_id] : []))];
+      if (eventIds.length > 0) {
+        const { data: eventRows, error: eventError } = await withRequestTimeout(
+          supabase.from('events').select('id, event_date, event_type').in('id', eventIds),
+          { data: [], error: null, count: null, status: 200, statusText: 'OK' },
+          'Conversation event dates',
+        );
+
+        if (eventError) {
+          console.error('Fetch conversation event dates error:', eventError);
+        } else {
+          const eventDates = new Map(
+            ((eventRows || []) as Array<{ id: string; event_date: string | null; event_type: string | null }>).map(event => [event.id, event]),
+          );
+          result.forEach(conversation => {
+            const event = conversation.event_id ? eventDates.get(conversation.event_id) : null;
+            conversation.event_date = event?.event_date ?? null;
+            conversation.event_type = event?.event_type ?? null;
+          });
+        }
+      }
       result.sort((a, b) => {
         const aActivity = Math.max(Date.parse(a.updated_at), Date.parse(a.last_message?.created_at ?? a.created_at));
         const bActivity = Math.max(Date.parse(b.updated_at), Date.parse(b.last_message?.created_at ?? b.created_at));

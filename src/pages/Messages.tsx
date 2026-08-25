@@ -371,6 +371,20 @@ function renderMessageText(text: string, isMe: boolean) {
   });
 }
 
+function getConversationListName(conv: Conversation, myId: string): string {
+  const name = getConvName(conv, myId);
+  if (conv.type !== 'event') return name;
+
+  const adminTestPrefix = name.startsWith('[Admin Test] ') ? '[Admin Test] ' : '';
+  const baseName = adminTestPrefix ? name.slice(adminTestPrefix.length) : name;
+  const parts = baseName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return name;
+
+  const hasHonorific = /^(sis|bro|ptr|pastor)\.?$/i.test(parts[0]);
+  const shortenedName = hasHonorific ? `${parts[0]} ${parts[1]}` : parts[0];
+  return `${adminTestPrefix}${shortenedName}`;
+}
+
 function InlineSongReference({ reference, eventSongs, isMe }: {
   reference: ChatEventReference;
   eventSongs: EventDiscussionDetails['songs'];
@@ -636,11 +650,11 @@ function EmojiPicker({ onPick }: { onPick: (emoji: string, sourceElement: HTMLEl
           type="button"
           onClick={event => onPick(reaction.emoji, event.currentTarget)}
           aria-label={`React with ${reaction.label}`}
-          initial={prefersReducedMotion ? false : { opacity: 0, y: 5, scale: 0.78 }}
+          initial={prefersReducedMotion ? false : { opacity: 0, y: -8, scale: 0.82 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={prefersReducedMotion
             ? { duration: 0.1 }
-            : { type: 'spring', stiffness: 590, damping: 30, mass: 0.48, delay: 0.045 + (index * 0.022) }}
+            : { type: 'spring', stiffness: 590, damping: 30, mass: 0.48, delay: index * 0.025 }}
           whileHover={{ y: -4, scale: 1.1 }}
           whileTap={{ scale: 0.9 }}
           className="group/reaction flex min-w-0 flex-col items-center gap-1 rounded-xl py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70"
@@ -790,7 +804,7 @@ type EventConversationArtworkSongRow = {
 
 const eventConversationArtworkCache = new Map<string, EventConversationArtworkData>();
 
-function EventConversationAvatar({ eventId, name }: { eventId: string; name: string }) {
+function EventConversationAvatar({ eventId, name, className = 'h-10 w-10 rounded-full' }: { eventId: string; name: string; className?: string }) {
   const [artwork, setArtwork] = useState<EventConversationArtworkData | null>(
     () => eventConversationArtworkCache.get(eventId) ?? null,
   );
@@ -841,7 +855,7 @@ function EventConversationAvatar({ eventId, name }: { eventId: string; name: str
       eventType={artwork?.eventType}
       title={artwork?.title ?? name}
       songs={artwork?.songs ?? []}
-      className="h-10 w-10 rounded-full"
+      className={className}
     />
   );
 }
@@ -864,6 +878,10 @@ function ConvItem({ conv, selected, myUserId, draft, onSelect, onLongPress }: {
     }, 520);
   };
   const name = getConvName(conv, myUserId);
+  const listName = getConversationListName(conv, myUserId);
+  const eventDateLabel = conv.type === 'event' && conv.event_date
+    ? format(parseISO(conv.event_date), 'MMM d')
+    : null;
   const lastContent = conv.last_message ? previewContent(conv.last_message.content) : 'No messages yet';
   const isMyLast = conv.last_message?.sender_id === myUserId;
   const avatarName = getConversationAvatarName(conv, myUserId);
@@ -913,11 +931,16 @@ function ConvItem({ conv, selected, myUserId, draft, onSelect, onLongPress }: {
         )}
       </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between gap-2 mb-0.5">
-          <span className={`text-[13px] truncate ${conv.unread_count > 0 ? 'font-bold text-gray-900 dark:text-white' : 'font-semibold text-gray-800 dark:text-white/80'}`}>
-            {name}
+        <div className="mb-0.5 flex items-center justify-between gap-2">
+          <span className={`flex min-w-0 items-center gap-1.5 text-[13px] ${conv.unread_count > 0 ? 'font-bold text-gray-900 dark:text-white' : 'font-semibold text-gray-800 dark:text-white/80'}`}>
+            <span className="truncate">{listName}</span>
+            {eventDateLabel && (
+              <span className="min-w-0 truncate font-medium text-inherit" aria-label={`Event date ${eventDateLabel}${conv.event_type ? `, ${conv.event_type}` : ''}`}>
+                <span aria-hidden="true">|</span> {eventDateLabel}{conv.event_type ? ` · ${conv.event_type}` : ''}
+              </span>
+            )}
           </span>
-          {conv.last_message && (
+          {conv.last_message && !eventDateLabel && (
             <span className="text-[11px] text-gray-400 dark:text-white/30 shrink-0">
               {formatConvTime(conv.last_message.created_at)}
             </span>
@@ -2120,6 +2143,7 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
               rows={1}
               style={{ resize: 'none', maxHeight: '132px' }}
               className="flex-1 px-3.5 py-2 text-[15px] sm:text-[14px] bg-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/25 outline-none leading-relaxed overflow-y-auto"
+              overlayClassName="px-3.5 py-2 text-[15px] leading-relaxed sm:text-[14px]"
             />
           )}
         </div>
@@ -3693,7 +3717,10 @@ function ChatWindow({
   } = useMessages(conv.id);
   const typingLabel = formatTypingUsers(typingUsers);
 
-  const convName = getConvName(conv, myUserId);
+  const headerName = getConversationListName(conv, myUserId);
+  const headerEventMeta = conv.type === 'event' && conv.event_date
+    ? `${format(parseISO(conv.event_date), 'MMM d')}${conv.event_type ? ` · ${conv.event_type}` : ''}`
+    : null;
   const mentionProfiles = useMemo(
     () => [
       {
@@ -4213,29 +4240,38 @@ function ChatWindow({
           >
             <ArrowLeft className="h-4.5 w-4.5" style={{ width: '18px', height: '18px' }} />
           </button>
-          <Avatar
-            src={getConversationAvatarSrc(conv, myUserId)}
-            firstName={avatarName.firstName}
-            lastName={avatarName.lastName}
-            size="sm"
-          />
+          {conv.type === 'event' && conv.event_id ? (
+            <EventConversationAvatar eventId={conv.event_id} name={headerName} className="h-8 w-8 rounded-full" />
+          ) : (
+            <Avatar
+              src={getConversationAvatarSrc(conv, myUserId)}
+              firstName={avatarName.firstName}
+              lastName={avatarName.lastName}
+              size="sm"
+            />
+          )}
           <button
             onClick={() => setShowInfo(true)}
             className="flex-1 min-w-0 text-left group"
           >
-            <div className="flex items-center gap-1">
-              <p className="text-[14px] font-bold text-gray-900 dark:text-white truncate leading-tight group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{convName}</p>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <p className="truncate text-[14px] font-bold leading-tight text-gray-900 transition-colors group-hover:text-emerald-600 dark:text-white dark:group-hover:text-emerald-400">{headerName}</p>
+              {headerEventMeta && (
+                <span className="min-w-0 truncate text-[14px] font-medium leading-tight text-inherit">
+                  <span aria-hidden="true">|</span> {headerEventMeta}
+                </span>
+              )}
               <ChevronRight className="h-3.5 w-3.5 text-gray-300 dark:text-white/20 group-hover:text-emerald-500 transition-colors shrink-0" />
             </div>
             {typingUsers.length > 0 ? (
               <p className="text-[11px] text-emerald-500 dark:text-emerald-400 leading-tight">
                 {typingLabel}...
               </p>
-            ) : (
+            ) : conv.type !== 'event' ? (
               <p className="text-[11px] text-gray-400 dark:text-white/30 leading-tight">
                 {conv.members.length} {conv.members.length === 1 ? 'member' : 'members'}
               </p>
-            )}
+            ) : null}
           </button>
           {conv.type === 'event' && conv.event_id && (
             <button
@@ -4499,7 +4535,7 @@ function ChatWindow({
                           <button
                             type="button"
                             aria-label={`Go to original message from ${msg.reply_preview.sender_name}`}
-                            className={`block w-full min-w-0 rounded-[14px] px-3 py-2 text-left text-[12px] leading-snug transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 ${
+                            className={`relative z-[1] block w-full min-w-0 rounded-[14px] px-3 py-2 text-left text-[12px] leading-snug transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 ${
                               isMe
                                 ? 'bg-emerald-500/12 text-emerald-950/55 hover:bg-emerald-500/18 dark:bg-emerald-400/10 dark:text-white/50 dark:hover:bg-emerald-400/15'
                                 : 'bg-gray-200/85 text-gray-500 hover:bg-gray-200 dark:bg-white/[0.10] dark:text-white/[0.64] dark:hover:bg-white/[0.13]'
@@ -4521,9 +4557,17 @@ function ChatWindow({
                               {replyPreviewContent(msg.reply_preview.content)}
                             </span>
                           </button>
+                          <div
+                            aria-hidden="true"
+                            className={`pointer-events-none absolute bottom-0 z-0 h-4 rounded-b-[12px] ${
+                              isMe
+                                ? 'left-3 right-1 bg-emerald-500/12 dark:bg-emerald-400/10'
+                                : 'left-1 right-3 bg-gray-200/85 dark:bg-white/[0.10]'
+                            }`}
+                          />
                         </div>
                       )}
-                      <div className={hasReplyPreview ? `relative z-[1] -mt-2 ${bubbleSurfaceClass} ${msg.is_pinned ? 'ring-1 ring-amber-400/50' : ''}` : ''}>
+                      <div className={hasReplyPreview ? `relative z-[1] -mt-4 ${bubbleSurfaceClass} ${!isMe && !isBareMessage ? 'dark:!bg-[#222224]' : ''} ${msg.is_pinned ? 'ring-1 ring-amber-400/50' : ''}` : ''}>
                       {content.type === 'image' ? (
                         <img
                           src={content.url}

@@ -3,8 +3,8 @@ import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { addDays, format, parseISO, differenceInDays } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
-import { animate, motion, useMotionValue, AnimatePresence, type PanInfo } from 'framer-motion';
-import { ArrowLeft, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, ListOrdered, Pause, Play, Settings2, MoreHorizontal, Upload, Calendar, Loader2, BellRing, Eye, Lock, Unlock, Wifi, WifiOff } from 'lucide-react';
+import { animate, motion, useMotionValue, AnimatePresence, useReducedMotion, type PanInfo } from 'framer-motion';
+import { ArrowLeft, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, ListOrdered, Pause, Play, Settings2, MoreHorizontal, Upload, Calendar, Loader2, BellRing, Eye, Lock, Unlock, Wifi, WifiOff, Smile } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -20,6 +20,8 @@ import { SongArtwork } from '../components/SongArtwork';
 import { EventArtwork } from '../components/EventArtwork';
 import { FormattedText } from '../components/FormattedText';
 import { MentionTextarea } from '../components/MentionTextarea';
+import { EmojiReactionPicker, type ReactionEmoji } from '../components/EmojiReactionPicker';
+import { ReactionFlightAnimation, type ReactionFlightPath } from '../components/ReactionFlightAnimation';
 import { VoiceKeyDetector } from '../components/VoiceKeyDetector';
 import { withSaveTimeout } from '../lib/saveTimeout';
 import { clearActiveServiceMode, getActiveServiceMode, saveActiveServiceMode } from '../lib/serviceModeResume';
@@ -35,6 +37,7 @@ import { normalizeSongTitle } from '../lib/songTitle';
 import { calculatePolicyProposalDueDate, DEFAULT_EVENT_TEMPLATE_POLICIES, eventTemplateFor, normalizeEventTemplatePolicies, type EventTemplatePolicies, type SetlistSubmissionMode } from '../lib/eventPolicy';
 import { buildSongProposalConflicts, buildSongProposalReservations, type SongProposalConflict, type SongProposalReservation, type SongProposalSetlistRow } from '../lib/songProposalConflicts';
 import { getEffectiveSongLyrics, getSongLyricsSource } from '../lib/songLyrics';
+import { groupEmojiReactions } from '../lib/reactions';
 
 import type { Event, EventAssignment, Setlist, SetlistSong, Song, ServiceFormat, SetlistCheckReport, PostEventObservation, PostEventObservationCategory, PostEventObservationStatus, PostEventObservationView } from '../types';
 import { inferServiceFormat, SERVICE_FORMAT_LABELS } from '../lib/setlistCheckerEngine';
@@ -61,7 +64,23 @@ interface SetlistRevisionComment {
   reply_to: string | null;
   created_at: string;
   profiles?: { first_name: string; last_name: string; avatar_url: string | null } | null;
+  setlist_revision_comment_reactions?: SetlistRevisionCommentReaction[];
 }
+
+interface SetlistRevisionCommentReaction {
+  id: string;
+  org_id: string;
+  setlist_id: string;
+  comment_id: string;
+  user_id: string;
+  emoji: string;
+  created_at: string;
+}
+
+type RevisionCommentReactionFlight = ReactionFlightPath & {
+  commentId: string;
+  token: number;
+};
 
 interface PostEventObservationReply {
   id: string;
@@ -402,6 +421,7 @@ export function EventDetail() {
 
   const { user, profile, roles, userRoles, organization, loading: authLoading, isLeader, isOrgAdmin, isAdmin, isAdminCoordinator, isProductionDirector, isPlatformOwner } = useAuth();
   const { toast } = useToast();
+  const prefersReducedMotion = useReducedMotion();
   const canUseServiceModePilot = isOrgAdmin || isAdmin || isPlatformOwner;
   const canDeleteRevisionComments = isOrgAdmin || isAdmin || isPlatformOwner;
 
@@ -469,6 +489,11 @@ export function EventDetail() {
   const revisionCommentInputRef = useRef<HTMLTextAreaElement>(null);
   const [postingRevisionComment, setPostingRevisionComment] = useState(false);
   const [deletingRevisionCommentId, setDeletingRevisionCommentId] = useState<string | null>(null);
+  const [revisionReactionPickerCommentId, setRevisionReactionPickerCommentId] = useState<string | null>(null);
+  const [pendingRevisionReactionReveal, setPendingRevisionReactionReveal] = useState<{ commentId: string; emoji: string } | null>(null);
+  const [revisionReactionLanding, setRevisionReactionLanding] = useState<{ commentId: string; emoji: string; token: number } | null>(null);
+  const [revisionReactionFlight, setRevisionReactionFlight] = useState<RevisionCommentReactionFlight | null>(null);
+  const revisionReactionMutationsRef = useRef(new Set<string>());
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [editingSongId, setEditingSongId] = useState<string | null>(null);
@@ -1091,7 +1116,7 @@ export function EventDetail() {
   const fetchRevisionComments = useCallback(async (setlistId: string) => {
     const { data, error } = await supabase
       .from('setlist_revision_comments')
-      .select('id, setlist_id, user_id, content, reply_to, created_at, profiles!setlist_revision_comments_user_id_fkey(first_name, last_name, avatar_url)')
+      .select('id, setlist_id, user_id, content, reply_to, created_at, profiles!setlist_revision_comments_user_id_fkey(first_name, last_name, avatar_url), setlist_revision_comment_reactions(id, org_id, setlist_id, comment_id, user_id, emoji, created_at)')
       .eq('setlist_id', setlistId)
       .order('created_at', { ascending: true });
 
@@ -1109,6 +1134,26 @@ export function EventDetail() {
       return;
     }
     void fetchRevisionComments(setlist.id);
+  }, [fetchRevisionComments, setlist?.id]);
+
+  useEffect(() => {
+    if (!setlist?.id) return;
+    const setlistId = setlist.id;
+    const channel = supabase
+      .channel(`setlist-revision-discussion-${setlistId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'setlist_revision_comments', filter: `setlist_id=eq.${setlistId}` },
+        () => { void fetchRevisionComments(setlistId); },
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'setlist_revision_comment_reactions', filter: `setlist_id=eq.${setlistId}` },
+        () => { void fetchRevisionComments(setlistId); },
+      )
+      .subscribe();
+
+    return () => { void supabase.removeChannel(channel); };
   }, [fetchRevisionComments, setlist?.id]);
 
   useEffect(() => {
@@ -2340,6 +2385,145 @@ export function EventDetail() {
       toast('success', hasReplies ? 'Comment and replies deleted' : 'Comment deleted');
     }
     setDeletingRevisionCommentId(null);
+  };
+
+  const handleRevisionCommentReaction = async (
+    comment: SetlistRevisionComment,
+    emoji: ReactionEmoji,
+    sourceElement?: HTMLElement,
+  ) => {
+    if (!user || !setlist) return;
+    if (revisionReactionMutationsRef.current.has(comment.id)) return;
+
+    revisionReactionMutationsRef.current.add(comment.id);
+    const previousReactions = comment.setlist_revision_comment_reactions || [];
+    const existing = previousReactions.find(reaction => reaction.user_id === user.id && reaction.emoji === emoji);
+    const optimisticId = `optimistic-${comment.id}-${user.id}-${emoji}`;
+    const reactionRoot = sourceElement?.closest<HTMLElement>('[data-revision-comment-reaction-root]') || null;
+    const rootRect = reactionRoot?.getBoundingClientRect();
+    const sourceRect = sourceElement?.getBoundingClientRect();
+    const flightOrigin = rootRect && sourceRect
+      ? {
+          x: sourceRect.left - rootRect.left + sourceRect.width / 2,
+          y: sourceRect.top - rootRect.top + sourceRect.height / 2,
+        }
+      : null;
+    const shouldAnimateFlight = !existing && !prefersReducedMotion && Boolean(reactionRoot && flightOrigin);
+
+    if (shouldAnimateFlight) {
+      setPendingRevisionReactionReveal({ commentId: comment.id, emoji });
+    }
+
+    setRevisionComments(current => current.map(item => item.id === comment.id
+      ? {
+          ...item,
+          setlist_revision_comment_reactions: existing
+            ? (item.setlist_revision_comment_reactions || []).filter(reaction => reaction.id !== existing.id)
+            : [
+                ...(item.setlist_revision_comment_reactions || []),
+                {
+                  id: optimisticId,
+                  org_id: profile?.org_id || '',
+                  setlist_id: setlist.id,
+                  comment_id: comment.id,
+                  user_id: user.id,
+                  emoji,
+                  created_at: new Date().toISOString(),
+                },
+              ],
+        }
+      : item));
+
+    if (shouldAnimateFlight && reactionRoot && flightOrigin) {
+      const locateFlightTarget = (attempt = 0) => {
+        window.requestAnimationFrame(() => {
+          const target = Array.from(reactionRoot.querySelectorAll<HTMLElement>('[data-revision-reaction-emoji]'))
+            .find(element => element.dataset.revisionReactionEmoji === emoji);
+          if (!target && attempt < 3) {
+            locateFlightTarget(attempt + 1);
+            return;
+          }
+          if (!target) {
+            setPendingRevisionReactionReveal(null);
+            setRevisionReactionPickerCommentId(null);
+            return;
+          }
+          const currentRootRect = reactionRoot.getBoundingClientRect();
+          const targetRect = target.getBoundingClientRect();
+          setRevisionReactionFlight({
+            commentId: comment.id,
+            emoji,
+            token: Date.now(),
+            from: flightOrigin,
+            to: {
+              x: targetRect.left - currentRootRect.left + targetRect.width / 2,
+              y: targetRect.top - currentRootRect.top + targetRect.height / 2,
+            },
+          });
+        });
+      };
+      locateFlightTarget();
+    } else {
+      setRevisionReactionPickerCommentId(null);
+    }
+
+    try {
+      const { data, error } = existing
+        ? await supabase
+            .from('setlist_revision_comment_reactions')
+            .delete()
+            .eq('id', existing.id)
+            .select('id')
+            .maybeSingle()
+        : await supabase
+            .from('setlist_revision_comment_reactions')
+            .insert({ setlist_id: setlist.id, comment_id: comment.id, user_id: user.id, emoji })
+            .select('id, org_id, setlist_id, comment_id, user_id, emoji, created_at')
+            .single();
+
+      if (error || (existing && !data)) {
+        throw error || new Error('The reaction was not removed.');
+      }
+
+      if (!existing && data) {
+        setRevisionComments(current => current.map(item => item.id === comment.id
+          ? {
+              ...item,
+              setlist_revision_comment_reactions: (item.setlist_revision_comment_reactions || []).map(reaction =>
+                reaction.id === optimisticId ? data as SetlistRevisionCommentReaction : reaction
+              ),
+            }
+          : item));
+      }
+    } catch (error) {
+      console.error('Update setlist revision comment reaction error:', error);
+      setRevisionComments(current => current.map(item => item.id === comment.id
+        ? { ...item, setlist_revision_comment_reactions: previousReactions }
+        : item));
+      setRevisionReactionFlight(current => current?.commentId === comment.id ? null : current);
+      setPendingRevisionReactionReveal(current => current?.commentId === comment.id ? null : current);
+      setRevisionReactionLanding(current => current?.commentId === comment.id ? null : current);
+      setRevisionReactionPickerCommentId(null);
+      toast('error', 'Could not update reaction');
+    } finally {
+      revisionReactionMutationsRef.current.delete(comment.id);
+      await fetchRevisionComments(setlist.id);
+    }
+  };
+
+  const handleRevisionReactionFlightComplete = (completedFlight: RevisionCommentReactionFlight) => {
+    const landing = {
+      commentId: completedFlight.commentId,
+      emoji: completedFlight.emoji,
+      token: completedFlight.token,
+    };
+    setPendingRevisionReactionReveal(current => current?.commentId === completedFlight.commentId ? null : current);
+    setRevisionReactionLanding(landing);
+    setRevisionReactionFlight(current => current?.token === completedFlight.token ? null : current);
+    setRevisionReactionPickerCommentId(current => current === completedFlight.commentId ? null : current);
+    window.setTimeout(() => {
+      setRevisionReactionLanding(current => current?.token === landing.token ? null : current);
+    }, 420);
   };
 
   const handleReject = async () => {
@@ -4072,33 +4256,153 @@ const openLyricsModal = (ss: SetlistSong) => {
                 <p className="py-1 text-center text-xs text-gray-500 dark:text-gray-400">No comments yet.</p>
               ) : revisionComments.map(comment => {
                 const authorName = `${comment.profiles?.first_name || 'Team'} ${comment.profiles?.last_name || 'member'}`.trim();
+                const isAwaitingReactionLanding = pendingRevisionReactionReveal?.commentId === comment.id;
+                const visibleReactions = isAwaitingReactionLanding
+                  ? (comment.setlist_revision_comment_reactions || []).filter(reaction => !(
+                      reaction.user_id === user?.id && reaction.emoji === pendingRevisionReactionReveal.emoji
+                    ))
+                  : (comment.setlist_revision_comment_reactions || []);
+                const reactionGroups = groupEmojiReactions(visibleReactions);
+                const needsLandingPlaceholder = Boolean(
+                  isAwaitingReactionLanding
+                  && !reactionGroups.some(reaction => reaction.emoji === pendingRevisionReactionReveal?.emoji)
+                );
+                const isReactionPickerOpen = revisionReactionPickerCommentId === comment.id;
                 return (
-                  <div key={comment.id} data-app-nonselect="true" className={`rounded-lg border border-gray-200/70 bg-gray-50/70 px-2.5 py-2 dark:border-white/[0.08] dark:bg-white/[0.03] ${comment.reply_to ? 'ml-4 border-l-2 border-l-amber-400/70 sm:ml-6' : ''}`}>
-                    <div className="flex items-center gap-1.5">
-                      <Avatar src={comment.profiles?.avatar_url} firstName={comment.profiles?.first_name || '?'} lastName={comment.profiles?.last_name} size="xs" />
-                      <div className="flex min-w-0 flex-1 items-baseline gap-1.5 overflow-hidden">
-                        <p className="shrink-0 truncate text-xs font-semibold text-gray-900 dark:text-white">{authorName}</p>
-                        <p className="min-w-0 truncate text-[11px] text-gray-500 before:mr-1.5 before:text-gray-400 before:content-['|'] dark:text-gray-400 dark:before:text-gray-600">{format(parseISO(comment.created_at), 'MMM d, yyyy · h:mm a')}</p>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-1">
-                        <button type="button" onClick={() => startRevisionCommentReply(comment)} className="px-1.5 py-1 text-xs font-semibold text-amber-600 hover:text-amber-700 dark:text-amber-400">Reply</button>
-                        {canDeleteRevisionComments && (
+                  <div
+                    key={comment.id}
+                    data-app-nonselect="true"
+                    data-revision-comment-reaction-root={comment.id}
+                    className={`relative overflow-hidden rounded-lg border border-gray-200/70 bg-gray-50/70 dark:border-white/[0.08] dark:bg-white/[0.03] sm:overflow-visible ${isReactionPickerOpen ? 'sm:z-30' : 'sm:z-0'} ${comment.reply_to ? 'ml-4 border-l-2 border-l-amber-400/70 sm:ml-6' : ''}`}
+                  >
+                    <div className="px-2.5 py-2">
+                      <div className="flex items-center gap-1.5">
+                        <Avatar src={comment.profiles?.avatar_url} firstName={comment.profiles?.first_name || '?'} lastName={comment.profiles?.last_name} size="xs" />
+                        <div className="flex min-w-0 flex-1 items-baseline gap-1.5 overflow-hidden">
+                          <p className="shrink-0 truncate text-xs font-semibold text-gray-900 dark:text-white">{authorName}</p>
+                          <p className="min-w-0 truncate text-[11px] text-gray-500 before:mr-1.5 before:text-gray-400 before:content-['|'] dark:text-gray-400 dark:before:text-gray-600">{format(parseISO(comment.created_at), 'MMM d, yyyy · h:mm a')}</p>
+                        </div>
+                        <div className="relative flex shrink-0 items-center gap-0.5">
                           <button
                             type="button"
-                            onClick={() => void handleDeleteRevisionComment(comment)}
-                            disabled={deletingRevisionCommentId !== null}
-                            aria-label={`Delete comment by ${authorName}`}
-                            title="Delete comment"
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:text-gray-500 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                            onClick={() => setRevisionReactionPickerCommentId(current => current === comment.id ? null : comment.id)}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-black/[0.035] hover:text-amber-600 dark:hover:bg-white/[0.05] dark:hover:text-amber-400 sm:h-7 sm:w-7"
+                            aria-label={`React to ${authorName}'s comment`}
+                            aria-expanded={isReactionPickerOpen}
+                            aria-haspopup="menu"
                           >
-                            {deletingRevisionCommentId === comment.id
-                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              : <Trash2 className="h-3.5 w-3.5" />}
+                            <Smile className="h-3.5 w-3.5" />
                           </button>
-                        )}
+                          <button type="button" onClick={() => startRevisionCommentReply(comment)} className="min-h-9 rounded-lg px-1.5 py-1 text-xs font-semibold text-amber-600 transition-colors hover:bg-amber-500/[0.07] hover:text-amber-700 dark:text-amber-400 sm:min-h-7">Reply</button>
+                          {canDeleteRevisionComments && (
+                            <button
+                              type="button"
+                              onClick={() => void handleDeleteRevisionComment(comment)}
+                              disabled={deletingRevisionCommentId !== null}
+                              aria-label={`Delete comment by ${authorName}`}
+                              title="Delete comment"
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:text-gray-500 dark:hover:bg-red-500/10 dark:hover:text-red-400 sm:h-7 sm:w-7"
+                            >
+                              {deletingRevisionCommentId === comment.id
+                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                : <Trash2 className="h-3.5 w-3.5" />}
+                            </button>
+                          )}
+                          <AnimatePresence initial={false}>
+                            {isReactionPickerOpen && (
+                              <motion.div
+                                initial={{ height: 0, opacity: 0, scale: 0.96, y: -4 }}
+                                animate={{ height: 'auto', opacity: 1, scale: 1, y: 0 }}
+                                exit={{ height: 0, opacity: 0, scale: 0.97, y: -3 }}
+                                transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                                className="absolute right-[4.25rem] top-full z-40 mt-1 hidden origin-top-right overflow-hidden rounded-2xl sm:block"
+                              >
+                                <EmojiReactionPicker
+                                  className="!w-[22rem]"
+                                  animateEntrance={!prefersReducedMotion}
+                                  onPick={(emoji, event) => void handleRevisionCommentReaction(comment, emoji, event.currentTarget)}
+                                />
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
                       </div>
+                      <p className="mt-1 whitespace-pre-wrap break-words pl-7 text-sm leading-5 text-gray-700 dark:text-gray-200"><FormattedText text={comment.content} /></p>
+
+                      {(reactionGroups.length > 0 || needsLandingPlaceholder) && (
+                        <div className="relative mt-2 flex min-w-0 flex-wrap items-center gap-1.5 pl-7">
+                          {reactionGroups.map(reaction => {
+                            const isActive = reaction.users.includes(user?.id || '');
+                            const isLanding = revisionReactionLanding?.commentId === comment.id && revisionReactionLanding.emoji === reaction.emoji;
+                            return (
+                              <motion.button
+                                key={reaction.emoji}
+                                type="button"
+                                onClick={() => void handleRevisionCommentReaction(comment, reaction.emoji as ReactionEmoji)}
+                                data-revision-reaction-emoji={reaction.emoji}
+                                initial={isLanding ? { scale: 0.72, opacity: 0.35 } : false}
+                                animate={isLanding
+                                  ? { scale: [0.72, 1.16, 0.96, 1], opacity: [0.35, 1, 1, 1] }
+                                  : { scale: 1, opacity: 1 }}
+                                transition={isLanding
+                                  ? { duration: 0.36, times: [0, 0.48, 0.72, 1], ease: [0.16, 1, 0.3, 1] }
+                                  : { duration: 0.16 }}
+                                className={`inline-flex h-8 items-center gap-1 rounded-full px-2.5 text-xs font-bold transition-all active:scale-95 ${
+                                  isActive
+                                    ? 'bg-amber-500/15 text-amber-700 ring-1 ring-amber-500/30 dark:text-amber-300'
+                                    : 'bg-gray-100 text-gray-600 ring-1 ring-gray-200/80 hover:bg-gray-200 dark:bg-white/[0.055] dark:text-white/60 dark:ring-white/[0.07] dark:hover:bg-white/[0.1]'
+                                }`}
+                                aria-pressed={isActive}
+                                aria-label={`${isActive ? 'Remove' : 'Add'} ${reaction.emoji} reaction. ${reaction.count} total`}
+                              >
+                                <span>{reaction.emoji}</span>
+                                <span>{reaction.count}</span>
+                              </motion.button>
+                            );
+                          })}
+                          {needsLandingPlaceholder && pendingRevisionReactionReveal && (
+                            <span
+                              aria-hidden="true"
+                              data-revision-reaction-emoji={pendingRevisionReactionReveal.emoji}
+                              className="invisible inline-flex h-8 items-center gap-1 rounded-full px-2.5 text-xs font-bold"
+                            >
+                              <span>{pendingRevisionReactionReveal.emoji}</span>
+                              <span>1</span>
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    <p className="mt-1 whitespace-pre-wrap break-words pl-7 text-sm leading-5 text-gray-700 dark:text-gray-200"><FormattedText text={comment.content} /></p>
+
+                    <AnimatePresence initial={false}>
+                      {isReactionPickerOpen && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0, scale: 0.96, y: -4 }}
+                          animate={{ height: 'auto', opacity: 1, scale: 1, y: 0 }}
+                          exit={{ height: 0, opacity: 0, scale: 0.97, y: -3 }}
+                          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                          className="origin-top-right overflow-hidden border-t border-amber-500/15 bg-amber-500/[0.035] sm:hidden"
+                        >
+                          <div className="flex justify-center px-2.5 py-2 sm:justify-end sm:p-0">
+                            <EmojiReactionPicker
+                              className="!w-full sm:!w-[22rem]"
+                              animateEntrance={!prefersReducedMotion}
+                              onPick={(emoji, event) => void handleRevisionCommentReaction(comment, emoji, event.currentTarget)}
+                            />
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    <AnimatePresence>
+                      {revisionReactionFlight?.commentId === comment.id && (
+                        <ReactionFlightAnimation
+                          key={revisionReactionFlight.token}
+                          flight={revisionReactionFlight}
+                          onComplete={() => handleRevisionReactionFlightComplete(revisionReactionFlight)}
+                        />
+                      )}
+                    </AnimatePresence>
                   </div>
                 );
               })}

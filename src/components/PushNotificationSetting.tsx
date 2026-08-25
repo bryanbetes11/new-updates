@@ -8,6 +8,7 @@ import { VAPID_PUBLIC_KEY } from '../lib/push';
 
 interface PushNotificationSettingProps {
   surface?: 'profile' | 'drawer' | 'compact';
+  onEnabled?: () => void;
 }
 
 function urlBase64ToUint8Array(base64String: string) {
@@ -23,7 +24,7 @@ function urlBase64ToUint8Array(base64String: string) {
   return outputArray;
 }
 
-export function PushNotificationSetting({ surface = 'profile' }: PushNotificationSettingProps) {
+export function PushNotificationSetting({ surface = 'profile', onEnabled }: PushNotificationSettingProps) {
   const { user, profile } = useAuth();
   const { toast } = useToast();
   const [pushEnabled, setPushEnabled] = useState(false);
@@ -147,6 +148,7 @@ export function PushNotificationSetting({ surface = 'profile' }: PushNotificatio
         await savePushSubscription(sub);
         await savePushPreference(true);
         setPushEnabled(true);
+        onEnabled?.();
         window.dispatchEvent(new CustomEvent('push-readiness-updated', { detail: { enabled: true } }));
         toast('success', 'Push notifications enabled');
       } catch (err) {

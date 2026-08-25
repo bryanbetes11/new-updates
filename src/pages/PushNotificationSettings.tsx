@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowDown, BellRing, Sparkles, X } from 'lucide-react';
+import { ArrowDown, BellRing, CheckCircle2, Sparkles, X } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useSearchParams } from 'react-router-dom';
 import { PushNotificationSetting } from '../components/PushNotificationSetting';
@@ -7,10 +7,12 @@ import { PushNotificationSetting } from '../components/PushNotificationSetting';
 export function PushNotificationSettings() {
   const [searchParams] = useSearchParams();
   const [showSetupGuide, setShowSetupGuide] = useState(() => searchParams.get('setup') === 'push');
+  const [setupComplete, setSetupComplete] = useState(false);
   const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
     setShowSetupGuide(searchParams.get('setup') === 'push');
+    setSetupComplete(false);
   }, [searchParams]);
 
   return (
@@ -63,8 +65,29 @@ export function PushNotificationSettings() {
               <ArrowDown className="absolute -bottom-4 left-1/2 h-5 w-5 -translate-x-1/2 text-emerald-300" fill="#123327" />
             </motion.div>
           )}
-          <PushNotificationSetting />
+          <PushNotificationSetting
+            onEnabled={() => {
+              setShowSetupGuide(false);
+              setSetupComplete(true);
+            }}
+          />
         </section>
+
+        {setupComplete && (
+          <motion.section
+            role="status"
+            initial={prefersReducedMotion ? false : { opacity: 0, y: 8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ type: 'spring', stiffness: 340, damping: 25 }}
+            className="flex items-start gap-3 rounded-2xl border border-emerald-400/25 bg-emerald-500/[0.10] px-4 py-3.5 text-emerald-950 shadow-sm dark:text-emerald-50"
+          >
+            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" aria-hidden="true" />
+            <div>
+              <p className="text-sm font-extrabold">You’re all set.</p>
+              <p className="mt-1 text-sm leading-5 text-emerald-800/80 dark:text-emerald-100/75">Notifications are enabled for this device. You can now receive assignments, reminders, and team updates.</p>
+            </div>
+          </motion.section>
+        )}
       </div>
     </div>
   );

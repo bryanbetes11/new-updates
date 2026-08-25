@@ -322,7 +322,7 @@ export function Modal({
       <div className={`fixed inset-0 bg-black/50 backdrop-blur-sm ${backdropClass}`} />
       <div
         ref={dialogRef}
-        className={`modal-dialog-viewport relative min-h-0 w-full ${desktopSizes[size]} ${isMobilePage ? 'h-[100dvh] rounded-none sm:h-auto sm:rounded-2xl' : isMobileDialog ? 'mx-4 rounded-[28px]' : 'rounded-t-[28px] sm:rounded-2xl'} bg-white dark:bg-[#1c1b1e] ring-1 ring-black/[0.06] dark:ring-white/[0.08] ${sheetClass} ${isMobilePage ? 'max-h-[100dvh] sm:max-h-[85vh]' : 'max-h-[92dvh] sm:max-h-[85vh]'} flex flex-col overflow-hidden ${isMobilePage || isMobileDialog ? '' : 'sm:mx-4'} ${dialogClassName}`}
+        className={`modal-dialog-viewport relative min-h-0 w-full focus-visible:outline-none ${desktopSizes[size]} ${isMobilePage ? 'h-[100dvh] rounded-none sm:h-auto sm:rounded-2xl' : isMobileDialog ? 'mx-4 rounded-[28px]' : 'rounded-t-[28px] sm:rounded-2xl'} bg-white dark:bg-[#1c1b1e] ring-1 ring-black/[0.06] dark:ring-white/[0.08] ${sheetClass} ${isMobilePage ? 'max-h-[100dvh] sm:max-h-[85vh]' : 'max-h-[92dvh] sm:max-h-[85vh]'} flex flex-col overflow-hidden ${isMobilePage || isMobileDialog ? '' : 'sm:mx-4'} ${dialogClassName}`}
         style={{
           boxShadow: '0 24px 64px -16px rgba(0,0,0,0.3), 0 8px 24px -8px rgba(0,0,0,0.15)',
         }}

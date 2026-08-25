@@ -102,7 +102,7 @@ export function InteractionSoundSettingsPanel({ setup = false, onComplete }: Int
   return (
     <div className="space-y-5">
       {setup && (
-        <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.08] p-4">
+        <div className="rounded-2xl border border-gray-200/80 bg-emerald-400/[0.08] p-4 dark:border-white/[0.08]">
           <p className="text-sm font-black text-gray-950 dark:text-white">Make ServeSync feel right for you.</p>
           <p className="mt-1 text-[13px] leading-5 text-gray-800 dark:text-white">Small, low-volume cues confirm that your taps, long presses, and reactions were received—without interrupting your work.</p>
           <p className="mt-2 text-[13px] leading-5 text-gray-800 dark:text-white">Choose a comfortable level below. Each one plays a quick preview, and you can change it any time from Settings → Sounds & feedback.</p>

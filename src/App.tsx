@@ -441,6 +441,51 @@ function DailyUpdateCheckExperience({ suppressed }: { suppressed: boolean }) {
   );
 }
 
+const BACKGROUND_UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+const MIN_BACKGROUND_UPDATE_CHECK_GAP_MS = 30 * 1000;
+
+function BackgroundAppUpdateWatcher() {
+  const { user } = useAuth();
+  const updateFoundRef = useRef(false);
+  const lastCheckAtRef = useRef(0);
+
+  const checkInBackground = useCallback(() => {
+    if (!user || updateFoundRef.current || document.visibilityState !== 'visible') return;
+
+    const now = Date.now();
+    if (now - lastCheckAtRef.current < MIN_BACKGROUND_UPDATE_CHECK_GAP_MS) return;
+    lastCheckAtRef.current = now;
+
+    void checkForAppUpdate().then(result => {
+      // The waiting worker and AppUpdateModal handle the user-facing prompt.
+      // Mark this session once an update is found so dismissing "Later" does
+      // not keep reopening the prompt while the user is working.
+      if (result.status === 'available') updateFoundRef.current = true;
+    });
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const initialCheck = window.setTimeout(checkInBackground, 20_000);
+    const interval = window.setInterval(checkInBackground, BACKGROUND_UPDATE_CHECK_INTERVAL_MS);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') checkInBackground();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('online', checkInBackground);
+    return () => {
+      window.clearTimeout(initialCheck);
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('online', checkInBackground);
+    };
+  }, [checkInBackground, user]);
+
+  return null;
+}
+
 function ResumeSyncIndicator() {
   const [syncing, setSyncing] = useState(false);
   const hiddenAtRef = useRef<number | null>(null);
@@ -550,6 +595,7 @@ export default function App() {
             <LastRouteTracker />
             <ResumeSyncIndicator />
             <ToastProvider>
+              <BackgroundAppUpdateWatcher />
               <DailyUpdateCheckExperience suppressed={showAppUpdate} />
               <ReleaseNotesExperience suppressed={showAppUpdate} />
               <AppUpdateModal

@@ -59,7 +59,7 @@ export function ReleaseNotesModal({ open, onClose }: ReleaseNotesModalProps) {
       dialogClassName="!max-h-[78dvh] sm:!max-h-[74vh]"
     >
       <div className="space-y-5">
-        <div className="relative overflow-hidden rounded-3xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50 via-white to-sky-50 p-5 dark:border-emerald-400/15 dark:from-emerald-500/[0.11] dark:via-white/[0.025] dark:to-sky-500/[0.07] sm:p-6">
+        <div className="relative overflow-hidden rounded-3xl border border-gray-200/80 bg-gradient-to-br from-emerald-50 via-white to-sky-50 p-5 dark:border-white/[0.08] dark:from-emerald-500/[0.11] dark:via-white/[0.025] dark:to-sky-500/[0.07] sm:p-6">
           <div className="pointer-events-none absolute -right-10 -top-12 h-36 w-36 rounded-full bg-emerald-300/20 blur-3xl dark:bg-emerald-400/10" />
           <div className="relative flex items-start gap-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 text-white shadow-[0_12px_30px_-12px_rgba(16,185,129,0.75)]">

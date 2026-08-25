@@ -392,7 +392,12 @@ export function Layout() {
           filter: shouldShiftForMobileMenu
             ? "blur(1.25px) brightness(0.78)"
             : undefined,
-          transition: "transform 0.26s cubic-bezier(0.22, 1, 0.36, 1), filter 0.26s cubic-bezier(0.22, 1, 0.36, 1)",
+          // Keep the idle app shell entirely off the compositor. A transition
+          // that names filter can keep a sibling fixed header rasterized on
+          // iOS/WebKit even while the filter itself is unset.
+          transition: shouldShiftForMobileMenu
+            ? "transform 0.26s cubic-bezier(0.22, 1, 0.36, 1), filter 0.26s cubic-bezier(0.22, 1, 0.36, 1)"
+            : undefined,
         }}
       >
         {isMessagesPage ? (

@@ -86,6 +86,7 @@ export function useMessages(conversationId: string | null) {
   const { toast } = useToast();
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
   const [memberReadTimes, setMemberReadTimes] = useState<MemberReadTime[]>([]);
   const typingTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -106,17 +107,25 @@ export function useMessages(conversationId: string | null) {
     const isInitialLoad = loadedConversationRef.current !== conversationId;
     if (isInitialLoad) setLoading(true);
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('messages')
       .select(`
         id, conversation_id, sender_id, content, created_at, is_pinned, reply_to,
         profiles!sender_id(first_name, last_name, nickname, avatar_url),
-        message_reactions(emoji, user_id)
+        message_reactions!message_reactions_message_org_fkey(emoji, user_id)
       `)
       .eq('conversation_id', conversationId)
       .is('deleted_at', null)
       .order('created_at', { ascending: true });
 
+    if (error) {
+      console.error('Failed to load conversation messages:', error);
+      setLoadError('Messages could not be loaded. Please try again.');
+      setLoading(false);
+      return;
+    }
+
+    setLoadError(null);
     if (!data) { setLoading(false); return; }
 
     const messageRows = data as unknown as MessageQueryRow[];
@@ -164,7 +173,14 @@ export function useMessages(conversationId: string | null) {
   }, [conversationId, user]);
 
   useEffect(() => {
-    if (!conversationId) { loadedConversationRef.current = null; setMessages([]); setTypingUsers([]); return; }
+    if (!conversationId) {
+      loadedConversationRef.current = null;
+      setMessages([]);
+      setTypingUsers([]);
+      setLoadError(null);
+      return;
+    }
+    setLoadError(null);
     fetchMessages();
     fetchMemberReadTimes();
     markRead();
@@ -328,6 +344,7 @@ export function useMessages(conversationId: string | null) {
   return {
     messages,
     loading,
+    loadError,
     typingUsers,
     memberReadTimes,
     sendMessage,
@@ -335,5 +352,6 @@ export function useMessages(conversationId: string | null) {
     pinMessage,
     deleteMessage,
     toggleReaction,
+    retry: fetchMessages,
   };
 }

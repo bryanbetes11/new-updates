@@ -6,7 +6,7 @@ import {
   ArrowLeft, Send, ImageIcon, X, Pin, CornerUpLeft, Camera,
   MessageCircle, Plus, Search, Trash2, MoreHorizontal, ChevronRight, Check,
   CalendarDays, Music2, Copy, Paperclip, FileText, Download, ExternalLink, UserPlus,
-  Calendar, Clock, LogOut, PlayCircle,
+  Calendar, Clock, LogOut, PlayCircle, RefreshCw,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { formatTime12Hour } from '../lib/timeFormat';
@@ -3741,8 +3741,9 @@ function ChatWindow({
 
   const { profile } = useAuth();
   const {
-    messages, loading, typingUsers, memberReadTimes,
+    messages, loading, loadError, typingUsers, memberReadTimes,
     sendMessage, sendTyping, pinMessage, deleteMessage, toggleReaction,
+    retry,
   } = useMessages(conv.id);
   const typingLabel = formatTypingUsers(typingUsers);
 
@@ -4395,7 +4396,24 @@ function ChatWindow({
           </div>
         )}
 
-        {grouped.map(({ msg, isGrouped, showDateDivider }, i) => {
+        {!loading && loadError && (
+          <div className="flex min-h-48 flex-col items-center justify-center px-6 text-center">
+            <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-red-500/10 text-red-500 dark:text-red-400">
+              <MessageCircle className="h-5 w-5" />
+            </div>
+            <p className="text-[13px] font-semibold text-gray-900 dark:text-white">Couldn&apos;t load this conversation</p>
+            <p className="mt-1 max-w-xs text-[12px] leading-relaxed text-gray-500 dark:text-white/40">{loadError}</p>
+            <button
+              type="button"
+              onClick={retry}
+              className="mt-4 inline-flex h-9 items-center gap-2 rounded-full border border-gray-200 bg-white px-4 text-[12px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-white/80 dark:hover:bg-white/[0.1]"
+            >
+              <RefreshCw className="h-3.5 w-3.5" /> Retry
+            </button>
+          </div>
+        )}
+
+        {!loadError && grouped.map(({ msg, isGrouped, showDateDivider }, i) => {
           const isMe = msg.sender_id === myUserId;
           const content = parseContent(msg.content);
           const seers = seenByMessage[msg.id] || [];

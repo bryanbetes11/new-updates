@@ -589,6 +589,11 @@ export function EventDetail() {
   const [showRevisionRequest, setShowRevisionRequest] = useState(false);
   const [revisionReason, setRevisionReason] = useState('');
   const [revisionComments, setRevisionComments] = useState<SetlistRevisionComment[]>([]);
+  const [revisionDiscussionOverride, setRevisionDiscussionOverride] = useState<{
+    setlistId: string;
+    status: string;
+    expanded: boolean;
+  } | null>(null);
   const [revisionCommentText, setRevisionCommentText] = useState('');
   const [replyingToRevisionComment, setReplyingToRevisionComment] = useState<SetlistRevisionComment | null>(null);
   const revisionCommentInputRef = useRef<HTMLTextAreaElement>(null);
@@ -3946,6 +3951,11 @@ const openLyricsModal = (ss: SetlistSong) => {
   const newSongTitleMatch = newSong.title.trim()
     ? songs.find(song => normalizeSongTitle(song.title) === normalizeSongTitle(newSong.title)) || null
     : null;
+  const showRevisionDiscussion = setlist
+    ? revisionDiscussionOverride?.setlistId === setlist.id && revisionDiscussionOverride.status === setlist.status
+      ? revisionDiscussionOverride.expanded
+      : setlist.status !== 'approved'
+    : false;
 
   return (
     <div className="page-container page-bottom-pad relative isolate overflow-x-clip bg-[#050505]">
@@ -4369,25 +4379,61 @@ const openLyricsModal = (ss: SetlistSong) => {
 
         {setlist && (canReviewSetlist || isSongLeader) && setlist.status !== 'rejected' && (setlist.status === 'revision_requested' || revisionComments.length > 0 || !!setlist.review_note || !!setlist.approval_notes) && (
           <div className="card overflow-hidden animate-slide-up">
-            <div className="border-b border-gray-200/70 px-3.5 py-3 dark:border-white/[0.08] sm:px-4">
-              <div className="flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setRevisionDiscussionOverride({
+                  setlistId: setlist.id,
+                  status: setlist.status,
+                  expanded: !showRevisionDiscussion,
+                });
+              }}
+              aria-expanded={showRevisionDiscussion}
+              aria-controls="revision-discussion-content"
+              className={`flex min-h-12 w-full items-center justify-between gap-3 px-3.5 py-3 text-left transition-colors hover:bg-black/[0.025] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-500/70 dark:hover:bg-white/[0.035] sm:px-4 ${showRevisionDiscussion ? 'border-b border-gray-200/70 dark:border-white/[0.08]' : ''}`}
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <MessageCircle className="h-4 w-4 shrink-0 text-amber-500" />
                 <div className="min-w-0">
-                  <p className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white">
-                    <MessageCircle className="h-4 w-4 text-amber-500" />
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
                     {setlist.status === 'revision_requested' ? 'Revision Requested' : 'Revision Discussion'}
                   </p>
+                  {setlist.status === 'approved' && (
+                    <p className="mt-0.5 text-[11px] text-gray-500 dark:text-white/35">
+                      {showRevisionDiscussion ? 'Setlist approved · reviewing previous comments' : 'Setlist approved · open to review the discussion'}
+                    </p>
+                  )}
                 </div>
-                <span className="badge badge-yellow shrink-0">{revisionComments.length}</span>
               </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="badge badge-yellow">{revisionComments.length}</span>
+                <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform duration-300 ease-out dark:text-white/35 ${showRevisionDiscussion ? 'rotate-180' : ''}`} />
+              </div>
+            </button>
+
+            <AnimatePresence initial={false}>
+            {showRevisionDiscussion && (
+              <motion.div
+                id="revision-discussion-content"
+                key={`${setlist.id}-${setlist.status}-revision-discussion`}
+                initial={{ height: 0, opacity: 0, y: -8 }}
+                animate={{ height: 'auto', opacity: 1, y: 0 }}
+                exit={{ height: 0, opacity: 0, y: -6 }}
+                transition={prefersReducedMotion ? { duration: 0 } : {
+                  height: { duration: 0.42, ease: [0.22, 1, 0.36, 1] },
+                  opacity: { duration: 0.26, ease: [0.22, 1, 0.36, 1] },
+                  y: { duration: 0.34, ease: [0.22, 1, 0.36, 1] },
+                }}
+                className="origin-top overflow-hidden will-change-[height,opacity,transform]"
+              >
               {(setlist.review_note || setlist.approval_notes) && (
-                <div className="mt-2.5 flex items-start gap-2 rounded-xl border border-amber-300/50 bg-amber-50/80 px-3 py-2.5 dark:border-amber-700/35 dark:bg-amber-900/15">
+                <div className="mx-3.5 mt-3 flex items-start gap-2 rounded-xl border border-amber-300/50 bg-amber-50/80 px-3 py-2.5 dark:border-amber-700/35 dark:bg-amber-900/15 sm:mx-4">
                   <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
                   <div className="min-w-0 flex-1">
                     <p className="whitespace-pre-wrap break-words text-sm leading-5 text-amber-800 dark:text-amber-200">{setlist.review_note || setlist.approval_notes || 'Please review and make necessary changes to the setlist.'}</p>
                   </div>
                 </div>
               )}
-            </div>
 
             <div className="space-y-2 px-3.5 py-3 sm:px-4">
               {revisionComments.length === 0 ? (
@@ -4570,6 +4616,9 @@ const openLyricsModal = (ss: SetlistSong) => {
                 </button>
               </div>
             </div>
+              </motion.div>
+            )}
+            </AnimatePresence>
           </div>
         )}
 

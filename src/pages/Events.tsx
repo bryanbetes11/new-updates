@@ -976,7 +976,7 @@ function EventDesktopCardGroups({ events, calendarEntries, songLeaderMap, setlis
                     onEventClick={onEventClick}
                     onLifecycleChange={onLifecycleChange}
                     isPast={showPast}
-                    artworkClassName="h-24 w-24"
+                    artworkClassName="event-list-artwork h-24 w-24"
                   />
                 </div>
               );
@@ -1298,13 +1298,6 @@ export function Events() {
         if (slRole) validAssignments.push({ user_id: draft.song_leader_id, role_id: slRole.id });
       }
       if (validAssignments.length > 0) await supabase.from('event_assignments').insert(validAssignments.map(a => ({ event_id: newEventRecord.id, user_id: a.user_id, role_id: a.role_id })));
-
-      if (draft.event_type === 'Rehearsals' && draft.linked_event_id && validAssignments.length > 0) {
-        const { data: existing } = await supabase.from('event_assignments').select('user_id, role_id').eq('event_id', draft.linked_event_id);
-        const existingSet = new Set((existing || []).map(a => `${a.user_id}-${a.role_id}`));
-        const newOnes = validAssignments.filter(a => !existingSet.has(`${a.user_id}-${a.role_id}`));
-        if (newOnes.length > 0) await supabase.from('event_assignments').insert(newOnes.map(a => ({ event_id: draft.linked_event_id, user_id: a.user_id, role_id: a.role_id })));
-      }
 
       fetchEvents();
     } catch (error) {

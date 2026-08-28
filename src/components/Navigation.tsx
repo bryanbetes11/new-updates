@@ -297,6 +297,7 @@ interface NavigationProps {
   hideMobileHeader?: boolean;
   collapsed: boolean;
   onCollapsedChange: (v: boolean) => void;
+  collapseAfterNavigate?: boolean;
   mobileOpen: boolean;
   onMobileOpenChange: (v: boolean) => void;
   mobileChromeHidden?: boolean;
@@ -308,6 +309,7 @@ export function Navigation({
   hideMobileHeader = false,
   collapsed,
   onCollapsedChange,
+  collapseAfterNavigate = false,
   mobileOpen,
   onMobileOpenChange,
   mobileChromeHidden = false,
@@ -447,10 +449,11 @@ export function Navigation({
       playGlobalClickSound();
       void preloadRoute(path);
       navigate(path);
+      if (collapseAfterNavigate) onCollapsedChange(true);
       onMobileOpenChange(false);
       setDesktopProfileOpen(false);
     },
-    [navigate, onMobileOpenChange],
+    [collapseAfterNavigate, navigate, onCollapsedChange, onMobileOpenChange],
   );
 
   useEffect(() => {
@@ -911,7 +914,7 @@ export function Navigation({
     },
   ];
 
-  const sidebarWidth = collapsed ? 92 : 300;
+  const sidebarWidth = collapsed ? 72 : 300;
 
   const handleMobileNavStyleChange = async (style: MobileNavStyle) => {
     if (!user?.id || style === mobileNavStyle || savingNavStyle) return;
@@ -1165,7 +1168,7 @@ export function Navigation({
             onTouchStart={() => {
               void preloadRoute(item.path);
             }}
-            className={`group relative flex h-11 w-full items-center justify-center rounded-[0.8rem] border transition-all duration-200 ${
+            className={`group relative mx-auto flex h-11 w-11 items-center justify-center rounded-[0.85rem] border transition-all duration-200 ${
               active
                 ? "border-white/[0.10] bg-white/[0.10] text-white shadow-[0_14px_24px_-18px_rgba(0,0,0,0.85)]"
                 : "border-transparent text-white/58 hover:border-white/[0.08] hover:bg-white/[0.065] hover:text-white"
@@ -1178,18 +1181,18 @@ export function Navigation({
                 transition={{ type: "spring", stiffness: 460, damping: 38 }}
               />
             )}
-            <div
-              className={`relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-[0.6rem] bg-gradient-to-br ${iconTone} shadow-[inset_0_1px_0_rgba(255,255,255,0.16)]`}
-            >
-              <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_28%_22%,rgba(255,255,255,0.34),transparent_32%)]" />
-              <Icon
-				{...(ACTIVE_STATE_NAV_ICONS.has(Icon) ? { active } : {})}
-                className="relative h-[17px] w-[17px] shrink-0 text-white/90"
-                style={{ width: "17px", height: "17px", strokeWidth: 2.2 }}
-              />
+            <div className="relative flex h-8 w-8 items-center justify-center overflow-visible">
+              <span className={`absolute inset-0 flex items-center justify-center overflow-hidden rounded-[0.6rem] bg-gradient-to-br ${iconTone} shadow-[inset_0_1px_0_rgba(255,255,255,0.16)]`}>
+                <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_28%_22%,rgba(255,255,255,0.34),transparent_32%)]" />
+                <Icon
+                  {...(ACTIVE_STATE_NAV_ICONS.has(Icon) ? { active } : {})}
+                  className="relative h-[17px] w-[17px] shrink-0 text-white/90"
+                  style={{ width: "17px", height: "17px", strokeWidth: 2.2 }}
+                />
+              </span>
               {badge > 0 && (
                 <span
-                  className={`absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full text-white text-[8px] font-bold leading-none ${item.badgeColor === "blue" ? "bg-blue-500" : item.badgeColor === "amber" ? "bg-amber-500" : "bg-red-500"}`}
+                  className={`absolute -right-1.5 -top-1.5 z-10 flex h-[15px] min-w-[15px] items-center justify-center rounded-full px-0.5 text-[8px] font-bold leading-none text-white ring-2 ring-[#050505] ${item.badgeColor === "blue" ? "bg-blue-500" : item.badgeColor === "amber" ? "bg-amber-500" : "bg-red-500"}`}
                 >
                   {badge > 9 ? "9+" : badge}
                 </span>
@@ -2131,6 +2134,11 @@ export function Navigation({
         animate={{ width: sidebarWidth }}
         transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
         className="desktop-sidebar fixed left-0 z-40 hidden flex-col border-r border-white/[0.08] bg-[#050505] lg:flex"
+        onClickCapture={(event) => {
+          if (!collapseAfterNavigate || !collapsed) return;
+          event.stopPropagation();
+          onCollapsedChange(false);
+        }}
         style={{ overflow: "visible" }}
       >
         <div

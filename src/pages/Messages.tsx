@@ -5280,11 +5280,13 @@ export function Messages() {
 
   const visibleConversations = conversations.filter(c => c.last_message);
 
-  const filteredConvs = visibleConversations.filter(c => {
-    if (!search.trim()) return true;
-    const name = getConvName(c, myUserId).toLowerCase();
-    return name.includes(search.toLowerCase());
-  });
+  const filteredConvs = visibleConversations
+    .filter(c => {
+      if (!search.trim()) return true;
+      const name = getConvName(c, myUserId).toLowerCase();
+      return name.includes(search.toLowerCase());
+    })
+    .sort((a, b) => Number(b.unread_count > 0) - Number(a.unread_count > 0));
 
   const selectedConv = conversations.find(c => c.id === selectedConvId) ?? null;
 

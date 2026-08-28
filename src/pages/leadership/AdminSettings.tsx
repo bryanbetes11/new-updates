@@ -223,7 +223,7 @@ export function AdminSettings() {
             { to: '/admin/billing', label: 'Organization billing', detail: 'Review your ServeSync organization plan.', icon: CreditCard, tone: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' },
           ].map((tool) => {
             const Icon = tool.icon;
-            return <Link key={tool.to} to={tool.to} className="group flex min-h-[104px] items-start gap-3 rounded-2xl border border-gray-200/80 bg-gray-50/70 p-3.5 transition hover:-translate-y-0.5 hover:border-emerald-400/45 hover:bg-emerald-500/[0.035] dark:border-white/[0.07] dark:bg-white/[0.035] dark:hover:bg-emerald-500/[0.07]">
+            return <Link key={tool.to} to={tool.to} className="group flex items-center gap-3 self-start rounded-2xl border border-gray-200/80 bg-gray-50/70 p-3.5 transition hover:-translate-y-0.5 hover:border-emerald-400/45 hover:bg-emerald-500/[0.035] dark:border-white/[0.07] dark:bg-white/[0.035] dark:hover:bg-emerald-500/[0.07]">
               <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${tool.tone}`}><Icon className="h-5 w-5" /></span>
               <span className="min-w-0 flex-1"><span className="block text-sm font-black text-gray-900 dark:text-white">{tool.label}</span><span className="mt-0.5 block text-xs leading-relaxed text-gray-500 dark:text-white/45">{tool.detail}</span></span>
               <ChevronRight className="mt-2 h-4 w-4 shrink-0 text-gray-400 transition group-hover:translate-x-0.5 group-hover:text-emerald-500 dark:text-white/35" />

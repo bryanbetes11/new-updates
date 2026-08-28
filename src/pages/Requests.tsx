@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { motion } from 'framer-motion';
-import { Check, X, Shield, MessageSquare, RefreshCw, ClipboardCheck, CalendarDays, Users } from 'lucide-react';
+import { Check, X, Shield, MessageSquare, RefreshCw, ClipboardCheck, CalendarDays, AlertTriangle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { formatTime12Hour } from '../lib/timeFormat';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { PageLoader } from '../components/LoadingSpinner';
@@ -31,6 +32,15 @@ interface RequestsProps {
   embedded?: boolean;
 }
 
+interface LeaveEvent {
+  id: string;
+  title: string;
+  event_date: string;
+  start_time: string | null;
+  end_time: string | null;
+  event_type: string;
+}
+
 function getLeaveStart(request: UnavailabilityRequest) {
   return request.leave_type === 'range'
     ? request.start_date
@@ -57,16 +67,170 @@ function formatLeaveDate(request: UnavailabilityRequest) {
     : '—';
 }
 
-function countOverlappingLeaves(target: UnavailabilityRequest, requests: UnavailabilityRequest[]) {
+function getEventsDuringLeave(request: UnavailabilityRequest, events: LeaveEvent[]) {
+  const start = getLeaveStart(request);
+  const end = getLeaveEnd(request);
+  if (!start || !end) return [];
+  return events.filter(event => event.event_date >= start && event.event_date <= end);
+}
+
+function getApprovedLeaveConflicts(target: UnavailabilityRequest, approvedLeaves: UnavailabilityRequest[]) {
   const targetStart = getLeaveStart(target);
   const targetEnd = getLeaveEnd(target);
-  if (!targetStart || !targetEnd) return 1;
+  if (!targetStart || !targetEnd) return [];
 
-  return requests.filter(request => {
-    const start = getLeaveStart(request);
-    const end = getLeaveEnd(request);
-    return Boolean(start && end && start <= targetEnd && targetStart <= end);
-  }).length;
+  return approvedLeaves.filter(approvedLeave => {
+    if (approvedLeave.user_id === target.user_id) return false;
+    const approvedStart = getLeaveStart(approvedLeave);
+    const approvedEnd = getLeaveEnd(approvedLeave);
+    return Boolean(approvedStart && approvedEnd && approvedStart <= targetEnd && targetStart <= approvedEnd);
+  });
+}
+
+function LeaveConflictWarning({
+  request,
+  approvedLeaves,
+  events,
+  context,
+  display = 'panel',
+}: {
+  request: UnavailabilityRequest;
+  approvedLeaves: UnavailabilityRequest[];
+  events: LeaveEvent[];
+  context: 'pending' | 'approved';
+  display?: 'panel' | 'badge';
+}) {
+  const [open, setOpen] = useState(false);
+  const conflicts = getApprovedLeaveConflicts(request, approvedLeaves);
+  if (conflicts.length === 0) return null;
+
+  const names = conflicts
+    .map(conflict => `${conflict.profiles.first_name} ${conflict.profiles.last_name}`.trim())
+    .filter(Boolean);
+  const visibleNames = names.slice(0, 2).join(' and ');
+  const remainingCount = Math.max(0, names.length - 2);
+  const scheduledEvents = getEventsDuringLeave(request, events);
+  const eventTypes = [...new Set(scheduledEvents.map(event => event.event_type).filter(Boolean))];
+  const includesRehearsal = eventTypes.some(eventType => eventType.toLowerCase().includes('rehearsal'));
+  const subject = visibleNames || `${conflicts.length} other team member${conflicts.length === 1 ? '' : 's'}`;
+  const conflictSummary = `${subject}${remainingCount > 0 ? ` and ${remainingCount} more` : ''} ${conflicts.length === 1 ? 'already has' : 'already have'} approved leave overlapping this ${context === 'pending' ? 'request' : 'leave'}.`;
+  const suggestion = includesRehearsal
+    ? `Consider moving the rehearsal if possible, or arrange coverage ${context === 'pending' ? 'before approving' : 'now'}.`
+      : eventTypes.length > 0
+      ? `Review coverage for ${eventTypes.join(' and ')}. If a related rehearsal can be moved, consider rescheduling it; otherwise arrange substitutes ${context === 'pending' ? 'before approving' : 'early'}.`
+      : `Confirm team coverage ${context === 'pending' ? 'before approving another leave' : 'for all approved leaves'} in this period.`;
+
+  if (display === 'badge') {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-amber-300/80 bg-amber-50 px-3 text-[11px] font-bold text-amber-800 transition-colors hover:bg-amber-100 dark:border-amber-500/30 dark:bg-amber-500/[0.1] dark:text-amber-200 dark:hover:bg-amber-500/[0.16]"
+          aria-haspopup="dialog"
+        >
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          <span>Coverage warning</span>
+          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-200/80 px-1 text-[10px] text-amber-900 dark:bg-amber-400/20 dark:text-amber-100">{conflicts.length}</span>
+        </button>
+        <Modal open={open} onClose={() => setOpen(false)} title="Coverage warning" size="sm">
+          <div className="space-y-3">
+            <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-500/25 dark:bg-amber-500/[0.1]">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold leading-6 text-amber-950 dark:text-amber-100">{conflictSummary}</p>
+                <p className="mt-2 text-sm leading-6 text-amber-900/75 dark:text-amber-100/70"><span className="font-bold">Plan ahead:</span> {suggestion}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-gray-900 px-4 text-sm font-semibold text-white transition-colors hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
+            >
+              Got it
+            </button>
+          </div>
+        </Modal>
+      </>
+    );
+  }
+
+  return (
+    <section className="border-t border-amber-200/80 bg-amber-50/75 px-5 py-3 dark:border-amber-500/20 dark:bg-amber-500/[0.08]" role="alert">
+      <div className="flex items-start gap-2.5">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+        <div className="min-w-0">
+          <p className="text-[11px] font-black uppercase tracking-[0.12em] text-amber-800 dark:text-amber-200">Coverage warning</p>
+          <p className="mt-1 text-[11px] font-semibold leading-5 text-amber-900/80 dark:text-amber-100/70">{conflictSummary}</p>
+          <p className="mt-1 text-[11px] leading-5 text-amber-800/75 dark:text-amber-200/60"><span className="font-bold">Plan ahead:</span> {suggestion}</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function EventScheduleDuringLeave({
+  request,
+  events,
+  loadError,
+  separated = true,
+}: {
+  request: UnavailabilityRequest;
+  events: LeaveEvent[];
+  loadError: boolean;
+  separated?: boolean;
+}) {
+  const scheduledEvents = getEventsDuringLeave(request, events);
+  const showEventDate = getLeaveStart(request) !== getLeaveEnd(request);
+
+  return (
+    <section className={`${separated ? 'border-t border-black/[0.06] dark:border-white/[0.07]' : ''} px-4 py-3`}>
+      <div className="flex items-center gap-2">
+        <CalendarDays className="h-3.5 w-3.5 shrink-0 text-sky-600 dark:text-sky-400" />
+        <p className="flex-1 text-[10px] font-black uppercase tracking-[0.12em] text-sky-800 dark:text-sky-200">Events during this leave</p>
+        {!loadError && scheduledEvents.length > 0 && (
+          <span className="text-[10px] font-black text-sky-700 dark:text-sky-300">
+            {scheduledEvents.length}
+          </span>
+        )}
+      </div>
+
+      <div className="pt-2.5">
+        {loadError ? (
+          <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">Event schedule could not be loaded.</p>
+        ) : scheduledEvents.length === 0 ? (
+          <p className="text-[11px] font-semibold text-sky-800/65 dark:text-sky-200/50">No church events are scheduled during this leave.</p>
+        ) : (
+          <div className="divide-y divide-black/[0.05] dark:divide-white/[0.06]">
+            {scheduledEvents.map(event => {
+              const time = event.start_time ? formatTime12Hour(event.start_time) : '';
+              return (
+                <div key={event.id} className="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-100 dark:bg-sky-500/15">
+                    <CalendarDays className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-bold text-gray-900 dark:text-white">{event.title}</p>
+                      <p className="mt-0.5 text-[10px] font-semibold text-gray-500 dark:text-white/40">{event.event_type}</p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      {showEventDate && (
+                        <p className="text-[10px] font-bold text-sky-700 dark:text-sky-300">{format(parseISO(event.event_date), 'EEE, MMM d')}</p>
+                      )}
+                      <p className={`${showEventDate ? 'mt-1' : 'mt-0.5'} text-[10px] font-semibold text-gray-500 dark:text-white/45`}>{time || 'Time TBA'}</p>
+                    </div>
+                  </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </section>
+  );
 }
 
 export function Requests({ embedded }: RequestsProps = {}) {
@@ -74,6 +238,8 @@ export function Requests({ embedded }: RequestsProps = {}) {
   const { toast } = useToast();
   const [requests, setRequests] = useState<UnavailabilityRequest[]>([]);
   const [approvedUpcoming, setApprovedUpcoming] = useState<UnavailabilityRequest[]>([]);
+  const [leaveEvents, setLeaveEvents] = useState<LeaveEvent[]>([]);
+  const [eventScheduleError, setEventScheduleError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [approvalModal, setApprovalModal] = useState<{ request: UnavailabilityRequest; approved: boolean } | null>(null);
   const [approvalNotes, setApprovalNotes] = useState('');
@@ -81,7 +247,7 @@ export function Requests({ embedded }: RequestsProps = {}) {
 
   const fetchRequests = async () => {
     const today = format(new Date(), 'yyyy-MM-dd');
-    const [pendingResult, approvedResult] = await Promise.all([
+    const [pendingResult, approvedResult, eventsResult] = await Promise.all([
       supabase
         .from('user_availability')
         .select('*, profiles!user_availability_user_id_fkey(*)')
@@ -92,6 +258,11 @@ export function Requests({ embedded }: RequestsProps = {}) {
         .select('*, profiles!user_availability_user_id_fkey(*)')
         .eq('status', 'approved')
         .or(`unavailable_date.gte.${today},end_date.gte.${today}`),
+      supabase
+        .from('events')
+        .select('id,title,event_date,start_time,end_time,event_type')
+        .gte('event_date', today)
+        .order('event_date', { ascending: true }),
     ]);
 
     if (pendingResult.error) {
@@ -100,6 +271,7 @@ export function Requests({ embedded }: RequestsProps = {}) {
     if (approvedResult.error) {
       console.error('Error fetching approved upcoming leave:', approvedResult.error);
     }
+    if (eventsResult.error) console.error('Error fetching events for leave planning:', eventsResult.error);
 
     setRequests((pendingResult.data || []) as UnavailabilityRequest[]);
     setApprovedUpcoming(((approvedResult.data || []) as UnavailabilityRequest[]).sort((a, b) => {
@@ -107,6 +279,10 @@ export function Requests({ embedded }: RequestsProps = {}) {
       const bDate = b.leave_type === 'range' ? b.start_date : b.unavailable_date;
       return String(aDate || '').localeCompare(String(bDate || ''));
     }));
+
+    const events = (eventsResult.data || []) as LeaveEvent[];
+    setLeaveEvents(events);
+    setEventScheduleError(Boolean(eventsResult.error));
     setLoading(false);
   };
 
@@ -254,61 +430,68 @@ export function Requests({ embedded }: RequestsProps = {}) {
               >
                 <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.12] to-transparent" />
 
-                <div className="relative flex items-start gap-3.5 px-5 py-4">
-                  <Avatar src={request.profiles.avatar_url} firstName={request.profiles.first_name} lastName={request.profiles.last_name} size="md" className="shrink-0 mt-0.5 ring-1 ring-black/[0.06] dark:ring-white/[0.08]" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start gap-2 flex-wrap">
-                      <p className="text-[14px] font-bold text-gray-900 dark:text-white" style={{ letterSpacing: '-0.015em' }}>
-                        {request.profiles.first_name} {request.profiles.last_name}
-                      </p>
-                      {request.is_recurring && request.recurrence_type && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/25">
-                          Recurring: {request.recurrence_type}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[13px] text-gray-700 dark:text-white/65 mt-1 font-medium">
-                      Unavailable <span className="font-bold text-gray-900 dark:text-white">{(() => {
-                        if (request.leave_type === 'range' && request.start_date && request.end_date) {
-                          const s = parseISO(request.start_date);
-                          const e = parseISO(request.end_date);
-                          if (format(s, 'MMM yyyy') === format(e, 'MMM yyyy')) {
-                            return `${format(s, 'MMM d')}–${format(e, 'd, yyyy')}`;
-                          }
-                          return `${format(s, 'MMM d')} – ${format(e, 'MMM d, yyyy')}`;
-                        }
-                        return request.unavailable_date
-                          ? format(parseISO(request.unavailable_date), 'EEEE, MMM d, yyyy')
-                          : '—';
-                      })()}</span>
-                    </p>
-                    {request.reason && (
-                      <div className="mt-2.5 px-3 py-2.5 rounded-2xl bg-gray-50 dark:bg-white/[0.03] border border-black/[0.05] dark:border-white/[0.06]">
-                        <p className="text-[12px] text-gray-600 dark:text-white/55 leading-relaxed">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-white/30 block mb-1">Reason</span>
-                          {request.reason}
+                <div className="grid lg:grid-cols-[minmax(0,1.1fr)_minmax(290px,0.75fr)_minmax(190px,0.45fr)]">
+                  <div className="relative flex items-start gap-3.5 px-5 py-4">
+                    <Avatar src={request.profiles.avatar_url} firstName={request.profiles.first_name} lastName={request.profiles.last_name} size="md" className="shrink-0 mt-0.5 ring-1 ring-black/[0.06] dark:ring-white/[0.08]" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start gap-2 flex-wrap">
+                        <p className="text-[14px] font-bold text-gray-900 dark:text-white" style={{ letterSpacing: '-0.015em' }}>
+                          {request.profiles.first_name} {request.profiles.last_name}
                         </p>
+                        {request.is_recurring && request.recurrence_type && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/25">
+                            Recurring: {request.recurrence_type}
+                          </span>
+                        )}
                       </div>
-                    )}
-                    <p className="text-[11px] font-mono text-gray-400 dark:text-white/30 mt-2 tracking-wide">
-                      Submitted {format(parseISO(request.created_at), "MMM d 'at' h:mm a")}
-                    </p>
+                      <p className="text-[13px] text-gray-700 dark:text-white/65 mt-1 font-medium">
+                        Unavailable <span className="font-bold text-gray-900 dark:text-white">{formatLeaveDate(request)}</span>
+                      </p>
+                      {request.reason && (
+                        <div className="mt-2.5 px-3 py-2.5 rounded-2xl bg-gray-50 dark:bg-white/[0.03] border border-black/[0.05] dark:border-white/[0.06]">
+                          <p className="text-[12px] text-gray-600 dark:text-white/55 leading-relaxed">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-white/30 block mb-1">Reason</span>
+                            {request.reason}
+                          </p>
+                        </div>
+                      )}
+                      <p className="text-[11px] font-mono text-gray-400 dark:text-white/30 mt-2 tracking-wide">
+                        Submitted {format(parseISO(request.created_at), "MMM d 'at' h:mm a")}
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <div className="relative flex items-center gap-2 px-5 pb-4">
-                  <button
-                    onClick={() => openApprovalModal(request, false)}
-                    className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-full border border-red-200 bg-red-50 text-[12px] font-semibold text-red-700 transition-colors hover:bg-red-100 active:scale-[0.97] dark:border-red-500/25 dark:bg-red-500/[0.12] dark:text-red-300 dark:hover:bg-red-500/[0.18]"
-                  >
-                    <X className="h-3.5 w-3.5" /> Deny
-                  </button>
-                  <button
-                    onClick={() => openApprovalModal(request, true)}
-                    className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-full text-[12px] font-semibold text-white transition-all active:scale-[0.97]"
-                    style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', boxShadow: '0 3px 10px rgba(22,163,74,0.3)' }}
-                  >
-                    <Check className="h-3.5 w-3.5" /> Approve
-                  </button>
+                  <div className="border-t border-black/[0.06] dark:border-white/[0.07] lg:border-l lg:border-t-0">
+                    <EventScheduleDuringLeave
+                      request={request}
+                      events={leaveEvents}
+                      loadError={eventScheduleError}
+                      separated={false}
+                    />
+                  </div>
+                  <div className="flex flex-col justify-center gap-2 border-t border-black/[0.06] p-4 dark:border-white/[0.07] lg:border-l lg:border-t-0">
+                    <LeaveConflictWarning
+                      request={request}
+                      approvedLeaves={approvedUpcoming}
+                      events={leaveEvents}
+                      context="pending"
+                      display="badge"
+                    />
+                    <div className="flex gap-2 lg:flex-col">
+                      <button
+                        onClick={() => openApprovalModal(request, false)}
+                        className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3 text-[12px] font-semibold text-red-700 transition-colors hover:bg-red-100 active:scale-[0.97] dark:border-red-500/25 dark:bg-red-500/[0.12] dark:text-red-300 dark:hover:bg-red-500/[0.18]"
+                      >
+                        <X className="h-3.5 w-3.5" /> Deny
+                      </button>
+                      <button
+                        onClick={() => openApprovalModal(request, true)}
+                        className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl px-3 text-[12px] font-semibold text-white transition-all active:scale-[0.97]"
+                        style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', boxShadow: '0 3px 10px rgba(22,163,74,0.3)' }}
+                      >
+                        <Check className="h-3.5 w-3.5" /> Approve
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </motion.div>
             ))}
@@ -338,10 +521,9 @@ export function Requests({ embedded }: RequestsProps = {}) {
             ) : (
               <div className="grid gap-2.5 lg:grid-cols-2">
                 {approvedUpcoming.map(request => {
-                  const overlapCount = countOverlappingLeaves(request, approvedUpcoming);
                   return (
-                    <div key={request.id} className="rounded-2xl border border-gray-200/80 bg-white px-4 py-3 dark:border-white/[0.07] dark:bg-white/[0.025]">
-                      <div className="flex items-start gap-3">
+                    <div key={request.id} className="overflow-hidden rounded-2xl border border-gray-200/80 bg-white dark:border-white/[0.07] dark:bg-white/[0.025]">
+                      <div className="flex items-start gap-3 px-4 py-3">
                         <Avatar src={request.profiles.avatar_url} firstName={request.profiles.first_name} lastName={request.profiles.last_name} size="sm" className="ring-1 ring-black/[0.06] dark:ring-white/[0.08]" />
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -350,14 +532,19 @@ export function Requests({ embedded }: RequestsProps = {}) {
                           </div>
                           <p className="mt-1 text-xs font-semibold text-gray-700 dark:text-white/65">{formatLeaveDate(request)}</p>
                           {request.reason && <p className="mt-1 line-clamp-2 text-xs leading-5 text-gray-500 dark:text-white/40">{request.reason}</p>}
-                          {overlapCount > 1 && (
-                            <p className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-700 dark:border-amber-500/25 dark:bg-amber-500/[0.12] dark:text-amber-300">
-                              <Users className="h-3 w-3" />
-                              {overlapCount} approved leaves overlap this period
-                            </p>
-                          )}
                         </div>
                       </div>
+                      <EventScheduleDuringLeave
+                        request={request}
+                        events={leaveEvents}
+                        loadError={eventScheduleError}
+                      />
+                      <LeaveConflictWarning
+                        request={request}
+                        approvedLeaves={approvedUpcoming}
+                        events={leaveEvents}
+                        context="approved"
+                      />
                     </div>
                   );
                 })}

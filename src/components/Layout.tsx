@@ -35,7 +35,28 @@ export function Layout() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [soundSetupOpen, setSoundSetupOpen] = useState(false);
+  const [isIpadLandscapeSidebar, setIsIpadLandscapeSidebar] = useState(false);
   const mobileChromeHidden = false;
+
+  useEffect(() => {
+    const landscapeQuery = window.matchMedia(
+      "(min-width: 1024px) and (max-width: 1366px) and (orientation: landscape)",
+    );
+
+    const syncIpadLandscapeSidebar = () => {
+      const nextValue =
+        document.documentElement.dataset.ipadLayout === "true" &&
+        landscapeQuery.matches;
+      setIsIpadLandscapeSidebar(nextValue);
+      setCollapsed(nextValue);
+    };
+
+    syncIpadLandscapeSidebar();
+    landscapeQuery.addEventListener("change", syncIpadLandscapeSidebar);
+    return () => {
+      landscapeQuery.removeEventListener("change", syncIpadLandscapeSidebar);
+    };
+  }, []);
 
   useEffect(() => {
     initializeInteractionSounds();
@@ -181,7 +202,7 @@ export function Layout() {
   const shouldShiftForMobileMenu =
     user && !staticHideNav && !isMessagesConversation && mobileOpen;
   const desktopSidebarWidth =
-    user && !staticHideNav ? (collapsed ? 92 : 300) : 0;
+    user && !staticHideNav ? (collapsed ? 72 : 300) : 0;
   const mainStyle = {
     pointerEvents: shouldShiftForMobileMenu ? "none" : undefined,
     "--desktop-sidebar-width": `${desktopSidebarWidth}px`,
@@ -374,6 +395,7 @@ export function Layout() {
           hideMobileHeader={isEventDetail || isMessagesPage}
           collapsed={collapsed}
           onCollapsedChange={setCollapsed}
+          collapseAfterNavigate={isIpadLandscapeSidebar}
           mobileOpen={mobileOpen}
           onMobileOpenChange={setMobileOpen}
           mobileChromeHidden={mobileChromeHidden}
@@ -383,6 +405,9 @@ export function Layout() {
 
       <main
         className={`desktop-sidebar-main ${isEventDetail ? "event-detail-main" : "overflow-x-clip"} ${isMessagesPage ? "box-border flex flex-col min-h-[100dvh] overflow-hidden bg-white dark:bg-[#111013] lg:fixed lg:inset-0 lg:h-[100dvh]" : ""}`}
+        onClickCapture={() => {
+          if (isIpadLandscapeSidebar && !collapsed) setCollapsed(true);
+        }}
         style={{
           ...mainStyle,
           // Do not leave a neutral transform or filter on the shared shell.

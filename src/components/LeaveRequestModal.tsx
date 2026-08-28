@@ -1,9 +1,42 @@
 import { useState, useEffect } from 'react';
+import { format, parseISO } from 'date-fns';
+import { AlertTriangle, CalendarDays, Loader2, Users } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { Modal } from './Modal';
 import { DatePicker } from './DatePicker';
+
+interface TeamLeaveProfile {
+  first_name: string;
+  last_name: string;
+  avatar_url: string | null;
+}
+
+interface TeamLeaveOverlap {
+  id: string;
+  user_id: string;
+  leave_type: 'single' | 'range';
+  unavailable_date: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  status: 'pending' | 'approved';
+  profiles: TeamLeaveProfile | null;
+}
+
+function formatTeamLeaveDate(leave: TeamLeaveOverlap) {
+  if (leave.leave_type === 'range' && leave.start_date && leave.end_date) {
+    const start = parseISO(leave.start_date);
+    const end = parseISO(leave.end_date);
+    return format(start, 'MMM yyyy') === format(end, 'MMM yyyy')
+      ? `${format(start, 'MMM d')}–${format(end, 'd, yyyy')}`
+      : `${format(start, 'MMM d')} – ${format(end, 'MMM d, yyyy')}`;
+  }
+
+  return leave.unavailable_date
+    ? format(parseISO(leave.unavailable_date), 'EEEE, MMM d, yyyy')
+    : 'Date unavailable';
+}
 
 interface LeaveRequestModalProps {
   open: boolean;
@@ -13,12 +46,16 @@ interface LeaveRequestModalProps {
 
 export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModalProps) {
   const { user, profile } = useAuth();
+  const userId = user?.id;
   const { toast } = useToast();
   const [leaveType, setLeaveType] = useState<'single' | 'range'>('single');
   const [formDate, setFormDate] = useState('');
   const [formStartDate, setFormStartDate] = useState('');
   const [formEndDate, setFormEndDate] = useState('');
   const [formReason, setFormReason] = useState('');
+  const [teamLeaveOverlaps, setTeamLeaveOverlaps] = useState<TeamLeaveOverlap[]>([]);
+  const [teamLeaveLoading, setTeamLeaveLoading] = useState(false);
+  const [teamLeaveError, setTeamLeaveError] = useState(false);
   const [leavePolicy, setLeavePolicy] = useState({
     approval_required: true,
     reason_required: true,
@@ -33,6 +70,8 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
     setFormStartDate('');
     setFormEndDate('');
     setFormReason('');
+    setTeamLeaveOverlaps([]);
+    setTeamLeaveError(false);
   }, [open]);
 
   useEffect(() => {
@@ -44,6 +83,61 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
     });
     return () => { active = false; };
   }, [open, profile?.org_id]);
+
+  const selectedStartDate = leaveType === 'single' ? formDate : formStartDate;
+  const selectedEndDate = leaveType === 'single' ? formDate : formEndDate;
+  const hasCompleteDateSelection = Boolean(selectedStartDate && selectedEndDate);
+  const hasInvalidDateRange = Boolean(
+    leaveType === 'range'
+    && formStartDate
+    && formEndDate
+    && formEndDate < formStartDate,
+  );
+
+  useEffect(() => {
+    if (!open || !userId || !profile?.org_id || !hasCompleteDateSelection || hasInvalidDateRange) {
+      setTeamLeaveOverlaps([]);
+      setTeamLeaveLoading(false);
+      setTeamLeaveError(false);
+      return;
+    }
+
+    let active = true;
+    setTeamLeaveLoading(true);
+    setTeamLeaveError(false);
+
+    void supabase
+      .from('user_availability')
+      .select('id,user_id,leave_type,unavailable_date,start_date,end_date,status,profiles!user_availability_user_id_fkey(first_name,last_name,avatar_url)')
+      .in('status', ['pending', 'approved'])
+      .neq('user_id', userId)
+      .or(`and(unavailable_date.gte.${selectedStartDate},unavailable_date.lte.${selectedEndDate}),and(start_date.lte.${selectedEndDate},end_date.gte.${selectedStartDate})`)
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error) {
+          setTeamLeaveOverlaps([]);
+          setTeamLeaveError(true);
+        } else {
+          const overlaps = (data || []) as unknown as TeamLeaveOverlap[];
+          setTeamLeaveOverlaps(overlaps.sort((a, b) => {
+            const aDate = a.leave_type === 'range' ? a.start_date : a.unavailable_date;
+            const bDate = b.leave_type === 'range' ? b.start_date : b.unavailable_date;
+            return String(aDate || '').localeCompare(String(bDate || ''));
+          }));
+        }
+        setTeamLeaveLoading(false);
+      });
+
+    return () => { active = false; };
+  }, [
+    hasCompleteDateSelection,
+    hasInvalidDateRange,
+    open,
+    profile?.org_id,
+    selectedEndDate,
+    selectedStartDate,
+    userId,
+  ]);
 
   const resetForm = () => {
     setLeaveType('single');
@@ -102,7 +196,9 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
     onSuccess?.();
   };
 
-  const isSubmitDisabled = (leavePolicy.reason_required && !formReason.trim()) || (leaveType === 'single' ? !formDate : (!formStartDate || !formEndDate));
+  const isSubmitDisabled = (leavePolicy.reason_required && !formReason.trim())
+    || (leaveType === 'single' ? !formDate : (!formStartDate || !formEndDate))
+    || hasInvalidDateRange;
 
   return (
     <Modal
@@ -167,6 +263,72 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
             </div>
           </>
         )}
+
+        <div className="overflow-hidden rounded-2xl border border-emerald-200/80 bg-emerald-50/70 dark:border-emerald-500/20 dark:bg-emerald-500/[0.08]">
+          <div className="flex items-center gap-2 border-b border-emerald-200/70 px-3.5 py-3 dark:border-emerald-500/15">
+            <Users className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold text-emerald-950 dark:text-emerald-100">Team leave on these dates</p>
+              <p className="mt-0.5 text-[11px] text-emerald-800/65 dark:text-emerald-200/55">Pending and approved requests from your church</p>
+            </div>
+            {hasCompleteDateSelection && !teamLeaveLoading && !teamLeaveError && (
+              <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-white px-1.5 text-[11px] font-black text-emerald-700 shadow-sm dark:bg-white/[0.08] dark:text-emerald-300">
+                {teamLeaveOverlaps.length}
+              </span>
+            )}
+          </div>
+
+          <div className="px-3.5 py-3">
+            {!hasCompleteDateSelection ? (
+              <div className="flex items-center gap-2 text-xs text-emerald-800/70 dark:text-emerald-200/55">
+                <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+                Choose {leaveType === 'single' ? 'a date' : 'your start and end dates'} to check who else is away.
+              </div>
+            ) : hasInvalidDateRange ? (
+              <div className="flex items-center gap-2 text-xs font-semibold text-red-700 dark:text-red-300">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                End date must be on or after the start date.
+              </div>
+            ) : teamLeaveLoading ? (
+              <div className="flex items-center gap-2 text-xs text-emerald-800/70 dark:text-emerald-200/55">
+                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                Checking team leave…
+              </div>
+            ) : teamLeaveError ? (
+              <div className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-300" role="alert">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                Team leave could not be checked. You can still submit your request.
+              </div>
+            ) : teamLeaveOverlaps.length === 0 ? (
+              <p className="text-xs font-semibold text-emerald-800/75 dark:text-emerald-200/65">No one else has pending or approved leave on these dates.</p>
+            ) : (
+              <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
+                {teamLeaveOverlaps.map(leave => {
+                  const firstName = leave.profiles?.first_name || '';
+                  const lastName = leave.profiles?.last_name || '';
+                  const fullName = `${firstName} ${lastName}`.trim() || 'Church member';
+                  const initials = `${firstName[0] || ''}${lastName[0] || ''}` || '?';
+                  return (
+                    <div key={leave.id} className="flex items-center gap-2.5 rounded-xl border border-white bg-white/90 px-2.5 py-2 shadow-sm dark:border-white/[0.07] dark:bg-white/[0.05]">
+                      {leave.profiles?.avatar_url ? (
+                        <img src={leave.profiles.avatar_url} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" />
+                      ) : (
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[10px] font-black text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200">{initials}</span>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-bold text-gray-900 dark:text-white">{fullName}</p>
+                        <p className="truncate text-[11px] text-gray-500 dark:text-white/45">{formatTeamLeaveDate(leave)}</p>
+                      </div>
+                      <span className={`shrink-0 rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-wide ${leave.status === 'approved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'}`}>
+                        {leave.status}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Reason */}
         <div>

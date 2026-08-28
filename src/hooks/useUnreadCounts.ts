@@ -12,6 +12,14 @@ export interface UnreadCounts {
   pendingSetlists: number;
 }
 
+interface ConversationUnreadRow {
+  unread_count: number | string | null;
+}
+
+export function countUnreadConversations(rows: ConversationUnreadRow[] | null | undefined): number {
+  return (rows || []).filter(row => Number(row.unread_count) > 0).length;
+}
+
 function isLeadershipRole(value: unknown): boolean {
   if (Array.isArray(value)) return value.some(isLeadershipRole);
   return typeof value === 'object'
@@ -50,7 +58,7 @@ export function useUnreadCounts() {
       announcementRes,
       viewsRes,
       pendingAssignRes,
-      membershipsRes,
+      conversationsRes,
       pendingLeaveRes,
       pendingSetlistsRes,
       pendingSwapsRes,
@@ -58,7 +66,7 @@ export function useUnreadCounts() {
       supabase.from('announcements').select('id, created_at').order('created_at', { ascending: false }).limit(20),
       supabase.from('announcement_views').select('announcement_id').eq('user_id', user.id),
       supabase.from('event_assignments').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('status', 'pending'),
-      supabase.from('conversation_members').select('conversation_id, last_read_at').eq('user_id', user.id),
+      supabase.rpc('get_conversations'),
       canSeePendingLeave
         ? supabase.from('user_availability').select('id', { count: 'exact', head: true }).eq('status', 'pending').eq('request_type', 'leave')
         : Promise.resolve(null),
@@ -78,21 +86,12 @@ export function useUnreadCounts() {
     const viewedIds = new Set((viewsRes.data || []).map(view => view.announcement_id));
     const unreadAnnouncements = (announcementRes.data || []).filter(announcement => !viewedIds.has(announcement.id)).length;
 
-    // Calc message unread (simplified)
-    let unreadMessages = 0;
-    if (membershipsRes.data?.length) {
-      const { data: recentMessages } = await supabase
-        .from('messages')
-        .select('conversation_id, created_at')
-        .in('conversation_id', membershipsRes.data.map(membership => membership.conversation_id))
-        .order('created_at', { ascending: false });
-
-      membershipsRes.data.forEach(membership => {
-        const lastRead = membership.last_read_at ? new Date(membership.last_read_at) : new Date(0);
-        const hasNew = (recentMessages || []).some(msg => msg.conversation_id === membership.conversation_id && new Date(msg.created_at) > lastRead);
-        if (hasNew) unreadMessages++;
-      });
-    }
+    // Use the same server-authoritative conversation list as the Messages page.
+    // It excludes archived chats and the current user's own messages, so a
+    // global badge always points to an unread conversation the user can open.
+    const unreadMessages = conversationsRes.error
+      ? 0
+      : countUnreadConversations(conversationsRes.data as ConversationUnreadRow[] | null);
 
     setCounts({
       announcements: Math.max(0, unreadAnnouncements),

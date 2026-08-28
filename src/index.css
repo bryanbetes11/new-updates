@@ -578,6 +578,11 @@ html[data-touch-feedback="apple"] :is(nav, aside) .touch-feedback-strong {
     :root[data-ipad-layout="true"] .dashboard-summary-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     }
+
+    :root[data-ipad-layout="true"] .event-list-artwork {
+      width: 5rem !important;
+      height: 5rem !important;
+    }
   }
 
   @media (min-width: 1024px) and (max-width: 1279px) and (orientation: landscape) {

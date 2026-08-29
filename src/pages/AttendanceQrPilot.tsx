@@ -5,6 +5,7 @@ import QRCode from 'qrcode';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { buildAttendanceQrPayload } from '../lib/attendanceQrPilot';
+import { createAttendanceQrProjectorPng } from '../lib/attendanceQrProjector';
 import { supabase } from '../lib/supabase';
 
 interface PilotEvent {
@@ -29,42 +30,23 @@ interface LiveQrState {
   present_grace_minutes: number;
 }
 
-function BrandedQr({
+function ProjectorQrPreview({
   image,
   mode,
-  churchName,
 }: {
   image: string;
   mode: 'live' | 'test';
-  churchName?: string | null;
 }) {
   const live = mode === 'live';
-  const accent = live ? 'emerald' : 'amber';
-  const label = live ? 'Official attendance' : 'Safe test scan';
 
   return (
-    <div className={`relative mx-auto mt-5 w-full max-w-[336px] overflow-hidden rounded-[28px] border bg-white p-3 shadow-xl ${live ? 'border-emerald-400/50 shadow-emerald-950/25' : 'border-amber-400/50 shadow-black/25'}`}>
-      <div className={`absolute inset-x-0 top-0 h-1.5 ${live ? 'bg-emerald-500' : 'bg-amber-400'}`} />
-      <div className="flex items-center justify-between gap-3 px-2 pb-3 pt-2 text-left">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-white ${live ? 'bg-emerald-500' : 'bg-amber-500'}`}>
-            <QrCode className="h-4 w-4" />
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-[11px] font-black uppercase tracking-[0.13em] text-slate-900">ServeSync</p>
-            <p className="truncate text-[10px] font-semibold text-slate-500">{churchName || 'Church attendance'}</p>
-          </div>
-        </div>
-        <span className={`shrink-0 rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.09em] ${live ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{label}</span>
+    <div className="mt-5">
+      <div className={`overflow-hidden rounded-2xl border shadow-xl ${live ? 'border-emerald-400/40 shadow-emerald-950/20' : 'border-amber-400/40 shadow-black/20'}`}>
+        <img src={image} alt={live ? '1920 by 1080 official attendance projector preview' : '1920 by 1080 attendance test projector preview'} className="block aspect-video w-full bg-slate-950 object-cover" />
       </div>
-      <div className={`relative overflow-hidden rounded-2xl border p-2 ${live ? 'border-emerald-100 bg-emerald-50' : 'border-amber-100 bg-amber-50'}`}>
-        <img src={image} alt={live ? 'Live reusable ServeSync church attendance QR code' : 'Reusable ServeSync attendance test QR code'} className="block w-full rounded-xl bg-white p-2" />
-        <span className={`pointer-events-none absolute left-2 top-2 h-7 w-7 rounded-tl-xl border-l-[3px] border-t-[3px] ${live ? 'border-emerald-500' : 'border-amber-500'}`} />
-        <span className={`pointer-events-none absolute bottom-2 right-2 h-7 w-7 rounded-br-xl border-b-[3px] border-r-[3px] ${live ? 'border-emerald-500' : 'border-amber-500'}`} />
-      </div>
-      <div className="flex items-center justify-between gap-3 px-2 pb-1 pt-3 text-[10px] font-semibold text-slate-500">
-        <span>Scan • review • check in</span>
-        <span className={`h-1.5 w-1.5 rounded-full ${accent === 'emerald' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+      <div className="mt-2 flex items-center justify-center gap-2 text-[10px] font-bold uppercase tracking-[0.13em] text-gray-400">
+        <span className={`h-1.5 w-1.5 rounded-full ${live ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+        Live preview · 1920 × 1080 PNG
       </div>
     </div>
   );
@@ -82,6 +64,8 @@ export function AttendanceQrPilot() {
   const [liveState, setLiveState] = useState<LiveQrState | null>(null);
   const [qrImage, setQrImage] = useState('');
   const [liveQrImage, setLiveQrImage] = useState('');
+  const [projectorQrImage, setProjectorQrImage] = useState('');
+  const [liveProjectorQrImage, setLiveProjectorQrImage] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [title, setTitle] = useState('QR Attendance Test');
@@ -139,6 +123,22 @@ export function AttendanceQrPilot() {
     }).then(setLiveQrImage);
   }, [liveQrPayload]);
 
+  useEffect(() => {
+    if (!qrImage) return;
+    let active = true;
+    void createAttendanceQrProjectorPng({ qrImage, mode: 'test', churchName: organization?.name })
+      .then((image) => { if (active) setProjectorQrImage(image); });
+    return () => { active = false; };
+  }, [organization?.name, qrImage]);
+
+  useEffect(() => {
+    if (!liveQrImage) return;
+    let active = true;
+    void createAttendanceQrProjectorPng({ qrImage: liveQrImage, mode: 'live', churchName: organization?.name })
+      .then((image) => { if (active) setLiveProjectorQrImage(image); });
+    return () => { active = false; };
+  }, [liveQrImage, organization?.name]);
+
   const createTestEvent = async () => {
     if (!title.trim()) {
       toast('error', 'Enter a test event title');
@@ -182,7 +182,7 @@ export function AttendanceQrPilot() {
 
   return (
     <div className="page-container page-bottom-pad">
-      <div className="app-content-shell mx-auto max-w-5xl space-y-5">
+      <div className="relative mx-auto max-w-2xl space-y-5 px-4 pb-6 pt-4 sm:space-y-6 sm:px-6 sm:pt-5 md:max-w-[860px] md:px-8 lg:max-w-6xl xl:max-w-[1560px]">
         <div>
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-emerald-500">
             <ShieldCheck className="h-4 w-4" /> Attendance control
@@ -194,7 +194,7 @@ export function AttendanceQrPilot() {
         {loading ? (
           <div className="card flex min-h-64 items-center justify-center"><Loader2 className="h-7 w-7 animate-spin text-emerald-500" /></div>
         ) : (
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.75fr)]">
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(380px,1.1fr)]">
             <section className="card p-5">
               <div className="flex items-center gap-3">
                 <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-500"><CalendarClock className="h-5 w-5" /></span>
@@ -205,10 +205,10 @@ export function AttendanceQrPilot() {
                   <input className="input mt-1.5 w-full" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={120} />
                 </label>
                 <label className="text-sm font-semibold">Starts
-                  <input type="datetime-local" className="input mt-1.5 w-full" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} />
+                  <input type="datetime-local" className="input attendance-datetime-input mt-1.5 w-full" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} />
                 </label>
                 <label className="text-sm font-semibold">Ends
-                  <input type="datetime-local" className="input mt-1.5 w-full" value={endsAt} onChange={(event) => setEndsAt(event.target.value)} />
+                  <input type="datetime-local" className="input attendance-datetime-input mt-1.5 w-full" value={endsAt} onChange={(event) => setEndsAt(event.target.value)} />
                 </label>
               </div>
               <button type="button" className="btn-primary mt-5 min-h-11 w-full" onClick={createTestEvent} disabled={saving}>
@@ -232,23 +232,23 @@ export function AttendanceQrPilot() {
                 <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-500"><ShieldCheck className="h-6 w-6" /></div>
                 <h2 className="mt-3 font-bold">Live reusable church QR</h2>
                 <p className="mt-1 text-xs text-gray-500">This writes to official attendance. Members see only events they are scheduled for.</p>
-                {liveQrImage && <BrandedQr image={liveQrImage} mode="live" churchName={organization?.name} />}
-                {liveQrImage && (
-                  <a href={liveQrImage} download="servesync-live-church-attendance-qr.png" className="btn-primary mt-4 inline-flex min-h-11 w-full items-center justify-center">
-                    <Download className="h-4 w-4" /> Download live QR
+                {liveProjectorQrImage && <ProjectorQrPreview image={liveProjectorQrImage} mode="live" />}
+                {liveProjectorQrImage && (
+                  <a href={liveProjectorQrImage} download="servesync-live-attendance-projector-1920x1080.png" className="btn-primary mt-4 inline-flex min-h-11 w-full items-center justify-center">
+                    <Download className="h-4 w-4" /> Download projector slide
                   </a>
                 )}
-                <p className="mt-3 text-[11px] leading-relaxed text-emerald-500">Each scan opens a one-use {liveState?.session_minutes || 5}-minute session. Attendance still requires a separate Check In tap.</p>
+                <p className="mx-auto mt-3 max-w-[30rem] text-balance text-[11px] leading-relaxed text-emerald-500">Each scan opens a one-use {liveState?.session_minutes || 5}-minute session. Members still tap Check In.</p>
               </section>
 
               <section className="card p-5 text-center">
                 <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 text-amber-500"><QrCode className="h-6 w-6" /></div>
                 <h2 className="mt-3 font-bold">Isolated test QR</h2>
                 <p className="mt-1 text-xs text-gray-500">Use this only with the test events on the left.</p>
-                {qrImage && <BrandedQr image={qrImage} mode="test" churchName={organization?.name} />}
-                {qrImage && (
-                  <a href={qrImage} download="servesync-attendance-test-qr.png" className="btn-secondary mt-4 inline-flex min-h-11 w-full items-center justify-center">
-                    <Download className="h-4 w-4" /> Download test QR
+                {projectorQrImage && <ProjectorQrPreview image={projectorQrImage} mode="test" />}
+                {projectorQrImage && (
+                  <a href={projectorQrImage} download="servesync-attendance-test-projector-1920x1080.png" className="btn-secondary mt-4 inline-flex min-h-11 w-full items-center justify-center">
+                    <Download className="h-4 w-4" /> Download test projector slide
                   </a>
                 )}
                 <p className="mt-3 text-[11px] leading-relaxed text-amber-500">Admin test only. It cannot change real attendance or accountability.</p>

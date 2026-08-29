@@ -234,7 +234,7 @@ export function OrganizationBilling() {
   if (!isOrgAdmin || !organization) {
     return (
       <div className="page-container page-bottom-pad">
-        <div className="max-w-5xl mx-auto px-1 sm:px-2 pt-6 sm:pt-8">
+        <div className="relative mx-auto max-w-2xl px-4 pb-6 pt-6 sm:px-6 sm:pt-8 md:max-w-[860px] md:px-8 lg:max-w-6xl xl:max-w-[1560px]">
           <div className="flex items-center justify-center min-h-[40vh]">
             <div className="text-center">
               <div
@@ -575,7 +575,7 @@ export function OrganizationBilling() {
 
   return (
     <div className="page-container page-bottom-pad">
-      <div className="max-w-5xl mx-auto px-1 sm:px-2 pt-6 sm:pt-8">
+      <div className="relative mx-auto max-w-2xl px-4 pb-6 pt-6 sm:px-6 sm:pt-8 md:max-w-[860px] md:px-8 lg:max-w-6xl xl:max-w-[1560px]">
         {content}
       </div>
     </div>

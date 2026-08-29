@@ -96,6 +96,11 @@ export function AttendanceMonitoring() {
   const [selectedQuarter, setSelectedQuarter] = useState(getQuarterFromDate(new Date()));
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [showTeamResetModal, setShowTeamResetModal] = useState(false);
+  const [teamResetMonth, setTeamResetMonth] = useState('');
+  const [teamResetReason, setTeamResetReason] = useState('');
+  const [teamResetConfirmation, setTeamResetConfirmation] = useState('');
+  const [resettingTeam, setResettingTeam] = useState(false);
   const [expandedMember, setExpandedMember] = useState<string | null>(null);
   const [historyMember, setHistoryMember] = useState<MemberStats | null>(null);
   const [history, setHistory] = useState<AttendanceHistoryRow[]>([]);
@@ -280,6 +285,54 @@ export function AttendanceMonitoring() {
     needsReview: stats.reduce((sum, s) => sum + s.needs_review_count, 0),
   };
 
+  const quarterMonthNumbers = Array.from({ length: 3 }, (_, index) => ((selectedQuarter - 1) * 3) + index + 1);
+  const teamResetScopeLabel = teamResetMonth
+    ? `${format(new Date(selectedYear, Number(teamResetMonth) - 1, 1), 'MMMM')} ${selectedYear}`
+    : `Q${selectedQuarter} ${selectedYear}`;
+  const teamResetPhrase = `RESET ${teamResetMonth
+    ? format(new Date(selectedYear, Number(teamResetMonth) - 1, 1), 'MMMM').toUpperCase()
+    : `Q${selectedQuarter}`} ${selectedYear}`;
+  const teamResetScopeOptions = [
+    { value: '', label: `Entire Q${selectedQuarter} (${quarterMonthNumbers.map(month => format(new Date(selectedYear, month - 1, 1), 'MMM')).join(' - ')})` },
+    ...quarterMonthNumbers.map(month => ({
+      value: String(month),
+      label: format(new Date(selectedYear, month - 1, 1), 'MMMM'),
+    })),
+  ];
+
+  const openTeamReset = () => {
+    setTeamResetMonth('');
+    setTeamResetReason('');
+    setTeamResetConfirmation('');
+    setShowTeamResetModal(true);
+  };
+
+  const handleTeamAttendanceReset = async () => {
+    if (resettingTeam || teamResetConfirmation !== teamResetPhrase || teamResetReason.trim().length < 8) return;
+
+    setResettingTeam(true);
+    const { data, error } = await supabase.rpc('reset_team_attendance_for_consideration', {
+      p_year: selectedYear,
+      p_quarter: selectedQuarter,
+      p_month: teamResetMonth ? Number(teamResetMonth) : null,
+      p_reason: teamResetReason.trim(),
+    });
+
+    if (error) {
+      toast('error', error.message || 'Failed to reset team attendance');
+      setResettingTeam(false);
+      return;
+    }
+
+    const result = Array.isArray(data) ? data[0] : data;
+    const updated = Number(result?.updated_records || 0);
+    const created = Number(result?.created_records || 0);
+    toast('success', `${teamResetScopeLabel} consideration applied to ${updated + created} record${updated + created === 1 ? '' : 's'}`);
+    setResettingTeam(false);
+    setShowTeamResetModal(false);
+    await fetchStats();
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12" role="status" aria-live="polite">
@@ -327,8 +380,13 @@ export function AttendanceMonitoring() {
             <Download className="h-3.5 w-3.5" /> Export
           </button>
           {canManageDiscipline && (
-            <button onClick={() => setShowResetModal(true)} className="btn-ghost min-h-11 flex-1 text-xs text-amber-600 hover:text-amber-700 sm:flex-none">
+            <button onClick={() => setShowResetModal(true)} className="btn-secondary min-h-11 flex-1 border-amber-500/25 bg-amber-500/[0.07] text-xs text-amber-700 hover:bg-amber-500/[0.13] hover:text-amber-800 dark:text-amber-300 sm:flex-none">
               <RotateCcw className="h-3.5 w-3.5" /> Re-send Alerts
+            </button>
+          )}
+          {(isOrgAdmin || isPlatformOwner) && (
+            <button onClick={openTeamReset} className="btn-secondary min-h-11 flex-1 border-rose-500/25 text-xs text-rose-600 hover:bg-rose-500/[0.08] hover:text-rose-700 dark:text-rose-300 sm:flex-none">
+              <RotateCcw className="h-3.5 w-3.5" /> Reset Team
             </button>
           )}
         </div>
@@ -717,6 +775,67 @@ export function AttendanceMonitoring() {
             </div>
           </div>
         )}
+      </Modal>
+
+      <Modal open={showTeamResetModal} onClose={() => !resettingTeam && setShowTeamResetModal(false)} title="Reset Team Attendance" size="sm">
+        <div className="space-y-4">
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.08] p-3">
+            <p className="text-sm font-bold text-gray-900 dark:text-white">Grant consideration for {teamResetScopeLabel}</p>
+            <p className="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-300">
+              Attendance history will not be deleted. Late, absent, and finalized missing attendance within this scope will become Excused. Present records stay unchanged. Quarter-level offense alerts will be cleared and recalculated from the remaining records.
+            </p>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Reset scope</label>
+            <Select
+              value={teamResetMonth}
+              onChange={value => {
+                setTeamResetMonth(value);
+                setTeamResetConfirmation('');
+              }}
+              options={teamResetScopeOptions}
+            />
+            <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">Choose the entire quarter or one month within the selected quarter.</p>
+          </div>
+          <div>
+            <label htmlFor="team-attendance-reset-reason" className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Reason for consideration</label>
+            <textarea
+              id="team-attendance-reset-reason"
+              value={teamResetReason}
+              onChange={event => setTeamResetReason(event.target.value)}
+              className="input-field h-24 resize-none"
+              placeholder="Explain why the team is receiving attendance consideration..."
+              maxLength={500}
+              disabled={resettingTeam}
+            />
+            <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">This reason is saved with every attendance record changed by this reset.</p>
+          </div>
+          <div>
+            <label htmlFor="team-attendance-reset-confirmation" className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Type <span className="font-black text-gray-900 dark:text-white">{teamResetPhrase}</span> to confirm
+            </label>
+            <input
+              id="team-attendance-reset-confirmation"
+              value={teamResetConfirmation}
+              onChange={event => setTeamResetConfirmation(event.target.value.toUpperCase())}
+              className="input-field font-mono"
+              placeholder={teamResetPhrase}
+              autoComplete="off"
+              disabled={resettingTeam}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2 border-t border-gray-200/70 pt-4 dark:border-white/[0.08]">
+            <button type="button" onClick={() => setShowTeamResetModal(false)} disabled={resettingTeam} className="btn-secondary min-h-11">Cancel</button>
+            <button
+              type="button"
+              onClick={handleTeamAttendanceReset}
+              disabled={resettingTeam || teamResetConfirmation !== teamResetPhrase || teamResetReason.trim().length < 8}
+              className="inline-flex min-h-11 items-center justify-center rounded-xl bg-rose-600 px-4 text-sm font-bold text-white transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              {resettingTeam ? 'Applying...' : 'Reset'}
+            </button>
+          </div>
+        </div>
       </Modal>
 
       <Modal

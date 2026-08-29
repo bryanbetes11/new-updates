@@ -87,33 +87,59 @@ function getApprovedLeaveConflicts(target: UnavailabilityRequest, approvedLeaves
   });
 }
 
+function groupApprovedLeavesByPeriod(approvedLeaves: UnavailabilityRequest[]) {
+  const groups = new Map<string, UnavailabilityRequest[]>();
+
+  approvedLeaves.forEach(request => {
+    const start = getLeaveStart(request);
+    const end = getLeaveEnd(request);
+    const key = start && end ? `${start}:${end}` : request.id;
+    const group = groups.get(key);
+    if (group) group.push(request);
+    else groups.set(key, [request]);
+  });
+
+  return [...groups.entries()].map(([key, requests]) => ({ key, requests }));
+}
+
 function LeaveConflictWarning({
   request,
+  groupedRequests = [request],
   approvedLeaves,
   events,
   context,
   display = 'panel',
 }: {
   request: UnavailabilityRequest;
+  groupedRequests?: UnavailabilityRequest[];
   approvedLeaves: UnavailabilityRequest[];
   events: LeaveEvent[];
   context: 'pending' | 'approved';
   display?: 'panel' | 'badge';
 }) {
   const [open, setOpen] = useState(false);
-  const conflicts = getApprovedLeaveConflicts(request, approvedLeaves);
-  if (conflicts.length === 0) return null;
+  const groupedUserIds = new Set(groupedRequests.map(groupedRequest => groupedRequest.user_id));
+  const conflicts = groupedRequests
+    .flatMap(groupedRequest => getApprovedLeaveConflicts(groupedRequest, approvedLeaves))
+    .filter(conflict => !groupedUserIds.has(conflict.user_id))
+    .filter((conflict, index, list) => list.findIndex(candidate => candidate.user_id === conflict.user_id) === index);
+  const isSharedPeriod = groupedRequests.length > 1;
+  if (!isSharedPeriod && conflicts.length === 0) return null;
 
-  const names = conflicts
+  const names = (isSharedPeriod ? [...groupedRequests, ...conflicts] : conflicts)
     .map(conflict => `${conflict.profiles.first_name} ${conflict.profiles.last_name}`.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((name, index, list) => list.indexOf(name) === index);
   const visibleNames = names.slice(0, 2).join(' and ');
   const remainingCount = Math.max(0, names.length - 2);
   const scheduledEvents = getEventsDuringLeave(request, events);
   const eventTypes = [...new Set(scheduledEvents.map(event => event.event_type).filter(Boolean))];
   const includesRehearsal = eventTypes.some(eventType => eventType.toLowerCase().includes('rehearsal'));
-  const subject = visibleNames || `${conflicts.length} other team member${conflicts.length === 1 ? '' : 's'}`;
-  const conflictSummary = `${subject}${remainingCount > 0 ? ` and ${remainingCount} more` : ''} ${conflicts.length === 1 ? 'already has' : 'already have'} approved leave overlapping this ${context === 'pending' ? 'request' : 'leave'}.`;
+  const conflictCount = isSharedPeriod ? names.length : conflicts.length;
+  const subject = visibleNames || `${conflictCount} other team member${conflictCount === 1 ? '' : 's'}`;
+  const conflictSummary = isSharedPeriod
+    ? `${subject}${remainingCount > 0 ? ` and ${remainingCount} more` : ''} have approved leave covering the same ${getLeaveStart(request) === getLeaveEnd(request) ? 'date' : 'period'}.`
+    : `${subject}${remainingCount > 0 ? ` and ${remainingCount} more` : ''} ${conflicts.length === 1 ? 'already has' : 'already have'} approved leave overlapping this ${context === 'pending' ? 'request' : 'leave'}.`;
   const suggestion = includesRehearsal
     ? `Consider moving the rehearsal if possible, or arrange coverage ${context === 'pending' ? 'before approving' : 'now'}.`
       : eventTypes.length > 0
@@ -131,7 +157,7 @@ function LeaveConflictWarning({
         >
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
           <span>Coverage warning</span>
-          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-200/80 px-1 text-[10px] text-amber-900 dark:bg-amber-400/20 dark:text-amber-100">{conflicts.length}</span>
+          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-200/80 px-1 text-[10px] text-amber-900 dark:bg-amber-400/20 dark:text-amber-100">{conflictCount}</span>
         </button>
         <Modal open={open} onClose={() => setOpen(false)} title="Coverage warning" size="sm">
           <div className="space-y-3">
@@ -351,6 +377,8 @@ export function Requests({ embedded }: RequestsProps = {}) {
     );
   }
 
+  const approvedLeaveGroups = groupApprovedLeavesByPeriod(approvedUpcoming);
+
   const content = (
     <>
     <div className={embedded ? 'space-y-5' : 'space-y-5 sm:space-y-6'}>
@@ -519,20 +547,42 @@ export function Requests({ embedded }: RequestsProps = {}) {
                 <p className="mt-1 text-xs text-gray-500 dark:text-white/35">Approved requests will appear here.</p>
               </div>
             ) : (
-              <div className="grid gap-2.5 lg:grid-cols-2">
-                {approvedUpcoming.map(request => {
+              <div className="space-y-2.5">
+                {approvedLeaveGroups.map(group => {
+                  const request = group.requests[0];
+                  const isSharedPeriod = group.requests.length > 1;
                   return (
-                    <div key={request.id} className="overflow-hidden rounded-2xl border border-gray-200/80 bg-white dark:border-white/[0.07] dark:bg-white/[0.025]">
-                      <div className="flex items-start gap-3 px-4 py-3">
-                        <Avatar src={request.profiles.avatar_url} firstName={request.profiles.first_name} lastName={request.profiles.last_name} size="sm" className="ring-1 ring-black/[0.06] dark:ring-white/[0.08]" />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <p className="truncate text-sm font-bold text-gray-900 dark:text-white">{request.profiles.first_name} {request.profiles.last_name}</p>
-                            <span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 dark:bg-emerald-500/[0.12] dark:text-emerald-300">Approved</span>
+                    <div
+                      key={group.key}
+                      className={`overflow-hidden rounded-2xl border bg-white shadow-[0_8px_24px_-16px_rgba(15,23,42,0.35)] dark:bg-[#111418] dark:shadow-[0_12px_32px_-18px_rgba(0,0,0,0.9)] ${isSharedPeriod ? 'border-amber-300/80 dark:border-amber-400/35' : 'border-gray-300/90 dark:border-white/[0.14]'}`}
+                    >
+                      <div className={`flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 ${isSharedPeriod ? 'border-amber-200/80 bg-amber-50/55 dark:border-amber-400/25 dark:bg-amber-500/[0.06]' : 'border-gray-200/90 bg-gray-50 dark:border-white/[0.1] dark:bg-white/[0.045]'}`}>
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-500/[0.14]">
+                            <CalendarDays className="h-4 w-4 text-emerald-700 dark:text-emerald-300" />
                           </div>
-                          <p className="mt-1 text-xs font-semibold text-gray-700 dark:text-white/65">{formatLeaveDate(request)}</p>
-                          {request.reason && <p className="mt-1 line-clamp-2 text-xs leading-5 text-gray-500 dark:text-white/40">{request.reason}</p>}
+                          <div className="min-w-0">
+                            <p className="text-sm font-black tracking-[-0.01em] text-gray-950 dark:text-white sm:text-base">{formatLeaveDate(request)}</p>
+                            <p className="mt-0.5 text-[11px] font-semibold text-gray-500 dark:text-white/45">{isSharedPeriod ? 'Shared leave coverage' : 'Leave coverage'}</p>
+                          </div>
                         </div>
+                        <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${isSharedPeriod ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/[0.12] dark:text-amber-200' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/[0.12] dark:text-emerald-300'}`}>
+                          {group.requests.length} {group.requests.length === 1 ? 'member' : 'members'} away
+                        </span>
+                      </div>
+                      <div className={`grid divide-y divide-black/[0.05] dark:divide-white/[0.06] ${isSharedPeriod ? 'sm:grid-cols-2 sm:divide-x sm:divide-y-0' : ''}`}>
+                        {group.requests.map(groupedRequest => (
+                          <div key={groupedRequest.id} className="flex items-start gap-3 px-4 py-3">
+                            <Avatar src={groupedRequest.profiles.avatar_url} firstName={groupedRequest.profiles.first_name} lastName={groupedRequest.profiles.last_name} size="sm" className="ring-1 ring-black/[0.06] dark:ring-white/[0.08]" />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                <p className="truncate text-sm font-bold text-gray-900 dark:text-white">{groupedRequest.profiles.first_name} {groupedRequest.profiles.last_name}</p>
+                                <span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 dark:bg-emerald-500/[0.12] dark:text-emerald-300">Approved</span>
+                              </div>
+                              {groupedRequest.reason && <p className="mt-1 line-clamp-2 text-xs leading-5 text-gray-500 dark:text-white/40">{groupedRequest.reason}</p>}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                       <EventScheduleDuringLeave
                         request={request}
@@ -541,6 +591,7 @@ export function Requests({ embedded }: RequestsProps = {}) {
                       />
                       <LeaveConflictWarning
                         request={request}
+                        groupedRequests={group.requests}
                         approvedLeaves={approvedUpcoming}
                         events={leaveEvents}
                         context="approved"

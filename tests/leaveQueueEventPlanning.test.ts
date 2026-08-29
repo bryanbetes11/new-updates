@@ -43,3 +43,9 @@ assert.match(
   /<EventScheduleDuringLeave[\s\S]*?<LeaveConflictWarning[\s\S]*?context="approved"/,
   'approved leave warnings should follow the event schedule at the bottom of each card',
 );
+assert.match(source, /function groupApprovedLeavesByPeriod/, 'approved leaves should be grouped by matching date periods');
+assert.match(source, /groupedRequests=\{group\.requests\}/, 'a shared leave period should produce one consolidated coverage warning');
+assert.match(source, /Shared leave coverage/, 'matching leave periods should have a clear shared-card heading');
+assert.match(source, /group\.requests\.length === 1 \? 'member' : 'members'\} away/, 'leave cards should communicate how many members are unavailable with correct grammar');
+assert.match(source, /isSharedPeriod \? 'Shared leave coverage' : 'Leave coverage'/, 'every approved card should use the same date-first coverage header');
+assert.match(source, /text-sm font-black[\s\S]*?sm:text-base/, 'approved leave dates should be visually prominent');

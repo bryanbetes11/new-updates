@@ -42,6 +42,11 @@ assert.match(
 );
 assert.match(
   navigation,
-  /onClickCapture=\{\(event\) => \{[\s\S]*?!collapseAfterNavigate \|\| !collapsed[\s\S]*?event\.stopPropagation\(\)[\s\S]*?onCollapsedChange\(false\)/,
-  'the first tap on a collapsed iPad rail should expand it without selecting a destination',
+  /onClickCapture=\{\(event\) => \{[\s\S]*?if \(!collapsed\) return;[\s\S]*?event\.stopPropagation\(\)[\s\S]*?onCollapsedChange\(false\)/,
+  'the first tap on any collapsed desktop rail should expand it without selecting a destination',
+);
+assert.doesNotMatch(
+  navigation,
+  /if \(!collapseAfterNavigate \|\| !collapsed\) return;/,
+  'expand-only first taps should not be limited to iPad mode',
 );

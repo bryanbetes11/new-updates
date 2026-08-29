@@ -2135,7 +2135,7 @@ export function Navigation({
         transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
         className="desktop-sidebar fixed left-0 z-40 hidden flex-col border-r border-white/[0.08] bg-[#050505] lg:flex"
         onClickCapture={(event) => {
-          if (!collapseAfterNavigate || !collapsed) return;
+          if (!collapsed) return;
           event.stopPropagation();
           onCollapsedChange(false);
         }}

@@ -4,7 +4,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { addDays, format, parseISO, differenceInDays } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { animate, motion, useMotionValue, AnimatePresence, useReducedMotion, type PanInfo } from 'framer-motion';
-import { ArrowLeft, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, ListOrdered, Pause, Play, Settings2, MoreHorizontal, Upload, Calendar, Loader2, BellRing, Eye, EyeOff, Lock, Unlock, Wifi, WifiOff, Smile, Guitar, Drum, KeyboardMusic, Mic, Crown } from 'lucide-react';
+import { ArrowLeft, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, ListOrdered, Pause, Play, Settings2, MoreHorizontal, Upload, Calendar, Loader2, BellRing, Eye, EyeOff, Lock, Wifi, WifiOff, Smile, Guitar, Drum, KeyboardMusic, Mic, Crown } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -254,15 +254,6 @@ const REHEARSAL_READINESS_OPTIONS: Array<{ value: RehearsalReadiness; label: str
   { value: 'not_rehearsed', label: 'Not rehearsed' },
   { value: 'needs_work', label: 'Needs work' },
   { value: 'ready', label: 'Ready' },
-];
-
-const REHEARSAL_ISSUE_OPTIONS: Array<{ value: RehearsalIssueType; label: string }> = [
-  { value: 'timing', label: 'Timing' },
-  { value: 'chords', label: 'Chords' },
-  { value: 'vocals', label: 'Vocals' },
-  { value: 'transition', label: 'Transition' },
-  { value: 'lyrics', label: 'Lyrics' },
-  { value: 'other', label: 'Other' },
 ];
 
 function getServingRoleLabel(roleName: string) {
@@ -707,7 +698,6 @@ export function EventDetail() {
   const [serviceAutoScrollEnabled, setServiceAutoScrollEnabled] = useState(false);
   const [serviceSongPickerOpen, setServiceSongPickerOpen] = useState(false);
   const [serviceCloseConfirmOpen, setServiceCloseConfirmOpen] = useState(false);
-  const [servicePreparationOpen, setServicePreparationOpen] = useState(false);
   const [stageCommsOpen, setStageCommsOpen] = useState(false);
   const [stageCommsView, setStageCommsView] = useState<'stage' | 'tech'>('stage');
   const [stageCommsStatus, setStageCommsStatus] = useState<'idle' | 'sent' | 'adjusting' | 'done'>('idle');
@@ -720,13 +710,12 @@ export function EventDetail() {
   const [stageRequestMessages, setStageRequestMessages] = useState<TechModeMessages>(DEFAULT_STAGE_REQUEST_MESSAGES);
   const [liveCommsMessages, setLiveCommsMessages] = useState<LiveCommsMessage[]>([]);
   const [liveRequestStatuses, setLiveRequestStatuses] = useState<Record<string, 'sent' | 'adjusting' | 'done'>>({});
+  const [dismissedTechInstructionIds, setDismissedTechInstructionIds] = useState<string[]>([]);
   const liveCommsChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const [showRehearsalSummary, setShowRehearsalSummary] = useState(false);
   const [serviceModeUnlocked, setServiceModeUnlocked] = useState(false);
   const [isOnline, setIsOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine);
   const [songPreparation, setSongPreparation] = useState<Record<string, EventSongPreparation>>({});
-  const [preparationDraft, setPreparationDraft] = useState<{ readiness: RehearsalReadiness; issue_type: RehearsalIssueType | ''; note: string }>({ readiness: 'not_rehearsed', issue_type: '', note: '' });
-  const [savingPreparation, setSavingPreparation] = useState(false);
   const [serviceSongStageWidth, setServiceSongStageWidth] = useState(0);
   const [chartSaving, setChartSaving] = useState(false);
   const chartModalStorageKey = user?.id && id ? `${EVENT_CHART_OPEN_STORAGE_PREFIX}:${user.id}:${id}` : '';
@@ -966,7 +955,6 @@ export function EventDetail() {
       setServiceArrangementOpen(false);
       setServiceAutoScrollEnabled(false);
       setServiceSongPickerOpen(false);
-	  setServicePreparationOpen(false);
 	  setShowRehearsalSummary(false);
 	  setServiceModeUnlocked(false);
       setServiceCloseConfirmOpen(false);
@@ -3791,8 +3779,10 @@ const openLyricsModal = (ss: SetlistSong) => {
 	const techConfirmedCount = techPerformers.filter(member => member.status === 'confirmed').length;
 	const techPendingCount = techPerformers.length - techConfirmedCount;
 	const liveStageRequests = liveCommsMessages.filter(message => message.kind === 'stage_request');
+	const activeLiveStageRequests = liveStageRequests.filter(message => liveRequestStatuses[message.id] !== 'done');
 	const resolvedLiveRequestCount = liveStageRequests.filter(message => liveRequestStatuses[message.id] === 'done').length;
 	const latestTechInstruction = [...liveCommsMessages].reverse().find(message => message.kind === 'tech_instruction' && message.recipientUserId === user?.id);
+	const activeTechInstruction = latestTechInstruction && !dismissedTechInstructionIds.includes(latestTechInstruction.id) ? latestTechInstruction : null;
 	const sendLiveCommsMessage = async (message: LiveCommsMessage) => {
 	  if (message.kind === 'request_status' && message.requestId && message.status) {
 	    setLiveRequestStatuses(current => ({ ...current, [message.requestId!]: message.status! }));
@@ -3803,51 +3793,8 @@ const openLyricsModal = (ss: SetlistSong) => {
 	  if (result !== 'ok') toast('error', 'Message could not reach the other Live Mode devices');
 	  return result === 'ok';
 	};
-	const activeSongPreparation = serviceModeSong ? songPreparation[serviceModeSong.id] : undefined;
 	const rehearsalReadyCount = serviceModeSongs.filter(song => songPreparation[song.id]?.readiness === 'ready').length;
 	const rehearsalNeedsWorkCount = serviceModeSongs.filter(song => songPreparation[song.id]?.readiness === 'needs_work').length;
-	const openPreparationPanel = () => {
-	  if (!serviceModeSong) return;
-	  setPreparationDraft({
-	    readiness: activeSongPreparation?.readiness || 'not_rehearsed',
-	    issue_type: activeSongPreparation?.issue_type || '',
-	    note: activeSongPreparation?.note || '',
-	  });
-	  setServicePreparationOpen(value => !value);
-	};
-	const saveSongPreparation = async () => {
-	  if (!serviceModeSong || !user?.id || !organization?.id || event.event_type !== 'Rehearsals' || !event.linked_event_id || savingPreparation) return;
-	  setSavingPreparation(true);
-	  try {
-	    const payload = {
-	      org_id: organization.id,
-	      event_id: event.linked_event_id,
-	      rehearsal_event_id: event.id,
-	      setlist_song_id: serviceModeSong.id,
-	      song_id: serviceModeSong.song_id,
-	      readiness: preparationDraft.readiness,
-	      issue_type: preparationDraft.issue_type || null,
-	      note: preparationDraft.note.trim() || null,
-	      updated_by: user.id,
-	    };
-	    const { data, error } = await withSaveTimeout(
-	      supabase
-	        .from('event_song_preparation')
-	        .upsert(payload, { onConflict: 'event_id,setlist_song_id' })
-	        .select('id, event_id, rehearsal_event_id, setlist_song_id, song_id, readiness, issue_type, note, updated_at')
-	        .single()
-	    );
-	    if (error || !data) {
-	      toast('error', error?.message || 'Could not save rehearsal readiness');
-	      return;
-	    }
-	    setSongPreparation(current => ({ ...current, [serviceModeSong.id]: data as EventSongPreparation }));
-	    toast('success', 'Rehearsal handoff saved');
-	    setServicePreparationOpen(false);
-	  } finally {
-	    setSavingPreparation(false);
-	  }
-	};
 	  const serviceModeSourceLabel = event.event_type === 'Rehearsals' && linkedReferenceSongs.length > 0
 	    ? linkedServiceEvent?.title || 'linked Sunday Service'
 	    : orderedSetlistSongs.length > 0
@@ -3888,7 +3835,6 @@ const openLyricsModal = (ss: SetlistSong) => {
     setServiceArrangementOpen(false);
     setServiceAutoScrollEnabled(false);
     setServiceSongPickerOpen(false);
-	setServicePreparationOpen(false);
 	setShowRehearsalSummary(false);
 	setServiceModeUnlocked(event.event_type === 'Rehearsals');
     setServiceModeDisplayKey('');
@@ -3923,7 +3869,6 @@ const openLyricsModal = (ss: SetlistSong) => {
     setServiceArrangementOpen(false);
     setServiceAutoScrollEnabled(false);
     setServiceSongPickerOpen(false);
-	setServicePreparationOpen(false);
 	setShowRehearsalSummary(false);
 	setServiceModeUnlocked(false);
     setServiceCloseConfirmOpen(false);
@@ -3959,7 +3904,6 @@ const openLyricsModal = (ss: SetlistSong) => {
     setServiceArrangementOpen(false);
     setServiceAutoScrollEnabled(false);
     setServiceSongPickerOpen(false);
-	setServicePreparationOpen(false);
     serviceSwipeAnimating.current = true;
     serviceTrackAnimation.current?.stop();
     serviceTrackAnimation.current = animate(serviceTrackX, direction === 1 ? -serviceSwipeWidth : serviceSwipeWidth, {
@@ -3982,7 +3926,6 @@ const openLyricsModal = (ss: SetlistSong) => {
     setServiceChartEditing(false);
     setServiceArrangementOpen(false);
     setServiceAutoScrollEnabled(false);
-	setServicePreparationOpen(false);
     serviceTrackAnimation.current?.stop();
     serviceTrackX.set(0);
     setServiceModeIndex(targetIndex);
@@ -7542,7 +7485,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                 <div><h2 className="text-sm font-black">Requests</h2><p className="mt-0.5 text-[10px] text-white/35">Incoming messages from the stage</p></div>
                               </div>
                               <div className="mt-3 flex items-center justify-between border-b border-white/[0.08] pb-3"><span className="text-[10px] font-black uppercase tracking-[0.16em] text-white/40">Live request queue</span><span className="rounded-md bg-emerald-400/10 px-2 py-1 text-[9px] font-black text-emerald-300">{techOpenRequestCount} LIVE</span></div>
-                              <div className="mt-4 space-y-3">{liveStageRequests.map(message => { const status = liveRequestStatuses[message.id] || 'sent'; return <motion.article initial={prefersReducedMotion ? false : { opacity: 0, y: -10, scale: 0.98 }} animate={{ opacity: status === 'done' ? 0.6 : 1, y: 0, scale: 1 }} key={message.id} className={`rounded-3xl border p-4 transition ${status === 'done' ? 'border-white/[0.07] bg-white/[0.025]' : status === 'adjusting' ? 'border-amber-400/35 bg-amber-400/[0.06]' : 'border-emerald-400/35 bg-emerald-400/[0.055] shadow-[0_0_28px_rgba(52,211,153,0.08)]'}`}><div className="flex items-start gap-3"><motion.span animate={prefersReducedMotion || status !== 'sent' ? undefined : { scale: [1, 1.12, 1] }} transition={{ repeat: 2, duration: 0.55 }} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-400/15 text-emerald-300"><Music className="h-5 w-5" /></motion.span><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="text-sm font-black">{message.senderName} <span className="font-semibold text-white/40">· {message.senderRole}</span></p><span className={`text-[10px] font-black uppercase ${status === 'done' ? 'text-white/35' : status === 'adjusting' ? 'text-amber-300' : 'text-emerald-300'}`}>{status === 'sent' ? 'New' : status}</span></div><p className="mt-2 text-lg font-bold">{message.text}</p></div></div><div className="mt-4 grid grid-cols-3 gap-2">{(['sent', 'adjusting', 'done'] as const).map(nextStatus => <button key={nextStatus} type="button" onClick={() => { void sendLiveCommsMessage({ id: crypto.randomUUID(), kind: 'request_status', text: nextStatus, senderId: user?.id || '', senderName: profile?.first_name || 'Tech Team', senderRole: 'Tech Team', requestId: message.id, status: nextStatus, recipientUserId: message.senderId, createdAt: new Date().toISOString() }); }} className={`min-h-11 rounded-xl border text-[11px] font-black capitalize transition ${status === nextStatus ? nextStatus === 'adjusting' ? 'border-amber-400 bg-amber-400/15 text-amber-200' : 'border-emerald-400 bg-emerald-400/15 text-emerald-200' : 'border-white/[0.08] bg-white/[0.04] text-white/55 hover:bg-white/[0.08]'}`}>{nextStatus === 'sent' ? 'Seen' : nextStatus}</button>)}</div></motion.article>;})}{liveStageRequests.length === 0 && <div className="rounded-3xl border border-dashed border-emerald-400/20 p-10 text-center"><CheckCircle className="mx-auto h-7 w-7 text-emerald-300" /><p className="mt-2 text-sm font-black">No live requests</p><p className="mt-1 text-[10px] text-white/35">New messages from the stage will appear here.</p></div>}</div>
+                              <div className="mt-4 space-y-3">{activeLiveStageRequests.map(message => { const status = liveRequestStatuses[message.id] || 'sent'; return <motion.article initial={prefersReducedMotion ? false : { opacity: 0, y: -10, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, x: 24, height: 0 }} key={message.id} className={`rounded-3xl border p-4 transition ${status === 'adjusting' ? 'border-amber-400/35 bg-amber-400/[0.06]' : 'border-emerald-400/35 bg-emerald-400/[0.055] shadow-[0_0_28px_rgba(52,211,153,0.08)]'}`}><div className="flex items-start gap-3"><motion.span animate={prefersReducedMotion || status !== 'sent' ? undefined : { scale: [1, 1.12, 1] }} transition={{ repeat: 2, duration: 0.55 }} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-400/15 text-emerald-300"><Music className="h-5 w-5" /></motion.span><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="text-sm font-black">{message.senderName} <span className="font-semibold text-white/40">· {message.senderRole}</span></p><span className={`text-[10px] font-black uppercase ${status === 'adjusting' ? 'text-amber-300' : 'text-emerald-300'}`}>{status === 'sent' ? 'New' : status}</span></div><p className="mt-2 text-lg font-bold">{message.text}</p></div></div><div className="mt-4 grid grid-cols-3 gap-2">{(['sent', 'adjusting', 'done'] as const).map(nextStatus => <button key={nextStatus} type="button" onClick={() => { void sendLiveCommsMessage({ id: crypto.randomUUID(), kind: 'request_status', text: nextStatus, senderId: user?.id || '', senderName: profile?.first_name || 'Tech Team', senderRole: 'Tech Team', requestId: message.id, status: nextStatus, recipientUserId: message.senderId, createdAt: new Date().toISOString() }); }} className={`min-h-11 rounded-xl border text-[11px] font-black capitalize transition ${status === nextStatus ? nextStatus === 'adjusting' ? 'border-amber-400 bg-amber-400/15 text-amber-200' : 'border-emerald-400 bg-emerald-400/15 text-emerald-200' : 'border-white/[0.08] bg-white/[0.04] text-white/55 hover:bg-white/[0.08]'}`}>{nextStatus === 'sent' ? 'Seen' : nextStatus}</button>)}</div></motion.article>;})}{activeLiveStageRequests.length === 0 && <div className="rounded-3xl border border-dashed border-emerald-400/20 p-10 text-center"><CheckCircle className="mx-auto h-7 w-7 text-emerald-300" /><p className="mt-2 text-sm font-black">No live requests</p><p className="mt-1 text-[10px] text-white/35">New messages from the stage will appear here.</p></div>}</div>
                             </section>
 
                             <footer className="order-3 border-t border-white/[0.08] bg-white/[0.018] px-4 py-3 lg:col-span-2" aria-label="Live session footer">
@@ -7579,20 +7522,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                             aria-label="Stage Comms demo"
                           >
                             <div className="mx-auto max-w-3xl">
-                              <div className="mb-3 flex items-center justify-between gap-3">
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-400 text-emerald-950">
-                                      <MessageCircle className="h-4 w-4" />
-                                    </span>
-                                    <div>
-                                      <p className="text-sm font-black">Stage Comms</p>
-                                      <p className="flex items-center gap-1 text-[10px] font-bold text-emerald-300/70"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Connected · admin demo</p>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                              <div>
+                              {activeTechInstruction ? <motion.div key={activeTechInstruction.id} initial={prefersReducedMotion ? false : { opacity: 0, y: -10, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ type: 'spring', stiffness: 380, damping: 24 }} className="rounded-2xl border border-sky-400/40 bg-sky-400/[0.13] px-4 py-3 shadow-[0_0_30px_rgba(56,189,248,0.12)]"><div className="flex items-center gap-2"><motion.span animate={prefersReducedMotion ? undefined : { scale: [1, 1.22, 1] }} transition={{ repeat: 2, duration: 0.55 }} className="h-2.5 w-2.5 rounded-full bg-sky-300" /><p className="text-[9px] font-black uppercase tracking-[0.14em] text-sky-300">Message from Tech</p></div><div className="mt-1.5 flex items-center justify-between gap-4"><p className="text-lg font-black text-sky-100">{activeTechInstruction.text}</p><button type="button" onClick={() => { setDismissedTechInstructionIds(current => [...current, activeTechInstruction.id]); setStageCommsOpen(false); }} className="min-h-10 shrink-0 rounded-xl bg-sky-300 px-4 text-xs font-black text-sky-950">Got it</button></div></motion.div> : <div>
                                   <div className="mb-2 flex items-center justify-between">
                                     <p className="text-xs font-black">{profile?.first_name || 'Stage member'} · {myAssignment?.roles?.name || 'Stage role'}</p>
                                     <p className="text-[10px] font-bold text-white/40">Tap once to send</p>
@@ -7616,7 +7546,6 @@ const openLyricsModal = (ss: SetlistSong) => {
                                       </button>
                                     );})}
                                   </div>
-                                  <AnimatePresence mode="wait">{latestTechInstruction && <motion.div key={latestTechInstruction.id} initial={prefersReducedMotion ? false : { opacity: 0, y: -10, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ type: 'spring', stiffness: 380, damping: 24 }} className="mt-3 rounded-xl border border-sky-400/40 bg-sky-400/[0.13] px-3 py-3 shadow-[0_0_30px_rgba(56,189,248,0.12)]"><div className="flex items-center gap-2"><motion.span animate={prefersReducedMotion ? undefined : { scale: [1, 1.22, 1] }} transition={{ repeat: 2, duration: 0.55 }} className="h-2.5 w-2.5 rounded-full bg-sky-300" /><p className="text-[9px] font-black uppercase tracking-[0.14em] text-sky-300">New message from Tech</p></div><p className="mt-1.5 text-base font-black text-sky-100">{latestTechInstruction.text}</p></motion.div>}</AnimatePresence>
                                   {stageCommsStatus !== 'idle' && (
                                     <div className="mt-2 flex items-center justify-between rounded-xl border border-emerald-400/20 bg-emerald-400/[0.08] px-3 py-2">
                                       <p className="text-xs font-bold text-emerald-100">
@@ -7625,73 +7554,11 @@ const openLyricsModal = (ss: SetlistSong) => {
                                       <span className="text-[10px] font-black uppercase tracking-wide text-emerald-300">{stageCommsStatus}</span>
                                     </div>
                                   )}
-                              </div>
+                              </div>}
                             </div>
                           </motion.section>
                         )}
                       </AnimatePresence>
-					  <div className="relative z-[70] shrink-0 border-b border-black/[0.06] bg-gray-50/95 px-3 py-2 dark:border-white/[0.08] dark:bg-[#101411]/95">
-						<div className="flex items-center gap-2">
-						  <button
-							type="button"
-							onClick={openPreparationPanel}
-							aria-expanded={servicePreparationOpen}
-							className={`inline-flex min-h-9 flex-1 items-center justify-center gap-2 rounded-xl px-3 text-xs font-black transition ${
-							  activeSongPreparation?.readiness === 'ready'
-								? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200'
-								: activeSongPreparation?.readiness === 'needs_work'
-								  ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200'
-								  : 'bg-gray-200 text-gray-700 dark:bg-white/[0.08] dark:text-white/65'
-							}`}
-						  >
-							{activeSongPreparation?.readiness === 'ready' ? <CheckCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
-							{REHEARSAL_READINESS_OPTIONS.find(option => option.value === (activeSongPreparation?.readiness || 'not_rehearsed'))?.label}
-						  </button>
-						  {event.event_type === 'Rehearsals' ? (
-							<button type="button" onClick={() => setShowRehearsalSummary(true)} className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-emerald-600 px-3 text-xs font-black text-white">
-							  <ClipboardCheck className="h-4 w-4" /> Finish
-							</button>
-						  ) : (
-							<button
-							  type="button"
-							  onClick={() => setServiceModeUnlocked(value => !value)}
-							  className={`inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-black ${serviceModeUnlocked ? 'bg-amber-500 text-black' : 'bg-gray-900 text-white dark:bg-white dark:text-black'}`}
-							  aria-pressed={serviceModeUnlocked}
-							>
-							  {serviceModeUnlocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-							  {serviceModeUnlocked ? 'Editing' : 'Locked'}
-							</button>
-						  )}
-						</div>
-						<AnimatePresence initial={false}>
-						  {servicePreparationOpen && (
-							<motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-							  {event.event_type === 'Rehearsals' ? (
-								<div className="space-y-2 pt-2">
-								  <div className="grid grid-cols-3 gap-1.5">
-									{REHEARSAL_READINESS_OPTIONS.map(option => (
-									  <button key={option.value} type="button" onClick={() => setPreparationDraft(current => ({ ...current, readiness: option.value }))} className={`min-h-9 rounded-xl px-2 text-[11px] font-black ${preparationDraft.readiness === option.value ? 'bg-emerald-600 text-white' : 'bg-white text-gray-600 dark:bg-white/[0.06] dark:text-white/60'}`}>{option.label}</button>
-									))}
-								  </div>
-								  <div className="grid grid-cols-[minmax(0,0.38fr)_minmax(0,0.62fr)_auto] gap-2">
-									<select value={preparationDraft.issue_type} onChange={e => setPreparationDraft(current => ({ ...current, issue_type: e.target.value as RehearsalIssueType | '' }))} className="min-w-0 rounded-xl border-0 bg-white px-2 text-xs font-bold text-gray-800 dark:bg-white/[0.08] dark:text-white">
-									  <option value="">No issue</option>
-									  {REHEARSAL_ISSUE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-									</select>
-									<input value={preparationDraft.note} onChange={e => setPreparationDraft(current => ({ ...current, note: e.target.value }))} placeholder="Cue or follow-up note" className="min-w-0 rounded-xl border-0 bg-white px-3 text-xs text-gray-800 placeholder:text-gray-400 dark:bg-white/[0.08] dark:text-white" />
-									<button type="button" onClick={saveSongPreparation} disabled={savingPreparation} className="min-h-10 rounded-xl bg-emerald-600 px-3 text-xs font-black text-white disabled:opacity-60">{savingPreparation ? 'Saving…' : 'Save'}</button>
-								  </div>
-								</div>
-							  ) : (
-								<p className="pt-2 text-xs font-semibold leading-relaxed text-gray-600 dark:text-white/60">
-								  {activeSongPreparation?.issue_type ? `${REHEARSAL_ISSUE_OPTIONS.find(option => option.value === activeSongPreparation.issue_type)?.label}: ` : ''}
-								  {activeSongPreparation?.note || 'No rehearsal handoff note for this song.'}
-								</p>
-							  )}
-							</motion.div>
-						  )}
-						</AnimatePresence>
-					  </div>
                       <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}

@@ -21,6 +21,7 @@ interface ModalProps {
   footerClassName?: string;
   onBack?: () => void;
   backLabel?: string;
+  quickOpen?: boolean;
 }
 
 const desktopSizes = {
@@ -55,6 +56,13 @@ interface ScrollLockSnapshot {
   htmlOverscrollBehavior: string;
   bodyOverflow: string;
   bodyOverscrollBehavior: string;
+}
+
+function readVisualViewport() {
+  const viewport = window.visualViewport;
+  return viewport
+    ? { height: viewport.height, offsetTop: viewport.offsetTop }
+    : { height: window.innerHeight, offsetTop: 0 };
 }
 
 function readScrollLockSnapshot(): ScrollLockSnapshot | null {
@@ -172,6 +180,7 @@ export function Modal({
   footerClassName = '',
   onBack,
   backLabel = 'Back',
+  quickOpen = false,
 }: ModalProps) {
   const [visible, setVisible] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -179,6 +188,7 @@ export function Modal({
   const dialogRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const titleId = useId();
+  const shouldRender = open || visible;
 
   const requestClose = useCallback(() => {
     if (closing) return;
@@ -191,6 +201,9 @@ export function Modal({
         restoreFocusRef.current = document.activeElement instanceof HTMLElement
           ? document.activeElement
           : null;
+        // Capture the viewport before mounting so the dialog does not resize
+        // during its entrance animation on mobile browsers.
+        setVisualViewport(readVisualViewport());
       }
       setClosing(false);
       setVisible(true);
@@ -212,16 +225,26 @@ export function Modal({
   useEffect(() => {
     if (!visible) return;
     const viewport = window.visualViewport;
+    const listenerOptions: AddEventListenerOptions = { passive: true };
+    let animationFrame = 0;
     const updateViewport = () => {
-      setVisualViewport(viewport
-        ? { height: viewport.height, offsetTop: viewport.offsetTop }
-        : { height: window.innerHeight, offsetTop: 0 });
+      window.cancelAnimationFrame(animationFrame);
+      animationFrame = window.requestAnimationFrame(() => {
+        const nextViewport = readVisualViewport();
+        setVisualViewport(current => (
+          current
+          && Math.abs(current.height - nextViewport.height) < 0.5
+          && Math.abs(current.offsetTop - nextViewport.offsetTop) < 0.5
+            ? current
+            : nextViewport
+        ));
+      });
     };
-    updateViewport();
-    window.addEventListener('resize', updateViewport);
-    viewport?.addEventListener('resize', updateViewport);
-    viewport?.addEventListener('scroll', updateViewport);
+    window.addEventListener('resize', updateViewport, listenerOptions);
+    viewport?.addEventListener('resize', updateViewport, listenerOptions);
+    viewport?.addEventListener('scroll', updateViewport, listenerOptions);
     return () => {
+      window.cancelAnimationFrame(animationFrame);
       window.removeEventListener('resize', updateViewport);
       viewport?.removeEventListener('resize', updateViewport);
       viewport?.removeEventListener('scroll', updateViewport);
@@ -303,7 +326,10 @@ export function Modal({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [visible, closeOnEscape, requestClose]);
 
-  if (!visible) return null;
+  // Render on the same commit that opens the modal. Waiting for the effect to
+  // copy `open` into `visible` adds an avoidable paint before anything appears,
+  // which is especially noticeable on mobile event pages.
+  if (!shouldRender) return null;
 
   const backdropClass = closing ? 'animate-fade-out' : 'animate-fade-in';
   const isMobilePage = mobileView === 'page';
@@ -323,12 +349,13 @@ export function Modal({
       onClick={() => { if (closeOnBackdrop) requestClose(); }}
       role="presentation"
     >
-      <div className={`fixed inset-0 bg-black/50 backdrop-blur-sm ${backdropClass}`} />
+      <div className={`modal-backdrop fixed inset-0 bg-black/50 sm:backdrop-blur-sm ${backdropClass}`} />
       <div
         ref={dialogRef}
         className={`modal-dialog-viewport relative min-h-0 w-full focus-visible:outline-none ${desktopSizes[size]} ${isMobilePage ? 'h-[100dvh] rounded-none sm:h-auto sm:rounded-2xl' : isMobileDialog ? 'mx-4 rounded-[28px]' : 'rounded-t-[28px] sm:rounded-2xl'} bg-white dark:bg-[#1c1b1e] ring-1 ring-black/[0.06] dark:ring-white/[0.08] ${sheetClass} ${isMobilePage ? 'max-h-[100dvh] sm:max-h-[85vh]' : 'max-h-[92dvh] sm:max-h-[85vh]'} flex flex-col overflow-hidden ${isMobilePage || isMobileDialog ? '' : 'sm:mx-4'} ${dialogClassName}`}
         style={{
           boxShadow: '0 24px 64px -16px rgba(0,0,0,0.3), 0 8px 24px -8px rgba(0,0,0,0.15)',
+          animationDuration: quickOpen && !closing ? '140ms' : undefined,
         }}
         onClick={e => e.stopPropagation()}
         role="dialog"

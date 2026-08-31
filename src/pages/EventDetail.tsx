@@ -5870,6 +5870,7 @@ const openLyricsModal = (ss: SetlistSong) => {
           title="Song readiness"
           size="md"
           mobileView="dialog"
+          quickOpen
         >
           {readinessDetailsSong && (() => {
             const usage = songUsage[readinessDetailsSong.songId];

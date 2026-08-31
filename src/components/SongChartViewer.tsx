@@ -1525,7 +1525,7 @@ export function SongChartViewer({
                   </span>
                   <div className="grid grid-cols-[38px_1fr_38px] items-center gap-1.5 rounded-full border border-black/[0.06] bg-white/80 p-0.5 dark:border-white/[0.08] dark:bg-white/[0.04]">
                     <button type="button" aria-label="Decrease notes font size" onClick={() => setDisplaySettings(settings => ({ ...settings, noteFontSize: stepFontSize(settings.noteFontSize, -1, DEFAULT_CHART_SETTINGS.noteFontSize) }))} disabled={noteFontSize <= CHART_FONT_SIZE_MIN} className="flex h-8 items-center justify-center rounded-full bg-gray-100 text-gray-600 transition active:scale-[0.96] disabled:opacity-40 dark:bg-white/[0.08] dark:text-white/65"><Minus className="h-3.5 w-3.5" /></button>
-                    <div className="text-center font-black text-amber-950 dark:text-amber-100" style={{ fontFamily: '\"Comic Sans MS\", \"Bradley Hand\", cursive', fontSize: `${noteFontSize}px` }}>Note</div>
+                    <div className="text-center font-black text-amber-950 dark:text-amber-100" style={{ fontFamily: '"Comic Sans MS", "Bradley Hand", cursive', fontSize: `${noteFontSize}px` }}>Note</div>
                     <button type="button" aria-label="Increase notes font size" onClick={() => setDisplaySettings(settings => ({ ...settings, noteFontSize: stepFontSize(settings.noteFontSize, 1, DEFAULT_CHART_SETTINGS.noteFontSize) }))} disabled={noteFontSize >= CHART_FONT_SIZE_MAX} className="flex h-8 items-center justify-center rounded-full bg-amber-100 text-amber-800 transition active:scale-[0.96] disabled:opacity-40 dark:bg-amber-500/15 dark:text-amber-200"><Plus className="h-3.5 w-3.5" /></button>
                   </div>
                 </div>

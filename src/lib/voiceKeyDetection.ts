@@ -78,7 +78,10 @@ export function detectMonophonicPitch(
     energy += centered * centered;
   }
   const rms = Math.sqrt(energy / samples.length);
-  if (rms < 0.008) return null;
+  // Phone microphones and iOS WebViews often deliver a much quieter waveform
+  // than desktop browsers. Keep rejecting room noise, but do not discard a
+  // steady sung note merely because its normalized input level is low.
+  if (rms < 0.003) return null;
 
   const minimumLag = Math.max(2, Math.floor(sampleRate / maximumFrequency));
   const maximumLag = Math.min(samples.length - 3, Math.ceil(sampleRate / minimumFrequency));
@@ -111,10 +114,10 @@ export function detectMonophonicPitch(
     }
   }
 
-  if (strongestLag < 0 || strongestCorrelation < 0.72) return null;
+  if (strongestLag < 0 || strongestCorrelation < 0.56) return null;
 
   // Prefer the earliest strong local peak to reduce octave/subharmonic errors.
-  const strongPeakThreshold = Math.max(0.72, strongestCorrelation * 0.9);
+  const strongPeakThreshold = Math.max(0.56, strongestCorrelation * 0.9);
   let selectedLag = strongestLag;
   for (let lag = minimumLag + 1; lag < strongestLag; lag += 1) {
     if (
@@ -151,7 +154,7 @@ function profileForTonic(profile: number[], tonic: number) {
 }
 
 export function inferKeyFromPitchFrames(frames: DetectedPitchFrame[]): KeyInference | null {
-  const usableFrames = frames.filter(frame => Number.isFinite(frame.midi) && frame.clarity >= 0.72);
+  const usableFrames = frames.filter(frame => Number.isFinite(frame.midi) && frame.clarity >= 0.56);
   if (usableFrames.length < 12) return null;
 
   const histogram = Array.from({ length: 12 }, () => 0);

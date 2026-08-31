@@ -329,6 +329,11 @@ export function Navigation({
     addSavedAccount,
     switchAccount,
     forgetSavedAccount,
+    canPreviewMemberView,
+    isViewingAsMember,
+    isViewingAsSongLeader,
+    setViewingAsMember,
+    setViewingAsSongLeader,
   } = useAuth();
   const { toast } = useToast();
   const unread = useUnreadCounts();
@@ -1006,6 +1011,28 @@ export function Navigation({
     toast("success", "Account saved on this device");
   };
 
+  const handleToggleMemberView = () => {
+    if (isViewingAsSongLeader) {
+      setViewingAsSongLeader(false);
+      setDesktopProfileOpen(false);
+      onMobileOpenChange(false);
+      toast("success", "Admin view restored");
+      return;
+    }
+
+    const nextValue = !isViewingAsMember;
+    setViewingAsMember(nextValue);
+    setDesktopProfileOpen(false);
+    onMobileOpenChange(false);
+
+    if (nextValue) {
+      toast("info", "Member view enabled. Your admin access is unchanged.");
+      return;
+    }
+
+    toast("success", "Admin view restored");
+  };
+
   const baseProfileMenuItems: Array<{
     icon: LucideIcon;
     label: string;
@@ -1025,6 +1052,22 @@ export function Navigation({
       show: true,
       color: "#10b981",
     },
+    ...(canPreviewMemberView
+      ? [{
+          icon: isViewingAsMember || isViewingAsSongLeader ? EyeOff : Eye,
+          label: isViewingAsSongLeader
+            ? "Exit Song Leader view"
+            : isViewingAsMember
+              ? "Exit member view"
+              : "View as member",
+          desc: isViewingAsMember || isViewingAsSongLeader
+            ? "Restore admin and leadership tools"
+            : "Preview the standard member experience",
+          show: true,
+          color: isViewingAsMember || isViewingAsSongLeader ? "#f59e0b" : "#60a5fa",
+          action: handleToggleMemberView,
+        }]
+      : []),
     {
       icon: BookOpen,
       label: "Songs",
@@ -1653,6 +1696,47 @@ export function Navigation({
                   <ChevronRight className="h-4 w-4 text-white/30" />
                 </button>
               </div>
+
+              {canPreviewMemberView && (
+                <div className="border-b border-white/[0.08] p-2">
+                  <button
+                    type="button"
+                    onClick={handleToggleMemberView}
+                    className={`flex w-full items-center gap-3 rounded-[0.7rem] px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 ${
+                      isViewingAsMember || isViewingAsSongLeader
+                        ? "bg-amber-400/[0.10] hover:bg-amber-400/[0.16] focus-visible:ring-amber-400/70"
+                        : "hover:bg-white/[0.06] focus-visible:ring-sky-400/70"
+                    }`}
+                    role="menuitem"
+                  >
+                    <span className={`flex h-9 w-9 items-center justify-center rounded-[0.65rem] ${
+                      isViewingAsMember || isViewingAsSongLeader
+                        ? "bg-amber-400/[0.15] text-amber-200"
+                        : "bg-sky-400/[0.13] text-sky-200"
+                    }`}>
+                      {isViewingAsMember || isViewingAsSongLeader
+                        ? <EyeOff className="h-[18px] w-[18px]" />
+                        : <Eye className="h-[18px] w-[18px]" />}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2 text-[13px] font-black text-white">
+                        {isViewingAsSongLeader ? "Exit Song Leader view" : isViewingAsMember ? "Exit member view" : "View as member"}
+                        {(isViewingAsMember || isViewingAsSongLeader) && (
+                          <span className="rounded-full bg-amber-400/[0.14] px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.1em] text-amber-200">
+                            Active
+                          </span>
+                        )}
+                      </span>
+                      <span className="mt-0.5 block text-[10px] font-semibold text-white/42">
+                        {isViewingAsMember || isViewingAsSongLeader
+                          ? "Restore your admin and leadership tools"
+                          : "Hide admin and leadership tools temporarily"}
+                      </span>
+                    </span>
+                    <ChevronRight className="h-4 w-4 text-white/30" />
+                  </button>
+                </div>
+              )}
 
               <div className="border-t border-white/[0.08] p-2">
                 <div className="mb-2 flex items-center justify-between gap-2 px-1">

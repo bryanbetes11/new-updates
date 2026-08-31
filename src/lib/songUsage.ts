@@ -69,6 +69,7 @@ export function buildSongUsages({
     if (!eventDate) return;
 
     const daysSince = differenceInDays(now, parseISO(eventDate));
+    if (daysSince < 0) return;
     const eventTitle = setlist.events?.title?.trim() || 'Untitled event';
     const eventType = setlist.events?.event_type?.trim() || 'Event';
 

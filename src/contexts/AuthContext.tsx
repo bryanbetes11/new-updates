@@ -28,6 +28,11 @@ interface AuthContextValue {
   canManageDiscipline: boolean;
   canManageMembers: boolean;
   capabilities: Record<string, boolean>;
+  canPreviewMemberView: boolean;
+  isViewingAsMember: boolean;
+  isViewingAsSongLeader: boolean;
+  setViewingAsMember: (enabled: boolean) => void;
+  setViewingAsSongLeader: (enabled: boolean) => void;
   signUp: (email: string, password: string, firstName: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -39,6 +44,7 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 const AUTH_CONTEXT_REQUEST_TIMEOUT_MS = 10000;
+const MEMBER_VIEW_SESSION_KEY_PREFIX = 'servesync:view-as-member';
 
 async function withAuthTimeout<T>(
   request: PromiseLike<T>,
@@ -104,6 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [capabilities, setCapabilities] = useState<Record<string, boolean>>({});
   const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>(() => readSavedAccounts());
   const [loading, setLoading] = useState(true);
+  const [previewModeRequested, setPreviewModeRequested] = useState<'member' | 'song_leader' | null>(null);
   const activeUserIdRef = useRef<string | null>(null);
 
   const clearUserContext = () => {
@@ -113,6 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setOrganization(null);
     setUserRoles([]);
     setCapabilities({});
+    setPreviewModeRequested(null);
   };
 
   const fetchProfile = async (userId: string) => {
@@ -333,24 +341,70 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const roleNames = userRoles.map(ur => ur.roles?.name || '');
   const hasOrganization = Boolean(profile?.org_id && organization);
-  const isOrgAdmin = profile?.is_org_admin ?? false;
+  const actualIsOrgAdmin = profile?.is_org_admin ?? false;
   const platformOwnerEmails = new Set([
     'bryanbetes11@gmail.com',
     'fwd.bryanashleybetes@gmail.com',
     'bryanashleybetes@gmail.com',
   ]);
-  const isPlatformOwner = [profile?.email, user?.email]
+  const actualIsPlatformOwner = [profile?.email, user?.email]
     .some(email => platformOwnerEmails.has((email || '').trim().toLowerCase()));
-  const isLeader = roleNames.some(n => ['Admin', 'Admin Coordinator', 'Music Director', 'Stage Director', 'Production Director', 'Setlist Coordinator'].includes(n));
-  const isAdmin = roleNames.includes('Admin');
-  const isAdminCoordinator = roleNames.includes('Admin Coordinator');
-  const isProductionDirector = roleNames.includes('Production Director');
-  const isMusicDirector = roleNames.includes('Music Director');
-  const isStageDirector = roleNames.includes('Stage Director');
-  const isSetlistCoordinator = roleNames.includes('Setlist Coordinator');
-  const canApproveLeave = isOrgAdmin || isPlatformOwner || capabilities.approve_leave || isAdmin || isProductionDirector || isMusicDirector || isAdminCoordinator;
-  const canManageDiscipline = isOrgAdmin || isPlatformOwner || capabilities.manage_accountability || isAdmin || isProductionDirector || isMusicDirector || isAdminCoordinator;
-  const canManageMembers = isOrgAdmin || isPlatformOwner || capabilities.manage_members || isAdmin || isProductionDirector;
+  const actualIsAdmin = roleNames.includes('Admin');
+  const canPreviewMemberView = actualIsOrgAdmin || actualIsPlatformOwner || actualIsAdmin;
+  const isViewingAsMember = canPreviewMemberView && previewModeRequested === 'member';
+  const isViewingAsSongLeader = canPreviewMemberView && previewModeRequested === 'song_leader';
+  const isRolePreviewActive = isViewingAsMember || isViewingAsSongLeader;
+  const effectiveCapabilities = isRolePreviewActive ? {} : capabilities;
+  const isOrgAdmin = isRolePreviewActive ? false : actualIsOrgAdmin;
+  const isPlatformOwner = isRolePreviewActive ? false : actualIsPlatformOwner;
+  const isLeader = isRolePreviewActive ? false : roleNames.some(n => ['Admin', 'Admin Coordinator', 'Music Director', 'Stage Director', 'Production Director', 'Setlist Coordinator'].includes(n));
+  const isAdmin = isRolePreviewActive ? false : actualIsAdmin;
+  const isAdminCoordinator = !isRolePreviewActive && roleNames.includes('Admin Coordinator');
+  const isProductionDirector = !isRolePreviewActive && roleNames.includes('Production Director');
+  const isMusicDirector = !isRolePreviewActive && roleNames.includes('Music Director');
+  const isStageDirector = !isRolePreviewActive && roleNames.includes('Stage Director');
+  const isSetlistCoordinator = !isRolePreviewActive && roleNames.includes('Setlist Coordinator');
+  const canApproveLeave = isOrgAdmin || isPlatformOwner || effectiveCapabilities.approve_leave || isAdmin || isProductionDirector || isMusicDirector || isAdminCoordinator;
+  const canManageDiscipline = isOrgAdmin || isPlatformOwner || effectiveCapabilities.manage_accountability || isAdmin || isProductionDirector || isMusicDirector || isAdminCoordinator;
+  const canManageMembers = isOrgAdmin || isPlatformOwner || effectiveCapabilities.manage_members || isAdmin || isProductionDirector;
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || loading) return;
+    if (!user?.id) {
+      setPreviewModeRequested(null);
+      return;
+    }
+
+    const storageKey = `${MEMBER_VIEW_SESSION_KEY_PREFIX}:${user.id}`;
+    if (!canPreviewMemberView) {
+      window.sessionStorage.removeItem(storageKey);
+      setPreviewModeRequested(null);
+      return;
+    }
+
+    const storedMode = window.sessionStorage.getItem(storageKey);
+    setPreviewModeRequested(
+      storedMode === 'song_leader' ? 'song_leader' : storedMode === 'member' || storedMode === '1' ? 'member' : null,
+    );
+  }, [canPreviewMemberView, loading, user?.id]);
+
+  const setViewingAsMember = (enabled: boolean) => {
+    if (!user?.id || (enabled && !canPreviewMemberView)) return;
+    setPreviewModeRequested(enabled ? 'member' : null);
+    if (typeof window === 'undefined') return;
+    const storageKey = `${MEMBER_VIEW_SESSION_KEY_PREFIX}:${user.id}`;
+    if (enabled) window.sessionStorage.setItem(storageKey, 'member');
+    else window.sessionStorage.removeItem(storageKey);
+  };
+
+  const setViewingAsSongLeader = (enabled: boolean) => {
+    if (!user?.id || (enabled && !canPreviewMemberView)) return;
+    setPreviewModeRequested(enabled ? 'song_leader' : null);
+    if (typeof window === 'undefined') return;
+    const storageKey = `${MEMBER_VIEW_SESSION_KEY_PREFIX}:${user.id}`;
+    if (enabled) window.sessionStorage.setItem(storageKey, 'song_leader');
+    else window.sessionStorage.removeItem(storageKey);
+  };
 
   const signUp = async (email: string, password: string, firstName: string) => {
     const normalizedEmail = normalizeAuthEmail(email);
@@ -495,7 +549,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         savedAccounts,
         hasOrganization, isOrgAdmin, isPlatformOwner,
         isLeader, isAdmin, isAdminCoordinator, isProductionDirector, isMusicDirector, isStageDirector, isSetlistCoordinator,
-        canApproveLeave, canManageDiscipline, canManageMembers, capabilities,
+        canApproveLeave, canManageDiscipline, canManageMembers, capabilities: effectiveCapabilities,
+        canPreviewMemberView, isViewingAsMember, isViewingAsSongLeader, setViewingAsMember, setViewingAsSongLeader,
         signUp, signIn, signOut, addSavedAccount, switchAccount, forgetSavedAccount, refreshProfile,
       }}
     >

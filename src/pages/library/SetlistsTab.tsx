@@ -2037,21 +2037,13 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                       {song.last_used_date ? format(parseISO(song.last_used_date), 'MMM d, yyyy') : 'Never used'}
                     </p>
                     {latestUsage && (
-                      <div className="hidden">
-                        <span className="font-black">Used in {latestUsage.event_title}</span>
-                        <span className="text-red-700/75 dark:text-red-200/70">
-                          {' - '}
-                          {format(parseISO(latestUsage.event_date), 'MMM d, yyyy')}
-                          {latestUsage.event_type ? ` - ${latestUsage.event_type}` : ''}
-                          {song.usages.length > 1 ? ` - ${song.usages.length} total uses` : ''}
-                        </span>
-                        <span className="hidden text-red-700/75 dark:text-red-200/70">
-                          {' Â· '}
-                          {format(parseISO(latestUsage.event_date), 'MMM d, yyyy')}
-                          {latestUsage.event_type ? ` · ${latestUsage.event_type}` : ''}
-                          {song.usages.length > 1 ? ` · ${song.usages.length} total uses` : ''}
-                        </span>
-                      </div>
+                      <p
+                        className="mt-0.5 truncate text-[10px] font-medium text-red-500/80 dark:text-red-300/70"
+                        title={`Used in ${latestUsage.event_title} · ${format(parseISO(latestUsage.event_date), 'MMM d, yyyy')}${latestUsage.event_type ? ` · ${latestUsage.event_type}` : ''}`}
+                      >
+                        <span className="font-bold">Used in {latestUsage.event_title}</span>
+                        <span> · {format(parseISO(latestUsage.event_date), 'MMM d')}{latestUsage.event_type ? ` · ${latestUsage.event_type}` : ''}</span>
+                      </p>
                     )}
                   </div>
                   <div className="text-[11px] font-mono text-gray-400 dark:text-white/30 text-center whitespace-nowrap hidden sm:flex items-center gap-1 tracking-wide pt-1.5">
@@ -2089,17 +2081,6 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                       </span>
                     )}
                   </div>
-                  {latestUsage && (
-                    <div className="basis-full rounded-xl border border-red-200/80 bg-red-50 px-2.5 py-1.5 text-[11px] leading-4 text-red-700 dark:border-red-500/20 dark:bg-red-500/[0.10] dark:text-red-200">
-                      <span className="font-black">Used in {latestUsage.event_title}</span>
-                      <span className="text-red-700/75 dark:text-red-200/70">
-                        {' - '}
-                        {format(parseISO(latestUsage.event_date), 'MMM d, yyyy')}
-                        {latestUsage.event_type ? ` - ${latestUsage.event_type}` : ''}
-                        {song.usages.length > 1 ? ` - ${song.usages.length} total uses` : ''}
-                      </span>
-                    </div>
-                  )}
                 </div>
               );
             })}

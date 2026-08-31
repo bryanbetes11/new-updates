@@ -24,6 +24,12 @@ const usages = buildSongUsages({
       events: { title: 'Sunday Worship', event_date: '2026-06-01', event_type: 'Sunday Service' },
       setlist_songs: [{ id: 'set-song-latest', song_id: 'song-1', position: 2 }],
     },
+    {
+      id: 'set-future',
+      event_id: 'event-future',
+      events: { title: 'Future Service', event_date: '2026-09-20', event_type: 'Sunday Service' },
+      setlist_songs: [{ id: 'set-song-future', song_id: 'song-1', position: 3 }],
+    },
   ],
   now: new Date('2026-06-22T08:00:00+08:00'),
   ruleDays: 90,

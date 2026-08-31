@@ -69,11 +69,10 @@ function CategoryFitBadge({ fit }: { fit: 'good' | 'ok' | 'poor' }) {
 }
 
 export function SetlistChecker({ setlistId, setlistStatus, initialSongs = [], serviceFormat = 'sunday_full', onDecision }: SetlistCheckerProps) {
-  const { user, isLeader, isSetlistCoordinator, isMusicDirector, isAdmin, isProductionDirector, userRoles } = useAuth();
+  const { user, isLeader, isSetlistCoordinator, isMusicDirector, isAdmin, isProductionDirector } = useAuth();
   const { toast } = useToast();
 
-  const canDecide = isLeader || isSetlistCoordinator || isMusicDirector || isAdmin || isProductionDirector
-    || userRoles.some(ur => ['Admin', 'Production Director', 'Music Director', 'Setlist Coordinator'].includes(ur.roles?.name || ''));
+  const canDecide = isLeader || isSetlistCoordinator || isMusicDirector || isAdmin || isProductionDirector;
   const isSubmittedForReview = setlistStatus === 'pending_review';
 
   const [songs, setSongs] = useState<SetlistCheckerSong[]>(initialSongs);

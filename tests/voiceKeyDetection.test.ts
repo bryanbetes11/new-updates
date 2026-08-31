@@ -24,6 +24,14 @@ expect(detectedPitch !== null, 'detects a clean monophonic tone');
 expect(Math.abs((detectedPitch?.frequency || 0) - 220) < 2, 'detects A3 within two hertz');
 expect(detectedPitch?.note === 'A3', 'labels the detected A3 note');
 
+const quietPhoneSineWave = Float32Array.from(
+  { length: 4096 },
+  (_, index) => Math.sin((2 * Math.PI * 196 * index) / sampleRate) * 0.006,
+);
+const quietPhonePitch = detectMonophonicPitch(quietPhoneSineWave, sampleRate);
+expect(quietPhonePitch !== null, 'detects a quiet but steady phone-microphone signal');
+expect(quietPhonePitch?.note === 'G3', 'labels a quiet G3 signal');
+
 const silence = new Float32Array(4096);
 expect(detectMonophonicPitch(silence, sampleRate) === null, 'rejects silence');
 

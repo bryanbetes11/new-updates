@@ -17,6 +17,8 @@ interface ModalProps {
   headerIcon?: ReactNode;
   bodyClassName?: string;
   dialogClassName?: string;
+  footer?: ReactNode;
+  footerClassName?: string;
   onBack?: () => void;
   backLabel?: string;
 }
@@ -166,6 +168,8 @@ export function Modal({
   headerIcon,
   bodyClassName = '',
   dialogClassName = '',
+  footer,
+  footerClassName = '',
   onBack,
   backLabel = 'Back',
 }: ModalProps) {
@@ -389,6 +393,15 @@ export function Modal({
         >
           {children}
         </div>
+        {footer && (
+          <div
+            className={`shrink-0 border-t border-black/[0.06] bg-white/95 px-5 pt-3 backdrop-blur-xl dark:border-white/[0.07] dark:bg-[#1c1b1e]/95 ${footerClassName}`}
+            style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.75rem)' }}
+            data-modal-footer
+          >
+            {footer}
+          </div>
+        )}
       </div>
     </div>,
     document.body,

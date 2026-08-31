@@ -15,6 +15,11 @@ type DetectorStatus = 'idle' | 'requesting' | 'listening' | 'result' | 'error';
 
 const RECORDING_SECONDS = 12;
 const SAMPLE_INTERVAL_MS = 110;
+const MICROPHONE_REQUEST_TIMEOUT_MS = 10_000;
+
+type WebkitAudioWindow = Window & typeof globalThis & {
+  webkitAudioContext?: typeof AudioContext;
+};
 
 function microphoneErrorMessage(error: unknown) {
   if (error instanceof DOMException) {
@@ -23,6 +28,7 @@ function microphoneErrorMessage(error: unknown) {
     }
     if (error.name === 'NotFoundError') return 'No microphone was found on this device.';
     if (error.name === 'NotReadableError') return 'The microphone is being used by another app.';
+    if (error.name === 'TimeoutError') return 'The microphone did not respond. Check this site’s microphone permission, then try again.';
   }
   return 'ServeSync could not start the microphone. Check your browser permission and try again.';
 }
@@ -40,6 +46,9 @@ export function VoiceKeyDetector({ onApply }: VoiceKeyDetectorProps) {
   const countdownTimerRef = useRef<number | null>(null);
   const framesRef = useRef<DetectedPitchFrame[]>([]);
   const mountedRef = useRef(true);
+  const hearingLabel = liveNote === '—'
+    ? (inputStrength < 3 ? 'Sing louder' : 'Finding note…')
+    : liveNote;
 
   const releaseMicrophone = useCallback(() => {
     if (sampleTimerRef.current !== null) window.clearInterval(sampleTimerRef.current);
@@ -89,19 +98,39 @@ export function VoiceKeyDetector({ onApply }: VoiceKeyDetectorProps) {
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      let requestTimedOut = false;
+      let requestTimeout: number | undefined;
+      const microphoneRequest = navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: false,
           noiseSuppression: false,
-          autoGainControl: false,
+          autoGainControl: true,
           channelCount: 1,
         },
+      });
+      void microphoneRequest.then(lateStream => {
+        if (requestTimedOut) lateStream.getTracks().forEach(track => track.stop());
+      }, () => undefined);
+
+      const stream = await Promise.race([
+        microphoneRequest,
+        new Promise<never>((_, reject) => {
+          requestTimeout = window.setTimeout(() => {
+            requestTimedOut = true;
+            reject(new DOMException('Microphone request timed out.', 'TimeoutError'));
+          }, MICROPHONE_REQUEST_TIMEOUT_MS);
+        }),
+      ]).finally(() => {
+        if (requestTimeout !== undefined) window.clearTimeout(requestTimeout);
       });
       if (!mountedRef.current) {
         stream.getTracks().forEach(track => track.stop());
         return;
       }
-      const audioContext = new AudioContext();
+      const AudioContextClass = window.AudioContext
+        || (window as WebkitAudioWindow).webkitAudioContext;
+      if (!AudioContextClass) throw new DOMException('Web Audio is unavailable.', 'NotSupportedError');
+      const audioContext = new AudioContextClass();
       if (audioContext.state === 'suspended') await audioContext.resume();
       const source = audioContext.createMediaStreamSource(stream);
       const analyser = audioContext.createAnalyser();
@@ -184,7 +213,7 @@ export function VoiceKeyDetector({ onApply }: VoiceKeyDetectorProps) {
           <div className="flex items-center justify-between rounded-xl bg-white/80 px-3 py-2.5 ring-1 ring-violet-200/70 dark:bg-black/20 dark:ring-violet-400/15">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-violet-500 dark:text-violet-300/60">Hearing</p>
-              <p className="text-xl font-black tabular-nums text-violet-950 dark:text-white">{liveNote}</p>
+              <p className={`${liveNote === '—' ? 'text-sm' : 'text-xl tabular-nums'} font-black text-violet-950 dark:text-white`}>{hearingLabel}</p>
             </div>
             <div className="text-right">
               <p className="text-[10px] font-bold uppercase tracking-wider text-violet-500 dark:text-violet-300/60">Keep singing</p>

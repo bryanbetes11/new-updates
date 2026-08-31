@@ -4,7 +4,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { addDays, format, parseISO, differenceInDays } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { animate, motion, useMotionValue, AnimatePresence, useReducedMotion, type PanInfo } from 'framer-motion';
-import { ArrowLeft, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, ListOrdered, Pause, Play, Settings2, MoreHorizontal, Upload, Calendar, Loader2, BellRing, Eye, Lock, Unlock, Wifi, WifiOff, Smile } from 'lucide-react';
+import { ArrowLeft, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, ListOrdered, Pause, Play, Settings2, MoreHorizontal, Upload, Calendar, Loader2, BellRing, Eye, EyeOff, Lock, Unlock, Wifi, WifiOff, Smile } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -39,6 +39,7 @@ import { buildSongProposalConflicts, buildSongProposalReservations, type SongPro
 import { getEffectiveSongLyrics, getSongLyricsSource } from '../lib/songLyrics';
 import { groupEmojiReactions } from '../lib/reactions';
 import { playInteractionSound } from '../lib/interactionSounds';
+import { projectSongReadiness, SONG_READINESS_RULE_DAYS } from '../lib/songReadiness';
 
 import type { Event, EventAssignment, Setlist, SetlistSong, Song, ServiceFormat, SetlistCheckReport, PostEventObservation, PostEventObservationCategory, PostEventObservationStatus, PostEventObservationView } from '../types';
 import { inferServiceFormat, SERVICE_FORMAT_LABELS } from '../lib/setlistCheckerEngine';
@@ -126,7 +127,6 @@ const blurUp = (delay = 0) => ({
 const serviceSongPanelTransition = { type: 'spring' as const, stiffness: 380, damping: 36, mass: 0.88 };
 const serviceSwipeOffsets = [-1, 0, 1] as const;
 const EVENT_CHART_OPEN_STORAGE_PREFIX = 'servesync:event-chart:open-song-id';
-const SONG_READY_DAYS = 90;
 const ALL_MEMBERS_USER_ID = '__all_active_members__';
 const MULTIPLE_MEMBERS_USER_ID = '__multiple_members__';
 
@@ -191,12 +191,31 @@ function toBase64Url(value: string) {
     .replace(/=+$/g, '');
 }
 
-type SongUsageAge = { lastDate: string; days: number };
+type SongUsageAge = {
+  lastDate: string;
+  eventId: string;
+  eventTitle: string;
+  eventType: string;
+};
 
 type ApprovedSetlistUsage = {
   event_id: string;
-  events: { event_date: string } | Array<{ event_date: string }> | null;
+  events: {
+    title: string | null;
+    event_date: string;
+    event_type: string | null;
+  } | Array<{
+    title: string | null;
+    event_date: string;
+    event_type: string | null;
+  }> | null;
   setlist_songs: Array<{ song_id: string }>;
+};
+
+type ReadinessDetailsSelection = {
+  songId: string;
+  song: Song;
+  youtubeUrl: string | null;
 };
 
 type AssignmentDraftRow = EventAssignmentDraft & { id: string };
@@ -296,28 +315,24 @@ const createAssignmentDraftRow = (): AssignmentDraftRow => ({
   role_id: '',
 });
 
-function getSongReadinessBadge(usage?: SongUsageAge) {
-  if (!usage) {
-    return {
-      label: 'Ready',
-      detail: 'Never used',
-      className: 'bg-green-50 text-green-700 ring-green-200/70 dark:bg-green-950/60 dark:text-green-300 dark:ring-green-700/40',
-      Icon: CheckCircle,
-    };
-  }
+function getSongReadinessBadge(usage: SongUsageAge | undefined, eventDate: string) {
+  const projection = projectSongReadiness(usage?.lastDate, eventDate);
+  const eventDateLabel = format(parseISO(eventDate), 'MMM d');
 
-  if (usage.days >= SONG_READY_DAYS) {
+  if (projection.meetsRule) {
     return {
-      label: 'Ready',
-      detail: `${usage.days}d`,
+      label: `Meets · ${eventDateLabel}`,
+      title: projection.daysAtTarget === null
+        ? `Never used; meets the 90-day rule by ${eventDateLabel}`
+        : `${projection.daysAtTarget} days since the last approved use by ${eventDateLabel}`,
       className: 'bg-green-50 text-green-700 ring-green-200/70 dark:bg-green-950/60 dark:text-green-300 dark:ring-green-700/40',
       Icon: CheckCircle,
     };
   }
 
   return {
-    label: 'Not ready',
-    detail: `${usage.days}d`,
+    label: `${projection.shortfallDays}d short · ${eventDateLabel}`,
+    title: `${projection.daysAtTarget} days since the last approved use by ${eventDateLabel}; ${projection.shortfallDays} days short of the 90-day rule`,
     className: 'bg-red-50 text-red-700 ring-red-200/70 dark:bg-red-950/60 dark:text-red-300 dark:ring-red-700/40',
     Icon: AlertTriangle,
   };
@@ -519,7 +534,7 @@ export function EventDetail() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const { user, profile, roles, userRoles, organization, loading: authLoading, isLeader, isOrgAdmin, isAdmin, isAdminCoordinator, isProductionDirector, isPlatformOwner } = useAuth();
+  const { user, profile, roles, userRoles, organization, loading: authLoading, isLeader, isOrgAdmin, isAdmin, isAdminCoordinator, isProductionDirector, isMusicDirector, isSetlistCoordinator, isPlatformOwner, canPreviewMemberView, isViewingAsMember, isViewingAsSongLeader, setViewingAsSongLeader } = useAuth();
   const { toast } = useToast();
   const prefersReducedMotion = useReducedMotion();
   const canUseServiceModePilot = isOrgAdmin || isAdmin || isPlatformOwner;
@@ -610,6 +625,8 @@ export function EventDetail() {
   const [editSongForm, setEditSongForm] = useState({ artist: '', category: '', youtube_url: '', performed_key: '' });
   const [savingSongEdit, setSavingSongEdit] = useState(false);
   const [songUsage, setSongUsage] = useState<Record<string, SongUsageAge>>({});
+  const [readinessDetailsSong, setReadinessDetailsSong] = useState<ReadinessDetailsSelection | null>(null);
+  const [readinessDetailsReturnToPicker, setReadinessDetailsReturnToPicker] = useState(false);
   const [songProposalConflicts, setSongProposalConflicts] = useState<Record<string, SongProposalConflict>>({});
   const [songProposalReservations, setSongProposalReservations] = useState<Record<string, SongProposalReservation>>({});
   const [selectedSongProposals, setSelectedSongProposals] = useState<{ songTitle: string; conflict: SongProposalConflict } | null>(null);
@@ -961,7 +978,7 @@ export function EventDetail() {
   const fetchAll = useCallback(async () => {
     if (!id) return;
     try {
-      const [eventRes, assignRes, membersRes, memberRolesRes, memberSettingsRes, setlistRes, songsRes, allSetlistsRes, proposalSetlistsRes, sundayServicesRes, convRes, observationsRes, observationRepliesRes, observationViewsRes] = await Promise.all([
+      const [eventRes, assignRes, membersRes, memberRolesRes, memberSettingsRes, setlistRes, songsRes, allSetlistsRes, proposalSetlistsRes, sundayServicesRes, observationsRes, observationRepliesRes, observationViewsRes] = await Promise.all([
         supabase.from('events').select('*').eq('id', id).maybeSingle(),
         supabase.from('event_assignments').select('*, events(*), profiles(first_name, last_name, gender, avatar_url), roles(name)').eq('event_id', id),
         supabase.from('profiles').select('id, first_name, last_name, ministry_status').eq('ministry_status', 'active'),
@@ -975,7 +992,7 @@ export function EventDetail() {
           .limit(1)
           .maybeSingle(),
         supabase.from('songs').select('*').order('title'),
-        supabase.from('setlists').select('id, status, event_id, events(event_date), setlist_songs(song_id)').eq('status', 'approved'),
+        supabase.from('setlists').select('id, status, event_id, events(title, event_date, event_type), setlist_songs(song_id)').eq('status', 'approved'),
         supabase
           .from('setlists')
           .select('id, status, event_id, submitted_at, events!inner(title, event_date), submitter:profiles!setlists_created_by_fkey(first_name, last_name), setlist_songs(song_id)')
@@ -984,7 +1001,6 @@ export function EventDetail() {
           .gte('events.event_date', getManilaTodayKey())
           .order('submitted_at', { ascending: true }),
         supabase.from('events').select('*').eq('event_type', 'Sunday Service').gte('event_date', new Date().toISOString().split('T')[0]).order('event_date'),
-        supabase.from('conversations').select('id').eq('event_id', id).eq('type', 'event').not('name', 'like', '[Admin Test] %').maybeSingle(),
         supabase
           .from('post_event_observations')
           .select('*, profiles!post_event_observations_author_id_fkey(first_name, last_name, avatar_url), assignee:profiles!post_event_observations_assigned_to_fkey(first_name, last_name, avatar_url)')
@@ -1001,7 +1017,6 @@ export function EventDetail() {
           .eq('event_id', id)
           .order('viewed_at', { ascending: false }),
       ]);
-      setEventConversationId(convRes.data?.id ?? null);
       setEvent(eventRes.data);
       setAssignments(assignRes.data || []);
       const assignmentExcludedIds = new Set((memberSettingsRes.data || [])
@@ -1099,13 +1114,21 @@ export function EventDetail() {
       }
 
       const usage: Record<string, SongUsageAge> = {};
+      const targetEventDate = eventRes.data?.event_date;
       ((allSetlistsRes.data || []) as ApprovedSetlistUsage[]).forEach(sl => {
         if (sl.event_id === id) return;
-        const eventDate = Array.isArray(sl.events) ? undefined : sl.events?.event_date;
+        const usageEvent = Array.isArray(sl.events) ? undefined : sl.events;
+        const eventDate = usageEvent?.event_date;
         if (!eventDate) return;
+        if (targetEventDate && eventDate >= targetEventDate) return;
         (sl.setlist_songs || []).forEach(ss => {
           if (!usage[ss.song_id] || eventDate > usage[ss.song_id].lastDate) {
-            usage[ss.song_id] = { lastDate: eventDate, days: differenceInDays(new Date(), parseISO(eventDate)) };
+            usage[ss.song_id] = {
+              lastDate: eventDate,
+              eventId: sl.event_id,
+              eventTitle: usageEvent?.title?.trim() || 'Untitled event',
+              eventType: usageEvent?.event_type?.trim() || 'Event',
+            };
           }
         });
       });
@@ -1124,6 +1147,30 @@ export function EventDetail() {
   }, [id, isMissingSetlistSubmissionTableError]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  useEffect(() => {
+    if (!id) {
+      setEventConversationId(null);
+      return;
+    }
+
+    let active = true;
+    setEventConversationId(undefined);
+    void supabase
+      .from('conversations')
+      .select('id')
+      .eq('event_id', id)
+      .eq('type', 'event')
+      .not('name', 'like', '[Admin Test] %')
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error) console.error('Failed to resolve event conversation:', error);
+        setEventConversationId(data?.id ?? null);
+      });
+
+    return () => { active = false; };
+  }, [id]);
 
   useEffect(() => {
     const preparationEventId = event?.event_type === 'Rehearsals' ? event.linked_event_id : event?.id;
@@ -2098,6 +2145,16 @@ export function EventDetail() {
       toast('error', getProposalReservationMessage(songProposalReservations[reservedDraft.song_id]));
       return;
     }
+    const notReadyDraft = event ? setlistBuilderSongs.find(draft => {
+      const usage = songUsage[draft.song_id];
+      return !projectSongReadiness(usage?.lastDate, event.event_date).meetsRule;
+    }) : undefined;
+    if (notReadyDraft) {
+      const song = songs.find(candidate => candidate.id === notReadyDraft.song_id);
+      const projection = projectSongReadiness(songUsage[notReadyDraft.song_id]?.lastDate, event!.event_date);
+      toast('error', `${song?.title || 'This song'} is not ready for this event. It needs ${projection.shortfallDays} more days.`);
+      return;
+    }
     setSavingSetlistBuilder(true);
     try {
       let targetSetlist = setlist;
@@ -2179,6 +2236,13 @@ export function EventDetail() {
       return;
     }
     const selectedSong = songs.find(song => song.id === selectedSongForConfig);
+    if (event) {
+      const projection = projectSongReadiness(songUsage[selectedSongForConfig]?.lastDate, event.event_date);
+      if (!projection.meetsRule) {
+        toast('error', `${selectedSong?.title || 'This song'} cannot be added yet. It needs ${projection.shortfallDays} more days to meet the ${SONG_READINESS_RULE_DAYS}-day rule.`);
+        return;
+      }
+    }
     const artist = songConfig.artist.trim();
     if (!artist) {
       toast('error', 'Add the artist first so everyone knows this is the correct song.');
@@ -3419,12 +3483,14 @@ const openLyricsModal = (ss: SetlistSong) => {
       </div>
     </motion.section>
   ) : null;
-  const canManageSetlist = isLeader || isSongLeader || userIsSongLeaderRole;
+  const isRolePreviewActive = isViewingAsMember || isViewingAsSongLeader;
+  const canManageSetlist = isViewingAsSongLeader || (!isRolePreviewActive && (isLeader || isSongLeader || userIsSongLeaderRole));
   const canEditSetlist = isLeader || isProductionDirector;
   const canEditEvent = isLeader || isProductionDirector;
 
-  const isSetlistCreator = setlist ? setlist.created_by === user?.id : false;
-  const canReviewSetlist = isLeader || userRoles.some(ur => ['Admin', 'Production Director', 'Music Director', 'Setlist Coordinator'].includes(ur.roles?.name || ''));
+  const isSetlistCreator = isViewingAsSongLeader || (!isRolePreviewActive && (setlist ? setlist.created_by === user?.id : false));
+  const canSeeEventSongReadiness = isViewingAsSongLeader || isSetlistCreator || isSetlistCoordinator || isOrgAdmin || isAdmin || isPlatformOwner;
+  const canReviewSetlist = isLeader || isOrgAdmin || isPlatformOwner || isAdmin || isProductionDirector || isMusicDirector || isSetlistCoordinator;
   const canSubmitSetlist = isSetlistCreator || canManageSetlist;
   const pendingReviewAge = setlist?.status === 'pending_review'
     ? describeSetlistReviewAge(setlist.submitted_at || setlist.created_at)
@@ -3507,6 +3573,13 @@ const openLyricsModal = (ss: SetlistSong) => {
     ? [selectedSongProposals.conflict.currentSubmission, ...selectedSongProposals.conflict.otherSubmissions]
       .sort((left, right) => Date.parse(left.submittedAt) - Date.parse(right.submittedAt))
     : [];
+  const selectedSongConfigSong = selectedSongForConfig
+    ? songs.find(song => song.id === selectedSongForConfig) || null
+    : null;
+  const selectedSongConfigUsage = selectedSongForConfig ? songUsage[selectedSongForConfig] : undefined;
+  const selectedSongConfigProjection = selectedSongForConfig
+    ? projectSongReadiness(selectedSongConfigUsage?.lastDate, event.event_date)
+    : null;
   const eventDetailArtworkSongs = eventDetailSongs.slice(0, 4).map(ss => ({
     title: ss.songs?.title,
     artist: ss.songs?.artist,
@@ -4056,6 +4129,34 @@ const openLyricsModal = (ss: SetlistSong) => {
                   </h1>
                   {!assignmentDetailsBlocked && (
                     <div className="flex shrink-0 items-center gap-2 max-[380px]:self-end">
+                      {canPreviewMemberView && !isViewingAsMember && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextValue = !isViewingAsSongLeader;
+                            setViewingAsSongLeader(nextValue);
+                            toast(
+                              nextValue ? 'info' : 'success',
+                              nextValue
+                                ? 'Song Leader view enabled. Your admin access is unchanged.'
+                                : 'Admin view restored',
+                            );
+                          }}
+                          className={`inline-flex h-11 items-center justify-center gap-2 rounded-full border px-3 text-[11px] font-black backdrop-blur-md transition-colors focus-visible:outline-none focus-visible:ring-2 active:scale-95 ${
+                            isViewingAsSongLeader
+                              ? 'border-amber-300/35 bg-amber-400/[0.16] text-amber-100 hover:bg-amber-400/[0.22] focus-visible:ring-amber-300/80'
+                              : 'border-white/[0.1] bg-white/[0.08] text-white/75 hover:bg-white/[0.14] hover:text-white focus-visible:ring-white/80'
+                          }`}
+                          title={isViewingAsSongLeader ? 'Exit Song Leader view' : 'View this event as Song Leader'}
+                          aria-label={isViewingAsSongLeader ? 'Exit Song Leader view' : 'View this event as Song Leader'}
+                          aria-pressed={isViewingAsSongLeader}
+                        >
+                          {isViewingAsSongLeader ? <EyeOff className="h-4 w-4" /> : <Music className="h-4 w-4" />}
+                          <span className="hidden xl:inline">
+                            {isViewingAsSongLeader ? 'Exit Song Leader' : 'Song Leader View'}
+                          </span>
+                        </button>
+                      )}
                       <button
                         onClick={handleShareEvent}
                         disabled={sharingEvent}
@@ -4075,7 +4176,16 @@ const openLyricsModal = (ss: SetlistSong) => {
                           <ArrowLeftRight className="h-4 w-4" />
                         </button>
                       )}
-                      {eventConversationId !== undefined && (
+                      {eventConversationId === undefined ? (
+                        <button
+                          disabled
+                          className="inline-flex h-11 w-11 cursor-wait items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md"
+                          title="Loading event chat"
+                          aria-label="Loading event chat"
+                        >
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        </button>
+                      ) : (
                         eventConversationId ? (
                           <button
                             onClick={() => {
@@ -5016,15 +5126,15 @@ const openLyricsModal = (ss: SetlistSong) => {
                       {setlistSongs.sort((a, b) => a.position - b.position).map((ss, i) => {
                         const usage = songUsage[ss.song_id];
                         const proposalConflict = canReviewSetlist ? songProposalConflicts[ss.song_id] : undefined;
-                        const readiness = getSongReadinessBadge(usage);
+                        const readiness = getSongReadinessBadge(usage, event.event_date);
                         const ReadinessIcon = readiness.Icon;
                         const displayKey = ss.performed_key || ss.songs?.song_key || '';
                         const keyChanged = ss.performed_key && ss.songs?.song_key && ss.performed_key !== ss.songs.song_key;
                         const lyricsSource = getSongLyricsSource(ss.songs);
                         const lyricsMissing = lyricsSource === 'missing';
                         const videoUrl = ss.youtube_url || ss.songs?.youtube_url || '';
-                        const keyBadgeClass = `text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${keyChanged ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'}`;
-                        const editableKeyBadgeClass = `inline-flex items-center gap-1 text-[10px] font-black px-1.5 py-0.5 rounded shrink-0 transition-colors ${keyChanged ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/45' : 'bg-brand-50 text-brand-700 ring-1 ring-brand-200/70 hover:bg-brand-100 dark:bg-brand-950/40 dark:text-brand-300 dark:ring-brand-700/40 dark:hover:bg-brand-950/60'}`;
+                        const keyBadgeClass = `text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${keyChanged ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'}`;
+                        const editableKeyBadgeClass = `inline-flex items-center gap-1 text-[10px] font-black px-1.5 py-0.5 rounded-full shrink-0 transition-colors ${keyChanged ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/45' : 'bg-brand-50 text-brand-700 ring-1 ring-brand-200/70 hover:bg-brand-100 dark:bg-brand-950/40 dark:text-brand-300 dark:ring-brand-700/40 dark:hover:bg-brand-950/60'}`;
                         return (
                           <div key={ss.id} className="px-4 py-2.5">
                             {/* Desktop: original single-row layout */}
@@ -5036,7 +5146,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                   <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{ss.songs?.title}</p>
                                   {ss.song_category && <span className="badge-blue text-[10px] shrink-0">{ss.song_category}</span>}
                                   {lyricsMissing && (
-                                    <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200/70 dark:bg-amber-950/60 dark:text-amber-400 dark:ring-amber-700/40 shrink-0">
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200/70 dark:bg-amber-950/60 dark:text-amber-400 dark:ring-amber-700/40 shrink-0">
                                       <AlertCircle className="h-3 w-3" />
                                       Lyrics needed
                                     </span>
@@ -5062,22 +5172,32 @@ const openLyricsModal = (ss: SetlistSong) => {
                                 </div>
                               </div>
                               {videoUrl && (
-                                <a href={videoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 transition-colors shrink-0" title="Open video" aria-label={`Open video for ${ss.songs?.title || 'song'}`}>
+                                <a href={videoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 transition-colors shrink-0" title="Open video" aria-label={`Open video for ${ss.songs?.title || 'song'}`}>
                                   <Play className="h-3 w-3" /> Video
                                 </a>
                               )}
-                              <span
-                                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold ring-1 shrink-0 ${readiness.className}`}
-                                title={usage ? `Last used ${usage.days} days ago` : 'No approved setlist usage found'}
+                              {canSeeEventSongReadiness && <button
+                                type="button"
+                                onClick={() => {
+                                  if (!ss.songs) return;
+                                  setReadinessDetailsReturnToPicker(false);
+                                  setReadinessDetailsSong({
+                                    songId: ss.song_id,
+                                    song: ss.songs,
+                                    youtubeUrl: ss.youtube_url || ss.songs.youtube_url || null,
+                                  });
+                                }}
+                                className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold ring-1 shrink-0 transition-[filter,transform] hover:brightness-110 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 ${readiness.className}`}
+                                title={`${readiness.title}${usage ? `; last approved use ${format(parseISO(usage.lastDate), 'MMM d, yyyy')}` : ''}`}
+                                aria-label={`Open readiness details for ${ss.songs?.title || 'song'}: ${readiness.label}`}
                               >
                                 <ReadinessIcon className="h-3.5 w-3.5" />
                                 <span>{readiness.label}</span>
-                                <span className="opacity-75">- {readiness.detail}</span>
-                              </span>
-                              {showSetlistEditControls && <button
+                              </button>}
+                              {canEditSetlistSongDetails && <button
                                 onClick={() => openLyricsModal(ss)}
                                  title={lyricsSource === 'saved' ? 'Edit lyrics' : lyricsSource === 'chart' ? 'Lyrics are available from the chord chart' : 'Add lyrics'}
-                                 className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold transition-colors shrink-0 ${
+                                 className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold transition-colors shrink-0 ${
                                    lyricsSource !== 'missing'
                                      ? 'bg-green-50 text-green-600 hover:text-green-700 ring-1 ring-green-200/70 dark:bg-green-950/60 dark:text-green-400 dark:hover:text-green-300 dark:ring-green-700/40'
                                      : 'bg-amber-50 text-amber-600 hover:text-amber-700 ring-1 ring-amber-200/70 dark:bg-amber-950/60 dark:text-amber-400 dark:hover:text-amber-300 dark:ring-amber-700/40'
@@ -5086,10 +5206,10 @@ const openLyricsModal = (ss: SetlistSong) => {
                                  <FileText className="h-4 w-4" />
                                  <span>{lyricsSource === 'saved' ? 'Edit Lyrics' : lyricsSource === 'chart' ? 'Chart Lyrics' : 'Add Lyrics'}</span>
                                </button>}
-                              {showSetlistEditControls && <button
+                              {(canEditSetlistSongDetails || !!getSetlistSongChartText(ss)) && <button
                                 onClick={() => openChartModal(ss)}
                                 title={getSetlistSongChartText(ss) ? 'Open chart' : 'Add chart'}
-                                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold transition-colors shrink-0 ${
+                                className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold transition-colors shrink-0 ${
                                   getSetlistSongChartText(ss)
                                     ? 'bg-emerald-50 text-emerald-600 hover:text-emerald-700 ring-1 ring-emerald-200/70 dark:bg-emerald-950/60 dark:text-emerald-400 dark:hover:text-emerald-300 dark:ring-emerald-700/40'
                                     : 'bg-gray-50 text-gray-500 hover:text-gray-700 ring-1 ring-gray-200/70 dark:bg-white/[0.04] dark:text-white/45 dark:hover:text-white/70 dark:ring-white/[0.07]'
@@ -5099,12 +5219,24 @@ const openLyricsModal = (ss: SetlistSong) => {
                                 <span>{ss.arrangement_section_order?.length ? 'Arranged' : getSetlistSongChartText(ss) ? 'Chart' : 'Add Chart'}</span>
                               </button>}
                               {canEditSetlistSongDetails && (
-                                <button onClick={() => openEditSong(ss)} className="p-1 text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">
+                                <button
+                                  type="button"
+                                  onClick={() => openEditSong(ss)}
+                                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gray-50 text-gray-500 ring-1 ring-gray-200/70 transition-colors hover:bg-brand-50 hover:text-brand-600 hover:ring-brand-200/80 dark:bg-white/[0.04] dark:text-white/45 dark:ring-white/[0.07] dark:hover:bg-brand-950/50 dark:hover:text-brand-300 dark:hover:ring-brand-700/40"
+                                  title={`Edit ${ss.songs?.title || 'song'}`}
+                                  aria-label={`Edit ${ss.songs?.title || 'song'}`}
+                                >
                                   <Edit className="h-4 w-4" />
                                 </button>
                               )}
                               {showSetlistEditControls && ((canManageSetlist && !['approved', 'pending_review'].includes(setlist.status)) || (canEditSetlist)) ? (
-                                <button onClick={() => handleRemoveSongFromSetlist(ss.id)} className="p-1 text-gray-400 hover:text-red-500 transition-colors">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveSongFromSetlist(ss.id)}
+                                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-500 ring-1 ring-red-200/70 transition-colors hover:bg-red-100 hover:text-red-600 dark:bg-red-950/30 dark:text-red-400 dark:ring-red-900/50 dark:hover:bg-red-950/50 dark:hover:text-red-300"
+                                  title={`Remove ${ss.songs?.title || 'song'} from setlist`}
+                                  aria-label={`Remove ${ss.songs?.title || 'song'} from setlist`}
+                                >
                                   <Trash2 className="h-4 w-4" />
                                 </button>
                               ) : null}
@@ -5131,14 +5263,27 @@ const openLyricsModal = (ss: SetlistSong) => {
                                     </span>
                                   )}
                                   <div className="mt-1 flex min-w-0 flex-wrap gap-1">
-                                    <span
-                                      className={`inline-flex w-fit items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${readiness.className}`}
-                                      title={usage ? `Last used ${usage.days} days ago` : 'No approved setlist usage found'}
+                                    {canSeeEventSongReadiness && <button
+                                      type="button"
+                                      onClick={(event) => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        if (ss.songs) {
+                                          setReadinessDetailsReturnToPicker(false);
+                                          setReadinessDetailsSong({
+                                            songId: ss.song_id,
+                                            song: ss.songs,
+                                            youtubeUrl: ss.youtube_url || ss.songs.youtube_url || null,
+                                          });
+                                        }
+                                      }}
+                                      className={`inline-flex w-fit items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 transition-[filter,transform] hover:brightness-110 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 ${readiness.className}`}
+                                      title={`${readiness.title}${usage ? `; last approved use ${format(parseISO(usage.lastDate), 'MMM d, yyyy')}` : ''}`}
+                                      aria-label={`Open readiness details for ${ss.songs?.title || 'song'}: ${readiness.label}`}
                                     >
                                       <ReadinessIcon className="h-3 w-3" />
                                       <span>{readiness.label}</span>
-                                      <span className="opacity-75">- {readiness.detail}</span>
-                                    </span>
+                                    </button>}
                                     {proposalConflict && <SongProposalConflictBadge conflict={proposalConflict} onOpen={() => setSelectedSongProposals({ songTitle: ss.songs?.title || 'Song', conflict: proposalConflict })} />}
                                   </div>
                                 </div>
@@ -5158,7 +5303,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                       <Play className="h-4 w-4" />
                                     </a>
                                   )}
-                                  {showSetlistEditControls || canEditSetlistSongDetails ? (
+                                  {canEditSetlistSongDetails ? (
                                     <button
                                       type="button"
                                       onClick={(event) => {
@@ -5716,6 +5861,145 @@ const openLyricsModal = (ss: SetlistSong) => {
         )}
 
         <Modal
+          open={Boolean(readinessDetailsSong)}
+          onClose={() => {
+            setReadinessDetailsSong(null);
+            if (readinessDetailsReturnToPicker) setShowSetlist(true);
+            setReadinessDetailsReturnToPicker(false);
+          }}
+          title="Song readiness"
+          size="md"
+          mobileView="dialog"
+        >
+          {readinessDetailsSong && (() => {
+            const usage = songUsage[readinessDetailsSong.songId];
+            const projection = projectSongReadiness(usage?.lastDate, event.event_date);
+            const readiness = getSongReadinessBadge(usage, event.event_date);
+            const ReadinessIcon = readiness.Icon;
+            const targetDateLabel = format(parseISO(event.event_date), 'MMM d, yyyy');
+            const readyDateLabel = projection.readyDate
+              ? format(parseISO(projection.readyDate), 'MMM d, yyyy')
+              : null;
+            const explanation = projection.daysAtTarget === null
+              ? `No earlier approved use was found before ${targetDateLabel}. New or never-used songs meet the ${SONG_READINESS_RULE_DAYS}-day rule.`
+              : projection.meetsRule
+                ? `${projection.daysAtTarget} days will have passed since the last approved use. That clears the ${SONG_READINESS_RULE_DAYS}-day rule by ${projection.daysAtTarget - SONG_READINESS_RULE_DAYS} days.`
+                : `Only ${projection.daysAtTarget} days will have passed since the last approved use. The song needs ${projection.shortfallDays} more days and becomes ready on ${readyDateLabel}.`;
+
+            return (
+              <div className="space-y-4">
+                <div className="flex items-start gap-3 rounded-2xl border border-gray-200/80 bg-gray-50 p-3.5 dark:border-white/[0.08] dark:bg-white/[0.035]">
+                  <SongArtwork
+                    song={readinessDetailsSong.song}
+                    youtubeUrl={readinessDetailsSong.youtubeUrl}
+                    className="h-12 w-12 rounded-lg"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-black text-gray-950 dark:text-white">
+                      {readinessDetailsSong.song.title || 'Untitled song'}
+                    </p>
+                    <p className="mt-0.5 truncate text-xs font-semibold text-gray-500 dark:text-white/45">
+                      {readinessDetailsSong.song.artist || 'No artist listed'}
+                    </p>
+                    <span className={`mt-2 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold ring-1 ${readiness.className}`}>
+                      <ReadinessIcon className="h-3.5 w-3.5" />
+                      {readiness.label}
+                    </span>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <span className="rounded-full bg-gray-100 px-2 py-1 text-[9px] font-bold text-gray-600 dark:bg-white/[0.06] dark:text-white/55">
+                        Key {readinessDetailsSong.song.song_key || 'not set'}
+                      </span>
+                      <span className={`rounded-full px-2 py-1 text-[9px] font-bold ${
+                        getSongLyricsSource(readinessDetailsSong.song) === 'missing'
+                          ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/45 dark:text-amber-300'
+                          : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/45 dark:text-emerald-300'
+                      }`}>
+                        {getSongLyricsSource(readinessDetailsSong.song) === 'saved'
+                          ? 'Lyrics saved'
+                          : getSongLyricsSource(readinessDetailsSong.song) === 'chart'
+                            ? 'Lyrics from chart'
+                            : 'Lyrics missing'}
+                      </span>
+                      <span className={`rounded-full px-2 py-1 text-[9px] font-bold ${
+                        readinessDetailsSong.song.chordpro_text
+                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/45 dark:text-emerald-300'
+                          : 'bg-gray-100 text-gray-500 dark:bg-white/[0.06] dark:text-white/45'
+                      }`}>
+                        {readinessDetailsSong.song.chordpro_text ? 'Chart available' : 'No chart'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={`rounded-2xl p-4 ring-1 ${
+                  projection.meetsRule
+                    ? 'bg-emerald-50 text-emerald-950 ring-emerald-200/80 dark:bg-emerald-950/35 dark:text-emerald-100 dark:ring-emerald-800/50'
+                    : 'bg-red-50 text-red-950 ring-red-200/80 dark:bg-red-950/35 dark:text-red-100 dark:ring-red-800/50'
+                }`}>
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] opacity-60">
+                    Why this status
+                  </p>
+                  <p className="mt-2 text-sm font-semibold leading-relaxed">{explanation}</p>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-xl bg-gray-100 p-3 dark:bg-white/[0.045]">
+                    <p className="text-[9px] font-black uppercase tracking-[0.12em] text-gray-400 dark:text-white/35">Last used</p>
+                    <p className="mt-1 text-xs font-bold text-gray-800 dark:text-white/80">
+                      {usage ? format(parseISO(usage.lastDate), 'MMM d, yyyy') : 'Never'}
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-gray-100 p-3 dark:bg-white/[0.045]">
+                    <p className="text-[9px] font-black uppercase tracking-[0.12em] text-gray-400 dark:text-white/35">Ready date</p>
+                    <p className="mt-1 text-xs font-bold text-gray-800 dark:text-white/80">
+                      {readyDateLabel || 'Already ready'}
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-gray-100 p-3 dark:bg-white/[0.045]">
+                    <p className="text-[9px] font-black uppercase tracking-[0.12em] text-gray-400 dark:text-white/35">This event</p>
+                    <p className="mt-1 text-xs font-bold text-gray-800 dark:text-white/80">{targetDateLabel}</p>
+                  </div>
+                </div>
+
+                {usage ? (
+                  <div className="rounded-2xl border border-gray-200/80 p-4 dark:border-white/[0.08]">
+                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-gray-400 dark:text-white/35">
+                      Last approved use
+                    </p>
+                    <div className="mt-2 flex items-center gap-3">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-600 dark:bg-brand-950/50 dark:text-brand-300">
+                        <Calendar className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-black text-gray-900 dark:text-white">{usage.eventTitle}</p>
+                        <p className="mt-0.5 text-xs font-semibold text-gray-500 dark:text-white/45">
+                          {usage.eventType} · {format(parseISO(usage.lastDate), 'MMM d, yyyy')}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReadinessDetailsReturnToPicker(false);
+                          setReadinessDetailsSong(null);
+                          navigate(`/events/${usage.eventId}`);
+                        }}
+                        className="inline-flex h-9 shrink-0 items-center justify-center rounded-full bg-gray-100 px-3 text-[11px] font-black text-gray-700 transition-colors hover:bg-gray-200 dark:bg-white/[0.07] dark:text-white/75 dark:hover:bg-white/[0.11]"
+                      >
+                        Open event
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-gray-200 px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:border-white/[0.08] dark:text-white/40">
+                    No approved previous event was found for this song.
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </Modal>
+
+        <Modal
           open={Boolean(viewingObservationId)}
           onClose={() => setViewingObservationId(null)}
           title="Seen by"
@@ -6095,7 +6379,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                   </div>
                   <ListOrdered className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" aria-hidden="true" />
                 </div>
-                <div className="max-h-52 overflow-y-auto p-1.5">
+                <div className="max-h-52 overflow-y-auto p-1.5 scrollbar-thin">
                   {setlistBuilderSongs.map((draft, index) => {
                     const song = songs.find(candidate => candidate.id === draft.song_id);
                     if (!song) return null;
@@ -6167,7 +6451,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                 autoComplete="off"
               />
             </div>
-            <div className={`${setlistBuilderSongs.length > 0 ? 'h-[34dvh] sm:h-[34vh]' : 'h-[56dvh] sm:h-[50vh]'} max-h-[34rem] space-y-1 overflow-y-auto`}>
+            <div className={`${setlistBuilderSongs.length > 0 ? 'h-[34dvh] sm:h-[34vh]' : 'h-[56dvh] sm:h-[50vh]'} max-h-[34rem] space-y-1 overflow-y-auto scrollbar-thin`}>
               {songs
                 .filter(s => !setlistSongs.some(ss => ss.song_id === s.id) && !setlistBuilderSongs.some(draft => draft.song_id === s.id))
                 .filter(s => {
@@ -6180,51 +6464,68 @@ const openLyricsModal = (ss: SetlistSong) => {
                 })
                 .map(song => {
                   const usage = songUsage[song.id];
-                  const isSafe = !usage || usage.days >= SONG_READY_DAYS;
+                  const projection = projectSongReadiness(usage?.lastDate, event.event_date);
+                  const eventDateLabel = format(parseISO(event.event_date), 'MMM d');
                   const proposalReservation = songProposalReservations[song.id];
                   return (
-                    <button
+                    <div
                       key={song.id}
-                      type="button"
-                      onClick={() => proposalReservation
-                        ? setSelectedSongReservationDetails({ songTitle: song.title, reservation: proposalReservation })
-                        : openSongConfig(song.id)}
-                      aria-label={proposalReservation ? `View duplicate proposal details for ${song.title}` : undefined}
-                      title={proposalReservation ? getProposalReservationMessage(proposalReservation) : undefined}
                       className={`flex w-full items-start gap-3 rounded-xl p-3 text-left transition-colors ${proposalReservation
                         ? 'cursor-not-allowed bg-amber-50/80 opacity-80 ring-1 ring-inset ring-amber-300/80 dark:bg-amber-500/[0.08] dark:ring-amber-500/30'
                         : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`}
                     >
-                      <SongArtwork song={song} youtubeUrl={song.youtube_url} className="h-11 w-11 shrink-0 rounded-lg" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-gray-900 dark:text-white">{song.title}</p>
-                        <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
-                          <span className={`truncate text-xs ${song.artist?.trim() ? 'text-gray-500 dark:text-gray-400' : 'font-semibold text-amber-600 dark:text-amber-400'}`}>
-                            {song.artist?.trim() || 'Artist required before use'}
-                          </span>
-                          {proposalReservation && (
-                            <span className="inline-flex min-w-0 shrink items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-300">
-                              <span className="text-gray-300 dark:text-gray-600" aria-hidden="true">·</span>
-                              <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />
-                              <span className="truncate">Duplicate - Open to see details</span>
+                      <button
+                        type="button"
+                        onClick={() => proposalReservation
+                          ? setSelectedSongReservationDetails({ songTitle: song.title, reservation: proposalReservation })
+                          : openSongConfig(song.id)}
+                        aria-label={proposalReservation ? `View duplicate proposal details for ${song.title}` : `Configure ${song.title}`}
+                        title={proposalReservation ? getProposalReservationMessage(proposalReservation) : undefined}
+                        className="flex min-w-0 flex-1 items-start gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+                      >
+                        <SongArtwork song={song} youtubeUrl={song.youtube_url} className="h-11 w-11 shrink-0 rounded-lg" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-gray-900 dark:text-white">{song.title}</p>
+                          <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+                            <span className={`truncate text-xs ${song.artist?.trim() ? 'text-gray-500 dark:text-gray-400' : 'font-semibold text-amber-600 dark:text-amber-400'}`}>
+                              {song.artist?.trim() || 'Artist required before use'}
                             </span>
-                          )}
+                            {song.song_key && (
+                              <span className="shrink-0 rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] font-bold text-gray-500 dark:bg-white/[0.06] dark:text-white/45">
+                                {song.song_key}
+                              </span>
+                            )}
+                            {proposalReservation && (
+                              <span className="inline-flex min-w-0 shrink items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-300">
+                                <span className="text-gray-300 dark:text-gray-600" aria-hidden="true">·</span>
+                                <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />
+                                <span className="truncate">Duplicate - Open to see details</span>
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                      {usage ? (
-                        <span className={`mt-0.5 inline-flex items-center gap-1 text-xs font-medium shrink-0 ${isSafe ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                          {isSafe ? <CheckCircle className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
-                          {usage.days}d
-                        </span>
-                      ) : (
-                        <span className="mt-0.5 inline-flex items-center gap-1 text-xs text-gray-400 shrink-0">
-                          <CheckCircle className="h-3.5 w-3.5" />
-                        </span>
-                      )}
-                      {proposalReservation
-                        ? <Lock className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-300" aria-hidden="true" />
-                        : <Plus className="mt-0.5 h-4 w-4 text-gray-400 shrink-0" />}
-                    </button>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReadinessDetailsReturnToPicker(true);
+                          setShowSetlist(false);
+                          setReadinessDetailsSong({
+                            songId: song.id,
+                            song,
+                            youtubeUrl: song.youtube_url || null,
+                          });
+                        }}
+                        className={`mt-0.5 inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-bold ring-1 transition-[filter,transform] hover:brightness-110 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 ${projection.meetsRule
+                          ? 'bg-green-50 text-green-700 ring-green-200/70 dark:bg-green-950/60 dark:text-green-300 dark:ring-green-700/40'
+                          : 'bg-red-50 text-red-700 ring-red-200/70 dark:bg-red-950/60 dark:text-red-300 dark:ring-red-700/40'}`}
+                        title={projection.daysAtTarget === null ? `New song; meets the rule by ${eventDateLabel}` : `${projection.daysAtTarget} days since last approved use by ${eventDateLabel}`}
+                        aria-label={`Open readiness details for ${song.title}: ${projection.meetsRule ? 'Meets' : `${projection.shortfallDays}d short`} · ${eventDateLabel}`}
+                      >
+                        {projection.meetsRule ? <CheckCircle className="h-3.5 w-3.5 shrink-0" /> : <AlertTriangle className="h-3.5 w-3.5 shrink-0" />}
+                        <span>{projection.meetsRule ? 'Meets' : `${projection.shortfallDays}d short`} · {eventDateLabel}</span>
+                      </button>
+                    </div>
                   );
                 })}
               {songs
@@ -6266,7 +6567,7 @@ const openLyricsModal = (ss: SetlistSong) => {
           </div>
         </Modal>
 
-        <Modal open={showAddSong} onClose={() => { if (!creatingSong) { setShowAddSong(false); setNewSongError(''); if (setlistBuilderActive) setShowSetlist(true); } }} title="Create New Song">
+        <Modal open={showAddSong} onClose={() => { if (!creatingSong) { setShowAddSong(false); setNewSongError(''); if (setlistBuilderActive) setShowSetlist(true); } }} title="Create New Song" size="lg">
           <form onSubmit={e => { e.preventDefault(); handleCreateSong(); }} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Title</label>
@@ -6327,21 +6628,143 @@ const openLyricsModal = (ss: SetlistSong) => {
           onBack={setlistBuilderActive ? () => resetSongConfigModal(true) : undefined}
           backLabel="Back to song list"
           title="Configure Song"
+          size="lg"
+          footer={(
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end sm:gap-3">
+              <button
+                type="button"
+                onClick={() => resetSongConfigModal(setlistBuilderActive)}
+                disabled={addingSetlistSong}
+                className="btn-secondary min-h-12 min-w-0 w-full justify-center whitespace-nowrap px-3 disabled:opacity-60 sm:min-h-11 sm:w-auto sm:min-w-32"
+              >
+                {setlistBuilderActive ? 'Back to Songs' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={confirmAddSong}
+                disabled={!songConfig.category || !songConfig.artist.trim() || addingSetlistSong || selectedSongConfigProjection?.meetsRule === false}
+                className={selectedSongConfigProjection?.meetsRule === false
+                  ? 'inline-flex min-h-12 min-w-0 w-full cursor-not-allowed items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-red-300 bg-red-50 px-3 text-[11px] font-black text-red-700 opacity-100 shadow-none dark:border-red-500/35 dark:bg-red-500/[0.12] dark:text-red-200 sm:min-h-11 sm:w-auto sm:min-w-40 sm:text-xs'
+                  : 'btn-primary min-h-12 min-w-0 w-full justify-center whitespace-nowrap px-3 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-11 sm:w-auto sm:min-w-40'}
+                title={selectedSongConfigProjection?.meetsRule === false
+                  ? `Not ready for this event — ${selectedSongConfigProjection.shortfallDays} days short`
+                  : undefined}
+              >
+                {addingSetlistSong
+                  ? 'Adding...'
+                  : selectedSongConfigProjection?.meetsRule === false
+                    ? <><Lock className="h-3.5 w-3.5 shrink-0" /> Locked · {selectedSongConfigProjection.shortfallDays}d short</>
+                    : setlistBuilderActive
+                      ? (setlistBuilderSongs.some(draft => draft.song_id === selectedSongForConfig) ? 'Update Selection' : 'Add to Selection')
+                      : 'Add to Setlist'}
+              </button>
+            </div>
+          )}
         >
           <div className="space-y-4">
-            {selectedSongForConfig && (() => {
-              const song = songs.find(s => s.id === selectedSongForConfig);
-              return song ? (
-                <div className="flex items-center gap-4">
-                  <SongArtwork song={song} youtubeUrl={songConfig.youtube_url || song.youtube_url} className="h-16 w-16 shrink-0 rounded-xl" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-base font-bold text-gray-900 dark:text-white">{song.title}</p>
-                    <p className={`mt-0.5 truncate text-sm ${song.artist?.trim() ? 'text-gray-500 dark:text-gray-400' : 'font-semibold text-amber-600 dark:text-amber-400'}`}>
-                      {song.artist?.trim() || 'Artist required'}
-                    </p>
+            {selectedSongConfigSong && selectedSongConfigProjection && (() => {
+              const eventDateLabel = format(parseISO(event.event_date), 'MMM d, yyyy');
+              const readyDateLabel = selectedSongConfigProjection.readyDate
+                ? format(parseISO(selectedSongConfigProjection.readyDate), 'MMM d, yyyy')
+                : null;
+              const readiness = getSongReadinessBadge(selectedSongConfigUsage, event.event_date);
+              const ReadinessIcon = readiness.Icon;
+              const lyricsSource = getSongLyricsSource(selectedSongConfigSong);
+              const explanation = selectedSongConfigProjection.daysAtTarget === null
+                ? `No earlier approved use was found before ${eventDateLabel}. New or never-used songs meet the ${SONG_READINESS_RULE_DAYS}-day rule.`
+                : selectedSongConfigProjection.meetsRule
+                  ? `${selectedSongConfigProjection.daysAtTarget} days will have passed since the last approved use. That clears the ${SONG_READINESS_RULE_DAYS}-day rule by ${selectedSongConfigProjection.daysAtTarget - SONG_READINESS_RULE_DAYS} days.`
+                  : `Only ${selectedSongConfigProjection.daysAtTarget} days will have passed since the last approved use. The song needs ${selectedSongConfigProjection.shortfallDays} more days and becomes ready on ${readyDateLabel}.`;
+
+              return (
+                <div className="rounded-2xl border border-gray-200/80 bg-gray-50/80 p-3 dark:border-white/[0.08] dark:bg-white/[0.035]">
+                  <div className="flex items-start gap-3">
+                    <SongArtwork
+                      song={selectedSongConfigSong}
+                      youtubeUrl={songConfig.youtube_url || selectedSongConfigSong.youtube_url}
+                      className="h-16 w-16 shrink-0 rounded-xl"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-black text-gray-950 dark:text-white">
+                        {selectedSongConfigSong.title || 'Untitled song'}
+                      </p>
+                      <p className={`mt-0.5 truncate text-xs font-semibold ${selectedSongConfigSong.artist?.trim() ? 'text-gray-500 dark:text-white/45' : 'text-amber-600 dark:text-amber-400'}`}>
+                        {selectedSongConfigSong.artist?.trim() || 'Artist required'}
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[9px] font-bold ring-1 ${readiness.className}`}>
+                          <ReadinessIcon className="h-3 w-3" />
+                          {readiness.label}
+                        </span>
+                        <span className={`rounded-full px-2 py-1 text-[9px] font-bold ${
+                          lyricsSource === 'missing'
+                            ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/45 dark:text-amber-300'
+                            : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/45 dark:text-emerald-300'
+                        }`}>
+                          {lyricsSource === 'saved' ? 'Lyrics saved' : lyricsSource === 'chart' ? 'Lyrics from chart' : 'Lyrics missing'}
+                        </span>
+                        <span className={`rounded-full px-2 py-1 text-[9px] font-bold ${
+                          selectedSongConfigSong.chordpro_text
+                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/45 dark:text-emerald-300'
+                            : 'bg-gray-100 text-gray-500 dark:bg-white/[0.06] dark:text-white/45'
+                        }`}>
+                          {selectedSongConfigSong.chordpro_text ? 'Chart available' : 'No chart'}
+                        </span>
+                      </div>
+                    </div>
                   </div>
+
+                  <div className={`mt-3 rounded-xl p-3 ring-1 ${
+                    selectedSongConfigProjection.meetsRule
+                      ? 'bg-emerald-50 text-emerald-950 ring-emerald-200/80 dark:bg-emerald-950/35 dark:text-emerald-100 dark:ring-emerald-800/50'
+                      : 'bg-red-50 text-red-950 ring-red-200/80 dark:bg-red-950/35 dark:text-red-100 dark:ring-red-800/50'
+                  }`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[9px] font-black uppercase tracking-[0.14em] opacity-60">Why this status</p>
+                      {!selectedSongConfigProjection.meetsRule && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.08em] text-red-700 dark:bg-red-500/15 dark:text-red-200">
+                          <Lock className="h-2.5 w-2.5" /> Cannot add
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1.5 text-[11px] font-semibold leading-relaxed">{explanation}</p>
+                  </div>
+
+                  <div className="mt-2 grid grid-cols-3 gap-1.5">
+                    <div className="rounded-lg bg-gray-100 px-2 py-2 dark:bg-white/[0.045]">
+                      <p className="text-[8px] font-black uppercase tracking-[0.1em] text-gray-400 dark:text-white/35">Last used</p>
+                      <p className="mt-0.5 text-[10px] font-bold leading-tight text-gray-800 dark:text-white/80">
+                        {selectedSongConfigUsage ? format(parseISO(selectedSongConfigUsage.lastDate), 'MMM d, yyyy') : 'Never'}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-gray-100 px-2 py-2 dark:bg-white/[0.045]">
+                      <p className="text-[8px] font-black uppercase tracking-[0.1em] text-gray-400 dark:text-white/35">Ready date</p>
+                      <p className="mt-0.5 text-[10px] font-bold leading-tight text-gray-800 dark:text-white/80">{readyDateLabel || 'Already ready'}</p>
+                    </div>
+                    <div className="rounded-lg bg-gray-100 px-2 py-2 dark:bg-white/[0.045]">
+                      <p className="text-[8px] font-black uppercase tracking-[0.1em] text-gray-400 dark:text-white/35">This event</p>
+                      <p className="mt-0.5 text-[10px] font-bold leading-tight text-gray-800 dark:text-white/80">{eventDateLabel}</p>
+                    </div>
+                  </div>
+
+                  {selectedSongConfigUsage && (
+                    <div className="mt-2 flex items-center gap-2 rounded-xl border border-gray-200/70 bg-white/70 px-2.5 py-2 dark:border-white/[0.07] dark:bg-black/15">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-600 dark:bg-brand-950/50 dark:text-brand-300">
+                        <Calendar className="h-3.5 w-3.5" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-[8px] font-black uppercase tracking-[0.12em] text-gray-400 dark:text-white/35">Last approved use</p>
+                        <p className="truncate text-[11px] font-black text-gray-800 dark:text-white/80">
+                          {selectedSongConfigUsage.eventTitle}
+                        </p>
+                        <p className="text-[9px] font-semibold text-gray-500 dark:text-white/40">
+                          {selectedSongConfigUsage.eventType} · {format(parseISO(selectedSongConfigUsage.lastDate), 'MMM d, yyyy')}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              ) : null;
+              );
             })()}
             {selectedSongForConfig && !songs.find(s => s.id === selectedSongForConfig)?.artist?.trim() && (
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-500/30 dark:bg-amber-500/10">
@@ -6431,14 +6854,6 @@ const openLyricsModal = (ss: SetlistSong) => {
                 placeholder="https://youtube.com/watch?v=..."
               />
             </div>
-            <div className="flex justify-end gap-3 pt-2">
-              <button type="button" onClick={() => resetSongConfigModal(setlistBuilderActive)} disabled={addingSetlistSong} className="btn-secondary disabled:opacity-60">
-                {setlistBuilderActive ? 'Back to Songs' : 'Cancel'}
-              </button>
-              <button type="button" onClick={confirmAddSong} disabled={!songConfig.category || !songConfig.artist.trim() || addingSetlistSong} className="btn-primary disabled:opacity-60">
-                {addingSetlistSong ? 'Adding...' : setlistBuilderActive ? (setlistBuilderSongs.some(draft => draft.song_id === selectedSongForConfig) ? 'Update Selection' : 'Add to Selection') : 'Add to Setlist'}
-              </button>
-            </div>
           </div>
         </Modal>
 
@@ -6472,7 +6887,7 @@ const openLyricsModal = (ss: SetlistSong) => {
           </div>
         </Modal>
 
-        <Modal open={!!editingSongId} onClose={() => { if (!savingSongEdit) setEditingSongId(null); }} title="Edit Song">
+        <Modal open={!!editingSongId} onClose={() => { if (!savingSongEdit) setEditingSongId(null); }} title="Edit Song" size="lg">
           <div className="space-y-4">
             {editingSongId && (() => {
               const ss = setlistSongs.find(s => s.id === editingSongId)
@@ -7250,7 +7665,7 @@ const openLyricsModal = (ss: SetlistSong) => {
               </div>
 
               <div className="grid gap-2">
-                {(showSetlistEditControls || canEditSetlistSongDetails) && (
+                {canEditSetlistSongDetails && (
                   <button
                     type="button"
                     onClick={() => openLyricsModal(mobileSongActionsSong)}
@@ -7308,7 +7723,7 @@ const openLyricsModal = (ss: SetlistSong) => {
           )}
         </Modal>
 
-        <Modal open={!!lyricsModalSong} onClose={() => { setLyricsModalSong(null); setArtistPromptVisible(false); setArtistPromptValue(''); setLyricsSearchNotice(null); }} title="Song Lyrics">
+        <Modal open={!!lyricsModalSong} onClose={() => { setLyricsModalSong(null); setArtistPromptVisible(false); setArtistPromptValue(''); setLyricsSearchNotice(null); }} title="Song Lyrics" size="lg">
           {lyricsModalSong && (
             <div className="space-y-4">
               <div>
@@ -7597,6 +8012,10 @@ const openLyricsModal = (ss: SetlistSong) => {
                   <dd className="truncate font-semibold text-gray-900 dark:text-white">{submission.submitterName}</dd>
                   <dt className="text-gray-500 dark:text-gray-400">Event</dt>
                   <dd className="truncate font-semibold text-gray-900 dark:text-white">{submission.eventTitle}</dd>
+                  <dt className="text-gray-500 dark:text-gray-400">Event date</dt>
+                  <dd className="font-semibold text-gray-900 dark:text-white">
+                    {submission.eventDate ? format(parseISO(submission.eventDate), 'MMM d, yyyy') : 'Date unavailable'}
+                  </dd>
                   <dt className="text-gray-500 dark:text-gray-400">Submitted</dt>
                   <dd className="font-semibold text-gray-900 dark:text-white">{formatProposalSubmissionTime(submission.submittedAt)}</dd>
                   <dt className="text-gray-500 dark:text-gray-400">Status</dt>
@@ -7737,7 +8156,7 @@ const openLyricsModal = (ss: SetlistSong) => {
           </div>
         </Modal>
 
-        <Modal open={showEditEvent} onClose={() => setShowEditEvent(false)} title="Edit Event">
+        <Modal open={showEditEvent} onClose={() => setShowEditEvent(false)} title="Edit Event" size="lg">
           <form onSubmit={e => { e.preventDefault(); handleEditEvent(); }} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Event Type</label>

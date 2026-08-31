@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowDown, ArrowUp, Bold, Captions, Check, ChevronLeft, ChevronRight, Copy, CornerDownRight, Edit3, FileText, Gauge, Italic, ListOrdered, Lock, Minus, Music2, Pause, Play, Plus, RotateCcw, Save, Settings2, StickyNote, Trash2, Users, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { loadSyncedPreference, saveSyncedPreference } from '../lib/syncedPreferences';
 import { ChordProLine, detectChordProKey, formatChordProForPlainEditor, getKeyTransposeOffset, parseChordPro, parseChordProMetadata, plainEditorSectionsToChordPro, plainEditorToChordPro, transposeChordPro, transposeKey } from '../lib/chordPro';
 
 const SECTION_TONES = [
@@ -91,6 +92,7 @@ const CHART_FONT_SIZE_MAX = 36;
 const AUTO_SCROLL_SPEED_MIN = 8;
 const AUTO_SCROLL_SPEED_MAX = 80;
 const AUTO_SCROLL_SPEED_DEFAULT = 24;
+const LIVE_MODE_CHART_SETTINGS_PREFERENCE_KEY = 'live-mode-chart-display-settings-v1';
 const SHARP_KEY_OPTIONS = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
 const FLAT_KEY_OPTIONS = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
 
@@ -144,27 +146,30 @@ const DEFAULT_CHART_SETTINGS: ChartDisplaySettings = {
   autoScrollSpeed: AUTO_SCROLL_SPEED_DEFAULT,
 };
 
+function normalizeChartDisplaySettings(parsed: Partial<ChartDisplaySettings> | null | undefined): ChartDisplaySettings {
+  if (!parsed) return DEFAULT_CHART_SETTINGS;
+  const shouldUseNewDefaults = parsed.settingsVersion !== CHART_SETTINGS_VERSION;
+  return {
+    settingsVersion: CHART_SETTINGS_VERSION,
+    lyricFontSize: shouldUseNewDefaults ? DEFAULT_CHART_SETTINGS.lyricFontSize : normalizeFontSize(parsed.lyricFontSize, DEFAULT_CHART_SETTINGS.lyricFontSize),
+    chordFontSize: shouldUseNewDefaults ? DEFAULT_CHART_SETTINGS.chordFontSize : normalizeFontSize(parsed.chordFontSize, DEFAULT_CHART_SETTINGS.chordFontSize),
+    sectionBadgeFontSize: normalizeFontSize(parsed.sectionBadgeFontSize, DEFAULT_CHART_SETTINGS.sectionBadgeFontSize),
+    noteFontSize: normalizeFontSize(parsed.noteFontSize, DEFAULT_CHART_SETTINGS.noteFontSize),
+    lyricBold: typeof parsed.lyricBold === 'boolean' ? parsed.lyricBold : DEFAULT_CHART_SETTINGS.lyricBold,
+    lyricItalic: typeof parsed.lyricItalic === 'boolean' ? parsed.lyricItalic : DEFAULT_CHART_SETTINGS.lyricItalic,
+    chordBold: typeof parsed.chordBold === 'boolean' ? parsed.chordBold : DEFAULT_CHART_SETTINGS.chordBold,
+    chordItalic: typeof parsed.chordItalic === 'boolean' ? parsed.chordItalic : DEFAULT_CHART_SETTINGS.chordItalic,
+    lyricsOnly: typeof parsed.lyricsOnly === 'boolean' ? parsed.lyricsOnly : DEFAULT_CHART_SETTINGS.lyricsOnly,
+    autoScrollSpeed: normalizeAutoScrollSpeed(parsed.autoScrollSpeed),
+  };
+}
+
 function loadChartDisplaySettings(storageKey = CHART_SETTINGS_STORAGE_KEY): ChartDisplaySettings {
   if (typeof window === 'undefined') return DEFAULT_CHART_SETTINGS;
 
   try {
     const raw = window.localStorage.getItem(storageKey);
-    if (!raw) return DEFAULT_CHART_SETTINGS;
-    const parsed = JSON.parse(raw) as Partial<ChartDisplaySettings>;
-    const shouldUseNewDefaults = parsed.settingsVersion !== CHART_SETTINGS_VERSION;
-    return {
-      settingsVersion: CHART_SETTINGS_VERSION,
-      lyricFontSize: shouldUseNewDefaults ? DEFAULT_CHART_SETTINGS.lyricFontSize : normalizeFontSize(parsed.lyricFontSize, DEFAULT_CHART_SETTINGS.lyricFontSize),
-      chordFontSize: shouldUseNewDefaults ? DEFAULT_CHART_SETTINGS.chordFontSize : normalizeFontSize(parsed.chordFontSize, DEFAULT_CHART_SETTINGS.chordFontSize),
-      sectionBadgeFontSize: normalizeFontSize(parsed.sectionBadgeFontSize, DEFAULT_CHART_SETTINGS.sectionBadgeFontSize),
-      noteFontSize: normalizeFontSize(parsed.noteFontSize, DEFAULT_CHART_SETTINGS.noteFontSize),
-      lyricBold: typeof parsed.lyricBold === 'boolean' ? parsed.lyricBold : DEFAULT_CHART_SETTINGS.lyricBold,
-      lyricItalic: typeof parsed.lyricItalic === 'boolean' ? parsed.lyricItalic : DEFAULT_CHART_SETTINGS.lyricItalic,
-      chordBold: typeof parsed.chordBold === 'boolean' ? parsed.chordBold : DEFAULT_CHART_SETTINGS.chordBold,
-      chordItalic: typeof parsed.chordItalic === 'boolean' ? parsed.chordItalic : DEFAULT_CHART_SETTINGS.chordItalic,
-      lyricsOnly: typeof parsed.lyricsOnly === 'boolean' ? parsed.lyricsOnly : DEFAULT_CHART_SETTINGS.lyricsOnly,
-      autoScrollSpeed: normalizeAutoScrollSpeed(parsed.autoScrollSpeed),
-    };
+    return normalizeChartDisplaySettings(raw ? JSON.parse(raw) as Partial<ChartDisplaySettings> : null);
   } catch {
     return DEFAULT_CHART_SETTINGS;
   }
@@ -562,6 +567,7 @@ export function SongChartViewer({
   const [arrangementSaveMessage, setArrangementSaveMessage] = useState<string | null>(null);
   const [clearArrangementConfirmOpen, setClearArrangementConfirmOpen] = useState(false);
   const [displaySettings, setDisplaySettings] = useState<ChartDisplaySettings>(() => loadChartDisplaySettings(displaySettingsStorageKey));
+  const [displaySettingsSyncReady, setDisplaySettingsSyncReady] = useState(!preferenceScopeId);
   const [internalAutoScrollEnabled, setInternalAutoScrollEnabled] = useState(false);
   const [savedPreviewChordPro, setSavedPreviewChordPro] = useState<string | null>(null);
   const [previewBaseKey, setPreviewBaseKey] = useState(() => initialSourceChartKey);
@@ -766,6 +772,37 @@ export function SongChartViewer({
     return () => window.removeEventListener('servesync:chart-display-settings-updated', handleSettingsUpdate);
   }, [displaySettingsStorageKey]);
 
+  useEffect(() => {
+    let cancelled = false;
+    if (!user?.id || !preferenceScopeId) {
+      setDisplaySettingsSyncReady(true);
+      return;
+    }
+
+    setDisplaySettingsSyncReady(false);
+    loadSyncedPreference<Partial<ChartDisplaySettings>>(user.id, LIVE_MODE_CHART_SETTINGS_PREFERENCE_KEY)
+      .then(settings => {
+        if (cancelled) return;
+        if (settings) setDisplaySettings(normalizeChartDisplaySettings(settings));
+        setDisplaySettingsSyncReady(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [preferenceScopeId, user?.id]);
+
+  useEffect(() => {
+    if (!displaySettingsSyncReady || !user?.id || !preferenceScopeId) return;
+    const timeoutId = window.setTimeout(() => {
+      void saveSyncedPreference(user.id, LIVE_MODE_CHART_SETTINGS_PREFERENCE_KEY, {
+        ...displaySettings,
+        settingsVersion: CHART_SETTINGS_VERSION,
+      });
+    }, 350);
+    return () => window.clearTimeout(timeoutId);
+  }, [displaySettings, displaySettingsSyncReady, preferenceScopeId, user?.id]);
+
   const renderedText = useMemo(() => transposeChordPro(previewChordProText, transpose), [previewChordProText, transpose]);
   const chartLines = useMemo(() => parseChordPro(renderedText), [renderedText]);
   const chartSections = useMemo(() => buildChartSections(chartLines), [chartLines]);
@@ -891,13 +928,13 @@ export function SongChartViewer({
   useEffect(() => {
     let cancelled = false;
 
-    async function loadTeamNotes() {
+    async function loadTeamNotes(showLoading = false) {
       if (!songId) {
         setTeamNotes({});
         return;
       }
 
-      setNotesLoading(true);
+      if (showLoading) setNotesLoading(true);
       const { data, error } = await supabase
         .from('song_section_notes')
         .select('id, section_key, section_label, note')
@@ -908,8 +945,10 @@ export function SongChartViewer({
 
       if (error) {
         console.error('Failed to load song section notes', error);
-        setNoteError('Could not load team notes yet.');
-        setTeamNotes({});
+        if (showLoading) {
+          setNoteError('Could not load team notes yet.');
+          setTeamNotes({});
+        }
       } else {
         const nextNotes = (data || []).reduce<Record<string, TeamSectionNote>>((acc, note) => {
           acc[note.section_key] = note as TeamSectionNote;
@@ -918,12 +957,23 @@ export function SongChartViewer({
         setTeamNotes(nextNotes);
       }
 
-      setNotesLoading(false);
+      if (showLoading) setNotesLoading(false);
     }
 
-    loadTeamNotes();
+    void loadTeamNotes(true);
+    const refreshId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void loadTeamNotes();
+    }, 4000);
+    const refreshVisibleNotes = () => {
+      if (document.visibilityState === 'visible') void loadTeamNotes();
+    };
+    window.addEventListener('focus', refreshVisibleNotes);
+    document.addEventListener('visibilitychange', refreshVisibleNotes);
     return () => {
       cancelled = true;
+      window.clearInterval(refreshId);
+      window.removeEventListener('focus', refreshVisibleNotes);
+      document.removeEventListener('visibilitychange', refreshVisibleNotes);
     };
   }, [songId]);
 
@@ -1840,8 +1890,8 @@ export function SongChartViewer({
                   key={`${section.key}-${arrangementIndex}`}
                   className={
                     fullBleed
-                      ? 'border-t border-black/[0.06] px-0.5 py-5 first:border-t-0 dark:border-white/[0.08]'
-                      : 'rounded-[24px] border border-black/[0.05] bg-white/75 p-4 shadow-sm dark:border-white/[0.07] dark:bg-white/[0.035]'
+                      ? 'group/section border-t border-black/[0.06] px-0.5 py-5 first:border-t-0 dark:border-white/[0.08]'
+                      : 'group/section rounded-[24px] border border-black/[0.05] bg-white/75 p-4 shadow-sm dark:border-white/[0.07] dark:bg-white/[0.035]'
                   }
                 >
                   <div className={`${fullBleed ? 'mb-3' : 'mb-4'} flex flex-wrap items-center gap-2`}>
@@ -1853,7 +1903,7 @@ export function SongChartViewer({
                       <span>{section.label}</span>
                     </div>
                     {songId && (
-                      <div className="inline-flex shrink-0 items-center gap-1 rounded-full border border-black/[0.04] bg-white/45 p-1 shadow-sm shadow-black/[0.02] dark:border-white/[0.06] dark:bg-white/[0.035]">
+                      <div className={`inline-flex shrink-0 items-center gap-1 rounded-full border border-black/[0.04] bg-white/45 p-1 shadow-sm shadow-black/[0.02] transition dark:border-white/[0.06] dark:bg-white/[0.035] ${selfNote || teamNote || isEditingSelf || isEditingTeam ? 'opacity-100' : 'opacity-0 group-hover/section:opacity-100 group-focus-within/section:opacity-100 group-active/section:opacity-100'}`}>
                         <button
                           onClick={() => openSectionNote(section.key, section.label, 'self')}
                           className={`relative inline-flex h-7 w-7 items-center justify-center rounded-full transition active:scale-[0.94] ${

@@ -713,7 +713,6 @@ export function EventDetail() {
   const [dismissedTechInstructionIds, setDismissedTechInstructionIds] = useState<string[]>([]);
   const liveCommsChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const [showRehearsalSummary, setShowRehearsalSummary] = useState(false);
-  const [serviceModeUnlocked, setServiceModeUnlocked] = useState(false);
   const [isOnline, setIsOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine);
   const [songPreparation, setSongPreparation] = useState<Record<string, EventSongPreparation>>({});
   const [serviceSongStageWidth, setServiceSongStageWidth] = useState(0);
@@ -888,10 +887,10 @@ export function EventDetail() {
         restingViewportHeight = visibleViewportHeight;
       }
 
-      root.style.setProperty('--service-mode-viewport-height', `${Math.round(restingViewportHeight)}px`);
+      root.style.setProperty('--service-mode-viewport-height', `${Math.round(visibleViewportHeight)}px`);
+      root.style.setProperty('--service-mode-viewport-offset-top', `${Math.round(viewport?.offsetTop || 0)}px`);
       root.style.setProperty('--service-mode-keyboard-inset', `${Math.round(keyboardOpen ? rawKeyboardInset : 0)}px`);
       root.classList.toggle('service-mode-keyboard-open', keyboardOpen);
-      if (keyboardOpen) window.scrollTo(0, 0);
     };
 
     updateServiceViewportHeight();
@@ -911,6 +910,7 @@ export function EventDetail() {
       root.classList.remove('service-mode-keyboard-open');
       document.body.classList.remove('service-mode-active');
       root.style.removeProperty('--service-mode-viewport-height');
+      root.style.removeProperty('--service-mode-viewport-offset-top');
       root.style.removeProperty('--service-mode-keyboard-inset');
       root.style.overflow = previousRootOverflow;
       root.style.overscrollBehavior = previousRootOverscroll;
@@ -956,7 +956,6 @@ export function EventDetail() {
       setServiceAutoScrollEnabled(false);
       setServiceSongPickerOpen(false);
 	  setShowRehearsalSummary(false);
-	  setServiceModeUnlocked(false);
       setServiceCloseConfirmOpen(false);
     }
   }, [serviceModeIndex]);
@@ -1001,7 +1000,6 @@ export function EventDetail() {
     setServiceAutoScrollEnabled(false);
     setServiceModeEntering(false);
 	setStageCommsView(params.get('audience') === 'tech' ? 'tech' : 'stage');
-	setServiceModeUnlocked(event?.event_type === 'Rehearsals');
     setServiceModeIndex(restoredIndex);
   }, [authLoading, canUseServiceModePilot, event?.event_type, id, linkedSetlistSongs, loading, location.pathname, location.search, navigate, serviceModeIndex, setlist?.status, setlistSongs]);
 
@@ -3836,7 +3834,6 @@ const openLyricsModal = (ss: SetlistSong) => {
     setServiceAutoScrollEnabled(false);
     setServiceSongPickerOpen(false);
 	setShowRehearsalSummary(false);
-	setServiceModeUnlocked(event.event_type === 'Rehearsals');
     setServiceModeDisplayKey('');
     serviceTrackAnimation.current?.stop();
     serviceTrackX.set(0);
@@ -3870,7 +3867,6 @@ const openLyricsModal = (ss: SetlistSong) => {
     setServiceAutoScrollEnabled(false);
     setServiceSongPickerOpen(false);
 	setShowRehearsalSummary(false);
-	setServiceModeUnlocked(false);
     setServiceCloseConfirmOpen(false);
     setServiceModeEntering(false);
     setServiceModeDisplayKey('');
@@ -7076,17 +7072,19 @@ const openLyricsModal = (ss: SetlistSong) => {
           onClose={() => setLiveModeAudiencePickerIndex(null)}
           title="Preview Live Mode"
           size="sm"
+          mobileView="dialog"
+          instantOpen
         >
           <div className="space-y-4">
             <div>
               <p className="text-sm font-bold text-gray-900 dark:text-white">Which experience would you like to test?</p>
               <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-white/45">This selector is available only to admin accounts. Team members enter the experience assigned to their event role.</p>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
               <button
                 type="button"
                 onClick={() => enterServiceMode(liveModeAudiencePickerIndex ?? 0, 'stage')}
-                className="group rounded-3xl border border-emerald-200 bg-emerald-50 p-4 text-left transition hover:border-emerald-400 hover:bg-emerald-100 active:scale-[0.98] dark:border-emerald-400/20 dark:bg-emerald-400/[0.08] dark:hover:bg-emerald-400/[0.13]"
+                className="group min-w-0 rounded-3xl border border-emerald-200 bg-emerald-50 p-3 text-left transition hover:border-emerald-400 hover:bg-emerald-100 active:scale-[0.98] sm:p-4 dark:border-emerald-400/20 dark:bg-emerald-400/[0.08] dark:hover:bg-emerald-400/[0.13]"
               >
                 <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"><Music className="h-5 w-5" /></span>
                 <span className="mt-3 block text-sm font-black text-emerald-950 dark:text-emerald-100">Stage</span>
@@ -7095,7 +7093,7 @@ const openLyricsModal = (ss: SetlistSong) => {
               <button
                 type="button"
                 onClick={() => enterServiceMode(liveModeAudiencePickerIndex ?? 0, 'tech')}
-                className="group rounded-3xl border border-violet-200 bg-violet-50 p-4 text-left transition hover:border-violet-400 hover:bg-violet-100 active:scale-[0.98] dark:border-violet-400/20 dark:bg-violet-400/[0.08] dark:hover:bg-violet-400/[0.13]"
+                className="group min-w-0 rounded-3xl border border-violet-200 bg-violet-50 p-3 text-left transition hover:border-violet-400 hover:bg-violet-100 active:scale-[0.98] sm:p-4 dark:border-violet-400/20 dark:bg-violet-400/[0.08] dark:hover:bg-violet-400/[0.13]"
               >
                 <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-500 text-white shadow-lg shadow-violet-500/20"><Settings2 className="h-5 w-5" /></span>
                 <span className="mt-3 block text-sm font-black text-violet-950 dark:text-violet-100">Tech</span>
@@ -7117,7 +7115,8 @@ const openLyricsModal = (ss: SetlistSong) => {
                 transition={{ duration: 0.12, ease: 'easeOut' }}
                 className="service-mode-overlay fixed inset-0 isolate z-[2147483000] flex w-screen flex-col overflow-visible bg-white text-gray-950 dark:bg-[#0c0f0d] dark:text-white"
                 style={{
-                  bottom: 0,
+                  top: 'var(--service-mode-viewport-offset-top, 0px)',
+                  bottom: 'auto',
                   height: 'var(--service-mode-viewport-height)',
                   overflow: 'hidden',
                 }}
@@ -7406,7 +7405,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                         </button>
                         <button
                           onClick={() => setServiceChartControlsVisible(value => !value)}
-                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition active:scale-95 ${
+                          className={`order-last flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition active:scale-95 ${
                             serviceChartControlsVisible
                               ? 'border-emerald-500 bg-emerald-600 text-white shadow-lg shadow-emerald-600/25'
                               : 'border-black/[0.06] bg-white/90 text-gray-600 shadow-sm hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/70 dark:hover:border-emerald-500/30 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300'
@@ -7590,7 +7589,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                               >
                                 <SongChartViewer
                                   songId={song.song_id}
-                                  preferenceScopeId={event.id}
+                                  preferenceScopeId="live-mode"
                                   draftStorageId={`setlist-song:${song.id}`}
                                   sectionOrder={song.arrangement_section_order}
                                   title={song.songs.title}
@@ -7598,7 +7597,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                   songKey={song.songs.song_key}
                                   performedKey={song.performed_key}
                                   chordproText={getSetlistSongChartText(song)}
-								  editable={offset === 0 && canUseServiceModePilot && (event.event_type === 'Rehearsals' || serviceModeUnlocked)}
+								  editable={offset === 0 && (canEditSetlistSongDetails || isOrgAdmin || isAdmin || isPlatformOwner)}
                                   fullBleed
                                   saving={offset === 0 ? chartSaving : false}
                                   hideTitleHeader

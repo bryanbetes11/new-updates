@@ -48,6 +48,14 @@ html[data-touch-feedback="apple"] :is(nav, aside) .touch-feedback-strong {
     -webkit-touch-callout: none;
   }
 
+  /* Resolve taps as controls instead of waiting for touch browsers to decide
+     whether the gesture is a double-tap/zoom. Keeping this on the shared
+     interactive primitives makes modal and menu triggers respond consistently
+     without opening controls on pointerdown (which would break scrolling). */
+  :is(button, a[href], [role="button"], [role="tab"], input[type="button"], input[type="submit"], input[type="reset"], select, summary) {
+    touch-action: manipulation;
+  }
+
   :is(button, [role="button"], [data-app-nonselect="true"]) img {
     -webkit-user-drag: none;
     user-drag: none;
@@ -921,9 +929,9 @@ html[data-touch-feedback="apple"] :is(nav, aside) .touch-feedback-strong {
   }
 
   .service-mode-overlay {
-    top: 0;
+    top: var(--service-mode-viewport-offset-top, 0px);
     right: 0;
-    bottom: 0;
+    bottom: auto;
     left: 0;
     max-height: none;
     min-height: 0;

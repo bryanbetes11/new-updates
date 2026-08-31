@@ -3483,6 +3483,10 @@ const openLyricsModal = (ss: SetlistSong) => {
   const userIsSongLeaderRole = userRoles.some(ur => ur.roles?.name === 'Song Leader');
   const hasEventManagementAccess = isLeader || isOrgAdmin || isPlatformOwner;
   const visiblePendingAssignments = myPendingAssignments;
+  const isAttendanceAssignment = (assignment: EventAssignment) => assignment.roles?.name === 'All Members';
+  const attendanceOnlyPendingAssignments = visiblePendingAssignments.length > 0
+    && visiblePendingAssignments.every(isAttendanceAssignment);
+  const decliningAttendance = Boolean(decliningAssignment && isAttendanceAssignment(decliningAssignment));
   const assignmentDetailsBlocked = shouldBlockEventDetails(assignments, user?.id, hasEventManagementAccess);
   const pendingAssignmentPanel = visiblePendingAssignments.length > 0 && !assignmentDetailsBlocked ? (
     <motion.section
@@ -3505,13 +3509,17 @@ const openLyricsModal = (ss: SetlistSong) => {
           </div>
           <div className="min-w-0 flex-1">
             <p className="mb-0.5 text-[10px] font-mono font-medium uppercase tracking-[0.22em] text-amber-400">
-              Action required
+              {attendanceOnlyPendingAssignments ? 'Event invitation' : 'Action required'}
             </p>
             <h2 id="pending-assignment-title" className="text-[15px] font-bold leading-tight text-white" style={{ letterSpacing: '-0.02em' }}>
-              {visiblePendingAssignments.length} pending {visiblePendingAssignments.length === 1 ? 'assignment' : 'assignments'}
+              {attendanceOnlyPendingAssignments
+                ? `${visiblePendingAssignments.length} pending ${visiblePendingAssignments.length === 1 ? 'response' : 'responses'}`
+                : `${visiblePendingAssignments.length} pending ${visiblePendingAssignments.length === 1 ? 'assignment' : 'assignments'}`}
             </h2>
             <p className="mt-1 max-w-2xl text-xs leading-relaxed text-white/50">
-              {isSongLeader
+              {attendanceOnlyPendingAssignments
+                ? 'Please let the event organizers know whether you can attend this session.'
+                : isSongLeader
                 ? 'You can keep preparing as Song Leader, but please respond to each additional role.'
                 : 'Please respond to each role so the event leaders have an accurate team count.'}
             </p>
@@ -3523,11 +3531,12 @@ const openLyricsModal = (ss: SetlistSong) => {
             const isResponding = respondingAssignmentId === assignment.id;
             const roleName = assignment.roles?.name || 'Team role';
 			const servingRole = getServingRoleLabel(roleName);
+            const attendanceAssignment = isAttendanceAssignment(assignment);
             return (
               <div key={assignment.id} className="flex flex-col gap-3 px-3.5 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
-				  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-300/70">Your role for this event</p>
-				  <p className="mt-1 text-sm font-bold leading-snug text-white">You’re assigned to serve as <span className="text-amber-300">{servingRole}</span>.</p>
+				  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-300/70">{attendanceAssignment ? 'Event invitation' : 'Your role for this event'}</p>
+				  <p className="mt-1 text-sm font-bold leading-snug text-white">{attendanceAssignment ? 'You’re invited to attend this session.' : <>You’re assigned to serve as <span className="text-amber-300">{servingRole}</span>.</>}</p>
                 </div>
                 <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
                   <button
@@ -3535,19 +3544,19 @@ const openLyricsModal = (ss: SetlistSong) => {
                     onClick={() => handleConfirm(assignment.id)}
                     disabled={respondingAssignmentId !== null}
                     className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-emerald-600 px-4 text-xs font-bold text-white transition-colors hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:cursor-wait disabled:opacity-55"
-                    aria-label={`Confirm ${roleName} assignment`}
+                    aria-label={attendanceAssignment ? 'Confirm attendance' : `Confirm ${roleName} assignment`}
                   >
                     {isResponding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                    Confirm
+                    {attendanceAssignment ? 'Attending' : 'Confirm'}
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowDecline(assignment.id)}
                     disabled={respondingAssignmentId !== null}
                     className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/[0.1] px-4 text-xs font-bold text-red-200 transition-colors hover:bg-red-500/[0.17] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 disabled:cursor-wait disabled:opacity-55"
-                    aria-label={`Decline ${roleName} assignment`}
+                    aria-label={attendanceAssignment ? 'Cannot attend' : `Decline ${roleName} assignment`}
                   >
-                    <X className="h-3.5 w-3.5" /> Decline
+                    <X className="h-3.5 w-3.5" /> {attendanceAssignment ? 'Can’t attend' : 'Decline'}
                   </button>
                 </div>
               </div>
@@ -4043,10 +4052,10 @@ const openLyricsModal = (ss: SetlistSong) => {
               <Lock className="h-5 w-5" aria-hidden="true" />
             </div>
             <p className="mt-5 text-[10px] font-mono font-bold uppercase tracking-[0.22em] text-amber-400">
-              Response required
+              {attendanceOnlyPendingAssignments ? 'Invitation response required' : 'Response required'}
             </p>
             <h2 id="assignment-gate-title" className="mt-2 text-[1.65rem] font-black leading-[1.08] text-white sm:text-3xl" style={{ letterSpacing: '-0.035em' }}>
-              Respond before viewing<span className="hidden sm:inline"> </span><br className="sm:hidden" />event details
+              Respond before viewing<span className="hidden sm:inline"> </span><br className="sm:hidden" />{attendanceOnlyPendingAssignments ? 'session details' : 'event details'}
             </h2>
 
         <div className="mx-auto mt-6 w-full max-w-xl divide-y divide-white/[0.07] overflow-hidden rounded-2xl border border-white/[0.09] bg-black/25 text-left sm:mt-7">
@@ -4054,11 +4063,12 @@ const openLyricsModal = (ss: SetlistSong) => {
             const isResponding = respondingAssignmentId === assignment.id;
             const roleName = assignment.roles?.name || 'Team role';
 			const servingRole = getServingRoleLabel(roleName);
+            const attendanceAssignment = isAttendanceAssignment(assignment);
             return (
               <div key={assignment.id} className="grid gap-3 px-4 py-4 sm:grid-cols-[1fr_auto] sm:items-center sm:px-5">
                 <div className="min-w-0">
-				  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-300/70">Your role for this event</p>
-				  <p className="mt-1 text-base font-black leading-snug text-white">You’re assigned to serve as <span className="text-amber-300">{servingRole}</span>.</p>
+				  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-300/70">{attendanceAssignment ? 'Event invitation' : 'Your role for this event'}</p>
+				  <p className="mt-1 text-base font-black leading-snug text-white">{attendanceAssignment ? 'You’re invited to attend this session.' : <>You’re assigned to serve as <span className="text-amber-300">{servingRole}</span>.</>}</p>
                 </div>
                 <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
                   <button
@@ -4066,19 +4076,19 @@ const openLyricsModal = (ss: SetlistSong) => {
                     onClick={() => handleConfirm(assignment.id)}
                     disabled={respondingAssignmentId !== null}
                     className={`inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-emerald-600 px-5 text-xs font-black text-white transition-colors hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:cursor-not-allowed ${respondingAssignmentId ? 'opacity-45' : ''}`}
-                    aria-label={`Confirm ${roleName} assignment`}
+                    aria-label={attendanceAssignment ? 'Confirm attendance' : `Confirm ${roleName} assignment`}
                   >
                     {isResponding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                    Confirm
+                    {attendanceAssignment ? 'Attending' : 'Confirm'}
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowDecline(assignment.id)}
                     disabled={respondingAssignmentId !== null}
                     className={`inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/[0.1] px-5 text-xs font-black text-red-200 transition-colors hover:bg-red-500/[0.17] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 disabled:cursor-not-allowed ${respondingAssignmentId ? 'opacity-45' : ''}`}
-                    aria-label={`Decline ${roleName} assignment`}
+                    aria-label={attendanceAssignment ? 'Cannot attend' : `Decline ${roleName} assignment`}
                   >
-                    <X className="h-3.5 w-3.5" aria-hidden="true" /> Decline
+                    <X className="h-3.5 w-3.5" aria-hidden="true" /> {attendanceAssignment ? 'Can’t attend' : 'Decline'}
                   </button>
                 </div>
               </div>
@@ -4088,7 +4098,9 @@ const openLyricsModal = (ss: SetlistSong) => {
 
             <p className="mx-auto mt-4 flex max-w-md items-center justify-center gap-2 border-t border-white/[0.06] px-2 pt-4 text-[11px] font-semibold leading-relaxed text-white/35 sm:mt-5 sm:pt-5">
               <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              Event details stay private until all assignments have a response.
+              {attendanceOnlyPendingAssignments
+                ? 'Session details stay private until you respond to the invitation.'
+                : 'Event details stay private until all assignments have a response.'}
             </p>
           </div>
         </section>
@@ -7723,7 +7735,7 @@ const openLyricsModal = (ss: SetlistSong) => {
             setShowDecline(null);
             setDeclineReason('');
           }}
-          title="Decline Assignment"
+          title={decliningAttendance ? 'Can’t Attend' : 'Decline Assignment'}
           size="sm"
           closeOnBackdrop={!respondingAssignmentId}
           closeOnEscape={!respondingAssignmentId}
@@ -7731,20 +7743,20 @@ const openLyricsModal = (ss: SetlistSong) => {
           <div className="space-y-4">
             {decliningAssignment?.roles?.name && (
               <div className="rounded-2xl border border-red-500/15 bg-red-500/[0.07] px-3.5 py-3">
-                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-red-400/70">Assigned role</p>
-                <p className="mt-0.5 text-sm font-bold text-gray-900 dark:text-white">{decliningAssignment.roles.name}</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-red-400/70">{decliningAttendance ? 'Event response' : 'Assigned role'}</p>
+                <p className="mt-0.5 text-sm font-bold text-gray-900 dark:text-white">{decliningAttendance ? 'Unable to attend this session' : decliningAssignment.roles.name}</p>
               </div>
             )}
             <div>
               <label htmlFor="assignment-decline-reason" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                Reason <span className="text-red-500" aria-hidden="true">*</span>
+                {decliningAttendance ? 'Reason you can’t attend' : 'Reason'} <span className="text-red-500" aria-hidden="true">*</span>
               </label>
               <textarea
                 id="assignment-decline-reason"
                 value={declineReason}
                 onChange={e => setDeclineReason(e.target.value)}
                 className="input-field h-20 resize-none"
-                placeholder="Why are you declining?"
+                placeholder={decliningAttendance ? 'Why can’t you attend?' : 'Why are you declining?'}
                 required
                 aria-required="true"
                 disabled={!!respondingAssignmentId}
@@ -7767,7 +7779,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                 className="btn-danger disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {respondingAssignmentId ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                {respondingAssignmentId ? 'Declining…' : 'Decline'}
+                {respondingAssignmentId ? 'Sending…' : decliningAttendance ? 'Can’t attend' : 'Decline'}
               </button>
             </div>
           </div>

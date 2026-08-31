@@ -23,6 +23,7 @@ import {
 import { useAuth } from "../../contexts/AuthContext";
 import { useToast } from "../../contexts/ToastContext";
 import { supabase } from "../../lib/supabase";
+import { AdminPageBackLink } from "../../components/AdminPageBackLink";
 import {
   formatSurveyTime,
   parseSurveyRating,
@@ -119,6 +120,17 @@ export function SurveyManagement() {
     campaigns.find((campaign) => campaign.id === selectedId) ||
     campaigns[0] ||
     null;
+  const availableTabs: Array<"campaign" | "progress" | "results"> = canManage
+    ? ["campaign", "progress", "results"]
+    : ["results"];
+  const contentQuestionCount = useMemo(
+    () => sections.reduce((total, section) => total + (section.questions?.length || 0), 0),
+    [sections],
+  );
+  const roleScopedSectionCount = useMemo(
+    () => sections.filter((section) => Boolean(section.required_role)).length,
+    [sections],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -481,16 +493,17 @@ export function SurveyManagement() {
   return (
     <div className="page-container page-bottom-pad">
       <div className="app-content-shell space-y-6 py-5 lg:py-9">
-        <header className="overflow-hidden rounded-[2rem] border border-emerald-200/70 bg-emerald-50 p-6 dark:border-white/[0.08] dark:bg-[#07110d] sm:p-8">
+        <AdminPageBackLink />
+        <header className="overflow-hidden rounded-[2rem] border border-emerald-200/70 bg-emerald-50 p-5 dark:border-emerald-300/15 dark:bg-[#0b2119] sm:p-8">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-600 dark:text-emerald-300">
                 Ministry care
               </p>
-              <h1 className="mt-3 text-4xl font-black tracking-[-0.05em] text-gray-950 dark:text-white">
+              <h1 className="mt-2 text-3xl font-black tracking-[-0.05em] text-gray-950 dark:text-white sm:mt-3 sm:text-4xl">
                 Reflection campaigns.
               </h1>
-              <p className="mt-2 max-w-xl text-sm leading-6 text-gray-600 dark:text-white/50">
+              <p className="mt-2 max-w-xl text-sm leading-6 text-gray-600 dark:text-white/65">
                 Launch thoughtfully, follow progress without ranking people, and
                 give temporary access when someone needs it.
               </p>
@@ -507,15 +520,67 @@ export function SurveyManagement() {
           </div>
         </header>
 
-        <div className="flex gap-2 rounded-2xl bg-gray-100 p-1 dark:bg-white/[0.05]">
-          {[
-            ...(canManage ? (["campaign", "progress"] as const) : []),
-            "results" as const,
-          ].map((item) => (
+        {selected && (
+          <section className="flex flex-col gap-4 rounded-[1.5rem] border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#1b1b1f] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] sm:flex-row sm:items-center sm:justify-between sm:p-5" aria-label="Selected reflection campaign">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${selected.status === "live" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300" : "bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-white/50"}`}
+                >
+                  {selected.status}
+                </span>
+                <span className="text-xs text-gray-400 dark:text-white/55">
+                  Active members
+                </span>
+                <span aria-hidden="true" className="text-gray-300 dark:text-white/20">
+                  ·
+                </span>
+                <span className="text-xs text-gray-400 dark:text-white/55">
+                  {selected.starts_at ? "Starts" : "Created"}{" "}
+                  {formatSurveyTime(selected.starts_at || selected.created_at)}
+                </span>
+              </div>
+              <h2 className="mt-2 truncate text-lg font-black text-gray-950 dark:text-white sm:text-xl">
+                {selected.title}
+              </h2>
+            </div>
+            <label className="block shrink-0">
+              <span className="sr-only">Select reflection campaign</span>
+              <select
+                value={selected.id}
+                onChange={(event) => setSelectedId(event.target.value)}
+                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-bold dark:border-white/10 dark:bg-[#111] dark:text-white sm:w-auto"
+              >
+                {campaigns.map((campaign) => (
+                  <option key={campaign.id} value={campaign.id}>
+                    {campaign.title} · {campaign.status}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </section>
+        )}
+
+        <div role="tablist" aria-label="Reflection campaign views" className="flex gap-2 rounded-2xl bg-gray-100 p-1 dark:border dark:border-white/[0.07] dark:bg-[#1b1b1f]">
+          {availableTabs.map((item, index) => (
             <button
               key={item}
+              id={`survey-tab-${item}`}
+              role="tab"
+              aria-selected={tab === item}
+              aria-controls={`survey-panel-${item}`}
+              tabIndex={tab === item ? 0 : -1}
               onClick={() => setTab(item)}
-              className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-black capitalize ${tab === item ? "bg-white text-gray-950 shadow-sm dark:bg-white dark:text-black" : "text-gray-500 dark:text-white/45"}`}
+              onKeyDown={(event) => {
+                if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+                event.preventDefault();
+                const offset = event.key === "ArrowRight" ? 1 : -1;
+                const nextIndex = (index + offset + availableTabs.length) % availableTabs.length;
+                const nextTab = availableTabs[nextIndex];
+                setTab(nextTab);
+                window.requestAnimationFrame(() => document.getElementById(`survey-tab-${nextTab}`)?.focus());
+              }}
+              className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-black capitalize transition-colors ${tab === item ? "bg-white text-gray-950 shadow-sm dark:bg-white dark:text-black" : "text-gray-500 hover:bg-white/70 dark:text-white/60 dark:hover:bg-white/[0.07]"}`}
             >
               {item}
             </button>
@@ -529,34 +594,8 @@ export function SurveyManagement() {
             </p>
           </div>
         ) : tab === "campaign" ? (
-          <section className="rounded-[1.75rem] border border-gray-200 bg-white p-5 shadow-sm dark:border-white/[0.07] dark:bg-white/[0.025] sm:p-6">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <span
-                  className={`inline-flex rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide ${selected.status === "live" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300" : "bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-white/50"}`}
-                >
-                  {selected.status}
-                </span>
-                <h2 className="mt-3 text-2xl font-black text-gray-950 dark:text-white">
-                  {selected.title}
-                </h2>
-                <p className="mt-1 text-sm text-gray-500 dark:text-white/40">
-                  Created {formatSurveyTime(selected.created_at)}
-                </p>
-              </div>
-              <select
-                value={selected.id}
-                onChange={(event) => setSelectedId(event.target.value)}
-                className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-bold dark:border-white/10 dark:bg-[#111] dark:text-white"
-              >
-                {campaigns.map((campaign) => (
-                  <option key={campaign.id} value={campaign.id}>
-                    {campaign.title} · {campaign.status}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+          <section id="survey-panel-campaign" role="tabpanel" aria-labelledby="survey-tab-campaign" className="rounded-[1.75rem] border border-gray-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#1b1b1f] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] sm:p-6">
+            <div className="grid gap-3 sm:grid-cols-3">
               <Summary icon={Users} label="Audience" value="Active members" />
               <Summary
                 icon={BellRing}
@@ -573,7 +612,33 @@ export function SurveyManagement() {
                 }
               />
             </div>
-            <div className="mt-6 flex flex-wrap gap-3">
+            <div className="mt-6 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-[#222226]">
+              <p className="text-sm font-black text-gray-950 dark:text-white">
+                {selected.status === "draft" ? "Launch workflow" : "Campaign controls"}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-white/60">
+                {selected.status === "draft"
+                  ? "Review the content, test the member experience, then publish now or schedule the launch."
+                  : "Manage the campaign’s current availability and completion rule."}
+              </p>
+              {selected.status === "draft" && (
+                <ol className="mt-4 grid gap-2 text-xs font-bold text-gray-600 dark:text-white/55 sm:grid-cols-3">
+                  {["Review content", "Test experience", "Launch campaign"].map(
+                    (step, index) => (
+                      <li
+                        key={step}
+                        className="flex items-center gap-2 rounded-xl border border-gray-100 bg-white px-3 py-2.5 dark:border-white/[0.07] dark:bg-[#2b2a2f]"
+                      >
+                        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-emerald-500/10 text-[11px] font-black text-emerald-600 dark:text-emerald-300">
+                          {index + 1}
+                        </span>
+                        {step}
+                      </li>
+                    ),
+                  )}
+                </ol>
+              )}
+              <div className="mt-4 flex flex-wrap gap-3">
               {selected.status === "draft" && (
                 <>
                   <button
@@ -617,6 +682,7 @@ export function SurveyManagement() {
                 </button>
               )}
             </div>
+            </div>
             {selected.status === "draft" && (
               <div className="mt-6 rounded-2xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-400/15 dark:bg-violet-400/[0.055]">
                 <div className="flex flex-wrap items-center gap-4">
@@ -655,7 +721,9 @@ export function SurveyManagement() {
             <div className="mt-6 border-t border-gray-200 pt-5 dark:border-white/[0.07]">
               <button
                 onClick={() => void toggleContent()}
-                className="flex w-full items-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 text-left dark:border-white/10 dark:bg-white/[0.035]"
+                aria-expanded={contentOpen}
+                aria-controls="survey-content-review"
+                className="flex w-full items-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 text-left transition-colors hover:bg-gray-100 dark:border-white/10 dark:bg-[#242428] dark:hover:bg-[#2a292e]"
               >
                 <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-500">
                   <BookOpen className="h-5 w-5" />
@@ -664,7 +732,7 @@ export function SurveyManagement() {
                   <span className="block text-sm font-black text-gray-950 dark:text-white">
                     Review survey content
                   </span>
-                  <span className="mt-0.5 block text-xs text-gray-500 dark:text-white/45">
+                  <span className="mt-0.5 block text-xs text-gray-500 dark:text-white/60">
                     Introduction, bilingual sections, questions, and role scope
                   </span>
                 </span>
@@ -673,7 +741,7 @@ export function SurveyManagement() {
                 />
               </button>
               {contentOpen && (
-                <div className="mt-4 space-y-3">
+                <div id="survey-content-review" className="mt-4 space-y-3">
                   {selected.status === "draft" && (
                     <div className="flex flex-wrap gap-2">
                       {!editing ? (
@@ -701,15 +769,22 @@ export function SurveyManagement() {
                           </button>
                         </>
                       )}
-                      {!editing && (
-                        <button
-                          onClick={() => setDeleteConfirmationOpen(true)}
-                          disabled={working}
-                          className="inline-flex items-center gap-2 rounded-xl border border-red-300 px-3 py-2 text-xs font-black text-red-600 dark:border-red-400/20 dark:text-red-300"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" /> Delete draft
-                        </button>
-                      )}
+                    </div>
+                  )}
+                  {!contentLoading && sections.length > 0 && (
+                    <div className="grid gap-2 sm:grid-cols-3" aria-label="Survey content summary">
+                      <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-white/[0.07] dark:bg-[#242428]">
+                        <p className="text-[10px] font-black uppercase tracking-wide text-gray-400 dark:text-white/45">Sections</p>
+                        <p className="mt-1 text-lg font-black text-gray-950 dark:text-white">{sections.length}</p>
+                      </div>
+                      <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-white/[0.07] dark:bg-[#242428]">
+                        <p className="text-[10px] font-black uppercase tracking-wide text-gray-400 dark:text-white/45">Questions</p>
+                        <p className="mt-1 text-lg font-black text-gray-950 dark:text-white">{contentQuestionCount}</p>
+                      </div>
+                      <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-white/[0.07] dark:bg-[#242428]">
+                        <p className="text-[10px] font-black uppercase tracking-wide text-gray-400 dark:text-white/45">Role-scoped</p>
+                        <p className="mt-1 text-lg font-black text-gray-950 dark:text-white">{roleScopedSectionCount}</p>
+                      </div>
                     </div>
                   )}
                   {editing && (
@@ -722,7 +797,7 @@ export function SurveyManagement() {
                       />
                     </label>
                   )}
-                  <div className="rounded-2xl border border-gray-200 p-4 dark:border-white/10">
+                  <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-white/10 dark:bg-[#222226]">
                     <p className="text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
                       Introduction
                     </p>
@@ -742,22 +817,22 @@ export function SurveyManagement() {
                     <p className="py-6 text-center text-sm text-gray-500">Loading survey content…</p>
                   ) : (
                     sections.map((section) => (
-                      <div key={section.id} className="rounded-2xl border border-gray-200 p-4 dark:border-white/10">
+                      <div key={section.id} className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-white/10 dark:bg-[#222226]">
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div>
                             <h3 className="font-black text-gray-950 dark:text-white">{section.title_en}</h3>
                             {section.description_en && (
-                              <p className="text-sm text-gray-500 dark:text-white/45">{section.description_en}</p>
+                              <p className="text-sm text-gray-500 dark:text-white/60">{section.description_en}</p>
                             )}
                           </div>
                           <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-gray-600 dark:bg-white/10 dark:text-white/55">
-                            {section.required_role ? `${section.required_role} only` : "All members"}
+                            {section.required_role ? `${section.required_role} only` : "All members"} · {section.questions?.length || 0} questions
                           </span>
                         </div>
                         <div className="mt-4 space-y-3">
                           {(section.questions || []).map((question, index) => (
-                            <div key={question.id} className="rounded-xl bg-gray-50 p-3 dark:bg-white/[0.035]">
-                              <p className="text-xs font-black text-gray-400">QUESTION {index + 1}</p>
+                            <div key={question.id} className="rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-white/[0.06] dark:bg-[#2a292e]">
+                              <p className="text-xs font-black text-gray-400 dark:text-white/45">QUESTION {index + 1}</p>
                               {editing ? (
                                 <div className="mt-2 space-y-2">
                                   <textarea value={question.prompt_en} onChange={(event) => setSections((current) => current.map((item) => item.id === section.id ? { ...item, questions: (item.questions || []).map((candidate) => candidate.id === question.id ? { ...candidate, prompt_en: event.target.value } : candidate) } : item))} rows={2} className="w-full rounded-lg border border-gray-200 bg-white p-2 text-sm font-bold text-gray-900 outline-none focus:border-emerald-400 dark:border-white/10 dark:bg-black dark:text-white" />
@@ -766,11 +841,11 @@ export function SurveyManagement() {
                               ) : (
                                 <>
                                   <p className="mt-1 text-sm font-bold text-gray-900 dark:text-white/85">{question.prompt_en}</p>
-                                  <p className="mt-1 text-sm text-gray-500 dark:text-white/50">{question.prompt_tl}</p>
+                                  <p className="mt-1 text-sm text-gray-500 dark:text-white/65">{question.prompt_tl}</p>
                                   {question.options?.length > 0 && (
                                     <div className="mt-3 flex flex-wrap gap-2 border-t border-gray-200 pt-3 dark:border-white/10">
                                       {question.options.map((option) => (
-                                        <span key={option.value} className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-gray-600 ring-1 ring-gray-200 dark:bg-white/[0.04] dark:text-white/55 dark:ring-white/10">
+                                        <span key={option.value} className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-gray-600 ring-1 ring-gray-200 dark:bg-[#343339] dark:text-white/70 dark:ring-white/10">
                                           {option.label}
                                         </span>
                                       ))}
@@ -789,6 +864,21 @@ export function SurveyManagement() {
                       </div>
                     ))
                   )}
+                  {selected.status === "draft" && !editing && (
+                    <div className="flex flex-col gap-3 border-t border-red-200 pt-4 dark:border-red-400/15 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-black text-gray-950 dark:text-white">Draft controls</p>
+                        <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-white/60">Deleting removes this draft and its editable survey content.</p>
+                      </div>
+                      <button
+                        onClick={() => setDeleteConfirmationOpen(true)}
+                        disabled={working}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-300 px-3 py-2.5 text-xs font-black text-red-600 dark:border-red-400/20 dark:text-red-300"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" /> Delete draft
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -797,7 +887,9 @@ export function SurveyManagement() {
         ) : tab === "progress" ? (
           <ProgressTable
             members={members}
+            campaignStatus={selected.status}
             onRefresh={loadProgress}
+            onGoToCampaign={() => setTab("campaign")}
             onGrant={async (member, hours, customUntil) => {
               const { error } = await supabase.rpc(
                 "grant_survey_temporary_access",
@@ -971,30 +1063,30 @@ function LiveSurveyPreview({ campaignId, revision }: { campaignId: string; revis
 
   return (
     <div className="mt-6 border-t border-gray-200 pt-5 dark:border-white/[0.07]">
-      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-black/20">
+      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-[#222226]">
         <div className="flex flex-wrap items-center gap-3 border-b border-gray-200 p-4 dark:border-white/10">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-300">
             <Play className="h-5 w-5" />
           </span>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-black text-gray-950 dark:text-white">Live survey preview</p>
-            <p className="mt-0.5 text-xs text-gray-500 dark:text-white/45">Uses this campaign’s real introduction, sections, questions, and role rules. Preview answers are never saved.</p>
+            <p className="mt-0.5 text-xs text-gray-500 dark:text-white/60">Uses this campaign’s real introduction, sections, questions, and role rules. Preview answers are never saved.</p>
           </div>
-          <button onClick={() => setOpen((current) => !current)} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-black text-gray-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-white">
+          <button onClick={() => setOpen((current) => !current)} aria-expanded={open} aria-controls="live-survey-preview-frame" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-black text-gray-700 dark:border-white/10 dark:bg-[#2b2a2f] dark:text-white">
             {open ? "Hide preview" : "Show preview"}
           </button>
         </div>
         {open && (
-          <div className="p-4">
+          <div id="live-survey-preview-frame" className="p-4">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex rounded-xl border border-gray-200 bg-white p-1 dark:border-white/10 dark:bg-white/[0.035]">
+              <div className="flex rounded-xl border border-gray-200 bg-white p-1 dark:border-white/10 dark:bg-[#2b2a2f]">
                 {(["phone", "tablet", "desktop"] as const).map((item) => (
-                  <button key={item} onClick={() => setDevice(item)} aria-pressed={device === item} className={`rounded-lg px-3 py-2 text-xs font-black capitalize ${device === item ? "bg-gray-950 text-white dark:bg-white dark:text-black" : "text-gray-500 dark:text-white/45"}`}>
+                  <button key={item} onClick={() => setDevice(item)} aria-pressed={device === item} className={`rounded-lg px-3 py-2 text-xs font-black capitalize ${device === item ? "bg-gray-950 text-white dark:bg-white dark:text-black" : "text-gray-500 dark:text-white/60"}`}>
                     {item === "tablet" ? "iPad" : item}
                   </button>
                 ))}
               </div>
-              <button onClick={() => setManualRevision((current) => current + 1)} className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-black text-gray-600 dark:border-white/10 dark:bg-white/[0.035] dark:text-white/60">
+              <button onClick={() => setManualRevision((current) => current + 1)} className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-black text-gray-600 dark:border-white/10 dark:bg-[#2b2a2f] dark:text-white/70">
                 <RefreshCw className="h-3.5 w-3.5" /> Refresh
               </button>
             </div>
@@ -1024,6 +1116,7 @@ function ResultsPanel({
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let active = true;
+    setLoading(true);
     Promise.all([
       supabase
         .from("survey_responses")
@@ -1033,7 +1126,7 @@ function ResultsPanel({
       canSeeCommitment
         ? supabase
             .from("survey_commitment_responses")
-            .select("response_key,reflection,survey_participations!inner(is_test)")
+            .select("response_key,reflection,survey_participations!inner(is_test,campaign_id)")
         : Promise.resolve({ data: [] }),
     ]).then(([responseResult, commitmentResult]) => {
       if (!active) return;
@@ -1059,7 +1152,7 @@ function ResultsPanel({
             const participation = Array.isArray(row.survey_participations)
               ? row.survey_participations[0]
               : row.survey_participations;
-            return !participation?.is_test;
+            return !participation?.is_test && participation?.campaign_id === campaignId;
           })
           .map((row) => ({ response_key: row.response_key, reflection: row.reflection })) as Array<{
             response_key: string;
@@ -1117,13 +1210,27 @@ function ResultsPanel({
     });
     return [...map.entries()];
   }, [rows]);
-  if (loading) return <PageLoader />;
+  const hasSuggestions = grouped.some(([, result]) => result.suggestions.length > 0);
+  if (loading)
+    return (
+      <section id="survey-panel-results" role="tabpanel" aria-labelledby="survey-tab-results" aria-busy="true" className="space-y-3 rounded-[1.75rem] border border-gray-200 bg-white p-5 dark:border-white/10 dark:bg-[#1b1b1f]">
+        <div className="skeleton h-5 w-36 rounded-lg" />
+        <div className="skeleton h-20 w-full rounded-2xl" />
+        <div className="skeleton h-20 w-full rounded-2xl" />
+        <p className="sr-only">Loading survey results</p>
+      </section>
+    );
   return (
-    <div className="space-y-4">
+    <div id="survey-panel-results" role="tabpanel" aria-labelledby="survey-tab-results" className="space-y-4">
+      {hasSuggestions && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900 dark:border-amber-300/15 dark:bg-amber-300/[0.055] dark:text-amber-100/75">
+          <span className="font-black">Protect member privacy.</span> Read verbatim comments in context and avoid sharing details that could identify a respondent.
+        </div>
+      )}
       {grouped.map(([title, result]) => (
         <section
           key={title}
-          className="rounded-[1.75rem] border border-gray-200 bg-white p-5 dark:border-white/[0.07] dark:bg-white/[0.025]"
+          className="rounded-[1.75rem] border border-gray-200 bg-white p-5 dark:border-white/10 dark:bg-[#1b1b1f] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]"
         >
           <div className="flex items-center gap-3">
             <BarChart3 className="h-5 w-5 text-emerald-500" />
@@ -1132,14 +1239,14 @@ function ResultsPanel({
             </h2>
           </div>
           {result.ratings.length > 0 && (
-            <p className="mt-4 text-sm text-gray-500 dark:text-white/45">
+            <p className="mt-4 text-sm text-gray-500 dark:text-white/60">
               <span className="text-2xl font-black text-gray-950 dark:text-white">
                 {(
                   result.ratings.reduce((a, b) => a + b, 0) /
                   result.ratings.length
                 ).toFixed(1)}
               </span>{" "}
-              average observation · {result.ratings.length} responses
+              <span className="font-bold text-gray-700 dark:text-white/65">/ 5</span> average observation · {result.ratings.length} response{result.ratings.length === 1 ? "" : "s"}
             </p>
           )}
           {result.clarifications.size > 0 && (
@@ -1167,7 +1274,7 @@ function ResultsPanel({
                 {result.suggestions.map((suggestion, index) => (
                   <blockquote
                     key={index}
-                    className="rounded-2xl bg-gray-50 p-4 text-sm leading-6 text-gray-700 dark:bg-white/[0.04] dark:text-white/60"
+                    className="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm leading-6 text-gray-700 dark:border-white/[0.06] dark:bg-[#28272c] dark:text-white/75"
                   >
                     {suggestion}
                   </blockquote>
@@ -1178,16 +1285,23 @@ function ResultsPanel({
         </section>
       ))}
       {grouped.length === 0 && (
-        <div className="rounded-[1.75rem] border border-dashed border-gray-300 p-10 text-center text-sm text-gray-400 dark:border-white/10">
-          Results will appear here after members submit.
+        <div className="rounded-[1.75rem] border border-dashed border-gray-300 bg-white p-10 text-center dark:border-white/15 dark:bg-[#1b1b1f]">
+          <p className="font-black text-gray-700 dark:text-white/70">
+            {commitments.length > 0 ? "No scored or written responses yet." : "No responses yet."}
+          </p>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-gray-500 dark:text-white/60">
+            {commitments.length > 0
+              ? "Commitment responses are available separately below. Observation and written results will appear as members complete those sections."
+              : "Results will appear here after members submit this reflection."}
+          </p>
         </div>
       )}
       {canSeeCommitment && commitments.length > 0 && (
-        <section className="rounded-[1.75rem] border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-400/10 dark:bg-emerald-400/[0.04]">
+        <section className="rounded-[1.75rem] border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-300/20 dark:bg-[#14251f]">
           <h2 className="font-black text-gray-950 dark:text-white">
             Commitment responses
           </h2>
-          <p className="mt-1 text-xs text-gray-500 dark:text-white/40">
+          <p className="mt-1 text-xs text-gray-500 dark:text-white/60">
             Kept separate from knowledge-check performance.
           </p>
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
@@ -1199,13 +1313,13 @@ function ResultsPanel({
             ).map(([key, count]) => (
               <div
                 key={key}
-                className="rounded-xl bg-white p-3 dark:bg-white/[0.05]"
+                className="rounded-xl border border-white/[0.05] bg-white p-3 dark:bg-[#25342f]"
               >
                 <p className="text-sm font-bold capitalize text-gray-700 dark:text-white/65">
                   {key.replace(/_/g, " ")}
                 </p>
                 <p className="mt-1 text-xl font-black text-gray-950 dark:text-white">
-                  {count}
+                  {count} <span className="text-xs font-bold text-gray-500 dark:text-white/60">response{count === 1 ? "" : "s"}</span>
                 </p>
               </div>
             ))}
@@ -1226,9 +1340,9 @@ function Summary({
   value: string;
 }) {
   return (
-    <div className="rounded-2xl bg-gray-50 p-4 dark:bg-white/[0.04]">
+    <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4 dark:border-white/[0.07] dark:bg-[#27272b]">
       <Icon className="h-5 w-5 text-emerald-500" />
-      <p className="mt-3 text-xs font-bold uppercase tracking-wide text-gray-400 dark:text-white/30">
+      <p className="mt-3 text-xs font-bold uppercase tracking-wide text-gray-400 dark:text-white/50">
         {label}
       </p>
       <p className="mt-1 font-black text-gray-950 dark:text-white">{value}</p>
@@ -1238,12 +1352,16 @@ function Summary({
 
 function ProgressTable({
   members,
+  campaignStatus,
   onRefresh,
+  onGoToCampaign,
   onGrant,
   onRemind,
 }: {
   members: ProgressMember[];
+  campaignStatus: SurveyCampaign["status"];
   onRefresh: () => void;
+  onGoToCampaign: () => void;
   onGrant: (
     member: ProgressMember,
     hours: number,
@@ -1266,18 +1384,20 @@ function ProgressTable({
       )
     : 0;
   return (
-    <section className="overflow-hidden rounded-[1.75rem] border border-gray-200 bg-white shadow-sm dark:border-white/[0.07] dark:bg-white/[0.025]">
+    <section id="survey-panel-progress" role="tabpanel" aria-labelledby="survey-tab-progress" className="overflow-hidden rounded-[1.75rem] border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#1b1b1f] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
       <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4 dark:border-white/[0.06]">
         <div>
           <h2 className="font-black text-gray-950 dark:text-white">
             Member progress
           </h2>
-          <p className="mt-1 text-xs text-gray-500 dark:text-white/40">
+          <p className="mt-1 text-xs text-gray-500 dark:text-white/60">
             {submitted} submitted · {average}% average completion
           </p>
         </div>
         <button
           onClick={onRefresh}
+          aria-label="Refresh member progress"
+          title="Refresh member progress"
           className="rounded-xl border border-gray-200 p-2.5 text-gray-500 dark:border-white/10 dark:text-white/50"
         >
           <RefreshCw className="h-4 w-4" />
@@ -1296,11 +1416,11 @@ function ProgressTable({
                     <p className="truncate text-sm font-black text-gray-950 dark:text-white">
                       {member.name}
                     </p>
-                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-black uppercase text-gray-500 dark:bg-white/10 dark:text-white/45">
+                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-black uppercase text-gray-500 dark:bg-white/10 dark:text-white/60">
                       {member.status.replace(/_/g, " ")}
                     </span>
                   </div>
-                  <p className="mt-1 text-xs text-gray-400 dark:text-white/30">
+                  <p className="mt-1 text-xs text-gray-400 dark:text-white/55">
                     {member.currentSection} · Last saved{" "}
                     {formatSurveyTime(member.last_saved_at)}
                   </p>
@@ -1319,6 +1439,7 @@ function ProgressTable({
                 <div className="flex gap-2">
                   <button
                     onClick={() => onRemind(member)}
+                    aria-label={`Send reminder to ${member.name}`}
                     title="Send reminder"
                     className="rounded-xl border border-gray-200 p-2.5 text-gray-500 dark:border-white/10 dark:text-white/50"
                   >
@@ -1368,9 +1489,20 @@ function ProgressTable({
           );
         })}
         {members.length === 0 && (
-          <p className="px-5 py-10 text-center text-sm text-gray-400">
-            No members have been assigned yet.
-          </p>
+          <div className="px-5 py-10 text-center">
+            <p className="font-black text-gray-700 dark:text-white/70">No members have been assigned yet.</p>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-gray-500 dark:text-white/60">
+              {campaignStatus === "draft"
+                ? "Members are assigned when this reflection is published or its scheduled launch begins."
+                : "Refresh to check for new assignments, or review the campaign settings if this looks unexpected."}
+            </p>
+            <button
+              onClick={onGoToCampaign}
+              className="mt-4 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-black text-gray-700 dark:border-white/10 dark:text-white"
+            >
+              Review campaign settings
+            </button>
+          </div>
         )}
       </div>
     </section>

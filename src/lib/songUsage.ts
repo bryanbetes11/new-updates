@@ -7,6 +7,7 @@ export interface SongUsageSong {
   song_key?: string | null;
   created_by?: string | null;
   youtube_url?: string | null;
+  lyrics?: string | null;
   chordpro_text?: string | null;
 }
 

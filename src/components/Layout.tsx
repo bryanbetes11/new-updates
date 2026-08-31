@@ -38,6 +38,26 @@ export function Layout() {
   const [isIpadLandscapeSidebar, setIsIpadLandscapeSidebar] = useState(false);
   const mobileChromeHidden = false;
 
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    const body = document.body;
+    const hasActiveGlobalLock = body.hasAttribute('data-modal-lock-count')
+      || root.classList.contains('mobile-menu-active')
+      || body.classList.contains('mobile-menu-active')
+      || root.classList.contains('service-mode-active')
+      || body.classList.contains('service-mode-active');
+
+    if (hasActiveGlobalLock) return;
+
+    // Recover from a surface that unmounted after another dialog had captured
+    // its locked styles. Route content should never inherit an ownerless
+    // `overflow: hidden` from the previous screen.
+    if (root.style.overflow === 'hidden') root.style.overflow = '';
+    if (root.style.overscrollBehavior === 'none') root.style.overscrollBehavior = '';
+    if (body.style.overflow === 'hidden') body.style.overflow = '';
+    if (body.style.overscrollBehavior === 'none') body.style.overscrollBehavior = '';
+  }, [location.pathname, location.search]);
+
   useEffect(() => {
     const landscapeQuery = window.matchMedia(
       "(min-width: 1024px) and (max-width: 1366px) and (orientation: landscape)",
@@ -202,7 +222,7 @@ export function Layout() {
   const shouldShiftForMobileMenu =
     user && !staticHideNav && !isMessagesConversation && mobileOpen;
   const desktopSidebarWidth =
-    user && !staticHideNav ? (collapsed ? 72 : 300) : 0;
+    user && !staticHideNav ? (collapsed ? 72 : 220) : 0;
   const mainStyle = {
     pointerEvents: shouldShiftForMobileMenu ? "none" : undefined,
     "--desktop-sidebar-width": `${desktopSidebarWidth}px`,

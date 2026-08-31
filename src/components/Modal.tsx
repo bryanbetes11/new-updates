@@ -80,6 +80,15 @@ function writeScrollLockSnapshot(snapshot: ScrollLockSnapshot) {
   document.body.setAttribute(MODAL_LOCK_PREVIOUS_STYLES_ATTR, JSON.stringify(snapshot));
 }
 
+function hasNonModalScrollLock() {
+  const root = document.documentElement;
+  const body = document.body;
+  return root.classList.contains('mobile-menu-active')
+    || body.classList.contains('mobile-menu-active')
+    || root.classList.contains('service-mode-active')
+    || body.classList.contains('service-mode-active');
+}
+
 function lockBodyScroll() {
   const root = document.documentElement;
   const body = document.body;
@@ -110,10 +119,16 @@ function lockBodyScroll() {
       body.removeAttribute(MODAL_LOCK_ATTR);
       body.removeAttribute(MODAL_LOCK_PREVIOUS_STYLES_ATTR);
 
-      root.style.overflow = snapshot?.htmlOverflow || '';
-      root.style.overscrollBehavior = snapshot?.htmlOverscrollBehavior || '';
-      body.style.overflow = snapshot?.bodyOverflow || '';
-      body.style.overscrollBehavior = snapshot?.bodyOverscrollBehavior || '';
+      // A dialog can open while another surface (for example Live Mode) owns
+      // the body lock. If that surface closes first, restoring the captured
+      // `overflow: hidden` snapshot would strand every subsequent page in a
+      // non-scrollable state. Only restore a hidden snapshot while its owner is
+      // still visibly active.
+      const preserveCapturedLock = hasNonModalScrollLock();
+      root.style.overflow = preserveCapturedLock ? snapshot?.htmlOverflow || '' : '';
+      root.style.overscrollBehavior = preserveCapturedLock ? snapshot?.htmlOverscrollBehavior || '' : '';
+      body.style.overflow = preserveCapturedLock ? snapshot?.bodyOverflow || '' : '';
+      body.style.overscrollBehavior = preserveCapturedLock ? snapshot?.bodyOverscrollBehavior || '' : '';
     } else {
       body.setAttribute(MODAL_LOCK_ATTR, String(nextCount));
     }

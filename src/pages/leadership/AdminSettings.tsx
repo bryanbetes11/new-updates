@@ -206,11 +206,6 @@ export function AdminSettings() {
       </section>
 
       <section className="card overflow-hidden">
-        <div className="border-b border-gray-100 p-5 dark:border-white/[0.06]"><h2 className="font-black text-gray-900 dark:text-white">Tech Mode quick messages</h2><p className="mt-1 text-xs text-gray-500 dark:text-white/45">Customize the four instructions shown for each kind of stage assignment.</p></div>
-        <div className="p-4"><TechModeMessageSettings orgId={policy.org_id} onSaved={() => toast('success', 'Tech Mode messages saved')} /></div>
-      </section>
-
-      <section className="card overflow-hidden">
         <div className="border-b border-gray-100 p-5 dark:border-white/[0.06]">
           <div className="flex items-start gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-300"><ShieldCheck className="h-5 w-5" /></span>
@@ -236,6 +231,11 @@ export function AdminSettings() {
             </Link>;
           })}
         </div>
+      </section>
+
+      <section className="card overflow-hidden">
+        <div className="border-b border-gray-100 p-5 dark:border-white/[0.06]"><h2 className="font-black text-gray-900 dark:text-white">Tech Mode quick messages</h2><p className="mt-1 text-xs text-gray-500 dark:text-white/45">Customize the four instructions shown for each kind of stage assignment.</p></div>
+        <div className="p-4"><TechModeMessageSettings orgId={policy.org_id} onSaved={() => toast('success', 'Tech Mode messages saved')} /></div>
       </section>
 
       <section className="card overflow-hidden">

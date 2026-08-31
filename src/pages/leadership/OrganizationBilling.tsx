@@ -8,6 +8,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { EmptyState } from '../../components/EmptyState';
 import { PageLoader } from '../../components/LoadingSpinner';
 import type { OrganizationPaymentSubmission } from '../../types';
+import { AdminPageBackLink } from '../../components/AdminPageBackLink';
 
 type BillingPlan = {
   code: string;
@@ -576,6 +577,7 @@ export function OrganizationBilling() {
   return (
     <div className="page-container page-bottom-pad">
       <div className="relative mx-auto max-w-2xl px-4 pb-6 pt-6 sm:px-6 sm:pt-8 md:max-w-[860px] md:px-8 lg:max-w-6xl xl:max-w-[1560px]">
+        <div className="mb-5"><AdminPageBackLink /></div>
         {content}
       </div>
     </div>

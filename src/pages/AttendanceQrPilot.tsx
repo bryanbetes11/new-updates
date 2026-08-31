@@ -7,6 +7,7 @@ import { useToast } from '../contexts/ToastContext';
 import { buildAttendanceQrPayload } from '../lib/attendanceQrPilot';
 import { createAttendanceQrProjectorPng } from '../lib/attendanceQrProjector';
 import { supabase } from '../lib/supabase';
+import { AdminPageBackLink } from '../components/AdminPageBackLink';
 
 interface PilotEvent {
   id: string;
@@ -183,6 +184,7 @@ export function AttendanceQrPilot() {
   return (
     <div className="page-container page-bottom-pad">
       <div className="relative mx-auto max-w-2xl space-y-5 px-4 pb-6 pt-4 sm:space-y-6 sm:px-6 sm:pt-5 md:max-w-[860px] md:px-8 lg:max-w-6xl xl:max-w-[1560px]">
+        <AdminPageBackLink />
         <div>
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-emerald-500">
             <ShieldCheck className="h-4 w-4" /> Attendance control

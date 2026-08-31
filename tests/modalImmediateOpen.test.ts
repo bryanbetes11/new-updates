@@ -33,3 +33,15 @@ assert.match(
   /: instantOpen\s+\? ''\s+: `\$\{isMobilePage/,
   'instant-opening dialogs must skip their entrance transform and opacity animation',
 );
+
+assert.match(
+  source,
+  /const preserveCapturedLock = hasNonModalScrollLock\(\);/,
+  'a closing modal must not restore a stale scroll lock after its original owner closes',
+);
+
+assert.match(
+  source,
+  /root\.style\.overflow = preserveCapturedLock \? snapshot\?\.htmlOverflow \|\| '' : '';/,
+  'ownerless modal snapshots must release the document scroll lock',
+);

@@ -10,6 +10,7 @@ import { PageLoader } from '../../components/LoadingSpinner';
 import { sortRolesLeadershipFirst } from '../../components/RoleBadge';
 import type { OrganizationInvitation } from '../../types';
 import { Modal } from '../../components/Modal';
+import { AdminPageBackLink } from '../../components/AdminPageBackLink';
 
 function formatStatus(status: string | null | undefined) {
   if (!status) return 'Exempt / not active';
@@ -210,6 +211,7 @@ export function OrganizationSettings() {
 
   const content = (
     <div className="space-y-5 sm:space-y-6">
+      <AdminPageBackLink />
       {billingRestricted && (
         <div className="rounded-2xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
           Billing needs attention. Church settings and invite actions are temporarily locked until the billing status is resolved in the Billing tab.

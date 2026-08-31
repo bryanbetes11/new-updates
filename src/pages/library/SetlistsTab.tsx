@@ -21,6 +21,7 @@ import { withSaveTimeout } from '../../lib/saveTimeout';
 import { filterSetlistsBySearch } from '../../lib/setlistSearch';
 import { buildSongUsages, type SongUsageSummary } from '../../lib/songUsage';
 import { normalizeSongTitle, sanitizeSongTitle } from '../../lib/songTitle';
+import { getEffectiveSongLyrics, getSongLyricsSource } from '../../lib/songLyrics';
 
 interface SetlistWithEvent {
   id: string;
@@ -28,7 +29,7 @@ interface SetlistWithEvent {
   event_id: string;
   created_by?: string | null;
   events?: { title: string; event_date: string; event_type: string };
-  setlist_songs?: { id: string; position: number; song_id: string; performed_key: string; youtube_url?: string | null; songs?: { id: string; title: string; artist: string; song_key: string; youtube_url?: string | null; chordpro_text?: string | null } }[];
+  setlist_songs?: { id: string; position: number; song_id: string; performed_key: string; youtube_url?: string | null; songs?: { id: string; title: string; artist: string; song_key: string; youtube_url?: string | null; lyrics?: string | null; chordpro_text?: string | null } }[];
 }
 
 type SongUsage = SongUsageSummary;
@@ -108,6 +109,7 @@ const chartFingerprint = (chart: string): string => chart
   .trim();
 
 type SortKey = 'date_desc' | 'date_asc' | 'songs_desc';
+type SongViewerTab = 'lyrics' | 'chart';
 
 const ULTIMATE_GUITAR_SEARCH_URL = (query: string) =>
   `https://www.ultimate-guitar.com/search.php?search_type=title&value=${encodeURIComponent(query)}`;
@@ -188,6 +190,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   const [songPage, setSongPage] = useState({ resultKey: '', limit: SONG_PAGE_SIZE });
   const [setlistPage, setSetlistPage] = useState({ resultKey: '', limit: SETLIST_PAGE_SIZE });
   const [selectedChartSong, setSelectedChartSong] = useState<SongUsage | null>(null);
+  const [songViewerTab, setSongViewerTab] = useState<SongViewerTab>('lyrics');
   const [editingLibrarySong, setEditingLibrarySong] = useState<SongUsage | null>(null);
   const [editLibrarySongForm, setEditLibrarySongForm] = useState({
     title: '',
@@ -235,10 +238,10 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
     const [setlistRes, songsRes, songLeadersRes] = await Promise.all([
       supabase
         .from('setlists')
-        .select('id, status, event_id, created_by, events(title, event_date, event_type), setlist_songs(id, position, song_id, performed_key, youtube_url, songs(id, title, artist, song_key, youtube_url, chordpro_text))')
+        .select('id, status, event_id, created_by, events(title, event_date, event_type), setlist_songs(id, position, song_id, performed_key, youtube_url, songs(id, title, artist, song_key, youtube_url, lyrics, chordpro_text))')
         .eq('status', 'approved')
         .order('created_at', { ascending: false }),
-      supabase.from('songs').select('id, title, artist, song_key, created_by, youtube_url, chordpro_text').order('title'),
+      supabase.from('songs').select('id, title, artist, song_key, created_by, youtube_url, lyrics, chordpro_text').order('title'),
       supabase.from('event_assignments').select('event_id, profiles(first_name, last_name, nickname, gender, avatar_url), roles!inner(name)').eq('roles.name', 'Song Leader'),
     ]);
 
@@ -304,6 +307,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
         song_key: parsed.song_key || '',
         created_by: parsed.created_by ?? null,
         youtube_url: parsed.youtube_url ?? null,
+        lyrics: parsed.lyrics ?? null,
         chordpro_text: parsed.chordpro_text ?? null,
         last_used_date: parsed.last_used_date ?? null,
         days_since: parsed.days_since ?? null,
@@ -322,7 +326,8 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
     if (latestSong && latestSong !== selectedChartSong) setSelectedChartSong(latestSong);
   }, [selectedChartSong?.id, songUsages]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const openChartSong = (song: SongUsage) => {
+  const openSongViewer = (song: SongUsage, initialTab: SongViewerTab = 'lyrics') => {
+    setSongViewerTab(initialTab);
     setSelectedChartSong(song);
     if (!openChartStorageKey) return;
     try {
@@ -334,6 +339,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
 
   const closeChartSong = () => {
     setSelectedChartSong(null);
+    setSongViewerTab('lyrics');
     if (!openChartStorageKey) return;
     try {
       localStorage.removeItem(openChartStorageKey);
@@ -574,7 +580,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
       setShowWebImport(false);
       setWebImportForm({ title: '', artist: '', song_key: '', chordpro_text: '' });
       await fetchData();
-      if (savedSong) openChartSong(savedSong);
+      if (savedSong) openSongViewer(savedSong, 'chart');
     } catch (error: unknown) {
       console.error('Failed to save web chart import:', error);
       toast('error', getErrorMessage(error, 'Failed to save song chart'));
@@ -1342,6 +1348,122 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   const safeCount = songUsages.filter(s => s.is_safe).length;
   const notReadyCount = songUsages.filter(s => !s.is_safe && s.days_since !== null).length;
   const neverUsed = songUsages.filter(s => s.days_since === null).length;
+  const selectedSongLyrics = getEffectiveSongLyrics(selectedChartSong);
+  const selectedSongLyricsSource = getSongLyricsSource(selectedChartSong);
+
+  const songDetailsModal = (
+    <Modal
+      open={selectedChartSong !== null}
+      onClose={closeChartSong}
+      title="Song details"
+      size="lg"
+      hideHeader
+      bodyClassName="!overflow-hidden !p-0"
+    >
+      {selectedChartSong && (
+        <div className="flex h-[70vh] min-h-0 flex-col overflow-hidden text-gray-950 dark:text-white">
+          <div className="flex items-start gap-3 border-b border-black/[0.06] bg-gradient-to-r from-emerald-50 via-white to-white px-5 py-4 dark:border-white/[0.08] dark:from-emerald-500/10 dark:via-white/[0.03] dark:to-transparent">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-500/25">
+              <Music2 className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-300">Song library</p>
+              <h2 className="truncate text-2xl font-black tracking-[-0.04em]">{selectedChartSong.title}</h2>
+              <p className="mt-0.5 truncate text-sm text-gray-500 dark:text-white/55">
+                {selectedChartSong.artist || 'No artist'}{selectedChartSong.song_key ? ` · Key ${selectedChartSong.song_key}` : ''}
+              </p>
+            </div>
+            <button onClick={closeChartSong} aria-label="Close song details" className="rounded-full p-2 text-gray-400 transition-colors hover:bg-black/[0.04] hover:text-gray-700 dark:hover:bg-white/[0.08] dark:hover:text-white">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div role="tablist" aria-label="Song content" className="grid grid-cols-2 gap-1 border-b border-black/[0.06] bg-gray-50 p-1.5 dark:border-white/[0.08] dark:bg-white/[0.035]">
+            {([
+              { id: 'lyrics' as const, label: 'Lyrics', icon: FileText },
+              { id: 'chart' as const, label: 'Chord chart', icon: Music2 },
+            ]).map(item => {
+              const Icon = item.icon;
+              const selected = songViewerTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  id={`song-viewer-tab-${item.id}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  aria-controls={`song-viewer-panel-${item.id}`}
+                  onClick={() => setSongViewerTab(item.id)}
+                  className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl text-sm font-black transition-colors ${selected ? 'bg-white text-gray-950 shadow-sm dark:bg-white dark:text-black' : 'text-gray-500 hover:bg-white/70 dark:text-white/55 dark:hover:bg-white/[0.06]'}`}
+                >
+                  <Icon className="h-4 w-4" />
+                  {item.label}
+                  {item.id === 'chart' && selectedChartSong.chordpro_text?.trim() && (
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-label="Chord chart available" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {songViewerTab === 'lyrics' ? (
+            <div id="song-viewer-panel-lyrics" role="tabpanel" aria-labelledby="song-viewer-tab-lyrics" className="flex-1 overflow-y-auto p-5 sm:p-7">
+              <div className="mx-auto max-w-3xl">
+                {selectedSongLyrics && <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-sky-600 dark:text-sky-300">Lyrics</p>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-white/50">
+                      {selectedSongLyricsSource === 'saved'
+                        ? 'Saved lyrics'
+                        : selectedSongLyricsSource === 'chart'
+                        ? 'Lyrics extracted from the chord chart'
+                        : 'No lyrics saved yet'}
+                    </p>
+                  </div>
+                  {selectedChartSong.chordpro_text?.trim() && (
+                    <button type="button" onClick={() => setSongViewerTab('chart')} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs font-black text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:text-emerald-300 dark:hover:bg-emerald-500/15">
+                      <Music2 className="h-3.5 w-3.5" /> View chord chart
+                    </button>
+                  )}
+                </div>}
+                {selectedSongLyrics ? (
+                  <article className="whitespace-pre-wrap rounded-2xl border border-gray-200 bg-gray-50 p-5 text-[15px] font-medium leading-8 text-gray-800 dark:border-white/[0.08] dark:bg-white/[0.045] dark:text-white/80 sm:p-6" aria-label={`Lyrics for ${selectedChartSong.title}`}>
+                    {selectedSongLyrics}
+                  </article>
+                ) : (
+                  <div className="flex min-h-[28rem] items-center justify-center px-5 py-8 text-center">
+                    <div className="max-w-sm">
+                      <FileText className="mx-auto h-8 w-8 text-gray-400 dark:text-white/35" />
+                      <p className="mt-3 text-lg font-black text-gray-800 dark:text-white/80">No lyrics saved yet</p>
+                      <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-white/50">Open the chord chart to review or add the song’s chart content.</p>
+                      <button type="button" onClick={() => setSongViewerTab('chart')} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-black text-black">
+                        <Music2 className="h-4 w-4" /> Open chord chart
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div id="song-viewer-panel-chart" role="tabpanel" aria-labelledby="song-viewer-tab-chart" className="min-h-0 flex-1 overflow-hidden bg-white dark:bg-[#111412]">
+              <SongChartViewer
+                songId={selectedChartSong.id}
+                title={selectedChartSong.title}
+                artist={selectedChartSong.artist}
+                songKey={selectedChartSong.song_key}
+                chordproText={selectedChartSong.chordpro_text}
+                editable
+                fullBleed
+                hideTitleHeader
+                saving={chartSaving}
+                onSave={handleSaveChart}
+              />
+            </div>
+          )}
+        </div>
+      )}
+    </Modal>
+  );
 
   if (loading) {
     return (
@@ -1634,7 +1756,14 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                               const displayKey = ss.performed_key || ss.songs?.song_key || '';
                               const keyChanged = ss.performed_key && ss.songs?.song_key && ss.performed_key !== ss.songs.song_key;
                               return (
-	                                <div key={ss.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-black/[0.015] dark:hover:bg-white/[0.02] transition-colors">
+		                                <button
+		                                  key={ss.id}
+		                                  type="button"
+		                                  onClick={() => songUsage && openSongViewer(songUsage, 'lyrics')}
+		                                  disabled={!songUsage}
+		                                  aria-label={`Open lyrics and chord chart for ${ss.songs?.title || 'song'}`}
+		                                  className="group/song flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-black/[0.025] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-400/70 disabled:cursor-default dark:hover:bg-white/[0.045]"
+		                                >
 	                                  <span className="flex items-center justify-center h-6 w-6 rounded-lg bg-gray-100 dark:bg-white/[0.05] text-[10px] font-black text-gray-400 dark:text-white/35 shrink-0 tabular-nums">{i + 1}</span>
 	                                  <SongArtwork
 	                                    song={ss.songs}
@@ -1642,8 +1771,8 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
 	                                    className="h-10 w-10 rounded-[0.35rem]"
 	                                  />
 	                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <p className="text-[13px] font-semibold text-gray-900 dark:text-white leading-snug">{ss.songs?.title}</p>
+	                                    <div className="flex items-center gap-1.5 flex-wrap">
+	                                      <p className="text-[13px] font-semibold text-gray-900 transition-colors group-hover/song:text-emerald-600 dark:text-white dark:group-hover/song:text-emerald-300 leading-snug">{ss.songs?.title}</p>
                                       {displayKey && (
                                         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${keyChanged ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' : 'bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-white/45'}`}>
                                           {displayKey}
@@ -1657,15 +1786,16 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                                       </p>
                                     )}
                                   </div>
-                                  {songUsage && (
-                                    <div className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg ${getDaysBg(songUsage.days_since)}`}>
+	                                  {songUsage && (
+	                                    <div className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg ${getDaysBg(songUsage.days_since)}`}>
                                       {songUsage.is_safe
                                         ? <CheckCircle className="h-3 w-3 shrink-0" />
                                         : <AlertTriangle className="h-3 w-3 shrink-0" />}
                                       <span>{songUsage.days_since !== null ? `${songUsage.days_since}d` : 'New'}</span>
-                                    </div>
-                                  )}
-                                </div>
+	                                    </div>
+	                                  )}
+	                                  <FileText className="h-4 w-4 shrink-0 text-emerald-500/70 transition-colors group-hover/song:text-emerald-400" aria-hidden="true" />
+	                                </button>
                               );
                             })}
                         </div>
@@ -1802,6 +1932,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
             )}
           </div>
         </Modal>
+        {songDetailsModal}
       </div>
     );
   }
@@ -2020,39 +2151,47 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                         : <Square className="h-4 w-4 text-gray-300 dark:text-white/20 hover:text-gray-400 dark:hover:text-white/35 transition-colors" />}
                     </button>
                   )}
-                  <SongArtwork
-                    song={song}
-                    youtubeUrl={song.youtube_url}
-                    className="h-14 w-14 rounded-[0.35rem]"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <p className="text-[13px] font-semibold text-gray-900 dark:text-white truncate" style={{ letterSpacing: '-0.01em' }}>{song.title}</p>
-                      {song.song_key && (
-                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-white/45">{song.song_key}</span>
+                  <button
+                    type="button"
+                    onClick={() => selectModeSongs ? toggleSong(song.id) : openSongViewer(song, 'lyrics')}
+                    aria-label={selectModeSongs ? `${selectedSongs.has(song.id) ? 'Deselect' : 'Select'} ${song.title}` : `Open lyrics and chord chart for ${song.title}`}
+                    className="group/song flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70"
+                  >
+                    <SongArtwork
+                      song={song}
+                      youtubeUrl={song.youtube_url}
+                      className="h-14 w-14 rounded-[0.35rem] transition-transform group-hover/song:scale-[1.03]"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        <span className="truncate text-[13px] font-semibold text-gray-900 transition-colors group-hover/song:text-emerald-600 dark:text-white dark:group-hover/song:text-emerald-300" style={{ letterSpacing: '-0.01em' }}>{song.title}</span>
+                        {song.song_key && (
+                          <span className="rounded-md bg-gray-100 px-1.5 py-0.5 text-[9px] font-black text-gray-500 dark:bg-white/[0.06] dark:text-white/45">{song.song_key}</span>
+                        )}
+                        {!selectModeSongs && <FileText className="h-3.5 w-3.5 text-emerald-500 opacity-70 transition-opacity group-hover/song:opacity-100" aria-hidden="true" />}
+                      </span>
+                      {song.artist && <span className="mt-0.5 block truncate text-[11px] text-gray-400 dark:text-white/40">{song.artist}</span>}
+                      <span className="mt-0.5 block text-[10px] font-mono tracking-wide text-gray-400 dark:text-white/35 sm:hidden">
+                        {song.last_used_date ? format(parseISO(song.last_used_date), 'MMM d, yyyy') : 'Never used'}
+                      </span>
+                      {latestUsage && (
+                        <span
+                          className="mt-0.5 block truncate text-[10px] font-medium text-red-500/80 dark:text-red-300/70"
+                          title={`Used in ${latestUsage.event_title} · ${format(parseISO(latestUsage.event_date), 'MMM d, yyyy')}${latestUsage.event_type ? ` · ${latestUsage.event_type}` : ''}`}
+                        >
+                          <span className="font-bold">Used in {latestUsage.event_title}</span>
+                          <span> · {format(parseISO(latestUsage.event_date), 'MMM d')}{latestUsage.event_type ? ` · ${latestUsage.event_type}` : ''}</span>
+                        </span>
                       )}
-                    </div>
-                    {song.artist && <p className="text-[11px] text-gray-400 dark:text-white/30 truncate mt-0.5">{song.artist}</p>}
-                    <p className="text-[10px] font-mono text-gray-400 dark:text-white/25 mt-0.5 sm:hidden tracking-wide">
-                      {song.last_used_date ? format(parseISO(song.last_used_date), 'MMM d, yyyy') : 'Never used'}
-                    </p>
-                    {latestUsage && (
-                      <p
-                        className="mt-0.5 truncate text-[10px] font-medium text-red-500/80 dark:text-red-300/70"
-                        title={`Used in ${latestUsage.event_title} · ${format(parseISO(latestUsage.event_date), 'MMM d, yyyy')}${latestUsage.event_type ? ` · ${latestUsage.event_type}` : ''}`}
-                      >
-                        <span className="font-bold">Used in {latestUsage.event_title}</span>
-                        <span> · {format(parseISO(latestUsage.event_date), 'MMM d')}{latestUsage.event_type ? ` · ${latestUsage.event_type}` : ''}</span>
-                      </p>
-                    )}
-                  </div>
-                  <div className="text-[11px] font-mono text-gray-400 dark:text-white/30 text-center whitespace-nowrap hidden sm:flex items-center gap-1 tracking-wide pt-1.5">
-                    {song.last_used_date ? (
-                      <><Clock className="h-3 w-3" />{format(parseISO(song.last_used_date), 'MMM d, yyyy')}</>
-                    ) : (
-                      <span className="text-gray-300 dark:text-white/20">Never</span>
-                    )}
-                  </div>
+                    </span>
+                    <span className="hidden items-center gap-1 whitespace-nowrap pt-1.5 text-center font-mono text-[11px] tracking-wide text-gray-400 dark:text-white/40 sm:flex">
+                      {song.last_used_date ? (
+                        <><Clock className="h-3 w-3" />{format(parseISO(song.last_used_date), 'MMM d, yyyy')}</>
+                      ) : (
+                        <span className="text-gray-300 dark:text-white/30">Never</span>
+                      )}
+                    </span>
+                  </button>
                   <div className="flex items-center justify-end gap-2 pt-0.5">
                     <button
                       type="button"
@@ -2633,27 +2772,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
         </div>
       </Modal>
 
-      <Modal
-        open={selectedChartSong !== null}
-        onClose={closeChartSong}
-        title="Song Chart"
-        size="lg"
-        hideHeader
-      >
-        {selectedChartSong && (
-          <SongChartViewer
-            songId={selectedChartSong.id}
-            title={selectedChartSong.title}
-            artist={selectedChartSong.artist}
-            songKey={selectedChartSong.song_key}
-            chordproText={selectedChartSong.chordpro_text}
-            editable
-            saving={chartSaving}
-            onClose={closeChartSong}
-            onSave={handleSaveChart}
-          />
-        )}
-      </Modal>
+      {songDetailsModal}
     </div>
   );
 }

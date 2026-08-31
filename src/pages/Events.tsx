@@ -26,6 +26,7 @@ import { loadSyncedPreference, saveSyncedPreference } from '../lib/syncedPrefere
 import { calculatePolicyProposalDueDate, DEFAULT_EVENT_TEMPLATE_POLICIES, eventTemplateFor, normalizeEventTemplatePolicies, type EventTemplatePolicies } from '../lib/eventPolicy';
 
 interface AssignmentRow { user_id: string; role_id: string; }
+const ALL_MEMBERS_USER_ID = '__all_active_members__';
 interface CalendarEntry { type: 'birthday' | 'leave'; date: string; name: string; status?: string; }
 interface EventSongArtwork {
   id: string;
@@ -1216,7 +1217,14 @@ export function Events() {
   const updateAssignmentRow = (index: number, field: keyof AssignmentRow, value: string) => {
     setAssignmentRows(prev => prev.map((row, i) => {
       if (i !== index) return row;
-      if (field === 'role_id') return { ...row, role_id: value, user_id: '' };
+      if (field === 'role_id') {
+        const selectedRole = roles.find(role => role.id === value);
+        return {
+          ...row,
+          role_id: value,
+          user_id: selectedRole?.name === 'All Members' ? ALL_MEMBERS_USER_ID : '',
+        };
+      }
       return { ...row, [field]: value };
     }));
   };
@@ -1292,7 +1300,14 @@ export function Events() {
       toast('success', 'Event created');
       eventWasCreated = true;
 
-      const validAssignments = draftAssignments.filter(a => a.user_id && a.role_id);
+      const allMembersRoleIds = new Set(roles.filter(role => role.name === 'All Members').map(role => role.id));
+      const validAssignments = draftAssignments
+        .filter(assignment => assignment.user_id && assignment.role_id)
+        .flatMap(assignment => (
+          allMembersRoleIds.has(assignment.role_id) && assignment.user_id === ALL_MEMBERS_USER_ID
+            ? members.map(member => ({ user_id: member.id, role_id: assignment.role_id }))
+            : [assignment]
+        ));
       if (draft.song_leader_id) {
         const slRole = roles.find(r => r.name === 'Song Leader');
         if (slRole) validAssignments.push({ user_id: draft.song_leader_id, role_id: slRole.id });
@@ -1650,14 +1665,23 @@ export function Events() {
                 </div>
               ) : (
                 <div className="space-y-2.5">
-                  {assignmentRows.map((row, i) => (
+                  {assignmentRows.map((row, i) => {
+                    const isAllMembersRole = roles.find(role => role.id === row.role_id)?.name === 'All Members';
+                    return (
                     <div
                       key={i}
                       className="grid grid-cols-[minmax(0,1fr)_3rem] gap-2 rounded-2xl border border-gray-200/80 bg-white/70 p-2.5 dark:border-white/[0.08] dark:bg-white/[0.03]"
                     >
                       <div className="min-w-0 grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <Select value={row.role_id} onChange={v => updateAssignmentRow(i, 'role_id', v)} options={roles.filter(r => !r.is_leadership).map(r => ({ value: r.id, label: r.name }))} placeholder="Select role" />
-                        <Select value={row.user_id} onChange={v => updateAssignmentRow(i, 'user_id', v)} options={getMembersForRole(row.role_id).map(m => ({ value: m.id, label: `${m.first_name} ${m.last_name}` }))} placeholder={row.role_id ? 'Select member' : 'Pick role first'} />
+                        <Select
+                          value={row.user_id}
+                          onChange={v => updateAssignmentRow(i, 'user_id', v)}
+                          options={isAllMembersRole
+                            ? [{ value: ALL_MEMBERS_USER_ID, label: `All active members (${members.length})` }]
+                            : getMembersForRole(row.role_id).map(m => ({ value: m.id, label: `${m.first_name} ${m.last_name}` }))}
+                          placeholder={row.role_id ? 'Select member' : 'Pick role first'}
+                        />
                       </div>
                       <button
                         type="button"
@@ -1670,7 +1694,8 @@ export function Events() {
                         <span className="sr-only">Remove this role and member assignment</span>
                       </button>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </section>

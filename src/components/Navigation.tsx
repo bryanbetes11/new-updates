@@ -185,7 +185,7 @@ const sidebarMainItems: NavItem[] = [
     label: "Home",
     icon: HomeIcon,
     exact: true,
-    tone: "from-emerald-500/85 via-green-900 to-black",
+    tone: "from-emerald-500/45 to-emerald-950/55",
   },
   {
     path: "/events",
@@ -193,7 +193,7 @@ const sidebarMainItems: NavItem[] = [
     icon: CalendarIcon,
     badgeKey: "events",
     badgeColor: "red",
-    tone: "from-sky-500/85 via-blue-900 to-black",
+    tone: "from-sky-500/45 to-sky-950/55",
   },
   {
     path: "/announcements",
@@ -201,7 +201,7 @@ const sidebarMainItems: NavItem[] = [
     icon: NewsIcon,
     badgeKey: "announcements",
     badgeColor: "blue",
-    tone: "from-amber-500/85 via-zinc-800 to-black",
+    tone: "from-amber-500/40 to-amber-950/55",
   },
   {
     path: "/messages",
@@ -209,7 +209,7 @@ const sidebarMainItems: NavItem[] = [
     icon: MessageIcon,
     badgeKey: "messages",
     badgeColor: "red",
-    tone: "from-violet-500/85 via-indigo-900 to-black",
+    tone: "from-violet-500/45 to-violet-950/55",
   },
 ];
 
@@ -794,7 +794,7 @@ export function Navigation({
             path: leadershipHomePath,
             label: "Overview",
             icon: ShieldNavIcon,
-            tone: "from-indigo-500/85 via-violet-900 to-black",
+            tone: "from-indigo-500/45 to-indigo-950/55",
           },
         ]
       : []),
@@ -802,7 +802,7 @@ export function Navigation({
       path: canApproveLeave ? "/leadership/leave" : "/request-leave",
       label: canApproveLeave ? "Leave Queue" : "Request Leave",
       icon: LeaveIcon,
-      tone: "from-orange-500/85 via-amber-900 to-black",
+      tone: "from-orange-500/45 to-orange-950/55",
       ...(canApproveLeave
         ? { badgeKey: "pendingLeave" as const, badgeColor: "red" as const }
         : {}),
@@ -813,13 +813,13 @@ export function Navigation({
             path: "/leadership/setlists",
             label: "Setlist Queue",
             icon: SetsNavIcon,
-            tone: "from-emerald-500/85 via-teal-900 to-black",
+            tone: "from-emerald-500/45 to-emerald-950/55",
           }] : []),
           ...(isLeader || capabilities.approve_swaps ? [{
             path: "/leadership/swaps",
             label: "Swap Requests",
             icon: SwapsNavIcon,
-            tone: "from-cyan-500/85 via-blue-900 to-black",
+            tone: "from-cyan-500/45 to-cyan-950/55",
           }] : []),
         ]
       : []),
@@ -829,13 +829,13 @@ export function Navigation({
             path: "/leadership/team",
             label: "Team Roster",
             icon: TeamNavIcon,
-            tone: "from-fuchsia-500/80 via-slate-800 to-black",
+            tone: "from-fuchsia-500/40 to-fuchsia-950/55",
           },
           {
             path: "/leadership/accountability",
             label: "Accountability",
             icon: ListChecks,
-            tone: "from-amber-500/85 via-orange-900 to-black",
+            tone: "from-amber-500/40 to-amber-950/55",
           },
         ]
       : []),
@@ -845,7 +845,7 @@ export function Navigation({
       path: "/admin/settings",
       label: "Admin Settings",
       icon: Settings,
-      tone: "from-emerald-500/85 via-teal-900 to-black",
+      tone: "from-emerald-500/45 to-emerald-950/55",
     }] : []),
   ];
   const displayName = profile?.nickname || profile?.first_name || "";
@@ -877,21 +877,21 @@ export function Navigation({
       title: "Songs",
       caption: "Charts & library",
       path: "/songs",
-      tone: "from-emerald-500/85 via-teal-800 to-black",
+      tone: "from-emerald-500/45 to-emerald-950/55",
       icon: Music2,
     },
     {
       title: "Sets",
       caption: "Approved setlists",
       path: "/sets",
-      tone: "from-violet-500/85 via-indigo-800 to-black",
+      tone: "from-violet-500/45 to-violet-950/55",
       icon: ListChecks,
     },
     {
       title: "Videos",
       caption: "Training media",
       path: "/videos",
-      tone: "from-sky-500/85 via-cyan-900 to-black",
+      tone: "from-sky-500/45 to-sky-950/55",
       icon: Video,
     },
   ];
@@ -900,26 +900,26 @@ export function Navigation({
       title: "My Assignments",
       caption: "Serving schedule",
       path: "/my-assignments",
-      tone: "from-emerald-500/85 via-green-900 to-black",
+      tone: "from-emerald-500/45 to-emerald-950/55",
       icon: CheckCircle2,
     },
     {
       title: "My Sets",
       caption: "Created by me",
       path: "/sets?owner=me",
-      tone: "from-indigo-400 via-violet-700 to-black",
+      tone: "from-indigo-500/45 to-indigo-950/55",
       icon: ListChecks,
     },
     {
       title: "Profile",
       caption: "Account & details",
       path: "/profile",
-      tone: "from-zinc-300/75 via-zinc-700 to-black",
+      tone: "from-zinc-400/35 to-zinc-900/65",
       icon: User,
     },
   ];
 
-  const sidebarWidth = collapsed ? 72 : 300;
+  const sidebarWidth = collapsed ? 72 : 220;
 
   const handleMobileNavStyleChange = async (style: MobileNavStyle) => {
     if (!user?.id || style === mobileNavStyle || savingNavStyle) return;
@@ -1224,13 +1224,12 @@ export function Navigation({
                 transition={{ type: "spring", stiffness: 460, damping: 38 }}
               />
             )}
-            <div className="relative flex h-8 w-8 items-center justify-center overflow-visible">
-              <span className={`absolute inset-0 flex items-center justify-center overflow-hidden rounded-[0.6rem] bg-gradient-to-br ${iconTone} shadow-[inset_0_1px_0_rgba(255,255,255,0.16)]`}>
-                <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_28%_22%,rgba(255,255,255,0.34),transparent_32%)]" />
+            <div className="relative flex h-9 w-9 items-center justify-center overflow-visible">
+              <span className={`absolute inset-0 flex items-center justify-center overflow-hidden rounded-[0.6rem] border border-white/[0.08] bg-gradient-to-br ${iconTone} shadow-[0_4px_12px_-8px_rgba(0,0,0,0.8)]`}>
                 <Icon
                   {...(ACTIVE_STATE_NAV_ICONS.has(Icon) ? { active } : {})}
-                  className="relative h-[17px] w-[17px] shrink-0 text-white/90"
-                  style={{ width: "17px", height: "17px", strokeWidth: 2.2 }}
+                  className="relative h-[18px] w-[18px] shrink-0 text-white/90"
+                  style={{ width: "18px", height: "18px", strokeWidth: 2.1 }}
                 />
               </span>
               {badge > 0 && (
@@ -1273,13 +1272,12 @@ export function Navigation({
           />
         )}
         <span
-          className={`relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-[0.55rem] bg-gradient-to-br ${iconTone} shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] transition-transform group-hover:scale-[1.03]`}
+          className={`relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-[0.6rem] border border-white/[0.08] bg-gradient-to-br ${iconTone} shadow-[0_4px_12px_-8px_rgba(0,0,0,0.8)] transition-colors group-hover:border-white/[0.14]`}
         >
-          <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_28%_22%,rgba(255,255,255,0.34),transparent_32%)]" />
           <Icon
 			{...(ACTIVE_STATE_NAV_ICONS.has(Icon) ? { active } : {})}
-            className="relative h-[17px] w-[17px] shrink-0 text-white/90"
-            style={{ width: "17px", height: "17px", strokeWidth: 2.2 }}
+            className="relative h-[18px] w-[18px] shrink-0 text-white/90"
+            style={{ width: "18px", height: "18px", strokeWidth: 2.1 }}
           />
         </span>
         <span className="relative flex-1 truncate text-left">{item.label}</span>
@@ -2271,12 +2269,11 @@ export function Navigation({
                         className="group flex w-full items-center gap-3 rounded-[0.7rem] px-2.5 py-1.5 text-left transition-colors hover:bg-white/[0.065]"
                       >
                         <span
-                          className={`relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-[0.35rem] bg-gradient-to-br ${entry.tone}`}
+                          className={`relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-[0.6rem] border border-white/[0.08] bg-gradient-to-br ${entry.tone} shadow-[0_4px_12px_-8px_rgba(0,0,0,0.8)] transition-colors group-hover:border-white/[0.14]`}
                         >
-                          <span className="block h-full w-full bg-[radial-gradient(circle_at_28%_22%,rgba(255,255,255,0.30),transparent_28%)]" />
                           <entry.icon
-                            className="absolute h-[18px] w-[18px] text-white/88"
-                            strokeWidth={2.2}
+                            className="absolute h-[18px] w-[18px] text-white/90"
+                            strokeWidth={2.1}
                           />
                         </span>
                         <span className="min-w-0">
@@ -2306,12 +2303,11 @@ export function Navigation({
                         className="group flex w-full items-center gap-3 rounded-[0.7rem] px-2.5 py-1.5 text-left transition-colors hover:bg-white/[0.065]"
                       >
                         <span
-                          className={`relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-[0.35rem] bg-gradient-to-br ${entry.tone}`}
+                          className={`relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-[0.6rem] border border-white/[0.08] bg-gradient-to-br ${entry.tone} shadow-[0_4px_12px_-8px_rgba(0,0,0,0.8)] transition-colors group-hover:border-white/[0.14]`}
                         >
-                          <span className="block h-full w-full bg-[radial-gradient(circle_at_28%_22%,rgba(255,255,255,0.35),transparent_28%)]" />
                           <entry.icon
-                            className="absolute h-[18px] w-[18px] text-white/88"
-                            strokeWidth={2.2}
+                            className="absolute h-[18px] w-[18px] text-white/90"
+                            strokeWidth={2.1}
                           />
                         </span>
                         <span className="min-w-0">

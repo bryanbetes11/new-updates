@@ -5,6 +5,7 @@ import { loadSyncedPreference, saveSyncedPreference } from '../../lib/syncedPref
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getBuiltInNotificationCopy } from '../../lib/notificationCopy';
+import { AdminPageBackLink } from '../../components/AdminPageBackLink';
 
 type Priority = 'low' | 'normal' | 'high' | 'urgent';
 
@@ -257,6 +258,7 @@ export function NotificationSettings() {
 
   return (
     <div className="app-content-shell space-y-5 py-4 sm:py-5">
+      <AdminPageBackLink />
       <div className="grid grid-cols-2 gap-1 rounded-2xl border border-gray-200/80 bg-gray-100 p-1 dark:border-white/[0.06] dark:bg-white/[0.04]">
         <button
           type="button"

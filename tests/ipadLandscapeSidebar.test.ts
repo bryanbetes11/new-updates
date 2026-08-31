@@ -5,10 +5,10 @@ import { resolve } from 'node:path';
 const layout = readFileSync(resolve(process.cwd(), 'src/components/Layout.tsx'), 'utf8');
 const navigation = readFileSync(resolve(process.cwd(), 'src/components/Navigation.tsx'), 'utf8');
 
-assert.match(layout, /collapsed \? 72 : 300/, 'the compact layout should reserve only 72px for the sidebar rail');
-assert.match(navigation, /sidebarWidth = collapsed \? 72 : 300/, 'the rendered compact sidebar should match the 72px shell offset');
+assert.match(layout, /collapsed \? 72 : 220/, 'the compact layout should reserve only 72px for the sidebar rail');
+assert.match(navigation, /sidebarWidth = collapsed \? 72 : 220/, 'the rendered compact sidebar should match the 72px shell offset');
 assert.match(navigation, /mx-auto flex h-11 w-11/, 'collapsed navigation highlights should be centered squares rather than full-width rows');
-assert.match(navigation, /h-8 w-8 items-center justify-center overflow-visible/, 'collapsed badge anchors should remain visible outside the icon artwork');
+assert.match(navigation, /h-9 w-9 items-center justify-center overflow-visible/, 'collapsed badge anchors should remain visible outside the icon artwork');
 
 assert.match(
   layout,

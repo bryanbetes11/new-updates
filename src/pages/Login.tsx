@@ -130,14 +130,21 @@ export function Login() {
             in sync.
           </h2>
           <p className="mt-7 max-w-md text-[17px] leading-8 text-white/45">
-            One focused workspace for the weekly rhythm of worship ministry.
+            Plan services, share setlists, and keep your ministry team aligned in one focused workspace.
           </p>
 
           <div className="mt-10 grid max-w-md gap-2">
-            {['Assignments', 'Setlists', 'Team updates'].map(item => (
-              <div key={item} className="flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.035] px-4 py-3">
+            {[
+              { title: 'Assignments', detail: 'Know when and where you serve' },
+              { title: 'Setlists', detail: 'Keep songs and arrangements together' },
+              { title: 'Team updates', detail: 'Stay aligned as plans change' },
+            ].map(item => (
+              <div key={item.title} className="flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.035] px-4 py-3">
                 <div className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.8)]" />
-                <span className="text-sm font-bold text-white/70">{item}</span>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold leading-tight text-white/75">{item.title}</p>
+                  <p className="mt-0.5 truncate text-[11px] font-medium leading-tight text-white/32">{item.detail}</p>
+                </div>
                 <div className="ml-auto h-px w-10 bg-gradient-to-r from-emerald-400/50 to-transparent" />
               </div>
             ))}
@@ -146,7 +153,7 @@ export function Login() {
 
         <div className="relative flex items-center gap-3 text-xs font-bold text-white/28">
           <span className="h-px w-10 bg-white/15" />
-          Built for ministry teams
+          Built for Ministry Teams
         </div>
       </aside>
 
@@ -188,11 +195,8 @@ export function Login() {
                       </div>
 
                       <div>
-                        <div className="mb-2 flex items-center justify-between">
+                        <div className="mb-2 flex items-center">
                           <label htmlFor="login-password" className="block text-[11px] font-black uppercase tracking-[0.16em] text-white/34">Password</label>
-                          <button type="button" onClick={openAccountUpdate} className="text-[11px] font-bold text-emerald-300 transition-colors hover:text-emerald-200">
-                            Update my account
-                          </button>
                         </div>
                         <div className="relative">
                           <input id="login-password" type={showPw ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} className={`${inputClass} pr-12`} placeholder="Your password" autoComplete="current-password" required />
@@ -205,6 +209,19 @@ export function Login() {
                       <button type="submit" disabled={loading || !email || !password} className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-emerald-500 text-[14px] font-black text-black shadow-[0_18px_50px_-24px_rgba(34,197,94,0.9)] transition hover:bg-emerald-400 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40">
                         {loading ? <><span className="h-4 w-4 rounded-full border-2 border-black/30 border-t-black animate-spin" />Signing in...</> : <>Sign In <ArrowRight className="h-4 w-4" /></>}
                       </button>
+
+                      <div className="pt-2 text-center">
+                        <p className="text-[12px] leading-5 text-white/38">
+                          Forgot your password or need to change your email?
+                        </p>
+                        <button
+                          type="button"
+                          onClick={openAccountUpdate}
+                          className="mt-1 inline-flex min-h-8 items-center justify-center text-[12px] font-bold text-emerald-300 transition-colors hover:text-emerald-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#10110f]"
+                        >
+                          Update My Account
+                        </button>
+                      </div>
                     </form>
 
                     <div className="mt-7 border-t border-white/[0.07] pt-6">

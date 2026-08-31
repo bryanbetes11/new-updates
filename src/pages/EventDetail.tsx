@@ -88,12 +88,14 @@ type RevisionCommentReactionFlight = ReactionFlightPath & {
 
 type LiveCommsMessage = {
   id: string;
-  kind: 'stage_request' | 'tech_instruction';
+  kind: 'stage_request' | 'tech_instruction' | 'request_status';
   text: string;
   senderId: string;
   senderName: string;
   senderRole: string;
   recipientUserId?: string;
+  requestId?: string;
+  status?: 'sent' | 'adjusting' | 'done';
   createdAt: string;
 };
 
@@ -717,6 +719,7 @@ export function EventDetail() {
   const [techModeMessages, setTechModeMessages] = useState<TechModeMessages>(DEFAULT_TECH_MODE_MESSAGES);
   const [stageRequestMessages, setStageRequestMessages] = useState<TechModeMessages>(DEFAULT_STAGE_REQUEST_MESSAGES);
   const [liveCommsMessages, setLiveCommsMessages] = useState<LiveCommsMessage[]>([]);
+  const [liveRequestStatuses, setLiveRequestStatuses] = useState<Record<string, 'sent' | 'adjusting' | 'done'>>({});
   const liveCommsChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const [showRehearsalSummary, setShowRehearsalSummary] = useState(false);
   const [serviceModeUnlocked, setServiceModeUnlocked] = useState(false);
@@ -755,8 +758,14 @@ export function EventDetail() {
       .channel(`event-live-comms-${id}`)
       .on('broadcast', { event: 'live-message' }, ({ payload }) => {
         const message = payload as LiveCommsMessage;
-        if (!message?.id || !message.text) return;
-        setLiveCommsMessages(current => current.some(item => item.id === message.id) ? current : [...current, message].slice(-50));
+        if (!message?.id) return;
+        if (message.kind === 'request_status' && message.requestId && message.status) {
+          setLiveRequestStatuses(current => ({ ...current, [message.requestId!]: message.status! }));
+          setStageCommsStatus(message.status);
+        } else if (message.text) {
+          setLiveCommsMessages(current => current.some(item => item.id === message.id) ? current : [...current, message].slice(-50));
+          if (message.kind === 'tech_instruction' && message.recipientUserId === user.id) setStageCommsOpen(true);
+        }
         playInteractionSound('tap');
       })
       .subscribe();
@@ -978,6 +987,7 @@ export function EventDetail() {
       if (shouldRestoreFromUrl) {
         params.delete('mode');
         params.delete('song');
+        params.delete('audience');
         const nextSearch = params.toString();
         navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ''}`, { replace: true });
       }
@@ -1002,6 +1012,7 @@ export function EventDetail() {
     setServiceArrangementOpen(false);
     setServiceAutoScrollEnabled(false);
     setServiceModeEntering(false);
+	setStageCommsView(params.get('audience') === 'tech' ? 'tech' : 'stage');
 	setServiceModeUnlocked(event?.event_type === 'Rehearsals');
     setServiceModeIndex(restoredIndex);
   }, [authLoading, canUseServiceModePilot, event?.event_type, id, linkedSetlistSongs, loading, location.pathname, location.search, navigate, serviceModeIndex, setlist?.status, setlistSongs]);
@@ -1021,11 +1032,12 @@ export function EventDetail() {
     const params = new URLSearchParams(location.search);
     params.set('mode', event?.event_type === 'Rehearsals' ? 'rehearsal' : 'service');
     params.set('song', String(serviceModeIndex));
+    params.set('audience', stageCommsView);
     const nextSearch = params.toString();
     const nextLocation = `${location.pathname}?${nextSearch}`;
     const currentLocation = `${location.pathname}${location.search}`;
     if (nextLocation !== currentLocation) navigate(nextLocation, { replace: true });
-  }, [canUseServiceModePilot, event?.event_type, id, location.pathname, location.search, navigate, serviceModeIndex]);
+  }, [canUseServiceModePilot, event?.event_type, id, location.pathname, location.search, navigate, serviceModeIndex, stageCommsView]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -3779,9 +3791,14 @@ const openLyricsModal = (ss: SetlistSong) => {
 	const techConfirmedCount = techPerformers.filter(member => member.status === 'confirmed').length;
 	const techPendingCount = techPerformers.length - techConfirmedCount;
 	const liveStageRequests = liveCommsMessages.filter(message => message.kind === 'stage_request');
+	const resolvedLiveRequestCount = liveStageRequests.filter(message => liveRequestStatuses[message.id] === 'done').length;
 	const latestTechInstruction = [...liveCommsMessages].reverse().find(message => message.kind === 'tech_instruction' && message.recipientUserId === user?.id);
 	const sendLiveCommsMessage = async (message: LiveCommsMessage) => {
-	  setLiveCommsMessages(current => current.some(item => item.id === message.id) ? current : [...current, message].slice(-50));
+	  if (message.kind === 'request_status' && message.requestId && message.status) {
+	    setLiveRequestStatuses(current => ({ ...current, [message.requestId!]: message.status! }));
+	  } else {
+	    setLiveCommsMessages(current => current.some(item => item.id === message.id) ? current : [...current, message].slice(-50));
+	  }
 	  const result = await liveCommsChannelRef.current?.send({ type: 'broadcast', event: 'live-message', payload: message });
 	  if (result !== 'ok') toast('error', 'Message could not reach the other Live Mode devices');
 	  return result === 'ok';
@@ -3838,7 +3855,7 @@ const openLyricsModal = (ss: SetlistSong) => {
 	    : linkedServiceEvent?.title || 'linked Sunday Service';
 	  const showServiceModeEntryPoints = canUseServiceModePilot;
   const serviceModeLabel = 'Live Mode';
-  const techOpenRequestCount = liveStageRequests.length;
+  const techOpenRequestCount = liveStageRequests.length - resolvedLiveRequestCount;
   const serviceModeLoadingTitle = event.event_type === 'Rehearsals' ? 'Preparing rehearsal flow.' : 'Preparing your setlist.';
   const serviceModeLoadingSteps = [
     { label: 'Opening charts', detail: `${serviceModeSongs.length} ${serviceModeSongs.length === 1 ? 'song' : 'songs'}`, icon: FileText },
@@ -3917,6 +3934,7 @@ const openLyricsModal = (ss: SetlistSong) => {
     const params = new URLSearchParams(location.search);
     params.delete('mode');
     params.delete('song');
+    params.delete('audience');
     const nextSearch = params.toString();
     navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ''}`, { replace: true });
 	window.setTimeout(() => serviceModeOpenerRef.current?.focus(), 0);
@@ -7524,13 +7542,13 @@ const openLyricsModal = (ss: SetlistSong) => {
                                 <div><h2 className="text-sm font-black">Requests</h2><p className="mt-0.5 text-[10px] text-white/35">Incoming messages from the stage</p></div>
                               </div>
                               <div className="mt-3 flex items-center justify-between border-b border-white/[0.08] pb-3"><span className="text-[10px] font-black uppercase tracking-[0.16em] text-white/40">Live request queue</span><span className="rounded-md bg-emerald-400/10 px-2 py-1 text-[9px] font-black text-emerald-300">{techOpenRequestCount} LIVE</span></div>
-                              <div className="mt-4 space-y-3">{liveStageRequests.map(message => <article key={message.id} className="rounded-3xl border border-white/[0.09] bg-white/[0.035] p-4"><div className="flex items-start gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-400/15 text-emerald-300"><Music className="h-5 w-5" /></span><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="text-sm font-black">{message.senderName} <span className="font-semibold text-white/40">· {message.senderRole}</span></p><span className="text-[10px] text-emerald-300">Live</span></div><p className="mt-2 text-lg font-bold">{message.text}</p></div></div></article>)}{liveStageRequests.length === 0 && <div className="rounded-3xl border border-dashed border-emerald-400/20 p-10 text-center"><CheckCircle className="mx-auto h-7 w-7 text-emerald-300" /><p className="mt-2 text-sm font-black">No live requests</p><p className="mt-1 text-[10px] text-white/35">New messages from the stage will appear here.</p></div>}</div>
+                              <div className="mt-4 space-y-3">{liveStageRequests.map(message => { const status = liveRequestStatuses[message.id] || 'sent'; return <motion.article initial={prefersReducedMotion ? false : { opacity: 0, y: -10, scale: 0.98 }} animate={{ opacity: status === 'done' ? 0.6 : 1, y: 0, scale: 1 }} key={message.id} className={`rounded-3xl border p-4 transition ${status === 'done' ? 'border-white/[0.07] bg-white/[0.025]' : status === 'adjusting' ? 'border-amber-400/35 bg-amber-400/[0.06]' : 'border-emerald-400/35 bg-emerald-400/[0.055] shadow-[0_0_28px_rgba(52,211,153,0.08)]'}`}><div className="flex items-start gap-3"><motion.span animate={prefersReducedMotion || status !== 'sent' ? undefined : { scale: [1, 1.12, 1] }} transition={{ repeat: 2, duration: 0.55 }} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-400/15 text-emerald-300"><Music className="h-5 w-5" /></motion.span><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="text-sm font-black">{message.senderName} <span className="font-semibold text-white/40">· {message.senderRole}</span></p><span className={`text-[10px] font-black uppercase ${status === 'done' ? 'text-white/35' : status === 'adjusting' ? 'text-amber-300' : 'text-emerald-300'}`}>{status === 'sent' ? 'New' : status}</span></div><p className="mt-2 text-lg font-bold">{message.text}</p></div></div><div className="mt-4 grid grid-cols-3 gap-2">{(['sent', 'adjusting', 'done'] as const).map(nextStatus => <button key={nextStatus} type="button" onClick={() => { void sendLiveCommsMessage({ id: crypto.randomUUID(), kind: 'request_status', text: nextStatus, senderId: user?.id || '', senderName: profile?.first_name || 'Tech Team', senderRole: 'Tech Team', requestId: message.id, status: nextStatus, recipientUserId: message.senderId, createdAt: new Date().toISOString() }); }} className={`min-h-11 rounded-xl border text-[11px] font-black capitalize transition ${status === nextStatus ? nextStatus === 'adjusting' ? 'border-amber-400 bg-amber-400/15 text-amber-200' : 'border-emerald-400 bg-emerald-400/15 text-emerald-200' : 'border-white/[0.08] bg-white/[0.04] text-white/55 hover:bg-white/[0.08]'}`}>{nextStatus === 'sent' ? 'Seen' : nextStatus}</button>)}</div></motion.article>;})}{liveStageRequests.length === 0 && <div className="rounded-3xl border border-dashed border-emerald-400/20 p-10 text-center"><CheckCircle className="mx-auto h-7 w-7 text-emerald-300" /><p className="mt-2 text-sm font-black">No live requests</p><p className="mt-1 text-[10px] text-white/35">New messages from the stage will appear here.</p></div>}</div>
                             </section>
 
                             <footer className="order-3 border-t border-white/[0.08] bg-white/[0.018] px-4 py-3 lg:col-span-2" aria-label="Live session footer">
                               <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
                                 <div className="flex items-center gap-4" aria-label="Session overview">
-                                  {[['Open', techOpenRequestCount, 'text-amber-300'], ['Resolved', 0, 'text-emerald-300'], ['Assigned', techPerformers.length, 'text-white'], ['Confirmed', techConfirmedCount, 'text-emerald-300']].map(([label, value, tone]) => <div key={String(label)} className="flex items-baseline gap-1.5"><span className={`text-base font-black ${tone}`}>{value}</span><span className="text-[9px] font-bold uppercase tracking-wide text-white/35">{label}</span></div>)}
+                                  {[['Open', techOpenRequestCount, 'text-amber-300'], ['Resolved', resolvedLiveRequestCount, 'text-emerald-300'], ['Assigned', techPerformers.length, 'text-white'], ['Confirmed', techConfirmedCount, 'text-emerald-300']].map(([label, value, tone]) => <div key={String(label)} className="flex items-baseline gap-1.5"><span className={`text-base font-black ${tone}`}>{value}</span><span className="text-[9px] font-bold uppercase tracking-wide text-white/35">{label}</span></div>)}
                                 </div>
                                 <span className="hidden h-7 w-px bg-white/[0.08] sm:block" />
                                 <div className="min-w-0 flex-1"><p className="truncate text-xs font-black"><span className="mr-2 text-[9px] uppercase tracking-[0.15em] text-emerald-300">Live set</span>{serviceModeSong?.songs?.title || 'Set in progress'}</p><p className="mt-0.5 text-[9px] text-white/35">Song {(serviceModeIndex ?? 0) + 1} of {serviceModeSongs.length || 1}{serviceModeSongKey ? ` · Key ${serviceModeSongKey}` : ''}</p></div>
@@ -7598,7 +7616,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                       </button>
                                     );})}
                                   </div>
-                                  {latestTechInstruction && <div className="mt-3 rounded-xl border border-sky-400/25 bg-sky-400/[0.10] px-3 py-2"><p className="text-[9px] font-black uppercase tracking-[0.14em] text-sky-300">Message from Tech</p><p className="mt-1 text-sm font-black text-sky-100">{latestTechInstruction.text}</p></div>}
+                                  <AnimatePresence mode="wait">{latestTechInstruction && <motion.div key={latestTechInstruction.id} initial={prefersReducedMotion ? false : { opacity: 0, y: -10, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ type: 'spring', stiffness: 380, damping: 24 }} className="mt-3 rounded-xl border border-sky-400/40 bg-sky-400/[0.13] px-3 py-3 shadow-[0_0_30px_rgba(56,189,248,0.12)]"><div className="flex items-center gap-2"><motion.span animate={prefersReducedMotion ? undefined : { scale: [1, 1.22, 1] }} transition={{ repeat: 2, duration: 0.55 }} className="h-2.5 w-2.5 rounded-full bg-sky-300" /><p className="text-[9px] font-black uppercase tracking-[0.14em] text-sky-300">New message from Tech</p></div><p className="mt-1.5 text-base font-black text-sky-100">{latestTechInstruction.text}</p></motion.div>}</AnimatePresence>
                                   {stageCommsStatus !== 'idle' && (
                                     <div className="mt-2 flex items-center justify-between rounded-xl border border-emerald-400/20 bg-emerald-400/[0.08] px-3 py-2">
                                       <p className="text-xs font-bold text-emerald-100">

@@ -2,8 +2,9 @@ import { useCallback, useLayoutEffect, useRef } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowDown, ArrowUp, Bold, Captions, Check, ChevronLeft, ChevronRight, Copy, Edit3, Gauge, Italic, ListOrdered, Lock, Minus, Music2, Pause, Play, Plus, RotateCcw, Save, Settings2, StickyNote, Trash2, Users, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Bold, Captions, Check, ChevronLeft, ChevronRight, Copy, CornerDownRight, Edit3, FileText, Gauge, Italic, ListOrdered, Lock, Minus, Music2, Pause, Play, Plus, RotateCcw, Save, Settings2, StickyNote, Trash2, Users, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 import { ChordProLine, detectChordProKey, formatChordProForPlainEditor, getKeyTransposeOffset, parseChordPro, parseChordProMetadata, plainEditorSectionsToChordPro, plainEditorToChordPro, transposeChordPro, transposeKey } from '../lib/chordPro';
 
 const SECTION_TONES = [
@@ -98,6 +99,7 @@ interface ChartDisplaySettings {
   lyricFontSize: number;
   chordFontSize: number;
   sectionBadgeFontSize: number;
+  noteFontSize: number;
   lyricBold: boolean;
   lyricItalic: boolean;
   chordBold: boolean;
@@ -133,6 +135,7 @@ const DEFAULT_CHART_SETTINGS: ChartDisplaySettings = {
   lyricFontSize: 10,
   chordFontSize: 10,
   sectionBadgeFontSize: 10,
+  noteFontSize: 11,
   lyricBold: false,
   lyricItalic: false,
   chordBold: true,
@@ -141,11 +144,11 @@ const DEFAULT_CHART_SETTINGS: ChartDisplaySettings = {
   autoScrollSpeed: AUTO_SCROLL_SPEED_DEFAULT,
 };
 
-function loadChartDisplaySettings(): ChartDisplaySettings {
+function loadChartDisplaySettings(storageKey = CHART_SETTINGS_STORAGE_KEY): ChartDisplaySettings {
   if (typeof window === 'undefined') return DEFAULT_CHART_SETTINGS;
 
   try {
-    const raw = window.localStorage.getItem(CHART_SETTINGS_STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey);
     if (!raw) return DEFAULT_CHART_SETTINGS;
     const parsed = JSON.parse(raw) as Partial<ChartDisplaySettings>;
     const shouldUseNewDefaults = parsed.settingsVersion !== CHART_SETTINGS_VERSION;
@@ -154,6 +157,7 @@ function loadChartDisplaySettings(): ChartDisplaySettings {
       lyricFontSize: shouldUseNewDefaults ? DEFAULT_CHART_SETTINGS.lyricFontSize : normalizeFontSize(parsed.lyricFontSize, DEFAULT_CHART_SETTINGS.lyricFontSize),
       chordFontSize: shouldUseNewDefaults ? DEFAULT_CHART_SETTINGS.chordFontSize : normalizeFontSize(parsed.chordFontSize, DEFAULT_CHART_SETTINGS.chordFontSize),
       sectionBadgeFontSize: normalizeFontSize(parsed.sectionBadgeFontSize, DEFAULT_CHART_SETTINGS.sectionBadgeFontSize),
+      noteFontSize: normalizeFontSize(parsed.noteFontSize, DEFAULT_CHART_SETTINGS.noteFontSize),
       lyricBold: typeof parsed.lyricBold === 'boolean' ? parsed.lyricBold : DEFAULT_CHART_SETTINGS.lyricBold,
       lyricItalic: typeof parsed.lyricItalic === 'boolean' ? parsed.lyricItalic : DEFAULT_CHART_SETTINGS.lyricItalic,
       chordBold: typeof parsed.chordBold === 'boolean' ? parsed.chordBold : DEFAULT_CHART_SETTINGS.chordBold,
@@ -258,6 +262,7 @@ function getSectionTone(section?: string) {
 
 interface SongChartViewerProps {
   songId?: string;
+  preferenceScopeId?: string;
   draftStorageId?: string;
   sectionOrder?: string[] | null;
   title: string;
@@ -502,6 +507,7 @@ function AutoSizeSectionTextarea({ value, onChange, placeholder, flat = false }:
 
 export function SongChartViewer({
   songId,
+  preferenceScopeId,
   draftStorageId,
   sectionOrder,
   title,
@@ -525,6 +531,8 @@ export function SongChartViewer({
   onDisplayKeyChange,
   footerNavigation,
 }: SongChartViewerProps) {
+  const { user } = useAuth();
+  const displaySettingsStorageKey = `${CHART_SETTINGS_STORAGE_KEY}:${user?.id || 'anonymous'}:${preferenceScopeId || 'all-songs'}`;
   const initialEditorState = useMemo(() => getInitialEditorState(draftStorageId || songId, songId, chordproText), []); // eslint-disable-line react-hooks/exhaustive-deps
   const initialMetadata = parseChordProMetadata(chordproText ?? '');
   const initialDetectedKey = detectChordProKey(chordproText ?? '', initialMetadata.key || songKey || '');
@@ -553,7 +561,7 @@ export function SongChartViewer({
   const [arrangementSaving, setArrangementSaving] = useState(false);
   const [arrangementSaveMessage, setArrangementSaveMessage] = useState<string | null>(null);
   const [clearArrangementConfirmOpen, setClearArrangementConfirmOpen] = useState(false);
-  const [displaySettings, setDisplaySettings] = useState<ChartDisplaySettings>(() => loadChartDisplaySettings());
+  const [displaySettings, setDisplaySettings] = useState<ChartDisplaySettings>(() => loadChartDisplaySettings(displaySettingsStorageKey));
   const [internalAutoScrollEnabled, setInternalAutoScrollEnabled] = useState(false);
   const [savedPreviewChordPro, setSavedPreviewChordPro] = useState<string | null>(null);
   const [previewBaseKey, setPreviewBaseKey] = useState(() => initialSourceChartKey);
@@ -594,6 +602,7 @@ export function SongChartViewer({
   const lyricFontSize = normalizeFontSize(displaySettings.lyricFontSize, DEFAULT_CHART_SETTINGS.lyricFontSize);
   const chordFontSize = normalizeFontSize(displaySettings.chordFontSize, DEFAULT_CHART_SETTINGS.chordFontSize);
   const sectionBadgeFontSize = normalizeFontSize(displaySettings.sectionBadgeFontSize, DEFAULT_CHART_SETTINGS.sectionBadgeFontSize);
+  const noteFontSize = normalizeFontSize(displaySettings.noteFontSize, DEFAULT_CHART_SETTINGS.noteFontSize);
   const autoScrollSpeed = normalizeAutoScrollSpeed(displaySettings.autoScrollSpeed);
   const arrangementOpen = controlledArrangementOpen ?? internalArrangementOpen;
   const setArrangementOpen = useCallback((next: boolean | ((current: boolean) => boolean)) => {
@@ -730,22 +739,40 @@ export function SongChartViewer({
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(CHART_SETTINGS_STORAGE_KEY, JSON.stringify({
+      const nextSettings = {
         ...displaySettings,
         settingsVersion: CHART_SETTINGS_VERSION,
         lyricFontSize,
         chordFontSize,
         sectionBadgeFontSize,
+        noteFontSize,
         autoScrollSpeed,
-      }));
+      };
+      window.localStorage.setItem(displaySettingsStorageKey, JSON.stringify(nextSettings));
+      window.dispatchEvent(new CustomEvent('servesync:chart-display-settings-updated', { detail: { storageKey: displaySettingsStorageKey, settings: nextSettings } }));
     } catch {
       // Display settings are a convenience; the chart should still work if storage is unavailable.
     }
-  }, [autoScrollSpeed, chordFontSize, displaySettings, lyricFontSize, sectionBadgeFontSize]);
+  }, [autoScrollSpeed, chordFontSize, displaySettings, displaySettingsStorageKey, lyricFontSize, noteFontSize, sectionBadgeFontSize]);
+
+  useEffect(() => {
+    setDisplaySettings(loadChartDisplaySettings(displaySettingsStorageKey));
+    const handleSettingsUpdate = (event: globalThis.Event) => {
+      const detail = (event as CustomEvent<{ storageKey: string; settings: ChartDisplaySettings }>).detail;
+      if (detail?.storageKey !== displaySettingsStorageKey) return;
+      setDisplaySettings(current => JSON.stringify(current) === JSON.stringify(detail.settings) ? current : detail.settings);
+    };
+    window.addEventListener('servesync:chart-display-settings-updated', handleSettingsUpdate);
+    return () => window.removeEventListener('servesync:chart-display-settings-updated', handleSettingsUpdate);
+  }, [displaySettingsStorageKey]);
 
   const renderedText = useMemo(() => transposeChordPro(previewChordProText, transpose), [previewChordProText, transpose]);
   const chartLines = useMemo(() => parseChordPro(renderedText), [renderedText]);
   const chartSections = useMemo(() => buildChartSections(chartLines), [chartLines]);
+  const hasDisplayableChartContent = useMemo(
+    () => chartLines.some(line => line.type === 'lyrics' && Boolean(line.chords?.trim() || line.lyrics?.trim())),
+    [chartLines],
+  );
   const sectionOrderLookups = useMemo(() => buildSectionOrderLookups(chartSections), [chartSections]);
   const defaultSectionOrder = useMemo(
     () => chartSections.map(section => sectionOrderLookups.codesByKey.get(section.key)).filter((code): code is string => Boolean(code)),
@@ -1370,7 +1397,7 @@ export function SongChartViewer({
               exit={{ height: 0, opacity: 0, y: -8, scale: 0.98, filter: 'blur(10px)' }}
               transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
             >
-              <div className="grid gap-2 p-2 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-2 p-2 sm:grid-cols-2 xl:grid-cols-5">
                 <div className="grid gap-1.5 rounded-2xl border border-emerald-200/80 bg-emerald-50/70 p-2 shadow-sm shadow-emerald-500/5 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:shadow-emerald-950/10">
                   <span className="flex items-center justify-between text-[12px] font-black uppercase tracking-[0.16em] text-emerald-900 dark:text-emerald-100">
                     Auto Scroll
@@ -1490,6 +1517,16 @@ export function SongChartViewer({
                   <div className={`inline-flex items-center justify-center gap-1.5 rounded-full border px-2.5 py-1.5 font-black uppercase tracking-[0.14em] shadow-sm ${DEFAULT_SECTION_TONE.badge}`} style={{ fontSize: `${sectionBadgeFontSize}px`, lineHeight: 1.15 }}>
                     <span className={`h-2 w-2 rounded-full ${DEFAULT_SECTION_TONE.dot}`} />
                     Section
+                  </div>
+                </div>
+                <div className="grid gap-1.5 rounded-2xl border border-amber-200/80 bg-amber-50/70 p-2 shadow-sm shadow-amber-500/5 dark:border-amber-400/20 dark:bg-amber-500/10 dark:shadow-amber-950/10">
+                  <span className="flex items-center justify-between text-[12px] font-black uppercase tracking-[0.16em] text-amber-900 dark:text-amber-100">
+                    Notes <span className="rounded-full bg-white/80 px-2 py-0.5 font-mono text-[11px] text-amber-700 ring-1 ring-amber-200/80 dark:bg-amber-300/10 dark:text-amber-100 dark:ring-amber-300/20">{noteFontSize}px</span>
+                  </span>
+                  <div className="grid grid-cols-[38px_1fr_38px] items-center gap-1.5 rounded-full border border-black/[0.06] bg-white/80 p-0.5 dark:border-white/[0.08] dark:bg-white/[0.04]">
+                    <button type="button" aria-label="Decrease notes font size" onClick={() => setDisplaySettings(settings => ({ ...settings, noteFontSize: stepFontSize(settings.noteFontSize, -1, DEFAULT_CHART_SETTINGS.noteFontSize) }))} disabled={noteFontSize <= CHART_FONT_SIZE_MIN} className="flex h-8 items-center justify-center rounded-full bg-gray-100 text-gray-600 transition active:scale-[0.96] disabled:opacity-40 dark:bg-white/[0.08] dark:text-white/65"><Minus className="h-3.5 w-3.5" /></button>
+                    <div className="text-center font-black text-amber-950 dark:text-amber-100" style={{ fontFamily: '\"Comic Sans MS\", \"Bradley Hand\", cursive', fontSize: `${noteFontSize}px` }}>Note</div>
+                    <button type="button" aria-label="Increase notes font size" onClick={() => setDisplaySettings(settings => ({ ...settings, noteFontSize: stepFontSize(settings.noteFontSize, 1, DEFAULT_CHART_SETTINGS.noteFontSize) }))} disabled={noteFontSize >= CHART_FONT_SIZE_MAX} className="flex h-8 items-center justify-center rounded-full bg-amber-100 text-amber-800 transition active:scale-[0.96] disabled:opacity-40 dark:bg-amber-500/15 dark:text-amber-200"><Plus className="h-3.5 w-3.5" /></button>
                   </div>
                 </div>
                 <div className="grid gap-1.5 rounded-2xl border border-emerald-200/80 bg-emerald-50/70 p-2 shadow-sm shadow-emerald-500/5 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:shadow-emerald-950/10">
@@ -1758,11 +1795,14 @@ export function SongChartViewer({
           placeholder={`Verse 1\nG                 Em7\nThe splendor of a King, clothed in majesty,\n\nChorus\nG\nHow great is our God, sing with me,`}
           spellCheck={false}
         />
-      ) : chartLines.length === 0 ? (
+      ) : !hasDisplayableChartContent ? (
         <div className="flex flex-1 items-center justify-center p-8 text-center">
-          <div>
-            <p className="text-lg font-bold">No chart saved yet</p>
-            <p className="mt-1 text-sm text-gray-500 dark:text-white/40">Import a SongBook Pro .cho file or paste a ChordPro chart to start.</p>
+          <div className="max-w-sm px-6 py-8">
+            <FileText className="mx-auto h-8 w-8 text-gray-400 dark:text-white/35" />
+            <p className="mt-3 text-lg font-black">No chord chart yet</p>
+            <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-white/50">
+              This song’s chart is blank at the moment. {editable ? 'Add the chords and lyrics when they are ready.' : 'Ask a song leader or admin to add it.'}
+            </p>
             {editable && (
               <button
                 onClick={() => {
@@ -1771,7 +1811,7 @@ export function SongChartViewer({
                 }}
                 className="mt-4 inline-flex h-10 items-center rounded-full bg-emerald-600 px-4 text-sm font-bold text-white transition active:scale-[0.97]"
               >
-                Paste chart
+                Add chart
               </button>
             )}
           </div>
@@ -1850,6 +1890,7 @@ export function SongChartViewer({
                         <button
                           onClick={() => openSectionNote(section.key, section.label, 'self')}
                           className="rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2 text-left text-xs font-semibold leading-relaxed text-sky-900 transition hover:bg-sky-100 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-100"
+                          style={{ fontFamily: '"Comic Sans MS", "Bradley Hand", cursive', fontSize: `${noteFontSize}px` }}
                         >
                           <span className="mb-1 inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-sky-700 dark:text-sky-300"><Lock className="h-3 w-3" /> Private note</span>
                           <span className="block whitespace-pre-wrap">{selfNote}</span>
@@ -1859,6 +1900,7 @@ export function SongChartViewer({
                         <button
                           onClick={() => openSectionNote(section.key, section.label, 'team')}
                           className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-left text-xs font-semibold leading-relaxed text-emerald-950 transition hover:bg-emerald-100 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-50"
+                          style={{ fontFamily: '"Comic Sans MS", "Bradley Hand", cursive', fontSize: `${noteFontSize}px` }}
                         >
                           <span className="mb-1 inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300"><Users className="h-3 w-3" /> Team note</span>
                           <span className="block whitespace-pre-wrap">{teamNote}</span>
@@ -1881,6 +1923,7 @@ export function SongChartViewer({
                             value={noteDraft}
                             onChange={event => setNoteDraft(event.target.value)}
                             className="min-h-28 w-full resize-none rounded-none border-0 bg-transparent px-0 py-1 text-sm font-semibold leading-relaxed text-gray-900 outline-none placeholder:text-gray-400 focus:ring-0 dark:text-white dark:placeholder:text-white/35"
+                            style={{ fontFamily: '"Comic Sans MS", "Bradley Hand", cursive', fontSize: `${noteFontSize}px` }}
                             placeholder={`Add a note for ${section.label.toLowerCase()}...`}
                           />
                           <div className="mt-2 flex justify-end gap-2 border-t border-black/[0.04] pt-2 dark:border-white/[0.06]">
@@ -1901,8 +1944,14 @@ export function SongChartViewer({
                       if (line.type === 'blank') return <div key={index} className="h-4" />;
                       const hasChords = Boolean(line.chords?.trim());
                       const hasLyrics = Boolean(line.lyrics?.trim());
+                      const lineNoteKey = `${section.key}:line:${index}`;
+                      const lineLabel = `${section.label} · line ${index + 1}`;
+                      const lineSelfNote = selfNotes[lineNoteKey];
+                      const lineTeamNote = teamNotes[lineNoteKey]?.note;
+                      const isEditingLineSelf = editingNote?.sectionKey === lineNoteKey && editingNote.scope === 'self';
+                      const isEditingLineTeam = editingNote?.sectionKey === lineNoteKey && editingNote.scope === 'team';
                       return (
-                        <div key={index} className="min-w-0 whitespace-pre-wrap break-words">
+                        <div key={index} className="group/line relative min-w-0 rounded-xl py-1 pr-16 whitespace-pre-wrap break-words transition hover:bg-amber-50/50 dark:hover:bg-amber-300/[0.025]">
                           <AnimatePresence initial={false}>
                             {hasChords && !displaySettings.lyricsOnly && (
                               <motion.div
@@ -1951,6 +2000,9 @@ export function SongChartViewer({
                               {line.lyrics}
                             </div>
                           )}
+                          {songId && <div className={`absolute right-1 top-1 flex items-center gap-1 transition ${lineSelfNote || lineTeamNote || isEditingLineSelf || isEditingLineTeam ? 'opacity-100' : 'opacity-0 group-hover/line:opacity-100 group-focus-within/line:opacity-100'}`}><button type="button" onClick={() => openSectionNote(lineNoteKey, lineLabel, 'self')} aria-label={`Add private note to ${lineLabel}`} title="Private line note" className={`flex h-7 w-7 items-center justify-center rounded-full border ${lineSelfNote ? 'border-sky-300 bg-sky-100 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/15 dark:text-sky-200' : 'border-black/[0.06] bg-white/90 text-gray-400 dark:border-white/[0.08] dark:bg-[#161b18] dark:text-white/40'}`}><Lock className="h-3.5 w-3.5" /></button><button type="button" onClick={() => openSectionNote(lineNoteKey, lineLabel, 'team')} aria-label={`Add team note to ${lineLabel}`} title="Team line note" className={`flex h-7 w-7 items-center justify-center rounded-full border ${lineTeamNote ? 'border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-200' : 'border-black/[0.06] bg-white/90 text-gray-400 dark:border-white/[0.08] dark:bg-[#161b18] dark:text-white/40'}`}><StickyNote className="h-3.5 w-3.5" /></button></div>}
+                          {(lineSelfNote || lineTeamNote) && <div className="mt-1.5 grid gap-1.5">{lineSelfNote && !isEditingLineSelf && <div className="flex max-w-full items-start gap-1.5 text-cyan-500 dark:text-cyan-300"><CornerDownRight aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 stroke-[1.75]" /><button type="button" onClick={() => openSectionNote(lineNoteKey, lineLabel, 'self')} className="w-fit max-w-[calc(100%-1.625rem)] -rotate-[0.25deg] rounded-lg bg-cyan-100 px-3 py-1.5 text-left font-medium leading-relaxed text-cyan-950 shadow-[0_4px_14px_rgba(6,182,212,0.16)] transition hover:bg-cyan-200 dark:bg-cyan-400/20 dark:text-cyan-50 dark:hover:bg-cyan-400/25" style={{ fontFamily: '"Comic Sans MS", "Bradley Hand", cursive', fontSize: `${noteFontSize}px` }}><span className="whitespace-pre-wrap">{lineSelfNote}</span></button></div>}{lineTeamNote && !isEditingLineTeam && <div className="flex max-w-full items-start gap-1.5 text-orange-500 dark:text-orange-300"><CornerDownRight aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 stroke-[1.75]" /><button type="button" onClick={() => openSectionNote(lineNoteKey, lineLabel, 'team')} className="w-fit max-w-[calc(100%-1.625rem)] rotate-[0.2deg] rounded-lg bg-orange-200 px-3 py-1.5 text-left font-medium leading-relaxed text-orange-950 shadow-[0_4px_14px_rgba(249,115,22,0.2)] transition hover:bg-orange-300 dark:bg-orange-400/25 dark:text-orange-50 dark:hover:bg-orange-400/30" style={{ fontFamily: '"Comic Sans MS", "Bradley Hand", cursive', fontSize: `${noteFontSize}px` }}><span className="whitespace-pre-wrap">{lineTeamNote}</span></button></div>}</div>}
+                          {(isEditingLineSelf || isEditingLineTeam) && <div className="mt-2 rounded-xl border border-amber-200 bg-[#fffdf4] p-2 dark:border-amber-500/20 dark:bg-amber-400/[0.06]"><p className="mb-1 text-[9px] font-black uppercase tracking-[0.14em] text-amber-700 dark:text-amber-300">{editingNote.scope === 'self' ? 'Private line note' : 'Team line note'}</p><textarea autoFocus value={noteDraft} onChange={event => setNoteDraft(event.target.value)} rows={3} placeholder="Write a cue or flow note…" className="w-full resize-y border-0 bg-transparent p-0 leading-relaxed text-gray-900 outline-none focus:ring-0 dark:text-white" style={{ fontFamily: '"Comic Sans MS", "Bradley Hand", cursive', fontSize: `${noteFontSize}px` }} /><div className="mt-2 flex justify-end gap-2"><button type="button" onClick={() => setEditingNote(null)} className="h-8 px-3 text-xs font-bold text-gray-500">Cancel</button><button type="button" onClick={saveSectionNote} disabled={notesSaving} className="h-8 rounded-lg bg-amber-500 px-3 text-xs font-black text-amber-950 disabled:opacity-50">{notesSaving ? 'Saving…' : noteDraft.trim() ? 'Save note' : 'Delete'}</button></div></div>}
                         </div>
                       );
                     })}

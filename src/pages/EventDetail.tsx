@@ -7590,6 +7590,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                               >
                                 <SongChartViewer
                                   songId={song.song_id}
+                                  preferenceScopeId={event.id}
                                   draftStorageId={`setlist-song:${song.id}`}
                                   sectionOrder={song.arrangement_section_order}
                                   title={song.songs.title}

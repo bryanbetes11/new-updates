@@ -13,6 +13,7 @@ import {
 export const APP_UPDATE_AVAILABLE_EVENT = 'servesync:app-update-available';
 
 const INSTALLED_APP_VERSION_KEY = 'servesync-installed-app-version';
+const LATEST_WORKER_READY_TIMEOUT_MS = 20_000;
 
 export interface AppVersionManifest {
   version: string;
@@ -104,6 +105,35 @@ function getVersionFromScriptUrl(scriptUrl?: string | null) {
   }
 }
 
+export function getServiceWorkerCacheVersion(scriptUrl?: string | null, baseUrl?: string) {
+  if (!scriptUrl) return null;
+  try {
+    const fallbackBaseUrl = baseUrl || (typeof window !== 'undefined' ? window.location.origin : 'https://servesync.invalid');
+    return new URL(scriptUrl, fallbackBaseUrl).searchParams.get('v');
+  } catch {
+    return null;
+  }
+}
+
+export function serviceWorkerScriptMatchesCacheVersion(
+  scriptUrl: string | null | undefined,
+  cacheVersion: string,
+  baseUrl?: string,
+) {
+  return getServiceWorkerCacheVersion(scriptUrl, baseUrl) === cacheVersion;
+}
+
+function workerMatchesUpdate(
+  worker: ServiceWorker | null | undefined,
+  update: AppVersionManifest | null | undefined,
+) {
+  return Boolean(
+    worker
+    && update
+    && serviceWorkerScriptMatchesCacheVersion(worker.scriptURL, update.cacheVersion),
+  );
+}
+
 function serviceWorkerUrl(manifest: AppVersionManifest) {
   return `/sw.js?v=${encodeURIComponent(manifest.cacheVersion)}&appVersion=${encodeURIComponent(manifest.version)}`;
 }
@@ -160,15 +190,17 @@ function syncInstalledVersion(registration: ServiceWorkerRegistration) {
 }
 
 function markWaitingWorker(registration: ServiceWorkerRegistration, update: PendingAppUpdate) {
+  if (!workerMatchesUpdate(registration.waiting, update)) return false;
   pendingRegistration = registration;
   pendingUpdate = update;
   syncInstalledVersion(registration);
   emitUpdateAvailable(update);
+  return true;
 }
 
 function watchInstallingWorker(registration: ServiceWorkerRegistration, update: PendingAppUpdate) {
   const worker = registration.installing;
-  if (!worker) return;
+  if (!worker || !workerMatchesUpdate(worker, update)) return;
 
   worker.addEventListener('statechange', () => {
     if (worker.state === 'installed' && navigator.serviceWorker.controller) {
@@ -179,9 +211,49 @@ function watchInstallingWorker(registration: ServiceWorkerRegistration, update: 
 
 function attachRegistrationListeners(registration: ServiceWorkerRegistration, update: PendingAppUpdate) {
   syncInstalledVersion(registration);
-  if (registration.waiting) markWaitingWorker(registration, update);
+  markWaitingWorker(registration, update);
   watchInstallingWorker(registration, update);
   registration.addEventListener('updatefound', () => watchInstallingWorker(registration, update));
+}
+
+function waitForMatchingWaitingWorker(
+  registration: ServiceWorkerRegistration,
+  update: PendingAppUpdate,
+) {
+  if (markWaitingWorker(registration, update)) return Promise.resolve(true);
+
+  return new Promise<boolean>(resolve => {
+    let settled = false;
+    const watchedWorkers = new WeakSet<ServiceWorker>();
+
+    const finish = (ready: boolean) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      registration.removeEventListener('updatefound', handleUpdateFound);
+      resolve(ready);
+    };
+
+    const checkRegistration = () => {
+      if (markWaitingWorker(registration, update)) {
+        finish(true);
+        return;
+      }
+
+      const worker = registration.installing;
+      if (!worker || !workerMatchesUpdate(worker, update) || watchedWorkers.has(worker)) return;
+      watchedWorkers.add(worker);
+      worker.addEventListener('statechange', () => {
+        if (worker.state === 'installed') checkRegistration();
+        if (worker.state === 'redundant') checkRegistration();
+      });
+    };
+
+    const handleUpdateFound = () => checkRegistration();
+    const timeout = window.setTimeout(() => finish(false), LATEST_WORKER_READY_TIMEOUT_MS);
+    registration.addEventListener('updatefound', handleUpdateFound);
+    checkRegistration();
+  });
 }
 
 export function getInstalledAppVersion() {
@@ -193,7 +265,7 @@ export function getPendingAppUpdate() {
 }
 
 export function hasPendingAppUpdate() {
-  return Boolean(pendingRegistration?.waiting);
+  return workerMatchesUpdate(pendingRegistration?.waiting, pendingUpdate);
 }
 
 export function shouldRequireAppUpdate() {
@@ -234,7 +306,20 @@ async function performAppUpdateCheck(): Promise<AppUpdateCheckResult> {
       console.warn('Could not download the latest ServeSync app shell:', error);
     }
 
-    if (registration.waiting) markWaitingWorker(registration, update);
+    // The newest worker may already be active if another tab completed the
+    // update first. In that case this page only needs one reload; it must not
+    // fall back to activating an older waiting worker.
+    if (
+      workerMatchesUpdate(navigator.serviceWorker.controller, update)
+      || workerMatchesUpdate(registration.active, update)
+    ) {
+      return { status: 'available', manifest: update };
+    }
+
+    const latestWorkerReady = await waitForMatchingWaitingWorker(registration, update);
+    if (!latestWorkerReady) {
+      throw new Error('The latest ServeSync worker did not finish installing in time');
+    }
     return { status: 'available', manifest: update };
   } catch (error) {
     const normalizedError = error instanceof Error ? error : new Error('Version check failed');
@@ -254,14 +339,57 @@ export function checkForAppUpdate(): Promise<AppUpdateCheckResult> {
 }
 
 export async function applyPendingAppUpdate() {
-  userRequestedUpdate = true;
-  const registration = pendingRegistration || await navigator.serviceWorker.getRegistration();
-  if (registration?.waiting) {
-    registration.waiting.postMessage({ type: 'SKIP_WAITING' });
-    window.setTimeout(() => window.location.reload(), 4000);
-    return;
+  const latestCheck = await checkForAppUpdate();
+
+  if (latestCheck.status === 'unavailable') {
+    console.warn('The latest ServeSync version could not be verified. No older update was applied.');
+    userRequestedUpdate = false;
+    return false;
   }
-  window.location.reload();
+
+  if (latestCheck.status === 'up-to-date') {
+    persistInstalledAppVersion(latestCheck.manifest.version);
+    window.location.reload();
+    return true;
+  }
+
+  const update = latestCheck.manifest;
+  const registration = pendingRegistration || await navigator.serviceWorker.getRegistration();
+
+  // If the exact newest worker is already active, a reload is sufficient to
+  // move this page directly onto it.
+  if (
+    workerMatchesUpdate(navigator.serviceWorker.controller, update)
+    || workerMatchesUpdate(registration?.active, update)
+  ) {
+    persistInstalledAppVersion(update.version);
+    window.location.reload();
+    return true;
+  }
+
+  const waitingWorker = registration?.waiting;
+
+  if (!registration || !update || !waitingWorker || !workerMatchesUpdate(waitingWorker, update)) {
+    console.warn('The latest ServeSync update is not ready yet. The updater will try again shortly.');
+    userRequestedUpdate = false;
+    return false;
+  }
+
+  userRequestedUpdate = true;
+  waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+
+  window.setTimeout(() => {
+    if (!userRequestedUpdate) return;
+    if (workerMatchesUpdate(navigator.serviceWorker.controller, update)) {
+      persistInstalledAppVersion(update.version);
+      window.location.reload();
+      return;
+    }
+
+    userRequestedUpdate = false;
+    void checkForAppUpdate();
+  }, 10_000);
+  return true;
 }
 
 export function registerAppServiceWorker() {
@@ -290,12 +418,16 @@ export function registerAppServiceWorker() {
   window.addEventListener('load', async () => {
     try {
       const registration = await navigator.serviceWorker.register(serviceWorkerUrl(currentManifest));
-      attachRegistrationListeners(registration, toPendingUpdate(currentManifest));
+      // Do not treat a previously waiting worker as the current release. The
+      // manifest check below identifies and prepares the actual latest worker.
+      syncInstalledVersion(registration);
 
       if (!hasRegisteredControllerChangeHandler) {
         navigator.serviceWorker.addEventListener('controllerchange', () => {
           if (!userRequestedUpdate) return;
+          if (!workerMatchesUpdate(navigator.serviceWorker.controller, pendingUpdate)) return;
           persistInstalledAppVersion(pendingUpdate?.version || APP_VERSION);
+          userRequestedUpdate = false;
           window.location.reload();
         });
         hasRegisteredControllerChangeHandler = true;

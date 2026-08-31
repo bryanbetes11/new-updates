@@ -485,7 +485,9 @@ export default function App() {
                 open={showAppUpdate}
                 onUpdate={() => {
                   setApplyingUpdate(true);
-                  void applyPendingAppUpdate();
+                  void applyPendingAppUpdate().then(applied => {
+                    if (!applied) setApplyingUpdate(false);
+                  });
                 }}
                 applying={applyingUpdate}
               />

@@ -24,6 +24,12 @@ assert.doesNotMatch(
 
 assert.match(
   source,
-  /animationDuration: quickOpen && !closing \? '140ms' : undefined/,
-  'quick-opening dialogs must keep a short entrance animation instead of feeling delayed',
+  /const backdropClass = closing \? 'animate-fade-out' : instantOpen \? '' : 'animate-fade-in'/,
+  'instant-opening dialogs must skip the backdrop entrance animation',
+);
+
+assert.match(
+  source,
+  /: instantOpen\s+\? ''\s+: `\$\{isMobilePage/,
+  'instant-opening dialogs must skip their entrance transform and opacity animation',
 );

@@ -51,7 +51,9 @@ export function HomeAppUpdateCard() {
           type="button"
           onClick={() => {
             setInstalling(true);
-            void applyPendingAppUpdate();
+            void applyPendingAppUpdate().then(applied => {
+              if (!applied) setInstalling(false);
+            });
           }}
           disabled={installing}
           className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-emerald-500 px-5 text-[12px] font-black text-white transition-colors hover:bg-emerald-600 disabled:opacity-50"

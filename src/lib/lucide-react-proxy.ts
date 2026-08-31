@@ -48,6 +48,9 @@ export { default as CornerDownRight } from 'lucide-react/dist/esm/icons/corner-d
 export { default as CornerUpLeft } from 'lucide-react/dist/esm/icons/corner-up-left.js';
 export { default as CreditCard } from 'lucide-react/dist/esm/icons/credit-card.js';
 export { default as Crown } from 'lucide-react/dist/esm/icons/crown.js';
+export { default as Drum } from 'lucide-react/dist/esm/icons/drum.js';
+export { default as Guitar } from 'lucide-react/dist/esm/icons/guitar.js';
+export { default as KeyboardMusic } from 'lucide-react/dist/esm/icons/keyboard-music.js';
 export { default as Download } from 'lucide-react/dist/esm/icons/download.js';
 export { default as Edit3 } from 'lucide-react/dist/esm/icons/edit-3.js';
 export { default as ExternalLink } from 'lucide-react/dist/esm/icons/external-link.js';

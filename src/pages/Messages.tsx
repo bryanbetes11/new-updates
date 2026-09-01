@@ -936,7 +936,7 @@ function ConvItem({ conv, selected, myUserId, draft, onSelect, onLongPress }: {
       }}
       aria-pressed={selected}
       style={{ WebkitTouchCallout: 'none' }}
-      className={`select-none touch-pan-y flex min-h-16 w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-400/70 ${
+      className={`select-none touch-pan-y flex min-h-20 w-full items-center gap-3.5 rounded-2xl px-3 py-3.5 text-left transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-400/70 md:min-h-16 md:gap-3 md:py-3 ${
         selected
           ? 'bg-emerald-50 dark:bg-emerald-500/[0.1]'
           : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.04]'
@@ -944,24 +944,20 @@ function ConvItem({ conv, selected, myUserId, draft, onSelect, onLongPress }: {
     >
       <div className="relative shrink-0">
         {conv.type === 'event' && conv.event_id ? (
-          <EventConversationAvatar eventId={conv.event_id} name={name} />
+          <EventConversationAvatar eventId={conv.event_id} name={name} className="h-12 w-12 md:h-10 md:w-10" />
         ) : (
           <Avatar
             src={getConversationAvatarSrc(conv, myUserId)}
             firstName={avatarName.firstName}
             lastName={avatarName.lastName}
             size="md"
+            className="h-12 w-12 md:h-10 md:w-10"
           />
-        )}
-        {conv.unread_count > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 h-4 min-w-[16px] px-0.5 rounded-full bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center">
-            {conv.unread_count > 9 ? '9+' : conv.unread_count}
-          </span>
         )}
       </div>
       <div className="flex-1 min-w-0">
-        <div className="mb-0.5 flex items-center justify-between gap-2">
-          <span className={`flex min-w-0 items-center gap-1.5 text-[13px] ${conv.unread_count > 0 ? 'font-bold text-gray-900 dark:text-white' : 'font-semibold text-gray-800 dark:text-white/80'}`}>
+        <div className="mb-0.5 flex items-center gap-2">
+          <span className={`flex min-w-0 items-center gap-1.5 text-[14px] md:text-[13px] ${conv.unread_count > 0 ? 'font-bold text-gray-900 dark:text-white' : 'font-semibold text-gray-800 dark:text-white/80'}`}>
             <span className="truncate">{listName}</span>
             {eventDateLabel && (
               <span className="min-w-0 truncate font-medium text-inherit" aria-label={`Event date ${eventDateLabel}${conv.event_type ? `, ${conv.event_type}` : ''}`}>
@@ -969,16 +965,25 @@ function ConvItem({ conv, selected, myUserId, draft, onSelect, onLongPress }: {
               </span>
             )}
           </span>
-          {conv.last_message && !eventDateLabel && (
-            <span className="text-[11px] text-gray-400 dark:text-white/30 shrink-0">
-              {formatConvTime(conv.last_message.created_at)}
-            </span>
-          )}
         </div>
-        <p className={`truncate text-[12px] ${draft.trim() ? 'font-semibold text-rose-500 dark:text-rose-400' : conv.unread_count > 0 ? 'text-gray-700 dark:text-white/70 font-medium' : 'text-gray-400 dark:text-white/35'}`}>
+        <p className={`truncate text-[13px] md:text-[12px] ${draft.trim() ? 'font-semibold text-rose-500 dark:text-rose-400' : conv.unread_count > 0 ? 'text-gray-700 dark:text-white/70 font-medium' : 'text-gray-400 dark:text-white/35'}`}>
           {draft.trim() ? `Draft: ${draft.trim()}` : isMyLast ? `You: ${lastContent}` : lastContent}
         </p>
       </div>
+      {(conv.unread_count > 0 || conv.last_message) && (
+        <div className="flex shrink-0 flex-col items-end justify-center gap-1.5 self-stretch py-0.5">
+          {conv.last_message && (
+            <span className="whitespace-nowrap text-[11px] text-gray-400 dark:text-white/30">
+              {formatConvTime(conv.last_message.created_at)}
+            </span>
+          )}
+          {conv.unread_count > 0 && (
+            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-black leading-none text-white shadow-sm">
+              {conv.unread_count > 9 ? '9+' : conv.unread_count}
+            </span>
+          )}
+        </div>
+      )}
     </button>
   );
 }

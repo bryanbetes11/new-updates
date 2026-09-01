@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Music2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, CheckCircle, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../contexts/ToastContext';
@@ -153,12 +153,7 @@ export function ResetPassword() {
           <div className="absolute bottom-[-5%] left-[-8%] w-[400px] h-[400px] rounded-full bg-emerald-400/[0.06] blur-[80px]" />
         </div>
         <div className="relative flex items-center gap-3">
-          <div
-            className="h-9 w-9 rounded-[22%] flex items-center justify-center"
-            style={{ background: 'linear-gradient(145deg, #1e3a1e 0%, #0d1a0d 100%)', boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}
-          >
-            <Music2 className="text-emerald-400" style={{ width: 18, height: 18 }} />
-          </div>
+          <img src="/logo.png" alt="" className="h-9 w-9 rounded-[22%] object-cover shadow-lg" />
           <div>
             <p className="text-[14px] font-bold text-white leading-tight tracking-tight">ServeSync</p>
             <p className="text-[10px] font-semibold text-emerald-500/70 uppercase tracking-widest">Team Portal</p>
@@ -183,9 +178,7 @@ export function ResetPassword() {
       {/* Right form panel */}
       <div className="flex-1 flex flex-col">
         <div className="lg:hidden flex items-center gap-2.5 px-6 pt-14 pb-2">
-          <div className="h-8 w-8 rounded-[22%] flex items-center justify-center" style={{ background: 'linear-gradient(145deg, #1e2a1e 0%, #0d1a0d 100%)' }}>
-            <Music2 className="text-emerald-400" style={{ width: 16, height: 16 }} />
-          </div>
+          <img src="/logo.png" alt="" className="h-8 w-8 rounded-[22%] object-cover" />
           <span className="text-[14px] font-bold text-white tracking-tight">ServeSync</span>
         </div>
 

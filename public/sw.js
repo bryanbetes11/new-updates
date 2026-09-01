@@ -57,8 +57,8 @@ self.addEventListener('push', function(event) {
 
   const options = {
     body: data.body || '',
-    icon: '/icon.svg',
-    badge: '/icon.svg',
+    icon: '/pwa-icon-192.png',
+    badge: '/favicon-64.png',
     vibrate: [100, 50, 100],
     data: data.data || {},
     actions: data.actions || [],

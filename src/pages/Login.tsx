@@ -117,7 +117,7 @@ export function Login() {
         </div>
 
         <div className="relative flex items-center gap-3">
-          <img src="/logo.png" alt="ServeSync" className="h-12 w-12 shrink-0 rounded-2xl bg-black/40 object-contain p-2 shadow-[0_18px_40px_-24px_rgba(34,197,94,0.8)]" />
+          <img src="/servesync-mark-transparent.png" alt="ServeSync" className="h-12 w-12 shrink-0 object-contain drop-shadow-[0_0_18px_rgba(34,197,94,0.28)]" />
           <div>
             <p className="text-[18px] font-black leading-tight tracking-[-0.04em] text-white">ServeSync</p>
             <p className="text-[10px] font-black uppercase tracking-[0.28em] leading-tight text-emerald-300/70">Team Portal</p>
@@ -159,7 +159,7 @@ export function Login() {
 
       <main className="relative flex min-h-screen flex-col lg:ml-[48%]">
         <div className="flex items-center gap-3 px-6 pt-14 pb-2 lg:hidden">
-          <img src="/logo.png" alt="ServeSync" className="h-12 w-12 shrink-0 rounded-2xl bg-black/40 object-contain p-2" />
+          <img src="/servesync-mark-transparent.png" alt="ServeSync" className="h-12 w-12 shrink-0 object-contain" />
           <span className="text-[26px] font-black tracking-[-0.055em] text-white">ServeSync</span>
         </div>
 

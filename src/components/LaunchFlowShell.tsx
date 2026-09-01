@@ -48,7 +48,7 @@ export function LaunchFlowShell({
             </button>
           ) : <span />}
           <Link to="/" className="inline-flex items-center gap-2.5 rounded-full px-2 py-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1ed760]/70">
-            <img src="/servesync-logo-new.png" alt="" className="h-8 w-8 rounded-lg" />
+            <img src="/logo.png" alt="" className="h-8 w-8 rounded-lg object-cover" />
             <span className="text-[11px] font-black uppercase tracking-[0.24em] text-white/72">ServeSync</span>
           </Link>
         </header>

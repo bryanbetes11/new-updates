@@ -1564,12 +1564,12 @@ export function Navigation({
           className="flex min-w-[170px] items-center gap-3 text-left"
           aria-label="Go to dashboard"
         >
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center">
             <img
-              src="/generated/servesync-mark-dark.png"
+              src="/servesync-mark-transparent.png"
               alt=""
               aria-hidden="true"
-              className="h-8 w-8 object-contain brightness-0 invert drop-shadow-[0_0_14px_rgba(255,255,255,0.14)]"
+              className="h-11 w-11 object-contain drop-shadow-[0_0_16px_rgba(74,222,128,0.24)]"
             />
           </span>
           <span className="min-w-0">

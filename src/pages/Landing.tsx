@@ -171,9 +171,7 @@ function Nav({ onSignIn, onStartFree }: { onSignIn: () => void; onStartFree: () 
         style={{ backdropFilter: 'blur(14px)', background: scrolled ? 'rgba(7,16,26,0.92)' : 'rgba(14,26,38,0.70)' }}
       >
         <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-[9px] bg-white flex items-center justify-center shrink-0">
-            <Music2 className="h-4 w-4 text-[#07101a]" />
-          </div>
+          <img src="/logo.png" alt="" className="h-8 w-8 shrink-0 rounded-[9px] object-cover" />
           <span className="font-semibold text-[#eef3f8] text-sm">ServeSync</span>
         </div>
 
@@ -850,9 +848,7 @@ export function Landing() {
         <Wrap className="py-8">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
             <div className="flex items-center gap-3">
-              <div className="h-7 w-7 rounded-[7px] bg-white flex items-center justify-center shrink-0">
-                <Music2 className="h-3.5 w-3.5 text-[#07101a]" />
-              </div>
+              <img src="/logo.png" alt="" className="h-7 w-7 shrink-0 rounded-[7px] object-cover" />
               <div>
                 <div className="text-[14px] font-bold text-[#eef3f8]">ServeSync</div>
                 <div className="font-mono text-[10px] text-white/35">© 2026 · Worship team workspace</div>

@@ -61,7 +61,7 @@ type EventPreview = {
   title: string;
 };
 
-const fallbackImagePath = '/servesync-logo-latest.png?v=2026-05-10-pwa-update-flow-v2';
+const fallbackImagePath = '/servesync-app-icon.png?v=2026-09-01-brand-icon-v1';
 
 function escapeHtml(value: string) {
   return value

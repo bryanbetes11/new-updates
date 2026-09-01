@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Eye, EyeOff, LockKeyhole, LogOut, Shield, ArrowRight } from 'lucide-react';
+import { Eye, EyeOff, LogOut, Shield, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -95,9 +95,7 @@ export function PlatformPortal({ view = 'dashboard' }: PlatformPortalProps) {
         </div>
 
         <div className="relative flex items-center gap-3">
-          <div className="h-10 w-10 rounded-[24%] flex items-center justify-center bg-white/[0.05] border border-white/[0.08] text-emerald-400">
-            <LockKeyhole className="h-5 w-5" />
-          </div>
+          <img src="/logo.png" alt="" className="h-10 w-10 rounded-[24%] object-cover" />
           <div>
             <p className="text-[14px] font-bold text-white tracking-tight">ServeSync Platform</p>
             <p className="text-[10px] font-semibold text-emerald-500/70 uppercase tracking-widest">Owner Portal</p>
@@ -139,9 +137,7 @@ export function PlatformPortal({ view = 'dashboard' }: PlatformPortalProps) {
       <div className="flex-1 flex items-center justify-center px-6 sm:px-10 py-12 bg-[#060709]">
         <div className="w-full max-w-[380px]">
           <div className="lg:hidden flex items-center gap-2.5 mb-8">
-            <div className="h-8 w-8 rounded-[24%] flex items-center justify-center bg-white/[0.05] border border-white/[0.08] text-emerald-400">
-              <LockKeyhole className="h-4 w-4" />
-            </div>
+            <img src="/logo.png" alt="" className="h-8 w-8 rounded-[24%] object-cover" />
             <span className="text-[14px] font-bold text-white tracking-tight">ServeSync Platform</span>
           </div>
 

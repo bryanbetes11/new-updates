@@ -799,7 +799,7 @@ export function Profile() {
             <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3.5">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-500/[0.10] dark:text-emerald-300">
-                  <img src="/generated/servesync-mark-light.png" alt="" className="h-9 w-9 object-contain" />
+                  <img src="/logo.png" alt="" className="h-9 w-9 rounded-xl object-cover" />
                 </div>
                 <div className="min-w-0">
                   <p className="text-[15px] font-black tracking-[-0.02em] text-gray-950 dark:text-white">ServeSync {APP_VERSION_LABEL}</p>

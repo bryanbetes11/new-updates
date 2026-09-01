@@ -152,15 +152,9 @@ export function PageLoader() {
           <div className="absolute -right-1 top-10 h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_20px_rgba(74,222,128,0.9)] animate-pulse" />
           <div className="absolute bottom-10 left-0 h-2 w-2 rounded-full bg-emerald-300/80 shadow-[0_0_16px_rgba(134,239,172,0.75)] animate-pulse" style={{ animationDelay: '0.8s' }} />
           <img
-            src="/generated/servesync-mark-dark.png"
+            src="/servesync-mark-transparent.png"
             alt="ServeSync"
-            className="relative h-28 w-28 object-contain drop-shadow-[0_16px_28px_rgba(15,23,42,0.2)] dark:hidden sm:h-32 sm:w-32"
-          />
-          <img
-            src="/generated/servesync-mark-light.png"
-            alt=""
-            aria-hidden="true"
-            className="relative hidden h-28 w-28 object-contain drop-shadow-[0_0_30px_rgba(74,222,128,0.22)] dark:block sm:h-32 sm:w-32"
+            className="relative h-28 w-28 object-contain drop-shadow-[0_16px_28px_rgba(15,23,42,0.2)] dark:drop-shadow-[0_0_30px_rgba(74,222,128,0.22)] sm:h-32 sm:w-32"
           />
         </div>
 

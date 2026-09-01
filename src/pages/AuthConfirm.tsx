@@ -89,7 +89,7 @@ export function AuthConfirm() {
 
       <main className="relative mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center px-6 py-14">
         <div className="mb-10 flex items-center gap-3">
-          <img src="/logo.png" alt="ServeSync" className="h-11 w-11 rounded-2xl bg-black/40 object-contain p-2" />
+          <img src="/logo.png" alt="ServeSync" className="h-11 w-11 rounded-2xl object-cover" />
           <span className="text-xl font-black tracking-[-0.04em]">ServeSync</span>
         </div>
 

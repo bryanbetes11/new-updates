@@ -73,6 +73,7 @@ interface SongLeaderProfile {
 
 interface SongLeaderAssignmentRow {
   event_id: string;
+  user_id: string;
   profiles?: SongLeaderProfile | SongLeaderProfile[] | null;
 }
 
@@ -167,6 +168,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   const location = useLocation();
   const { toast } = useToast();
   const [setlists, setSetlists] = useState<SetlistWithEvent[]>([]);
+  const [songLeaderUserByEvent, setSongLeaderUserByEvent] = useState<Record<string, string>>({});
   const [songUsages, setSongUsages] = useState<SongUsage[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -225,7 +227,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   const canManageSongLibrary = isOrgAdmin || isAdmin || isPlatformOwner;
   const openChartStorageKey = user?.id ? `${SONG_CHART_OPEN_STORAGE_PREFIX}:${user.id}` : '';
   const ownerFilter = new URLSearchParams(location.search).get('owner');
-  const showMyCreatedSets = !isSongsOnly && ownerFilter === 'me';
+  const showMySongLeaderSets = !isSongsOnly && ownerFilter === 'me';
 
   useEffect(() => {
     const state = location.state as { openModal?: string } | null;
@@ -242,7 +244,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
         .eq('status', 'approved')
         .order('created_at', { ascending: false }),
       supabase.from('songs').select('id, title, artist, song_key, created_by, youtube_url, lyrics, chordpro_text').order('title'),
-      supabase.from('event_assignments').select('event_id, profiles(first_name, last_name, nickname, gender, avatar_url), roles!inner(name)').eq('roles.name', 'Song Leader'),
+      supabase.from('event_assignments').select('event_id, user_id, profiles(first_name, last_name, nickname, gender, avatar_url), roles!inner(name)').eq('roles.name', 'Song Leader'),
     ]);
 
     const approvedSetlists = (setlistRes.data || []) as unknown as SetlistWithEvent[];
@@ -250,7 +252,9 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
 
     const slMap: Record<string, string> = {};
     const slAvatarMap: Record<string, { avatarUrl: string | null; firstName: string; lastName: string }> = {};
+    const slUserMap: Record<string, string> = {};
     ((songLeadersRes.data || []) as SongLeaderAssignmentRow[]).forEach((a) => {
+      slUserMap[a.event_id] = a.user_id;
       const leaderProfile = Array.isArray(a.profiles) ? a.profiles[0] : a.profiles;
       if (leaderProfile) {
         const prefix = leaderProfile.gender === 'male' ? 'Bro.' : leaderProfile.gender === 'female' ? 'Sis.' : '';
@@ -264,6 +268,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
     });
     setSongLeaderMap(slMap);
     setSongLeaderAvatarMap(slAvatarMap);
+    setSongLeaderUserByEvent(slUserMap);
 
     const songs = songsRes.data || [];
     const usages = buildSongUsages({
@@ -1316,8 +1321,8 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
     });
   };
 
-  const visibleSetlists = showMyCreatedSets && user?.id
-    ? setlists.filter(setlist => setlist.created_by === user.id)
+  const visibleSetlists = showMySongLeaderSets && user?.id
+    ? setlists.filter(setlist => songLeaderUserByEvent[setlist.event_id] === user.id)
     : setlists;
 
   const filteredSetlists = filterSetlistsBySearch(visibleSetlists, search, songLeaderMap);
@@ -1328,7 +1333,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
     return (b.events?.event_date ?? '').localeCompare(a.events?.event_date ?? '');
   });
 
-  const setlistResultKey = JSON.stringify([search, sortKey, showMyCreatedSets, sortedSetlists.length]);
+  const setlistResultKey = JSON.stringify([search, sortKey, showMySongLeaderSets, sortedSetlists.length]);
   const visibleSetlistLimit = setlistPage.resultKey === setlistResultKey
     ? setlistPage.limit
     : SETLIST_PAGE_SIZE;
@@ -1521,7 +1526,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                     setSelectedSetlists(new Set());
                   }}
                   aria-label="Search approved sets"
-                  placeholder={showMyCreatedSets ? 'Search my sets by song, event, artist…' : 'Search sets by song, leader, event, artist…'}
+                  placeholder={showMySongLeaderSets ? 'Search my sets by song, event, artist…' : 'Search sets by song, leader, event, artist…'}
                   className="w-full h-12 pl-10 pr-9 rounded-full text-[13px] bg-white/[0.055] border border-white/[0.08] text-white placeholder-white/30 outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/50 transition-all"
                 />
                 {search && (
@@ -1626,11 +1631,11 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                 <div className="px-5 py-10 text-center">
                   <Search className="mx-auto h-6 w-6 text-gray-300 dark:text-white/20" />
                   <p className="mt-3 text-sm font-bold text-gray-900 dark:text-white">
-                    {showMyCreatedSets ? 'No sets created by you yet' : 'No sets found'}
+                    {showMySongLeaderSets ? 'No Song Leader sets assigned to you yet' : 'No sets found'}
                   </p>
                   <p className="mt-1 text-xs text-gray-400 dark:text-white/35">
-                    {showMyCreatedSets
-                      ? 'Sets you create from event pages will show here.'
+                    {showMySongLeaderSets
+                      ? 'Approved sets appear here when you are the event’s Song Leader.'
                       : 'Try another song title, artist, event, or song leader.'}
                   </p>
                 </div>

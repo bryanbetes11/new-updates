@@ -905,7 +905,7 @@ export function Navigation({
     },
     {
       title: "My Sets",
-      caption: "Created by me",
+      caption: "As Song Leader",
       path: "/sets?owner=me",
       tone: "from-indigo-500/45 to-indigo-950/55",
       icon: ListChecks,

@@ -1,15 +1,29 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { format, isAfter, parseISO, startOfToday } from 'date-fns';
-import { AlertCircle, ArrowLeftRight, Calendar, CheckCircle, ChevronRight, Clock, ListChecks, Music, X } from 'lucide-react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { format, parseISO } from 'date-fns';
+import { AlertCircle, ArrowLeftRight, Calendar, CheckCircle, Clock, ListChecks, Music, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { PageLoader } from '../components/LoadingSpinner';
 import { formatTime12Hour } from '../lib/timeFormat';
 import { SwapRequestModal } from '../components/SwapRequestModal';
+import { useToast } from '../contexts/ToastContext';
+import { dispatchBadgeCountsRefresh } from '../lib/realtimeSignals';
+import { EventTypeLabel } from '../components/EventTypeLabel';
+import { EventDateChip } from '../components/EventDateChip';
+import { Modal } from '../components/Modal';
 import type { EventAssignment, SwapRequest } from '../types';
 
 type Filter = 'all' | 'confirmed' | 'pending' | 'declined';
+
+export function shouldShowInMyAssignments(assignment: EventAssignment, today: string) {
+  const eventDate = assignment.events?.event_date;
+  if (!eventDate) return false;
+
+  // Keep unresolved assignments actionable even after their event date. Once
+  // resolved, historical assignments belong in the event/attendance history.
+  return assignment.status === 'pending' || eventDate >= today;
+}
 
 const STATUS_CONFIG = {
   confirmed: { label: 'Confirmed', dot: '#16a34a', bg: 'bg-green-50 dark:bg-green-950/60',   text: 'text-green-700 dark:text-green-400', ring: 'ring-green-200 dark:ring-green-700/40' },
@@ -19,7 +33,9 @@ const STATUS_CONFIG = {
 
 export function MyAssignments() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [assignments, setAssignments] = useState<EventAssignment[]>([]);
@@ -29,6 +45,8 @@ export function MyAssignments() {
   const [swapModalAssignment, setSwapModalAssignment] = useState<EventAssignment | null>(null);
   const [sentSwapRequests, setSentSwapRequests] = useState<SwapRequest[]>([]);
   const [cancellingSwap, setCancellingSwap] = useState<string | null>(null);
+  const [confirmingAssignmentId, setConfirmingAssignmentId] = useState<string | null>(null);
+  const [confirmModalAssignment, setConfirmModalAssignment] = useState<EventAssignment | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -38,17 +56,21 @@ export function MyAssignments() {
       setLoadError(null);
       setLoading(true);
       try {
-        const today = startOfToday().toISOString().split('T')[0];
+        const today = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Manila',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        }).format(new Date());
         const { data, error } = await supabase
           .from('event_assignments')
           .select('*, events(*), roles(*)')
           .eq('user_id', user.id)
-          .gte('events.event_date', today)
           .order('created_at', { ascending: false });
         if (error) throw error;
 
         const list = ((data || []) as EventAssignment[])
-          .filter(a => a.events && isAfter(parseISO(a.events.event_date), startOfToday()))
+          .filter(a => shouldShowInMyAssignments(a, today))
           .sort((a, b) => parseISO(a.events!.event_date).getTime() - parseISO(b.events!.event_date).getTime());
 
         setAssignments(list);
@@ -94,6 +116,39 @@ export function MyAssignments() {
 
   const filtered = filter === 'all' ? assignments : assignments.filter(a => a.status === filter);
 
+  const handleConfirm = async (assignment: EventAssignment) => {
+    if (!user?.id || confirmingAssignmentId) return;
+
+    setConfirmingAssignmentId(assignment.id);
+    try {
+      const { data, error } = await supabase
+        .from('event_assignments')
+        .update({ status: 'confirmed', confirmed_at: new Date().toISOString(), decline_reason: null })
+        .eq('id', assignment.id)
+        .eq('user_id', user.id)
+        .select('id, status')
+        .maybeSingle();
+
+      if (error || data?.status !== 'confirmed') {
+        toast('error', error?.message || 'Could not confirm this assignment');
+        return;
+      }
+
+      setAssignments(current => current.map(item => (
+        item.id === assignment.id
+          ? { ...item, status: 'confirmed', confirmed_at: new Date().toISOString(), decline_reason: '' }
+          : item
+      )));
+      dispatchBadgeCountsRefresh();
+      toast('success', 'Assignment confirmed');
+      setConfirmModalAssignment(null);
+    } catch {
+      toast('error', 'Could not confirm this assignment');
+    } finally {
+      setConfirmingAssignmentId(null);
+    }
+  };
+
   const handleCancelSwap = async (swapId: string) => {
     setCancellingSwap(swapId);
     await supabase.from('user_availability').update({ status: 'withdrawn' }).eq('id', swapId);
@@ -121,7 +176,7 @@ export function MyAssignments() {
 
   return (
     <>
-    <div className="page-container page-bottom-pad">
+    <div className="page-container page-bottom-pad profile-page-scroll">
       <div className="app-content-shell space-y-6 pb-6 pt-4 sm:pt-5">
 
         {/* Header */}
@@ -135,7 +190,7 @@ export function MyAssignments() {
             My Assignments
           </h1>
           <p className="mt-2 text-[13px] text-gray-500 dark:text-white/40 font-light">
-            Your upcoming event assignments and serving schedule.
+            Your upcoming schedule and any assignments still awaiting your response.
           </p>
         </div>
 
@@ -162,12 +217,9 @@ export function MyAssignments() {
         </div>
 
         {/* Assignment list */}
-        <div
-          className="rounded-3xl overflow-hidden animate-slide-up border border-gray-200/80 dark:border-white/[0.06]"
-          style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 28px -16px rgba(15,23,42,0.12)' }}
-        >
+        <div className="animate-slide-up">
           {/* List header */}
-          <div className="flex items-center gap-2.5 px-5 py-4 bg-white dark:bg-white/[0.025] border-b border-gray-100 dark:border-white/[0.06]">
+          <div className="flex items-center gap-2.5 border-b border-gray-200/80 px-1 py-4 dark:border-white/[0.08]">
             <div className="h-7 w-7 rounded-lg bg-brand-50 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400 flex items-center justify-center">
               <Music className="h-3.5 w-3.5" />
             </div>
@@ -204,29 +256,24 @@ export function MyAssignments() {
               </p>
             </div>
           ) : (
-            <div className="divide-y divide-gray-100 dark:divide-white/[0.05] bg-white dark:bg-white/[0.025]">
+            <div className="divide-y divide-gray-200/70 dark:divide-white/[0.07]">
               {filtered.map(a => {
                 const cfg = STATUS_CONFIG[a.status as keyof typeof STATUS_CONFIG];
                 return (
                   <div
                     key={a.id}
-                    className="group flex w-full items-stretch transition-colors duration-150 hover:bg-gray-50 dark:hover:bg-white/[0.03]"
+                    className="group flex w-full items-stretch gap-2 pr-2 transition-colors duration-150 hover:bg-gray-50 dark:hover:bg-white/[0.03]"
                   >
                     <button
                       type="button"
-                      onClick={() => navigate(`/events/${a.event_id}`)}
+                      onClick={() => navigate(`/events/${a.event_id}`, {
+                        state: { returnTo: `${location.pathname}${location.search}` },
+                      })}
                       className="flex min-w-0 flex-1 items-center gap-4 py-4 pl-5 text-left"
                       aria-label={`Open ${a.events?.title || 'event'} assignment`}
                     >
                     {/* Date tile */}
-                    <div className="flex flex-col items-center justify-center h-12 w-12 rounded-xl bg-brand-50 dark:bg-brand-900/25 text-brand-700 dark:text-brand-300 shrink-0">
-                      <span className="font-mono text-[9px] font-semibold uppercase leading-none">
-                        {a.events?.event_date && format(parseISO(a.events.event_date), 'MMM')}
-                      </span>
-                      <span className="font-mono text-[20px] font-bold leading-none mt-0.5">
-                        {a.events?.event_date && format(parseISO(a.events.event_date), 'd')}
-                      </span>
-                    </div>
+                    {a.events?.event_date && <EventDateChip date={a.events.event_date} compact />}
 
                     {/* Content */}
                     <div className="min-w-0 flex-1">
@@ -240,6 +287,11 @@ export function MyAssignments() {
                       </div>
                       <p className="text-[13px] text-gray-600 dark:text-white/55 mb-1.5">
                         {a.roles?.name}
+                        {a.events?.event_type && (
+                          <span className="ml-2 inline-flex align-middle">
+                            <EventTypeLabel type={a.events.event_type} filled />
+                          </span>
+                        )}
                       </p>
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
                         <span className="inline-flex items-center gap-1 font-mono text-[10px] text-gray-400 dark:text-white/30 uppercase tracking-wide">
@@ -268,18 +320,29 @@ export function MyAssignments() {
                           {cfg.label}
                         </span>
                       )}
-                      <ChevronRight className="h-4 w-4 text-gray-300 dark:text-white/20 group-hover:text-gray-500 dark:group-hover:text-white/40 transition-colors" />
                     </div>
                     </button>
+                    {a.status === 'pending' && (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmModalAssignment(a)}
+                        disabled={confirmingAssignmentId !== null}
+                        className="inline-flex h-8 min-h-0 shrink-0 self-center items-center justify-center rounded-lg bg-brand-500 px-2.5 text-[10px] font-bold text-white transition hover:bg-brand-400 disabled:cursor-wait disabled:opacity-55"
+                        aria-label={`Confirm ${a.events?.title || 'assignment'}`}
+                      >
+                        {confirmingAssignmentId === a.id ? 'Confirming…' : 'Confirm'}
+                      </button>
+                    )}
                     {a.status !== 'declined' && (
                       <button
                         type="button"
                         title={a.roles?.name === 'Song Leader' ? 'Request Schedule Swap' : 'Find a Sub'}
                         aria-label={a.roles?.name === 'Song Leader' ? `Request a schedule swap for ${a.events?.title || 'this event'}` : `Find a substitute for ${a.events?.title || 'this event'}`}
                         onClick={() => setSwapModalAssignment(a)}
-                        className="mr-2 flex h-11 w-11 shrink-0 self-center items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-brand-50 hover:text-brand-600 dark:text-white/30 dark:hover:bg-brand-900/20 dark:hover:text-brand-400"
+                        className="inline-flex h-8 min-h-0 shrink-0 self-center items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 text-[10px] font-bold text-gray-600 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 dark:border-white/[0.09] dark:bg-white/[0.04] dark:text-white/55 dark:hover:border-brand-500/35 dark:hover:bg-brand-500/[0.10] dark:hover:text-brand-300"
                       >
-                        <ArrowLeftRight className="h-4 w-4" />
+                        <ArrowLeftRight className="h-3.5 w-3.5" />
+                        <span>{a.roles?.name === 'Song Leader' ? 'Swap' : 'Sub'}</span>
                       </button>
                     )}
                   </div>
@@ -370,11 +433,82 @@ export function MyAssignments() {
 
       </div>
     </div>
-    <SwapRequestModal
+      <SwapRequestModal
       open={!!swapModalAssignment}
       onClose={() => setSwapModalAssignment(null)}
       myAssignment={swapModalAssignment}
-    />
-  </>
+      />
+      <Modal
+        open={confirmModalAssignment !== null}
+        onClose={() => {
+          if (!confirmingAssignmentId) setConfirmModalAssignment(null);
+        }}
+        title="Confirm Assignment"
+        size="sm"
+        mobileView="dialog"
+        closeOnBackdrop={!confirmingAssignmentId}
+        closeOnEscape={!confirmingAssignmentId}
+        footer={confirmModalAssignment ? (
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setConfirmModalAssignment(null)}
+              disabled={confirmingAssignmentId !== null}
+              className="h-11 flex-1 rounded-xl border border-gray-200 text-sm font-bold text-gray-600 transition hover:bg-gray-50 disabled:opacity-50 dark:border-white/[0.08] dark:text-white/55 dark:hover:bg-white/[0.05]"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleConfirm(confirmModalAssignment)}
+              disabled={confirmingAssignmentId !== null}
+              className="h-11 flex-[1.25] rounded-xl bg-brand-500 text-sm font-black text-white transition hover:bg-brand-400 disabled:cursor-wait disabled:opacity-60"
+            >
+              {confirmingAssignmentId ? 'Confirming…' : 'Confirm Assignment'}
+            </button>
+          </div>
+        ) : undefined}
+      >
+        {confirmModalAssignment?.events && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-4 rounded-2xl border border-gray-200/80 bg-gray-50/70 p-4 dark:border-white/[0.07] dark:bg-white/[0.035]">
+              <EventDateChip date={confirmModalAssignment.events.event_date} />
+              <div className="min-w-0 flex-1">
+                <p className="text-base font-black leading-tight text-gray-900 dark:text-white">
+                  {confirmModalAssignment.events.title}
+                </p>
+                <div className="mt-2">
+                  <EventTypeLabel type={confirmModalAssignment.events.event_type} filled />
+                </div>
+              </div>
+            </div>
+
+            <dl className="divide-y divide-gray-100 rounded-2xl border border-gray-200/80 px-4 dark:divide-white/[0.06] dark:border-white/[0.07]">
+              <div className="flex items-center justify-between gap-4 py-3">
+                <dt className="text-xs font-semibold text-gray-500 dark:text-white/40">Your role</dt>
+                <dd className="text-right text-sm font-bold text-gray-900 dark:text-white">{confirmModalAssignment.roles?.name}</dd>
+              </div>
+              <div className="flex items-center justify-between gap-4 py-3">
+                <dt className="text-xs font-semibold text-gray-500 dark:text-white/40">Date</dt>
+                <dd className="text-right text-sm font-bold text-gray-900 dark:text-white">
+                  {format(parseISO(confirmModalAssignment.events.event_date), 'EEEE, MMMM d, yyyy')}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-4 py-3">
+                <dt className="text-xs font-semibold text-gray-500 dark:text-white/40">Time</dt>
+                <dd className="text-right text-sm font-bold text-gray-900 dark:text-white">
+                  {formatTime12Hour(confirmModalAssignment.events.start_time)}
+                  {confirmModalAssignment.events.end_time ? ` – ${formatTime12Hour(confirmModalAssignment.events.end_time)}` : ''}
+                </dd>
+              </div>
+            </dl>
+
+            <p className="mx-auto max-w-[19rem] text-balance text-center text-xs leading-relaxed text-gray-500 dark:text-white/40">
+              Confirming means you are available and committed to serve in this role.
+            </p>
+          </div>
+        )}
+      </Modal>
+    </>
   );
 }

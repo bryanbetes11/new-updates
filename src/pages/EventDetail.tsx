@@ -4,7 +4,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { addDays, format, parseISO, differenceInDays } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { animate, motion, useMotionValue, AnimatePresence, useReducedMotion, type PanInfo } from 'framer-motion';
-import { ArrowLeft, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, ListOrdered, Pause, Play, Settings2, MoreHorizontal, Upload, Calendar, Loader2, BellRing, Eye, EyeOff, Lock, Wifi, WifiOff, Smile, Guitar, Drum, KeyboardMusic, Mic, Crown } from 'lucide-react';
+import { ArrowLeft, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, ListOrdered, Pause, Play, Settings2, MoreHorizontal, Upload, Calendar, CalendarOff, Loader2, BellRing, Eye, EyeOff, Lock, Wifi, WifiOff, Smile, Guitar, Drum, KeyboardMusic, Mic, Crown } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -42,6 +42,7 @@ import { playInteractionSound } from '../lib/interactionSounds';
 import { projectSongReadiness, SONG_READINESS_RULE_DAYS } from '../lib/songReadiness';
 import { DEFAULT_STAGE_REQUEST_MESSAGES, DEFAULT_TECH_MODE_MESSAGES, getTechMessageGroup, loadStageRequestMessages, loadTechModeMessages, type TechModeMessages } from '../lib/techModeMessages';
 import { TechModeMessageSettings } from '../components/TechModeMessageSettings';
+import { getOutMemberIdsForDate, type MemberAvailabilityWindow } from '../lib/memberAvailability';
 
 import type { Event, EventAssignment, Setlist, SetlistSong, Song, ServiceFormat, SetlistCheckReport, PostEventObservation, PostEventObservationCategory, PostEventObservationStatus, PostEventObservationView } from '../types';
 import { inferServiceFormat, SERVICE_FORMAT_LABELS } from '../lib/setlistCheckerEngine';
@@ -547,10 +548,20 @@ function useArtworkAmbientColors(urls: string[]) {
   return colors;
 }
 
+function getEventReturnRoute(state: unknown) {
+  if (!state || typeof state !== 'object') return '/events';
+  const returnTo = (state as { returnTo?: unknown }).returnTo;
+  if (typeof returnTo !== 'string' || !returnTo.startsWith('/') || returnTo.startsWith('//')) return '/events';
+  return returnTo;
+}
+
 export function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const returnRouteRef = useRef(getEventReturnRoute(location.state));
+  const eventReturnRoute = returnRouteRef.current;
+  const eventBackLabel = eventReturnRoute.startsWith('/my-assignments') ? 'Back to assignments' : 'Back to events';
 
   const { user, profile, roles, userRoles, organization, loading: authLoading, isLeader, isOrgAdmin, isAdmin, isAdminCoordinator, isProductionDirector, isMusicDirector, isSetlistCoordinator, isPlatformOwner, canPreviewMemberView, isViewingAsMember, isViewingAsSongLeader, setViewingAsSongLeader } = useAuth();
   const { toast } = useToast();
@@ -577,6 +588,7 @@ export function EventDetail() {
   const [assignments, setAssignments] = useState<EventAssignment[]>([]);
   const [members, setMembers] = useState<{ id: string; first_name: string; last_name: string; ministry_status: string }[]>([]);
   const [memberRoles, setMemberRoles] = useState<{ user_id: string; role_id: string }[]>([]);
+  const [memberAvailability, setMemberAvailability] = useState<MemberAvailabilityWindow[]>([]);
   const [setlist, setSetlist] = useState<Setlist | null>(null);
   const [setlistSongs, setSetlistSongs] = useState<SetlistSong[]>([]);
   const [linkedSetlist, setLinkedSetlist] = useState<Setlist | null>(null);
@@ -609,6 +621,8 @@ export function EventDetail() {
   const [removingAssignmentId, setRemovingAssignmentId] = useState<string | null>(null);
   const [showAssignmentReminder, setShowAssignmentReminder] = useState(false);
   const [sendingAssignmentReminder, setSendingAssignmentReminder] = useState(false);
+  const assignmentListEndRef = useRef<HTMLDivElement>(null);
+  const shouldRevealNewAssignmentRef = useRef(false);
   const [newSong, setNewSong] = useState({ title: '', artist: '', song_key: '', duration: '', youtube_url: '' });
   const [newSongError, setNewSongError] = useState('');
   const [declineReason, setDeclineReason] = useState('');
@@ -1052,12 +1066,13 @@ export function EventDetail() {
   const fetchAll = useCallback(async () => {
     if (!id) return;
     try {
-      const [eventRes, assignRes, membersRes, memberRolesRes, memberSettingsRes, setlistRes, songsRes, allSetlistsRes, proposalSetlistsRes, sundayServicesRes, observationsRes, observationRepliesRes, observationViewsRes] = await Promise.all([
+      const [eventRes, assignRes, membersRes, memberRolesRes, memberSettingsRes, availabilityRes, setlistRes, songsRes, allSetlistsRes, proposalSetlistsRes, sundayServicesRes, observationsRes, observationRepliesRes, observationViewsRes] = await Promise.all([
         supabase.from('events').select('*').eq('id', id).maybeSingle(),
         supabase.from('event_assignments').select('*, events(*), profiles(first_name, last_name, gender, avatar_url), roles(name)').eq('event_id', id),
         supabase.from('profiles').select('id, first_name, last_name, ministry_status').eq('ministry_status', 'active'),
         supabase.from('user_roles').select('user_id, role_id'),
         supabase.from('organization_member_settings').select('user_id, include_in_assignments'),
+        supabase.from('user_availability').select('user_id, status, request_type, leave_type, unavailable_date, start_date, end_date').eq('status', 'approved'),
         supabase
           .from('setlists')
           .select('*, setlist_songs(*, songs(*))')
@@ -1098,6 +1113,7 @@ export function EventDetail() {
         .map(setting => setting.user_id));
       setMembers((membersRes.data || []).filter(member => !assignmentExcludedIds.has(member.id)));
       setMemberRoles(memberRolesRes.data || []);
+      setMemberAvailability((availabilityRes.data || []) as MemberAvailabilityWindow[]);
       if (observationsRes.error) {
         console.error('Failed to load post-event observations:', observationsRes.error);
         setPostEventObservations([]);
@@ -1608,6 +1624,13 @@ export function EventDetail() {
   const hasEmptyMultiSelection = assignmentDrafts.some(row => (
     backupVocalsRoleIds.has(row.role_id) && (multiMemberSelections[row.id]?.length || 0) === 0
   ));
+  const outMemberIds = getOutMemberIdsForDate(memberAvailability, event?.event_date);
+  const conflictingAssignmentUserIds = new Set([
+    ...assignments.filter(assignment => outMemberIds.has(assignment.user_id)).map(assignment => assignment.user_id),
+    ...expandedEventAssignments.filter(assignment => outMemberIds.has(assignment.user_id)).map(assignment => assignment.user_id),
+  ]);
+  const conflictingAssignmentMembers = members.filter(member => conflictingAssignmentUserIds.has(member.id));
+  const hasAssignmentAvailabilityConflict = conflictingAssignmentMembers.length > 0;
 
   const canManageTeamTemplates = isOrgAdmin || isPlatformOwner || isAdmin || isAdminCoordinator;
 
@@ -1631,7 +1654,20 @@ export function EventDetail() {
     if (showAssign) void fetchTeamTemplates();
   }, [fetchTeamTemplates, showAssign]);
 
+  useEffect(() => {
+    if (!showAssign || !shouldRevealNewAssignmentRef.current) return;
+    shouldRevealNewAssignmentRef.current = false;
+    const animationFrame = window.requestAnimationFrame(() => {
+      assignmentListEndRef.current?.scrollIntoView({
+        behavior: prefersReducedMotion ? 'auto' : 'smooth',
+        block: 'end',
+      });
+    });
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [assignmentDrafts.length, prefersReducedMotion, showAssign]);
+
   const openAssignModal = () => {
+    shouldRevealNewAssignmentRef.current = false;
     setAssignmentDrafts([createAssignmentDraftRow()]);
     setMultiMemberSelections({});
     setSelectedTeamTemplateId('');
@@ -1641,12 +1677,14 @@ export function EventDetail() {
 
   const closeAssignModal = () => {
     if (assigningBatch) return;
+    shouldRevealNewAssignmentRef.current = false;
     setShowAssign(false);
     setAssignmentDrafts([createAssignmentDraftRow()]);
     setMultiMemberSelections({});
   };
 
   const addAssignmentDraft = () => {
+    shouldRevealNewAssignmentRef.current = true;
     setAssignmentDrafts(current => [...current, createAssignmentDraftRow()]);
   };
 
@@ -1808,6 +1846,11 @@ export function EventDetail() {
 
   const handleAssign = async () => {
     if (!id || assigningBatch) return;
+
+    if (hasAssignmentAvailabilityConflict) {
+      toast('error', 'Replace or remove every member marked Out before assigning the team');
+      return;
+    }
 
     if (assignmentBatch.incompleteCount > 0) {
       toast('info', 'Complete or remove every assignment row');
@@ -3074,6 +3117,7 @@ const openLyricsModal = (ss: SetlistSong) => {
 
   const openEditEvent = () => {
     if (!event) return;
+    const assignedSongLeaderId = assignments.find(assignment => assignment.roles?.name === 'Song Leader')?.user_id;
     setEditForm({
       title: event.title,
       description: event.description || '',
@@ -3081,7 +3125,7 @@ const openLyricsModal = (ss: SetlistSong) => {
       event_date: event.event_date,
       start_time: event.start_time || '',
       end_time: event.end_time || '',
-      song_leader_id: event.song_leader_id || '',
+      song_leader_id: assignedSongLeaderId || event.song_leader_id || '',
       linked_event_id: event.linked_event_id || '',
     });
     setShowEditEvent(true);
@@ -3445,8 +3489,8 @@ const openLyricsModal = (ss: SetlistSong) => {
         <Calendar className="mx-auto h-9 w-9 text-white/35" />
         <h1 className="mt-4 text-xl font-black">Event not found</h1>
         <p className="mt-2 text-sm leading-relaxed text-white/50">This event may have been removed, or you may no longer have access to it.</p>
-        <button type="button" onClick={() => navigate('/events')} className="mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-white/[0.1] px-5 text-sm font-bold text-white transition-colors hover:bg-white/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e]">
-          <ArrowLeft className="h-4 w-4" /> Back to events
+        <button type="button" onClick={() => navigate(eventReturnRoute)} className="mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-white/[0.1] px-5 text-sm font-bold text-white transition-colors hover:bg-white/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e]">
+          <ArrowLeft className="h-4 w-4" /> {eventBackLabel}
         </button>
       </div>
     </div>
@@ -3977,7 +4021,7 @@ const openLyricsModal = (ss: SetlistSong) => {
 
   const goBack = () => {
     setIsLeaving(true);
-    setTimeout(() => navigate('/events'), 300);
+    setTimeout(() => navigate(eventReturnRoute), 300);
   };
 
   const fullScreenAssignmentGate = assignmentDetailsBlocked ? (
@@ -3997,8 +4041,8 @@ const openLyricsModal = (ss: SetlistSong) => {
         type="button"
         onClick={goBack}
         className="absolute left-4 top-[calc(env(safe-area-inset-top)+1rem)] z-20 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/[0.09] bg-white/[0.05] text-white/70 backdrop-blur-xl transition-colors hover:bg-white/[0.1] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 sm:left-6 lg:left-10 lg:top-10"
-        aria-label="Back to events"
-        title="Back to events"
+        aria-label={eventBackLabel}
+        title={eventBackLabel}
       >
         <ArrowLeft className="h-4 w-4" aria-hidden="true" />
       </button>
@@ -4192,8 +4236,8 @@ const openLyricsModal = (ss: SetlistSong) => {
             <button
               onClick={goBack}
               className="absolute left-0 top-1 z-20 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-black/35 text-white/85 shadow-lg shadow-black/25 backdrop-blur-md transition-colors hover:bg-black/50 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:scale-95 lg:top-8"
-              title="Back to events"
-              aria-label="Back to events"
+              title={eventBackLabel}
+              aria-label={eventBackLabel}
             >
               <ArrowLeft className="h-4 w-4" />
             </button>
@@ -5869,6 +5913,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                   .map(a => {
                     const isSongLeaderRole = a.roles?.name === 'Song Leader';
                     const declineNoteOpen = expandedDeclineNotes.has(a.id);
+                    const isOutForEvent = outMemberIds.has(a.user_id);
                     return (
                       <div key={a.id}>
                         <div className="group flex items-center gap-3 rounded-xl px-1.5 py-2 transition-colors hover:bg-white/[0.04]">
@@ -5883,6 +5928,11 @@ const openLyricsModal = (ss: SetlistSong) => {
                               <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{a.profiles?.first_name} {a.profiles?.last_name}</p>
                               {isSongLeaderRole && (
                                 <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-400 shadow-[0_0_10px_rgba(34,197,94,0.7)]" />
+                              )}
+                              {isOutForEvent && (
+                                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-red-500/12 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-red-300 ring-1 ring-red-400/20" title={`Out on ${format(parseISO(event.event_date), 'MMM d, yyyy')}`}>
+                                  <CalendarOff className="h-3 w-3" /> Out
+                                </span>
                               )}
                             </div>
                             {a.roles && <RoleBadge role={a.roles} size="sm" />}
@@ -6244,64 +6294,114 @@ const openLyricsModal = (ss: SetlistSong) => {
           size="lg"
           closeOnBackdrop={!assigningBatch}
           closeOnEscape={!assigningBatch}
+          footer={(
+            <div className="flex w-full items-center gap-2 sm:gap-3">
+              <button
+                type="button"
+                onClick={addAssignmentDraft}
+                disabled={assigningBatch}
+                className="btn-secondary min-h-10 shrink-0 px-3 sm:min-h-11 sm:px-4"
+              >
+                <Plus className="h-4 w-4" />
+                <span className="hidden sm:inline">Add another assignment</span>
+                <span className="sm:hidden">Add</span>
+              </button>
+              <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-3">
+                <button type="button" onClick={closeAssignModal} disabled={assigningBatch} className="btn-secondary min-h-10 px-3 sm:min-h-11 sm:px-4">Cancel</button>
+                <button
+                  type="button"
+                  onClick={handleAssign}
+                  disabled={assigningBatch || assignmentBatch.assignments.length === 0 || assignmentBatch.incompleteCount > 0 || assignmentBatch.duplicateCount > 0 || hasEmptyMultiSelection || hasAssignmentAvailabilityConflict}
+                  className="btn-primary min-h-10 min-w-0 px-3 sm:min-h-11 sm:min-w-28 sm:px-4"
+                >
+                  {assigningBatch
+                    ? 'Assigning...'
+                    : expandedEventAssignments.length > 1
+                    ? `Assign all (${expandedEventAssignments.length})`
+                    : 'Assign member'}
+                </button>
+              </div>
+            </div>
+          )}
         >
           <div className="space-y-4">
             {canManageTeamTemplates && (
-              <section className="space-y-3 rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.055] p-3.5">
-                <div>
-                  <p className="text-sm font-black text-gray-900 dark:text-white">Team template</p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-white/45">Admins and Admin Coordinators can reuse a team, then change any member for this event.</p>
-                </div>
-                <Select
-                  value={selectedTeamTemplateId}
-                  onChange={applyTeamTemplate}
-                  options={teamTemplates.map(template => ({ value: template.id, label: template.name }))}
-                  placeholder={teamTemplates.length ? 'Select a saved team' : 'No saved teams yet'}
-                />
-                <div className="flex flex-col gap-2 sm:flex-row">
+              <section className="space-y-2.5 rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.055] p-3 sm:space-y-3 sm:p-3.5">
+                <p className="text-sm font-black text-gray-900 dark:text-white">Team template</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="min-w-0">
+                    <Select
+                      value={selectedTeamTemplateId}
+                      onChange={applyTeamTemplate}
+                      options={teamTemplates.map(template => ({ value: template.id, label: template.name }))}
+                      placeholder={teamTemplates.length ? 'Select saved team' : 'No saved teams'}
+                    />
+                  </div>
                   <input
                     value={teamTemplateName}
                     onChange={event => setTeamTemplateName(event.target.value)}
-                    className="input-field min-h-11 flex-1"
+                    className="input-field min-h-10 min-w-0 sm:min-h-11"
                     maxLength={80}
-                    placeholder="Template name, e.g. Sunday Team A"
+                    placeholder="Team name"
+                    aria-label="Team template name"
                   />
-                  <button type="button" onClick={() => void saveTeamTemplate('create')} disabled={savingTeamTemplate} className="btn-secondary min-h-11 whitespace-nowrap">
+                  <button type="button" onClick={() => void saveTeamTemplate('create')} disabled={savingTeamTemplate} className={`btn-secondary min-h-10 whitespace-nowrap px-3 sm:min-h-11 ${selectedTeamTemplateId ? '' : 'col-span-2'}`}>
                     {savingTeamTemplate ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Save New
                   </button>
                   {selectedTeamTemplateId && (
-                    <button type="button" onClick={() => void saveTeamTemplate('update')} disabled={savingTeamTemplate} className="btn-secondary min-h-11 whitespace-nowrap">
-                      Update Template
+                    <button type="button" onClick={() => void saveTeamTemplate('update')} disabled={savingTeamTemplate} className="btn-secondary min-h-10 whitespace-nowrap px-3 sm:min-h-11">
+                      Update
                     </button>
                   )}
                 </div>
               </section>
             )}
 
-            <div className="flex items-start justify-between gap-3 rounded-2xl bg-gray-50 px-3.5 py-3 ring-1 ring-black/[0.04] dark:bg-white/[0.035] dark:ring-white/[0.06]">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-gray-800 dark:text-white/90">Build the team in one batch</p>
-                <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-white/45">Add as many role and member pairs as you need, then assign everyone together.</p>
+            {hasAssignmentAvailabilityConflict && (
+              <div role="alert" className="flex items-start gap-3 rounded-2xl border border-red-400/25 bg-red-500/[0.09] p-3.5 text-red-700 dark:text-red-200">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500/12">
+                  <CalendarOff className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-black">Assignment blocked · member marked Out</p>
+                  <p className="mt-0.5 text-xs leading-relaxed opacity-80">
+                    {conflictingAssignmentMembers.map(member => `${member.first_name} ${member.last_name}`).join(', ')} {conflictingAssignmentMembers.length === 1 ? 'is' : 'are'} unavailable on {event ? format(parseISO(event.event_date), 'MMM d, yyyy') : 'this date'}.
+                  </p>
+                  <p className="mt-1 text-xs font-bold leading-relaxed">
+                    Replace or remove {conflictingAssignmentMembers.length === 1 ? 'this member' : 'these members'} to continue.
+                  </p>
+                </div>
               </div>
-              <span className="shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-500/15 dark:text-emerald-300">
-                {expandedEventAssignments.length} ready
-              </span>
-            </div>
+            )}
 
-            <div className="max-h-[48dvh] space-y-3 overflow-y-auto pr-1 scrollbar-thin">
+            <div className="space-y-3">
               {assignmentDrafts.map((row, index) => {
                 const eligibleMembers = getEligibleAssignmentMembers(row.role_id, row.id);
                 const isAllMembersRole = roles.find(role => role.id === row.role_id)?.name === 'All Members';
                 const isBackupVocalsRole = roles.find(role => role.id === row.role_id)?.name === 'Backup Vocals';
+                const rowHasOutMember = isAllMembersRole
+                  ? members.some(member => outMemberIds.has(member.id))
+                  : isBackupVocalsRole
+                    ? (multiMemberSelections[row.id] || []).some(userId => outMemberIds.has(userId))
+                    : outMemberIds.has(row.user_id);
                 return (
                   <div
                     key={row.id}
-                    className="rounded-2xl border border-gray-200/80 bg-white p-3.5 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.025] dark:shadow-none"
+                    className={`rounded-2xl border p-3.5 shadow-sm transition-colors dark:shadow-none ${rowHasOutMember
+                      ? 'border-red-300 bg-red-50/85 ring-1 ring-red-200/60 dark:border-red-400/35 dark:bg-red-500/[0.09] dark:ring-red-400/15'
+                      : 'border-gray-200/80 bg-white dark:border-white/[0.08] dark:bg-white/[0.025]'}`}
                   >
                     <div className="mb-3 flex items-center justify-between gap-3">
-                      <p className="text-[11px] font-black uppercase tracking-[0.14em] text-gray-400 dark:text-white/35">
-                        Assignment {String(index + 1).padStart(2, '0')}
-                      </p>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <p className={`text-[11px] font-black uppercase tracking-[0.14em] ${rowHasOutMember ? 'text-red-600 dark:text-red-300' : 'text-gray-400 dark:text-white/35'}`}>
+                          Assignment {String(index + 1).padStart(2, '0')}
+                        </p>
+                        {rowHasOutMember && (
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-red-500/12 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-red-700 ring-1 ring-red-400/20 dark:text-red-200">
+                            <CalendarOff className="h-3 w-3" /> Out on this date
+                          </span>
+                        )}
+                      </div>
                       <button
                         type="button"
                         onClick={() => removeAssignmentDraft(row.id)}
@@ -6333,9 +6433,10 @@ const openLyricsModal = (ss: SetlistSong) => {
                             ) : eligibleMembers.map(member => {
                               const checked = (multiMemberSelections[row.id] || []).includes(member.id);
                               return (
-                                <label key={member.id} className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-gray-700 hover:bg-white dark:text-white/75 dark:hover:bg-white/[0.06]">
+                                <label key={member.id} className={`flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm hover:bg-white dark:hover:bg-white/[0.06] ${outMemberIds.has(member.id) ? 'bg-red-50/80 text-red-700 ring-1 ring-red-200/70 dark:bg-red-500/[0.08] dark:text-red-200 dark:ring-red-400/15' : 'text-gray-700 dark:text-white/75'}`}>
                                   <input type="checkbox" checked={checked} onChange={() => toggleMultiMember(row.id, member.id)} className="h-4 w-4 accent-emerald-500" />
                                   <span className="min-w-0 flex-1 truncate">{member.first_name} {member.last_name}</span>
+                                  {outMemberIds.has(member.id) && <span className="shrink-0 text-[10px] font-black uppercase">Out</span>}
                                 </label>
                               );
                             })}
@@ -6346,7 +6447,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                             onChange={value => updateAssignmentDraft(row.id, 'user_id', value)}
                             options={isAllMembersRole
                               ? [{ value: ALL_MEMBERS_USER_ID, label: `All active members (${expandedEventAssignments.length})` }]
-                              : eligibleMembers.map(member => ({ value: member.id, label: `${member.first_name} ${member.last_name}` }))}
+                              : eligibleMembers.map(member => ({ value: member.id, label: `${member.first_name} ${member.last_name}${outMemberIds.has(member.id) ? ' — OUT' : ''}` }))}
                             placeholder={row.role_id ? 'Select member' : 'Pick role first'}
                           />
                         )}
@@ -6359,16 +6460,8 @@ const openLyricsModal = (ss: SetlistSong) => {
                   </div>
                 );
               })}
+              <div ref={assignmentListEndRef} className="h-px scroll-mb-4" aria-hidden="true" />
             </div>
-
-            <button
-              type="button"
-              onClick={addAssignmentDraft}
-              disabled={assigningBatch}
-              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-gray-300 bg-gray-50/60 text-sm font-bold text-gray-600 transition-colors hover:border-emerald-400 hover:bg-emerald-50 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/[0.12] dark:bg-white/[0.025] dark:text-white/60 dark:hover:border-emerald-400/40 dark:hover:bg-emerald-500/[0.08] dark:hover:text-emerald-300"
-            >
-              <Plus className="h-4 w-4" /> Add another assignment
-            </button>
 
             {(assignmentBatch.duplicateCount > 0 || assignmentBatch.incompleteCount > 0) && assignmentBatch.assignments.length > 0 && (
               <p className="text-center text-xs text-gray-500 dark:text-white/40">
@@ -6376,21 +6469,6 @@ const openLyricsModal = (ss: SetlistSong) => {
               </p>
             )}
 
-            <div className="flex justify-end gap-3 border-t border-gray-100 pt-4 dark:border-white/[0.06]">
-              <button type="button" onClick={closeAssignModal} disabled={assigningBatch} className="btn-secondary">Cancel</button>
-              <button
-                type="button"
-                onClick={handleAssign}
-                disabled={assigningBatch || assignmentBatch.assignments.length === 0 || assignmentBatch.incompleteCount > 0 || assignmentBatch.duplicateCount > 0 || hasEmptyMultiSelection}
-                className="btn-primary min-w-28"
-              >
-                {assigningBatch
-                  ? 'Assigning...'
-                  : expandedEventAssignments.length > 1
-                  ? `Assign all (${expandedEventAssignments.length})`
-                  : 'Assign member'}
-              </button>
-            </div>
           </div>
         </Modal>
 

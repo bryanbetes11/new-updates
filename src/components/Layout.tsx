@@ -192,6 +192,7 @@ export function Layout() {
   const isVideosPage = location.pathname === "/videos";
   const isSetsPage = location.pathname === "/sets";
   const isRequestLeavePage = location.pathname === "/request-leave";
+  const isMyAssignmentsPage = location.pathname === "/my-assignments";
   const isNotificationsPage = location.pathname === "/notifications";
   const isProfilePage = location.pathname === "/profile";
   const isSoundSettingsPage = location.pathname === "/settings/sounds";
@@ -228,7 +229,7 @@ export function Layout() {
     "--desktop-sidebar-width": `${desktopSidebarWidth}px`,
   } as CSSProperties;
   const shouldAllowNativePullRefresh =
-    (isWideShellPage || isUnavailableMembersPage || isActivityLogPage) &&
+    (isWideShellPage || isUnavailableMembersPage || isActivityLogPage || isMyAssignmentsPage) &&
     !isMessagesPage;
 
   useEffect(() => {
@@ -256,16 +257,6 @@ export function Layout() {
       document.body.classList.remove("allow-native-pull-refresh");
     };
   }, [shouldAllowNativePullRefresh]);
-
-  useEffect(() => {
-    const clampHorizontalScroll = () => {
-      if (window.scrollX === 0) return;
-      window.scrollTo(0, window.scrollY);
-    };
-
-    window.addEventListener("scroll", clampHorizontalScroll, { passive: true });
-    return () => window.removeEventListener("scroll", clampHorizontalScroll);
-  }, []);
 
   useEffect(() => {
     if (!shouldShiftForMobileMenu) return;

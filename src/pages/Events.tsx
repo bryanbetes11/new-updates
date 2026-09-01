@@ -17,6 +17,8 @@ import { formatTime12Hour } from '../lib/timeFormat';
 import { withRequestTimeout } from '../lib/requestTimeout';
 import { describeSetlistReviewAge, getSetlistPendingMessage } from '../lib/setlistReviewAge';
 import { EventArtwork } from '../components/EventArtwork';
+import { EventTypeLabel } from '../components/EventTypeLabel';
+import { EventDateChip } from '../components/EventDateChip';
 import { EventLifecycleActionModal, type EventActionAnchorRect, type EventLifecycleDialogMode } from '../components/EventLifecycleActionModal';
 import { CalendarGrid } from '../components/CalendarGrid';
 import type { Event } from '../types';
@@ -24,10 +26,12 @@ import { hasArtworkArtist } from '../lib/songArtworkEligibility';
 import { hasEventScheduleEnded, isEventCompleted } from '../lib/eventLifecycle';
 import { loadSyncedPreference, saveSyncedPreference } from '../lib/syncedPreferences';
 import { calculatePolicyProposalDueDate, DEFAULT_EVENT_TEMPLATE_POLICIES, eventTemplateFor, normalizeEventTemplatePolicies, type EventTemplatePolicies } from '../lib/eventPolicy';
+import { compareEventSchedule, eventScheduleKey } from '../lib/eventChronology';
+import { getOutMemberIdsForDate, type MemberAvailabilityWindow } from '../lib/memberAvailability';
 
 interface AssignmentRow { user_id: string; role_id: string; }
 const ALL_MEMBERS_USER_ID = '__all_active_members__';
-interface CalendarEntry { type: 'birthday' | 'leave'; date: string; name: string; status?: string; }
+interface CalendarEntry { type: 'birthday' | 'leave'; date: string; name: string; status?: string; userId?: string; }
 interface EventSongArtwork {
   id: string;
   song_id?: string | null;
@@ -91,17 +95,6 @@ function emptyListResponse() {
 function getRelatedProfile(profile: RelatedProfile | RelatedProfile[] | null | undefined) {
   return Array.isArray(profile) ? profile[0] : profile;
 }
-
-const EVENT_TYPE_COLORS: Record<string, { lightBg: string; lightText: string; darkBg: string; darkText: string }> = {
-  'Sunday Service':   { lightBg: 'rgba(37,99,235,0.10)',  lightText: '#1d4ed8', darkBg: 'rgba(37,99,235,0.18)',  darkText: '#93c5fd' },
-  'Prayer Meeting':   { lightBg: 'rgba(124,58,237,0.10)', lightText: '#7c3aed', darkBg: 'rgba(124,58,237,0.18)', darkText: '#c4b5fd' },
-  'LGTF (Midweek)':  { lightBg: 'rgba(20,184,166,0.10)', lightText: '#0f766e', darkBg: 'rgba(20,184,166,0.18)', darkText: '#5eead4' },
-  'Rehearsals':       { lightBg: 'rgba(217,119,6,0.10)',  lightText: '#b45309', darkBg: 'rgba(217,119,6,0.18)',  darkText: '#fcd34d' },
-  'Online Devotion':  { lightBg: 'rgba(219,39,119,0.10)', lightText: '#be185d', darkBg: 'rgba(219,39,119,0.18)', darkText: '#f9a8d4' },
-  'Equipping':        { lightBg: 'rgba(22,163,74,0.10)',  lightText: '#15803d', darkBg: 'rgba(22,163,74,0.18)',  darkText: '#86efac' },
-  'Revamp Session':   { lightBg: 'rgba(234,88,12,0.10)',  lightText: '#c2410c', darkBg: 'rgba(234,88,12,0.18)',  darkText: '#fdba74' },
-  'Youth Recharge':   { lightBg: 'rgba(225,29,72,0.10)',  lightText: '#be123c', darkBg: 'rgba(225,29,72,0.18)',  darkText: '#fda4af' },
-};
 
 const fadeUp = (delay = 0) => ({
   initial: { opacity: 0, y: 14 },
@@ -228,83 +221,6 @@ async function getEventSongArtworkUrls(setlistSongs?: EventSongArtwork[] | null)
   });
 
   return artworkUrls.slice(0, 4);
-}
-
-function EventTypeLabel({ type }: { type: string }) {
-  const colors = EVENT_TYPE_COLORS[type];
-  if (!colors) return (
-    <span className="inline-flex shrink-0 items-center gap-1.5 text-[10px] font-bold text-white/45">
-      <span className="h-1.5 w-1.5 rounded-full bg-current" /> {type}
-    </span>
-  );
-  return (
-    <>
-      <span className="inline-flex shrink-0 items-center gap-1.5 text-[10px] font-bold dark:hidden" style={{ color: colors.lightText }}>
-        <span className="h-1.5 w-1.5 rounded-full bg-current" /> {type}
-      </span>
-      <span className="hidden shrink-0 items-center gap-1.5 text-[10px] font-bold dark:inline-flex" style={{ color: colors.darkText }}>
-        <span className="h-1.5 w-1.5 rounded-full bg-current" /> {type}
-      </span>
-    </>
-  );
-}
-
-function EventDateChip({
-  date,
-  dim = false,
-  tone = 'default',
-  compact = false,
-}: {
-  date: string;
-  dim?: boolean;
-  tone?: 'default' | 'warning' | 'danger';
-  compact?: boolean;
-}) {
-  const parsed = parseISO(date);
-
-  const surfaceClasses = dim
-    ? 'border-black/[0.06] bg-gray-100 dark:border-white/[0.06] dark:bg-[#202020]'
-    : 'border-black/[0.08] bg-white dark:border-white/[0.08] dark:bg-[#222222]';
-
-  const monthClasses = dim
-    ? 'text-gray-400 dark:text-white/28'
-    : tone === 'danger'
-    ? 'text-red-500 dark:text-red-300'
-    : tone === 'warning'
-    ? 'text-amber-600 dark:text-amber-300'
-    : 'text-[#1DB954]';
-
-  if (compact) {
-    return (
-      <div className="relative flex h-16 w-14 shrink-0 flex-col items-center justify-center">
-        <span className={`text-[9px] font-black uppercase tracking-widest leading-none ${monthClasses}`}>
-          {format(parsed, 'EEE')}
-        </span>
-        <span className={`mt-0.5 text-[18px] font-black leading-none ${dim ? 'text-white/58' : 'text-white'}`}>
-          {format(parsed, 'MMM')}
-        </span>
-        <span className={`text-[24px] font-black leading-none ${dim ? 'text-white/58' : 'text-white'}`}>
-          {format(parsed, 'dd')}
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className={`relative flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-[0.35rem] border ${surfaceClasses}`}
-    >
-      <span className={`text-[9px] font-black uppercase tracking-widest leading-none ${monthClasses}`}>
-        {format(parsed, 'MMM')}
-      </span>
-      <span className={`mt-0.5 text-[24px] font-black leading-none ${dim ? 'text-gray-500 dark:text-white/58' : 'text-gray-900 dark:text-white'}`} style={{ letterSpacing: '-0.05em' }}>
-        {format(parsed, 'dd')}
-      </span>
-      <span className={`mt-0.5 text-[8px] font-bold leading-none ${dim ? 'text-gray-400 dark:text-white/24' : 'text-gray-500 dark:text-white/42'}`}>
-        {format(parsed, 'EEE')}
-      </span>
-    </div>
-  );
 }
 
 function EmptyEventArtwork({ className = 'h-16 w-16' }: { className?: string }) {
@@ -769,8 +685,8 @@ function EventList({ events, calendarEntries, songLeaderMap, setlistInfoMap, onE
   const today = startOfDay(now);
 
   const displayEvents = showPast
-    ? events.filter(e => isEventCompleted(e)).sort((a, b) => b.event_date.localeCompare(a.event_date))
-    : events.filter(e => !isEventCompleted(e)).sort((a, b) => a.event_date.localeCompare(b.event_date));
+    ? events.filter(e => isEventCompleted(e)).sort((a, b) => compareEventSchedule(a, b, 'descending'))
+    : events.filter(e => !isEventCompleted(e)).sort((a, b) => compareEventSchedule(a, b));
 
   // Upcoming birthday entries (deduplicated, not shown in past view)
   const birthdayEntries = showPast ? [] : Array.from(
@@ -782,15 +698,15 @@ function EventList({ events, calendarEntries, songLeaderMap, setlistInfoMap, onE
   );
 
   type ListItem =
-    | { kind: 'event'; sortDate: string; event: Event }
-    | { kind: 'birthday'; sortDate: string; entry: CalendarEntry };
+    | { kind: 'event'; sortDate: string; sortKey: string; event: Event }
+    | { kind: 'birthday'; sortDate: string; sortKey: string; entry: CalendarEntry };
 
   const merged: ListItem[] = [
-    ...displayEvents.map(e => ({ kind: 'event' as const, sortDate: e.event_date, event: e })),
-    ...birthdayEntries.map(e => ({ kind: 'birthday' as const, sortDate: e.date, entry: e })),
+    ...displayEvents.map(e => ({ kind: 'event' as const, sortDate: e.event_date, sortKey: eventScheduleKey(e), event: e })),
+    ...birthdayEntries.map(e => ({ kind: 'birthday' as const, sortDate: e.date, sortKey: `${e.date}T23:59:59.999`, entry: e })),
   ].sort((a, b) => showPast
-    ? b.sortDate.localeCompare(a.sortDate)
-    : a.sortDate.localeCompare(b.sortDate)
+    ? b.sortKey.localeCompare(a.sortKey)
+    : a.sortKey.localeCompare(b.sortKey)
   );
 
   if (merged.length === 0) return null;
@@ -862,8 +778,8 @@ function getEventListItems(events: Event[], calendarEntries: CalendarEntry[], sh
   const now = new Date();
   const today = startOfDay(now);
   const displayEvents = showPast
-    ? events.filter(e => isEventCompleted(e)).sort((a, b) => b.event_date.localeCompare(a.event_date))
-    : events.filter(e => !isEventCompleted(e)).sort((a, b) => a.event_date.localeCompare(b.event_date));
+    ? events.filter(e => isEventCompleted(e)).sort((a, b) => compareEventSchedule(a, b, 'descending'))
+    : events.filter(e => !isEventCompleted(e)).sort((a, b) => compareEventSchedule(a, b));
   const birthdayEntries = showPast ? [] : Array.from(
     new Map(
       calendarEntries
@@ -873,17 +789,17 @@ function getEventListItems(events: Event[], calendarEntries: CalendarEntry[], sh
   );
 
   return [
-    ...displayEvents.map(e => ({ kind: 'event' as const, sortDate: e.event_date, event: e })),
-    ...birthdayEntries.map(e => ({ kind: 'birthday' as const, sortDate: e.date, entry: e })),
+    ...displayEvents.map(e => ({ kind: 'event' as const, sortDate: e.event_date, sortKey: eventScheduleKey(e), event: e })),
+    ...birthdayEntries.map(e => ({ kind: 'birthday' as const, sortDate: e.date, sortKey: `${e.date}T23:59:59.999`, entry: e })),
   ].sort((a, b) => showPast
-    ? b.sortDate.localeCompare(a.sortDate)
-    : a.sortDate.localeCompare(b.sortDate)
+    ? b.sortKey.localeCompare(a.sortKey)
+    : a.sortKey.localeCompare(b.sortKey)
   );
 }
 
 type EventListItem =
-  | { kind: 'event'; sortDate: string; event: Event }
-  | { kind: 'birthday'; sortDate: string; entry: CalendarEntry };
+  | { kind: 'event'; sortDate: string; sortKey: string; event: Event }
+  | { kind: 'birthday'; sortDate: string; sortKey: string; entry: CalendarEntry };
 
 function scoreSetlistInfo(info: SetlistInfo) {
   const statusScore = info.status === 'approved' ? 100 : info.status === 'pending_review' ? 50 : 0;
@@ -1034,7 +950,7 @@ export function Events() {
         withRequestTimeout(supabase.from('profiles').select('id, first_name, last_name, gender, birthday'), emptyListResponse(), 'Event members list'),
         withRequestTimeout(supabase.from('user_roles').select('user_id, role_id'), emptyListResponse(), 'Event member roles'),
         withRequestTimeout(supabase.from('profiles').select('first_name, last_name, birthday').not('birthday', 'is', null), emptyListResponse(), 'Birthdays list'),
-        withRequestTimeout(supabase.from('user_availability').select('leave_type, unavailable_date, start_date, end_date, status, profiles!user_availability_user_id_fkey(first_name, last_name)').eq('status', 'approved'), emptyListResponse(), 'Approved leave list'),
+        withRequestTimeout(supabase.from('user_availability').select('user_id, request_type, leave_type, unavailable_date, start_date, end_date, status, profiles!user_availability_user_id_fkey(first_name, last_name)').eq('status', 'approved'), emptyListResponse(), 'Approved leave list'),
         withRequestTimeout(supabase.from('event_assignments').select('event_id, profiles(first_name, last_name, gender), roles!inner(name)').eq('roles.name', 'Song Leader'), emptyListResponse(), 'Song leader list'),
         withRequestTimeout(
           supabase
@@ -1132,14 +1048,15 @@ export function Events() {
         }
       });
       (leaveRes.data || []).forEach(availability => {
+        if (availability.request_type && availability.request_type !== 'leave') return;
         const profile = getRelatedProfile(availability.profiles);
         const name = `${profile?.first_name} ${profile?.last_name}`;
         if (availability.leave_type === 'range' && availability.start_date && availability.end_date) {
           eachDayOfInterval({ start: parseISO(availability.start_date), end: parseISO(availability.end_date) }).forEach(day => {
-            entries.push({ type: 'leave', date: format(day, 'yyyy-MM-dd'), name, status: availability.status });
+            entries.push({ type: 'leave', date: format(day, 'yyyy-MM-dd'), name, status: availability.status, userId: availability.user_id });
           });
         } else if (availability.unavailable_date) {
-          entries.push({ type: 'leave', date: availability.unavailable_date, name, status: availability.status });
+          entries.push({ type: 'leave', date: availability.unavailable_date, name, status: availability.status, userId: availability.user_id });
         }
       });
       setCalendarEntries(entries);
@@ -1258,6 +1175,29 @@ export function Events() {
     return members.filter(m => ids.includes(m.id));
   };
 
+  const formAvailability = calendarEntries
+    .filter(entry => entry.type === 'leave' && entry.userId)
+    .map(entry => ({
+      user_id: entry.userId!,
+      status: entry.status || 'approved',
+      request_type: 'leave',
+      leave_type: 'single',
+      unavailable_date: entry.date,
+    })) satisfies MemberAvailabilityWindow[];
+  const outMemberIdsForFormDate = getOutMemberIdsForDate(formAvailability, form.event_date);
+  const selectedAssignmentUserIds = new Set(assignmentRows.flatMap(assignment => {
+    if (!assignment.user_id || !assignment.role_id) return [];
+    const isAllMembers = roles.some(role => role.id === assignment.role_id && role.name === 'All Members');
+    return isAllMembers && assignment.user_id === ALL_MEMBERS_USER_ID
+      ? members.map(member => member.id)
+      : [assignment.user_id];
+  }));
+  if (form.song_leader_id) selectedAssignmentUserIds.add(form.song_leader_id);
+  const createEventConflictMembers = members.filter(member => (
+    selectedAssignmentUserIds.has(member.id) && outMemberIdsForFormDate.has(member.id)
+  ));
+  const hasCreateEventAvailabilityConflict = createEventConflictMembers.length > 0;
+
   const generateEventTitle = async (): Promise<string> => {
     if (form.event_type === 'Custom') return customName.trim() || 'Custom Event';
     if (form.song_leader_id.trim()) {
@@ -1273,6 +1213,10 @@ export function Events() {
     e.preventDefault();
     if (!user) return;
     if (!form.event_type) { toast('error', 'Please select an event type'); return; }
+    if (hasCreateEventAvailabilityConflict) {
+      toast('error', 'Replace or remove every member marked Out before creating the event');
+      return;
+    }
     setCreating(true);
     let eventWasCreated = false;
     try {
@@ -1585,7 +1529,10 @@ export function Events() {
               {['Sunday Service', 'LGTF (Midweek)', 'Prayer Meeting', 'Youth Recharge'].includes(form.event_type) && (
                 <div>
                   <label className="block text-[12px] font-semibold text-gray-600 dark:text-white/55 mb-1.5">Song Leader</label>
-                  <Select value={form.song_leader_id} onChange={v => setForm({ ...form, song_leader_id: v })} options={getSongLeaders().map(m => ({ value: m.id, label: `${m.first_name} ${m.last_name}` }))} placeholder="Select song leader" />
+                  <Select value={form.song_leader_id} onChange={v => setForm({ ...form, song_leader_id: v })} options={getSongLeaders().map(m => ({ value: m.id, label: `${m.first_name} ${m.last_name}${outMemberIdsForFormDate.has(m.id) ? ' — OUT' : ''}` }))} placeholder="Select song leader" />
+                  {form.song_leader_id && outMemberIdsForFormDate.has(form.song_leader_id) && (
+                    <p className="mt-1.5 flex items-center gap-1.5 text-xs font-bold text-red-600 dark:text-red-300"><CalendarOff className="h-3.5 w-3.5" /> This song leader is Out on the event date.</p>
+                  )}
                 </div>
               )}
 
@@ -1679,9 +1626,14 @@ export function Events() {
                           onChange={v => updateAssignmentRow(i, 'user_id', v)}
                           options={isAllMembersRole
                             ? [{ value: ALL_MEMBERS_USER_ID, label: `All active members (${members.length})` }]
-                            : getMembersForRole(row.role_id).map(m => ({ value: m.id, label: `${m.first_name} ${m.last_name}` }))}
+                            : getMembersForRole(row.role_id).map(m => ({ value: m.id, label: `${m.first_name} ${m.last_name}${outMemberIdsForFormDate.has(m.id) ? ' — OUT' : ''}` }))}
                           placeholder={row.role_id ? 'Select member' : 'Pick role first'}
                         />
+                        {row.user_id === ALL_MEMBERS_USER_ID && isAllMembersRole && createEventConflictMembers.length > 0 ? (
+                          <p className="sm:col-span-2 flex items-center gap-1.5 text-xs font-bold text-red-600 dark:text-red-300"><CalendarOff className="h-3.5 w-3.5" /> All Members includes {createEventConflictMembers.length} unavailable {createEventConflictMembers.length === 1 ? 'person' : 'people'}.</p>
+                        ) : row.user_id && outMemberIdsForFormDate.has(row.user_id) ? (
+                          <p className="sm:col-span-2 flex items-center gap-1.5 text-xs font-bold text-red-600 dark:text-red-300"><CalendarOff className="h-3.5 w-3.5" /> This member is Out on the event date.</p>
+                        ) : null}
                       </div>
                       <button
                         type="button"
@@ -1699,6 +1651,16 @@ export function Events() {
                 </div>
               )}
             </section>
+
+            {hasCreateEventAvailabilityConflict && (
+              <div role="alert" className="flex items-start gap-3 rounded-2xl border border-red-300 bg-red-50 p-3.5 text-red-800 dark:border-red-400/20 dark:bg-red-500/[0.09] dark:text-red-200">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500/10"><CalendarOff className="h-4 w-4" /></span>
+                <div className="min-w-0">
+                  <p className="text-sm font-black">Cannot create event with unavailable members</p>
+                  <p className="mt-0.5 text-xs leading-relaxed opacity-80">{createEventConflictMembers.map(member => `${member.first_name} ${member.last_name}`).join(', ')} {createEventConflictMembers.length === 1 ? 'is' : 'are'} marked Out. Change the assignment to continue.</p>
+                </div>
+              </div>
+            )}
           </div>
 
           <div
@@ -1708,8 +1670,8 @@ export function Events() {
             <button type="button" onClick={closeCreateEvent} className="btn-secondary h-12 flex-1 max-w-[10.75rem] sm:h-auto sm:flex-none sm:min-w-24">Cancel</button>
             <button
               type="submit"
-              disabled={creating}
-              className="btn-primary h-12 flex-1 max-w-[10.75rem] sm:h-auto sm:flex-none sm:min-w-32"
+              disabled={creating || hasCreateEventAvailabilityConflict}
+              className="btn-primary h-12 flex-1 max-w-[10.75rem] disabled:cursor-not-allowed disabled:opacity-45 sm:h-auto sm:flex-none sm:min-w-32"
               style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', boxShadow: '0 4px 14px rgba(22,163,74,0.28)' }}
             >
               {creating ? 'Creating...' : 'Create Event'}

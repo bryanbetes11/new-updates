@@ -121,6 +121,16 @@ function getVideoSortDate(video: Video) {
   return Date.parse(video.created_at);
 }
 
+function splitVideoTitleDate(title: string) {
+  const match = title.match(/^\s*((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2},?\s+\d{4})\s*[-–—]\s*(.+?)\s*$/i);
+  if (!match) return { dateLabel: '', displayTitle: title };
+  const parsedDate = Date.parse(match[1].replace('.', ''));
+  return {
+    dateLabel: Number.isFinite(parsedDate) ? format(new Date(parsedDate), 'MMM d, yyyy') : match[1],
+    displayTitle: match[2],
+  };
+}
+
 async function fetchYouTubeMetadata(url: string): Promise<YouTubeMetadata> {
   if (!getYouTubeId(url)) throw new Error('Only valid YouTube links can be added.');
   const response = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`);
@@ -152,13 +162,11 @@ export function VideosTab() {
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [showNotify, setShowNotify] = useState(false);
-  const [showArchiveNotify, setShowArchiveNotify] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
   const [creating, setCreating] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [notifying, setNotifying] = useState(false);
-  const [archiveNotifying, setArchiveNotifying] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [createLinks, setCreateLinks] = useState('');
   const [createCategory, setCreateCategory] = useState('General');
@@ -466,19 +474,6 @@ export function VideosTab() {
     setSelectedVideo(null);
   };
 
-  const handleNotifyArchive = async () => {
-    if (!isProductionDirector) return;
-    setArchiveNotifying(true);
-    const { data, error } = await supabase.rpc('notify_team_about_video_archive');
-    setArchiveNotifying(false);
-    if (error) {
-      toast('error', error.message || 'The archive announcement could not be sent.');
-      return;
-    }
-    toast('success', `Archive announcement sent to ${Number(data) || 0} team member${Number(data) === 1 ? '' : 's'}.`);
-    setShowArchiveNotify(false);
-  };
-
   const canManageVideo = (video: Video) => video.uploaded_by === user?.id || isProductionDirector;
 
   const filtered = [...videos].sort((a, b) => {
@@ -553,15 +548,6 @@ export function VideosTab() {
             })}
         </div>
         <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
-          {isProductionDirector && (
-            <button
-              type="button"
-              onClick={() => setShowArchiveNotify(true)}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/[0.08] px-5 text-[13px] font-black text-emerald-300 transition-all hover:bg-emerald-400 hover:text-black active:scale-[0.97]"
-            >
-              <Bell className="h-4 w-4" /> Announce 2026 archive
-            </button>
-          )}
           <button
             onClick={() => setShowCreate(true)}
             className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-white/[0.095] px-5 text-[13px] font-black text-white transition-all hover:bg-[#1ed760] hover:text-black active:scale-[0.97]"
@@ -637,21 +623,28 @@ export function VideosTab() {
             variants={containerVariants}
             initial="hidden"
             animate="show"
-            className={`overflow-visible ${desktopView === 'grid' ? 'md:grid md:grid-cols-2 md:gap-4' : 'border-y border-white/[0.08]'}`}
+            className={`overflow-visible ${desktopView === 'grid' ? 'grid grid-cols-2 gap-2.5 md:gap-4 lg:grid-cols-3' : 'border-y border-white/[0.08]'}`}
           >
             {visibleVideos.map(video => {
               const thumb = video.thumbnail_url || getYouTubeThumb(video.video_url);
               const canManage = canManageVideo(video);
               const catColor = categoryColors[video.category] ?? categoryColors.General;
+              const titleParts = splitVideoTitleDate(video.title);
               return (
                 <motion.div
                   key={video.id}
                   variants={itemVariants}
-                  className={`group relative transition-colors duration-200 hover:bg-white/[0.045] ${desktopView === 'grid' ? 'md:overflow-hidden md:rounded-2xl md:border md:border-white/[0.08] md:bg-white/[0.025]' : 'border-b border-white/[0.075] last:border-b-0'}`}
+                  className={`group relative transition-colors duration-200 hover:bg-white/[0.045] ${desktopView === 'grid' ? 'overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.025]' : 'border-b border-white/[0.075] last:border-b-0'}`}
                 >
-                  <button type="button" onClick={() => openVideo(video)} className={`grid w-full gap-3 px-4 py-4 text-left sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-5 sm:px-5 lg:px-6 ${desktopView === 'grid' ? 'md:block md:!p-0' : ''}`}>
-                    <div className={`flex items-start gap-3 sm:contents ${desktopView === 'grid' ? 'md:block' : ''}`}>
-                      <div className={`relative h-16 w-28 shrink-0 overflow-hidden rounded-md bg-white/[0.055] ring-1 ring-white/[0.08] sm:h-20 sm:w-36 ${desktopView === 'grid' ? 'md:aspect-video md:!h-auto md:!w-full md:rounded-none md:ring-0' : ''}`}>
+                  <button
+                    type="button"
+                    onClick={() => openVideo(video)}
+                    className={desktopView === 'grid'
+                      ? 'block w-full text-left'
+                      : 'grid w-full gap-3 px-4 py-4 text-left sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-5 sm:px-5 lg:px-6'}
+                  >
+                    <div className={desktopView === 'grid' ? 'block' : 'flex items-start gap-3 sm:contents'}>
+                      <div className={`relative h-16 w-28 shrink-0 overflow-hidden rounded-md bg-white/[0.055] ring-1 ring-white/[0.08] sm:h-20 sm:w-36 ${desktopView === 'grid' ? 'aspect-video !h-auto !w-full rounded-none ring-0' : ''}`}>
                       {thumb ? (
                         <img
                           src={thumb}
@@ -670,25 +663,31 @@ export function VideosTab() {
                             <PlayCircle className="h-6 w-6 text-white" />
                           </div>
                         </div>
+                        {titleParts.dateLabel && desktopView === 'grid' && (
+                          <span className="absolute bottom-2 left-2 z-10 inline-flex rounded-full bg-black/95 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.08em] text-white shadow-[0_5px_18px_rgba(0,0,0,0.75)] ring-2 ring-white/45 sm:bottom-3 sm:left-3 sm:px-3 sm:text-[11px]">
+                            {titleParts.dateLabel}
+                          </span>
+                        )}
                       </div>
 
-                      <div className={`min-w-0 flex-1 ${desktopView === 'grid' ? 'md:p-5' : ''}`}>
+                      <div className={`min-w-0 flex-1 ${desktopView === 'grid' ? 'p-3 sm:p-4 md:p-5' : ''}`}>
                         <div className="flex flex-wrap items-center gap-1.5">
                           <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.1em] ${catColor}`}>
                             {video.category}
                           </span>
                         </div>
-                        <p className="mt-1.5 text-[1rem] font-black leading-tight text-white sm:text-[1.12rem]">
-                          {video.title}
+                        <p className="mt-1.5 min-w-0 text-[1rem] font-black leading-tight text-white sm:text-[1.12rem]" title={video.title}>
+                          {titleParts.dateLabel && desktopView === 'grid'
+                            ? <span className="block truncate">{titleParts.displayTitle}</span>
+                            : video.title}
                         </p>
                         {video.description && (
                           <p className="mt-1 line-clamp-2 text-[13px] leading-5 text-white/48 sm:line-clamp-1">{video.description}</p>
                         )}
-                        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-white/32">
-                          <span className="truncate text-white/48">
-                            {video.profiles?.first_name} {video.profiles?.last_name}
+                        <div className={`mt-2 min-w-0 items-center font-semibold text-white/32 ${desktopView === 'grid' ? 'flex flex-nowrap justify-between gap-2 text-[10px] sm:text-[11px]' : 'flex flex-wrap gap-x-3 gap-y-1 text-[11px]'}`}>
+                          <span className="whitespace-nowrap text-white/48">
+                            Uploaded <span className="font-mono">{format(parseISO(video.created_at), 'MMM d, yyyy')}</span>
                           </span>
-                          <span className="font-mono whitespace-nowrap">{format(parseISO(video.created_at), 'MMM d, yyyy')}</span>
                           <span role="button" tabIndex={0} onClick={event => openViewers(video, event)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') openViewers(video, event); }} className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-white/48 transition hover:bg-white/10 hover:text-white" aria-label={`See who viewed ${video.title}`}>
                             <Eye className="h-3.5 w-3.5" /> {viewCounts[video.id] || 0}
                           </span>
@@ -696,7 +695,7 @@ export function VideosTab() {
                       </div>
                     </div>
 
-                    <div className={`hidden items-center gap-2 justify-self-end text-white/26 sm:flex ${desktopView === 'grid' ? 'md:hidden' : ''}`}>
+                    <div className={desktopView === 'grid' ? 'hidden' : 'hidden items-center gap-2 justify-self-end text-white/26 sm:flex'}>
                       <span className="text-[11px] font-bold uppercase tracking-[0.12em] opacity-0 transition-opacity group-hover:opacity-100">
                         Open
                       </span>
@@ -706,7 +705,7 @@ export function VideosTab() {
 
                   {/* Manage menu */}
                   {canManage && (
-                    <div className="absolute right-4 top-4 z-20 sm:right-5 lg:right-6">
+                    <div className={`absolute z-20 ${desktopView === 'grid' ? 'right-2 top-2 sm:right-3 sm:top-3' : 'right-4 top-4 sm:right-5 lg:right-6'}`}>
                       <div className="relative">
                         <button
                           onClick={e => { e.preventDefault(); e.stopPropagation(); setOpenMenuId(openMenuId === video.id ? null : video.id); }}
@@ -893,6 +892,13 @@ export function VideosTab() {
               )}
             </div>
 
+            <div className="-mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-white/45">
+              <span>
+                Uploaded by <strong className="font-bold text-gray-700 dark:text-white/70">{`${selectedVideo.profiles?.first_name || ''} ${selectedVideo.profiles?.last_name || ''}`.trim() || 'Team member'}</strong>
+              </span>
+              <span className="font-mono">{format(parseISO(selectedVideo.created_at), 'MMM d, yyyy')}</span>
+            </div>
+
             <div className="border-b border-gray-200 pb-4 dark:border-white/10">
               <div className="flex items-center justify-between gap-3">
                 <p className="font-black text-gray-900 dark:text-white">Discussion</p>
@@ -995,26 +1001,6 @@ export function VideosTab() {
             <button type="button" onClick={() => setShowNotify(false)} className="btn-secondary">Cancel</button>
             <button type="button" onClick={handleNotifyTeam} disabled={notifying} className="btn-primary">
               {notifying ? 'Sending...' : 'Notify Team'}
-            </button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal open={showArchiveNotify} onClose={() => setShowArchiveNotify(false)} title="Announce 2026 Recordings" size="sm" mobileView="dialog">
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.07] p-4">
-            <p className="text-sm font-black text-gray-900 dark:text-white">2026 Sunday Service Recordings are now available</p>
-            <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">
-              All available Praise and Worship recordings from our 2026 Sunday Services have now been uploaded to ServeSync.
-            </p>
-          </div>
-          <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">
-            This sends one in-app and push notification to the team. Opening it will show the complete Videos library.
-          </p>
-          <div className="grid grid-cols-2 gap-3">
-            <button type="button" onClick={() => setShowArchiveNotify(false)} className="btn-secondary w-full">Cancel</button>
-            <button type="button" onClick={handleNotifyArchive} disabled={archiveNotifying} className="btn-primary w-full whitespace-nowrap px-3">
-              {archiveNotifying ? 'Sending...' : 'Send Announcement'}
             </button>
           </div>
         </div>

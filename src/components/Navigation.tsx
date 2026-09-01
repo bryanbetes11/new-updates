@@ -1316,7 +1316,7 @@ export function Navigation({
         onTouchStart={() => {
           void preloadRoute(item.path);
         }}
-        className={`relative group flex h-12 w-full items-center gap-3 rounded-[0.8rem] border px-3.5 text-[13px] transition-all duration-200 ${
+        className={`relative group flex h-12 w-full items-center gap-3 rounded-[0.8rem] border px-1.5 text-[13px] transition-all duration-200 ${
           active
             ? "border-white/[0.10] bg-white/[0.10] font-bold text-white shadow-[0_16px_32px_-24px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.12)]"
             : "border-transparent font-semibold text-white/62 hover:border-white/[0.08] hover:bg-white/[0.065] hover:text-white"
@@ -1564,12 +1564,12 @@ export function Navigation({
           className="flex min-w-[170px] items-center gap-3 text-left"
           aria-label="Go to dashboard"
         >
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center">
             <img
               src="/servesync-mark-transparent.png"
               alt=""
               aria-hidden="true"
-              className="h-11 w-11 object-contain drop-shadow-[0_0_16px_rgba(74,222,128,0.24)]"
+              className="h-9 w-9 object-contain drop-shadow-[0_0_14px_rgba(74,222,128,0.22)]"
             />
           </span>
           <span className="min-w-0">

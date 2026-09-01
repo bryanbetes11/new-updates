@@ -92,6 +92,7 @@ export function useMessages(conversationId: string | null) {
   const typingTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const loadedConversationRef = useRef<string | null>(null);
+  const readFailureNotifiedRef = useRef(false);
 
   const fetchMemberReadTimes = useCallback(async () => {
     if (!conversationId) return;
@@ -164,13 +165,29 @@ export function useMessages(conversationId: string | null) {
 
   const markRead = useCallback(async () => {
     if (!conversationId || !user) return;
-    const { error } = await supabase
-      .from('conversation_members')
-      .update({ last_read_at: new Date().toISOString() })
-      .eq('conversation_id', conversationId)
-      .eq('user_id', user.id);
-    if (!error) dispatchMessagingRefresh();
-  }, [conversationId, user]);
+    const readAt = new Date().toISOString();
+    const { error } = await supabase.rpc('set_active_conversation', {
+      p_conversation_id: conversationId,
+    });
+    if (error) {
+      console.error('Failed to mark conversation as read:', error);
+      if (!readFailureNotifiedRef.current) {
+        readFailureNotifiedRef.current = true;
+        toast('error', 'This chat could not update its read status. Please try again.');
+      }
+      return;
+    }
+
+    readFailureNotifiedRef.current = false;
+    setMemberReadTimes(previous => {
+      const existing = previous.find(member => member.user_id === user.id);
+      if (!existing) return [...previous, { user_id: user.id, last_read_at: readAt }];
+      return previous.map(member => member.user_id === user.id
+        ? { ...member, last_read_at: readAt }
+        : member);
+    });
+    dispatchMessagingRefresh();
+  }, [conversationId, toast, user]);
 
   useEffect(() => {
     if (!conversationId) {
@@ -182,8 +199,7 @@ export function useMessages(conversationId: string | null) {
     }
     setLoadError(null);
     fetchMessages();
-    fetchMemberReadTimes();
-    markRead();
+    void markRead().then(fetchMemberReadTimes);
   }, [fetchMessages, fetchMemberReadTimes, markRead, conversationId]);
 
   useEffect(() => {

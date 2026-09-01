@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { motion } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { PlayCircle, Plus, Search, ExternalLink, Film, CreditCard as Edit2, Trash2, MoreVertical, X, MessageCircle, Send, Loader2, Bell, BellOff, List, LayoutGrid, Eye } from 'lucide-react';
+import { PlayCircle, Plus, Search, ExternalLink, Film, CreditCard as Edit2, Trash2, MoreVertical, X, MessageCircle, Send, Loader2, Bell, BellOff, Eye } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -10,7 +10,7 @@ import { Modal } from '../../components/Modal';
 import { Select } from '../../components/Select';
 import { EmptyState } from '../../components/EmptyState';
 import type { Video } from '../../types';
-import { cacheSnapshot, loadSnapshot, loadSyncedPreference, saveSyncedPreference } from '../../lib/syncedPreferences';
+import { cacheSnapshot, loadSnapshot } from '../../lib/syncedPreferences';
 
 const categories = ['General', 'Worship', 'Tutorial', 'Sermon', 'Conference', 'Other'];
 const VIDEOS_PER_PAGE = 20;
@@ -155,9 +155,6 @@ export function VideosTab() {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [visibleCount, setVisibleCount] = useState(VIDEOS_PER_PAGE);
-  const [desktopView, setDesktopView] = useState<'list' | 'grid'>(() => {
-    return localStorage.getItem('videosDesktopView') === 'grid' ? 'grid' : 'list';
-  });
   const [showCreate, setShowCreate] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
@@ -231,17 +228,6 @@ export function VideosTab() {
   };
 
   useEffect(() => { void fetchVideos(); }, [organization?.id]);
-
-  useEffect(() => {
-    void loadSyncedPreference<'list' | 'grid'>(user?.id, 'videos.view').then(value => {
-      if (value === 'list' || value === 'grid') setDesktopView(value);
-    });
-  }, [user?.id]);
-
-  useEffect(() => {
-    localStorage.setItem('videosDesktopView', desktopView);
-    void saveSyncedPreference(user?.id, 'videos.view', desktopView);
-  }, [desktopView, user?.id]);
 
   useEffect(() => {
     setVisibleCount(VIDEOS_PER_PAGE);
@@ -579,26 +565,6 @@ export function VideosTab() {
             </button>
           )}
         </div>
-        <div className="hidden h-12 shrink-0 items-center rounded-full border border-white/[0.08] bg-white/[0.055] p-1 md:flex" role="group" aria-label="Video layout">
-          <button
-            type="button"
-            onClick={() => setDesktopView('list')}
-            aria-label="List view"
-            aria-pressed={desktopView === 'list'}
-            className={`inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors ${desktopView === 'list' ? 'bg-[#1ed760] text-black' : 'text-white/55 hover:bg-white/[0.08] hover:text-white'}`}
-          >
-            <List className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setDesktopView('grid')}
-            aria-label="Grid view"
-            aria-pressed={desktopView === 'grid'}
-            className={`inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors ${desktopView === 'grid' ? 'bg-[#1ed760] text-black' : 'text-white/55 hover:bg-white/[0.08] hover:text-white'}`}
-          >
-            <LayoutGrid className="h-4 w-4" />
-          </button>
-        </div>
       </motion.div>
 
       {loadError && (
@@ -623,7 +589,7 @@ export function VideosTab() {
             variants={containerVariants}
             initial="hidden"
             animate="show"
-            className={`overflow-visible ${desktopView === 'grid' ? 'grid grid-cols-2 gap-2.5 md:gap-4 lg:grid-cols-3' : 'border-y border-white/[0.08]'}`}
+            className="grid grid-cols-2 gap-2.5 overflow-visible md:gap-4 lg:grid-cols-3"
           >
             {visibleVideos.map(video => {
               const thumb = video.thumbnail_url || getYouTubeThumb(video.video_url);
@@ -634,17 +600,15 @@ export function VideosTab() {
                 <motion.div
                   key={video.id}
                   variants={itemVariants}
-                  className={`group relative transition-colors duration-200 hover:bg-white/[0.045] ${desktopView === 'grid' ? 'overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.025]' : 'border-b border-white/[0.075] last:border-b-0'}`}
+                  className="group relative overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.025] transition-colors duration-200 hover:bg-white/[0.045]"
                 >
                   <button
                     type="button"
                     onClick={() => openVideo(video)}
-                    className={desktopView === 'grid'
-                      ? 'block w-full text-left'
-                      : 'grid w-full gap-3 px-4 py-4 text-left sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-5 sm:px-5 lg:px-6'}
+                    className="block w-full text-left"
                   >
-                    <div className={desktopView === 'grid' ? 'block' : 'flex items-start gap-3 sm:contents'}>
-                      <div className={`relative h-16 w-28 shrink-0 overflow-hidden rounded-md bg-white/[0.055] ring-1 ring-white/[0.08] sm:h-20 sm:w-36 ${desktopView === 'grid' ? 'aspect-video !h-auto !w-full rounded-none ring-0' : ''}`}>
+                    <div>
+                      <div className="relative aspect-video w-full overflow-hidden bg-white/[0.055]">
                       {thumb ? (
                         <img
                           src={thumb}
@@ -663,28 +627,28 @@ export function VideosTab() {
                             <PlayCircle className="h-6 w-6 text-white" />
                           </div>
                         </div>
-                        {titleParts.dateLabel && desktopView === 'grid' && (
+                        {titleParts.dateLabel && (
                           <span className="absolute bottom-2 left-2 z-10 inline-flex rounded-full bg-black/95 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.08em] text-white shadow-[0_5px_18px_rgba(0,0,0,0.75)] ring-2 ring-white/45 sm:bottom-3 sm:left-3 sm:px-3 sm:text-[11px]">
                             {titleParts.dateLabel}
                           </span>
                         )}
                       </div>
 
-                      <div className={`min-w-0 flex-1 ${desktopView === 'grid' ? 'p-3 sm:p-4 md:p-5' : ''}`}>
+                      <div className="min-w-0 flex-1 p-3 sm:p-4 md:p-5">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.1em] ${catColor}`}>
                             {video.category}
                           </span>
                         </div>
                         <p className="mt-1.5 min-w-0 text-[1rem] font-black leading-tight text-white sm:text-[1.12rem]" title={video.title}>
-                          {titleParts.dateLabel && desktopView === 'grid'
+                          {titleParts.dateLabel
                             ? <span className="block truncate">{titleParts.displayTitle}</span>
                             : video.title}
                         </p>
                         {video.description && (
                           <p className="mt-1 line-clamp-2 text-[13px] leading-5 text-white/48 sm:line-clamp-1">{video.description}</p>
                         )}
-                        <div className={`mt-2 min-w-0 items-center font-semibold text-white/32 ${desktopView === 'grid' ? 'flex flex-nowrap justify-between gap-2 text-[10px] sm:text-[11px]' : 'flex flex-wrap gap-x-3 gap-y-1 text-[11px]'}`}>
+                        <div className="mt-2 flex min-w-0 flex-nowrap items-center justify-between gap-2 text-[10px] font-semibold text-white/32 sm:text-[11px]">
                           <span className="whitespace-nowrap text-white/48">
                             Uploaded <span className="font-mono">{format(parseISO(video.created_at), 'MMM d, yyyy')}</span>
                           </span>
@@ -695,17 +659,11 @@ export function VideosTab() {
                       </div>
                     </div>
 
-                    <div className={desktopView === 'grid' ? 'hidden' : 'hidden items-center gap-2 justify-self-end text-white/26 sm:flex'}>
-                      <span className="text-[11px] font-bold uppercase tracking-[0.12em] opacity-0 transition-opacity group-hover:opacity-100">
-                        Open
-                      </span>
-                      <PlayCircle className="h-4 w-4" />
-                    </div>
                   </button>
 
                   {/* Manage menu */}
                   {canManage && (
-                    <div className={`absolute z-20 ${desktopView === 'grid' ? 'right-2 top-2 sm:right-3 sm:top-3' : 'right-4 top-4 sm:right-5 lg:right-6'}`}>
+                    <div className="absolute right-2 top-2 z-20 sm:right-3 sm:top-3">
                       <div className="relative">
                         <button
                           onClick={e => { e.preventDefault(); e.stopPropagation(); setOpenMenuId(openMenuId === video.id ? null : video.id); }}

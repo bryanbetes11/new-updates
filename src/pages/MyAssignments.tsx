@@ -262,14 +262,14 @@ export function MyAssignments() {
                 return (
                   <div
                     key={a.id}
-                    className="group flex w-full items-stretch gap-2 pr-2 transition-colors duration-150 hover:bg-gray-50 dark:hover:bg-white/[0.03]"
+                    className="group flex w-full flex-col transition-colors duration-150 hover:bg-gray-50 dark:hover:bg-white/[0.03] sm:flex-row sm:items-stretch sm:gap-2 sm:pr-2"
                   >
                     <button
                       type="button"
                       onClick={() => navigate(`/events/${a.event_id}`, {
                         state: { returnTo: `${location.pathname}${location.search}` },
                       })}
-                      className="flex min-w-0 flex-1 items-center gap-4 py-4 pl-5 text-left"
+                      className="grid min-w-0 flex-1 grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-3 px-3 pb-2 pt-4 text-left sm:flex sm:gap-4 sm:py-4 sm:pl-5 sm:pr-0"
                       aria-label={`Open ${a.events?.title || 'event'} assignment`}
                     >
                     {/* Date tile */}
@@ -277,22 +277,19 @@ export function MyAssignments() {
 
                     {/* Content */}
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 mb-0.5">
+                      <div className="mb-0.5 flex items-center gap-2">
                         <p className="text-[14px] font-semibold text-gray-900 dark:text-white truncate">
                           {a.events?.title}
                         </p>
-                        {a.status === 'pending' && (
-                          <AlertCircle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                        )}
                       </div>
-                      <p className="text-[13px] text-gray-600 dark:text-white/55 mb-1.5">
-                        {a.roles?.name}
+                      <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-[13px] text-gray-600 dark:text-white/55">
+                        <span>{a.roles?.name}</span>
                         {a.events?.event_type && (
-                          <span className="ml-2 inline-flex align-middle">
+                          <span className="inline-flex align-middle">
                             <EventTypeLabel type={a.events.event_type} filled />
                           </span>
                         )}
-                      </p>
+                      </div>
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
                         <span className="inline-flex items-center gap-1 font-mono text-[10px] text-gray-400 dark:text-white/30 uppercase tracking-wide">
                           <Calendar className="h-3 w-3" />
@@ -313,7 +310,7 @@ export function MyAssignments() {
                     </div>
 
                     {/* Status + chevron */}
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="hidden shrink-0 items-center gap-2 sm:flex">
                       {cfg && (
                         <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold ring-1 ${cfg.bg} ${cfg.text} ${cfg.ring}`}>
                           <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: cfg.dot }} />
@@ -322,29 +319,40 @@ export function MyAssignments() {
                       )}
                     </div>
                     </button>
-                    {a.status === 'pending' && (
-                      <button
-                        type="button"
-                        onClick={() => setConfirmModalAssignment(a)}
-                        disabled={confirmingAssignmentId !== null}
-                        className="inline-flex h-8 min-h-0 shrink-0 self-center items-center justify-center rounded-lg bg-brand-500 px-2.5 text-[10px] font-bold text-white transition hover:bg-brand-400 disabled:cursor-wait disabled:opacity-55"
-                        aria-label={`Confirm ${a.events?.title || 'assignment'}`}
-                      >
-                        {confirmingAssignmentId === a.id ? 'Confirming…' : 'Confirm'}
-                      </button>
-                    )}
-                    {a.status !== 'declined' && (
-                      <button
-                        type="button"
-                        title={a.roles?.name === 'Song Leader' ? 'Request Schedule Swap' : 'Find a Sub'}
-                        aria-label={a.roles?.name === 'Song Leader' ? `Request a schedule swap for ${a.events?.title || 'this event'}` : `Find a substitute for ${a.events?.title || 'this event'}`}
-                        onClick={() => setSwapModalAssignment(a)}
-                        className="inline-flex h-8 min-h-0 shrink-0 self-center items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 text-[10px] font-bold text-gray-600 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 dark:border-white/[0.09] dark:bg-white/[0.04] dark:text-white/55 dark:hover:border-brand-500/35 dark:hover:bg-brand-500/[0.10] dark:hover:text-brand-300"
-                      >
-                        <ArrowLeftRight className="h-3.5 w-3.5" />
-                        <span>{a.roles?.name === 'Song Leader' ? 'Swap' : 'Sub'}</span>
-                      </button>
-                    )}
+                    <div className="flex items-center justify-end gap-2 px-3 pb-4 sm:contents sm:p-0">
+                      {cfg && (
+                        <span className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-[11px] font-bold ring-1 sm:hidden ${cfg.bg} ${cfg.text} ${cfg.ring}`}>
+                          <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: cfg.dot }} />
+                          {cfg.label}
+                        </span>
+                      )}
+                      {cfg && a.status !== 'declined' && (
+                        <span className="h-5 w-px shrink-0 bg-gray-300 dark:bg-white/15 sm:hidden" aria-hidden="true" />
+                      )}
+                      {a.status === 'pending' && (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmModalAssignment(a)}
+                          disabled={confirmingAssignmentId !== null}
+                          className="inline-flex h-9 min-h-0 shrink-0 items-center justify-center rounded-lg bg-brand-500 px-3 text-[11px] font-bold text-white transition hover:bg-brand-400 disabled:cursor-wait disabled:opacity-55 sm:h-8 sm:self-center sm:px-2.5 sm:text-[10px]"
+                          aria-label={`Confirm ${a.events?.title || 'assignment'}`}
+                        >
+                          {confirmingAssignmentId === a.id ? 'Confirming…' : 'Confirm'}
+                        </button>
+                      )}
+                      {a.status !== 'declined' && (
+                        <button
+                          type="button"
+                          title={a.roles?.name === 'Song Leader' ? 'Request Schedule Swap' : 'Find a Sub'}
+                          aria-label={a.roles?.name === 'Song Leader' ? `Request a schedule swap for ${a.events?.title || 'this event'}` : `Find a substitute for ${a.events?.title || 'this event'}`}
+                          onClick={() => setSwapModalAssignment(a)}
+                          className="inline-flex h-9 min-h-0 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-[11px] font-bold text-gray-600 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 dark:border-white/[0.09] dark:bg-white/[0.04] dark:text-white/55 dark:hover:border-brand-500/35 dark:hover:bg-brand-500/[0.10] dark:hover:text-brand-300 sm:h-8 sm:self-center sm:px-2.5 sm:text-[10px]"
+                        >
+                          <ArrowLeftRight className="h-3.5 w-3.5" />
+                          <span>{a.roles?.name === 'Song Leader' ? 'Swap' : 'Sub'}</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}

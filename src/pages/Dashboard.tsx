@@ -1127,7 +1127,8 @@ export function Dashboard() {
     .filter(announcement => activeHubFilter !== 'week' || isThisWeekDate(announcement.created_at?.slice(0, 10)))
   ).slice(0, 3);
   const teamAvailabilityRows = filterAvailabilityForHub(unavailableMembers).slice(0, 3);
-  const songsThisWeek = filteredDisplayEvents.reduce<DashboardWeekSong[]>((songs, event) => {
+  const thisWeekEvents = displayEvents.filter(event => isThisWeekEvent(event));
+  const songsThisWeek = thisWeekEvents.reduce<DashboardWeekSong[]>((songs, event) => {
     const eventSongs = eventArtworkSongsMap[event.id] || [];
     eventSongs.forEach((song) => {
       const nestedSong = getDashboardArtworkSong(song);
@@ -1891,9 +1892,9 @@ export function Dashboard() {
                 <DashboardEmptyState
                   icon={dashboardLoadIssues.has('events') || dashboardLoadIssues.has('setlists') ? AlertCircle : Music}
                   title={dashboardLoadIssues.has('events') || dashboardLoadIssues.has('setlists') ? 'Unable to load scheduled songs' : 'No songs scheduled'}
-                  description={dashboardLoadIssues.has('events') || dashboardLoadIssues.has('setlists') ? 'Check your connection and try loading the dashboard again.' : activeHubFilter === 'all' ? 'Songs from upcoming event setlists will appear here.' : 'No scheduled songs match this dashboard filter.'}
-                  actionLabel={dashboardLoadIssues.has('events') || dashboardLoadIssues.has('setlists') ? 'Try again' : activeHubFilter !== 'all' ? 'Show all' : undefined}
-                  onAction={dashboardLoadIssues.has('events') || dashboardLoadIssues.has('setlists') ? () => loadDashboardData() : activeHubFilter !== 'all' ? () => setActiveHubFilter('all') : undefined}
+                  description={dashboardLoadIssues.has('events') || dashboardLoadIssues.has('setlists') ? 'Check your connection and try loading the dashboard again.' : 'Songs from this week’s event setlists will appear here.'}
+                  actionLabel={dashboardLoadIssues.has('events') || dashboardLoadIssues.has('setlists') ? 'Try again' : undefined}
+                  onAction={dashboardLoadIssues.has('events') || dashboardLoadIssues.has('setlists') ? () => loadDashboardData() : undefined}
                   compact
                 />
               </div>

@@ -3284,20 +3284,19 @@ function SeenDetailsSheet({
 
   return (
     <motion.div
-      className="fixed inset-0 z-[160] flex items-end justify-center bg-black/20 px-0 sm:items-center sm:px-4 dark:bg-black/45"
+      className="fixed inset-0 z-[2147483646] flex items-center justify-center bg-black/45 px-4 py-[max(1rem,env(safe-area-inset-top))] dark:bg-black/70"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       onClick={onClose}
     >
       <motion.div
-        initial={{ y: 38, opacity: 0.96, scale: 0.98 }}
+        initial={{ y: 16, opacity: 0, scale: 0.96 }}
         animate={{ y: 0, opacity: 1, scale: 1 }}
-        exit={{ y: 30, opacity: 0, scale: 0.98 }}
+        exit={{ y: 12, opacity: 0, scale: 0.96 }}
         transition={mobilePanelTransition}
         onClick={event => event.stopPropagation()}
-        className="w-full max-w-md overflow-hidden rounded-t-[28px] border border-black/[0.06] bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#1c1b1f] sm:rounded-[28px]"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        className="max-h-[min(70dvh,32rem)] w-full max-w-sm overflow-hidden rounded-[28px] border border-black/[0.06] bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#1c1b1f]"
       >
         <div className="flex items-center justify-between border-b border-black/[0.06] px-5 py-3.5 dark:border-white/[0.07]">
           <div>
@@ -3311,7 +3310,7 @@ function SeenDetailsSheet({
           </span>
         </div>
 
-        <div className="min-h-[13.5rem] max-h-[52dvh] overflow-y-auto py-1.5">
+        <div className="max-h-[52dvh] overflow-y-auto py-1.5">
           {sortedSeers.map(seer => {
             const member = getMember(seer.userId);
             const isMe = seer.userId === myUserId;
@@ -4907,7 +4906,7 @@ function ChatWindow({
         document.body,
       )}
 
-      {!showInfo && !showEventDetail && (
+      {!showInfo && !showEventDetail && !detailsSheetOpen && (
         <>
           <InputBar
             conversationId={conv.id}

@@ -261,9 +261,19 @@ function SidebarBadge({
 
 function Tooltip({
   label,
+  active = false,
+  badge = 0,
+  badgeColor,
+  touchVisible = false,
+  onActivate,
   children,
 }: {
   label: string;
+  active?: boolean;
+  badge?: number;
+  badgeColor?: "red" | "blue" | "amber";
+  touchVisible?: boolean;
+  onActivate?: () => void;
   children: React.ReactNode;
 }) {
   const [visible, setVisible] = useState(false);
@@ -272,19 +282,24 @@ function Tooltip({
       className="relative flex items-center"
       onMouseEnter={() => setVisible(true)}
       onMouseLeave={() => setVisible(false)}
+      onFocus={() => setVisible(true)}
+      onBlur={() => setVisible(false)}
     >
       {children}
       <AnimatePresence>
-        {visible && (
-          <motion.div
+        {(visible || touchVisible) && (
+          <motion.button
+            type="button"
+            onClick={onActivate}
             initial={{ opacity: 0, x: -4 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -4 }}
             transition={{ duration: 0.12 }}
-            className="absolute left-full ml-3 z-50 whitespace-nowrap rounded-lg bg-gray-900 dark:bg-gray-800 px-2.5 py-1.5 text-xs font-medium text-white shadow-lg pointer-events-none"
+            className={`absolute left-[calc(100%-0.35rem)] z-50 flex h-11 min-w-40 items-center justify-between gap-3 whitespace-nowrap rounded-r-[0.85rem] border-y border-r px-4 text-left text-[13px] font-bold text-white shadow-[18px_14px_30px_-20px_rgba(0,0,0,0.95)] ${active ? "border-white/[0.10] bg-[#202020]" : "border-white/[0.08] bg-[#151515]"}`}
           >
-            {label}
-          </motion.div>
+            <span>{label}</span>
+            {badge > 0 && <SidebarBadge count={badge} color={badgeColor} />}
+          </motion.button>
         )}
       </AnimatePresence>
     </div>
@@ -368,6 +383,7 @@ export function Navigation({
   const [globalSearchAnchorRect, setGlobalSearchAnchorRect] =
     useState<SearchAnchorRect | null>(null);
   const [desktopProfileOpen, setDesktopProfileOpen] = useState(false);
+  const [touchPreviewPath, setTouchPreviewPath] = useState<string | null>(null);
   const mobileMenuScrollRef = useRef<HTMLDivElement | null>(null);
   const mobileSettingsScrollRef = useRef<HTMLDivElement | null>(null);
   const globalSearchInputRef = useRef<HTMLInputElement | null>(null);
@@ -376,6 +392,24 @@ export function Navigation({
   const globalSearchDialogRef = useRef<HTMLDivElement | null>(null);
   const mobileMenuScrollTopRef = useRef(0);
   const mobileSettingsScrollTopRef = useRef(0);
+
+  useEffect(() => {
+    if (!touchPreviewPath) return;
+
+    const dismissTouchPreview = (event: PointerEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest("[data-collapsed-nav-item]")
+      ) {
+        return;
+      }
+      setTouchPreviewPath(null);
+    };
+
+    document.addEventListener("pointerdown", dismissTouchPreview);
+    return () => document.removeEventListener("pointerdown", dismissTouchPreview);
+  }, [touchPreviewPath]);
 
   const isActive = useCallback(
     (item: NavItem) => {
@@ -1198,10 +1232,34 @@ export function Navigation({
     const iconTone = item.tone || "from-zinc-300/75 via-zinc-700 to-black";
 
     if (isCollapsed) {
+      const openCollapsedItem = () => {
+        if (
+          window.matchMedia("(hover: none)").matches &&
+          touchPreviewPath !== item.path
+        ) {
+          setTouchPreviewPath(item.path);
+          return;
+        }
+        setTouchPreviewPath(null);
+        handleNav(item.path);
+      };
+
       return (
-        <Tooltip key={item.path} label={item.label}>
+        <Tooltip
+          key={item.path}
+          label={item.label}
+          active={active}
+          badge={badge}
+          badgeColor={item.badgeColor}
+          touchVisible={touchPreviewPath === item.path}
+          onActivate={() => {
+            setTouchPreviewPath(null);
+            handleNav(item.path);
+          }}
+        >
           <button
-            onClick={() => handleNav(item.path)}
+            data-collapsed-nav-item
+            onClick={openCollapsedItem}
             onPointerEnter={() => {
               void preloadRoute(item.path);
             }}
@@ -1519,19 +1577,6 @@ export function Navigation({
               ServeSync
             </span>
           </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => onCollapsedChange(!collapsed)}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.65rem] border border-white/[0.08] bg-white/[0.055] text-white/62 transition-colors hover:bg-white/[0.10] hover:text-white"
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {collapsed ? (
-            <ChevronRight className="h-4 w-4" />
-          ) : (
-            <ChevronLeft className="h-4 w-4" />
-          )}
         </button>
 
         <button
@@ -2215,30 +2260,36 @@ export function Navigation({
       <motion.aside
         animate={{ width: sidebarWidth }}
         transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-        className="desktop-sidebar fixed left-0 z-40 hidden flex-col border-r border-white/[0.08] bg-[#050505] lg:flex"
-        onClickCapture={(event) => {
-          if (!collapsed) return;
-          event.stopPropagation();
-          onCollapsedChange(false);
-        }}
+        className="desktop-sidebar fixed left-0 z-40 hidden flex-col bg-[#050505] lg:flex"
         style={{ overflow: "visible" }}
       >
         <div
-          className="flex h-full flex-col overflow-hidden bg-[radial-gradient(circle_at_0%_0%,rgba(34,197,94,0.12),transparent_32%),linear-gradient(180deg,#07110b_0%,#050505_28%,#050505_100%)]"
-          style={{
-            WebkitBackdropFilter: "blur(24px) saturate(145%)",
-            backdropFilter: "blur(24px) saturate(145%)",
-          }}
+          className={`flex h-full flex-col bg-[#050505] ${collapsed ? "overflow-visible" : "overflow-hidden"}`}
         >
           <div
-            className={`flex-1 overflow-y-auto ${collapsed ? "px-2 pb-2 pt-5" : "px-4 pb-3 pt-5"} scrollbar-thin`}
+            className={`flex-1 ${collapsed ? "overflow-visible px-2 pb-2 pt-5" : "overflow-y-auto px-4 pb-3 pt-5 scrollbar-thin"}`}
           >
-            {!collapsed && (
-              <p className="px-2.5 pb-2 pt-1 text-[10px] font-black uppercase tracking-[0.16em] text-white/36">
-                Main
-              </p>
-            )}
-            {collapsed && <div className="pt-1" />}
+            <div
+              className={`flex items-center pb-2 pt-1 ${collapsed ? "justify-center" : "justify-between px-2.5"}`}
+            >
+              {!collapsed && (
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/36">
+                  Main
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={() => onCollapsedChange(!collapsed)}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[0.5rem] border border-white/[0.08] bg-white/[0.055] text-white/62 transition-colors hover:bg-white/[0.10] hover:text-white"
+                aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              >
+                {collapsed ? (
+                  <ChevronRight className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                )}
+              </button>
+            </div>
 
             <div className="space-y-1.5">
               {sidebarMainItems.map((item) => renderNavItem(item, collapsed))}

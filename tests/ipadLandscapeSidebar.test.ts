@@ -42,11 +42,16 @@ assert.match(
 );
 assert.match(
   navigation,
-  /onClickCapture=\{\(event\) => \{[\s\S]*?if \(!collapsed\) return;[\s\S]*?event\.stopPropagation\(\)[\s\S]*?onCollapsedChange\(false\)/,
-  'the first tap on any collapsed desktop rail should expand it without selecting a destination',
+  /window\.matchMedia\("\(hover: none\)"\)\.matches[\s\S]*?touchPreviewPath !== item\.path[\s\S]*?setTouchPreviewPath\(item\.path\)[\s\S]*?return;/,
+  'the first touch on a collapsed item should reveal only that item without navigating',
 );
-assert.doesNotMatch(
+assert.match(
   navigation,
-  /if \(!collapseAfterNavigate \|\| !collapsed\) return;/,
-  'expand-only first taps should not be limited to iPad mode',
+  /touchVisible=\{touchPreviewPath === item\.path\}/,
+  'the touched item should control its own expanded label preview',
+);
+assert.match(
+  navigation,
+  /setTouchPreviewPath\(null\);[\s\S]*?handleNav\(item\.path\)/,
+  'activating the revealed item should dismiss the preview and navigate',
 );

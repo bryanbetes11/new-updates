@@ -5,11 +5,13 @@ export function EventDateChip({
   dim = false,
   tone = 'default',
   compact = false,
+  mobileLarge = false,
 }: {
   date: string;
   dim?: boolean;
   tone?: 'default' | 'warning' | 'danger';
   compact?: boolean;
+  mobileLarge?: boolean;
 }) {
   const parsed = parseISO(date);
 
@@ -27,14 +29,14 @@ export function EventDateChip({
 
   if (compact) {
     return (
-      <div className="relative flex h-16 w-14 shrink-0 flex-col items-center justify-center">
-        <span className={`text-[9px] font-black uppercase tracking-widest leading-none ${monthClasses}`}>
+      <div className={`relative flex shrink-0 flex-col items-center justify-center ${mobileLarge ? 'h-20 w-[4.5rem] sm:h-16 sm:w-14' : 'h-16 w-14'}`}>
+        <span className={`${mobileLarge ? 'text-[10px] sm:text-[9px]' : 'text-[9px]'} font-black uppercase tracking-widest leading-none ${monthClasses}`}>
           {format(parsed, 'EEE')}
         </span>
-        <span className={`mt-0.5 text-[18px] font-black leading-none ${dim ? 'text-gray-500 dark:text-white/58' : 'text-gray-900 dark:text-white'}`}>
+        <span className={`mt-0.5 ${mobileLarge ? 'text-[22px] sm:text-[18px]' : 'text-[18px]'} font-black leading-none ${dim ? 'text-gray-500 dark:text-white/58' : 'text-gray-900 dark:text-white'}`}>
           {format(parsed, 'MMM')}
         </span>
-        <span className={`text-[24px] font-black leading-none ${dim ? 'text-gray-500 dark:text-white/58' : 'text-gray-900 dark:text-white'}`}>
+        <span className={`${mobileLarge ? 'text-[30px] sm:text-[24px]' : 'text-[24px]'} font-black leading-none ${dim ? 'text-gray-500 dark:text-white/58' : 'text-gray-900 dark:text-white'}`}>
           {format(parsed, 'dd')}
         </span>
       </div>

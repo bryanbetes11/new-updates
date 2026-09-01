@@ -16,8 +16,11 @@ interface ConversationUnreadRow {
   unread_count: number | string | null;
 }
 
-export function countUnreadConversations(rows: ConversationUnreadRow[] | null | undefined): number {
-  return (rows || []).filter(row => Number(row.unread_count) > 0).length;
+export function countUnreadMessages(rows: ConversationUnreadRow[] | null | undefined): number {
+  return (rows || []).reduce((total, row) => {
+    const unreadCount = Number(row.unread_count);
+    return total + (Number.isFinite(unreadCount) && unreadCount > 0 ? unreadCount : 0);
+  }, 0);
 }
 
 function isLeadershipRole(value: unknown): boolean {
@@ -88,10 +91,10 @@ export function useUnreadCounts() {
 
     // Use the same server-authoritative conversation list as the Messages page.
     // It excludes archived chats and the current user's own messages, so a
-    // global badge always points to an unread conversation the user can open.
+    // global badge totals unread messages only from conversations the user can open.
     const unreadMessages = conversationsRes.error
       ? 0
-      : countUnreadConversations(conversationsRes.data as ConversationUnreadRow[] | null);
+      : countUnreadMessages(conversationsRes.data as ConversationUnreadRow[] | null);
 
     setCounts({
       announcements: Math.max(0, unreadAnnouncements),

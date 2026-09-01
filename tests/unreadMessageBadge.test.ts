@@ -1,17 +1,17 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { countUnreadConversations } from '../src/hooks/useUnreadCounts';
+import { countUnreadMessages } from '../src/hooks/useUnreadCounts';
 
 const unreadSource = readFileSync(resolve(process.cwd(), 'src/hooks/useUnreadCounts.ts'), 'utf8');
 const messagesSource = readFileSync(resolve(process.cwd(), 'src/pages/Messages.tsx'), 'utf8');
 
-assert.equal(countUnreadConversations(null), 0);
-assert.equal(countUnreadConversations([
+assert.equal(countUnreadMessages(null), 0);
+assert.equal(countUnreadMessages([
   { unread_count: 0 },
   { unread_count: '2' },
   { unread_count: 1 },
-]), 2);
+]), 3);
 
 assert.match(
   unreadSource,

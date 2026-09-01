@@ -944,7 +944,7 @@ function ConvItem({ conv, selected, myUserId, draft, onSelect, onLongPress }: {
     >
       <div className="relative shrink-0">
         {conv.type === 'event' && conv.event_id ? (
-          <EventConversationAvatar eventId={conv.event_id} name={name} className="h-12 w-12 md:h-10 md:w-10" />
+          <EventConversationAvatar eventId={conv.event_id} name={name} className="h-12 w-12 rounded-md md:h-10 md:w-10" />
         ) : (
           <Avatar
             src={getConversationAvatarSrc(conv, myUserId)}

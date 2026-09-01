@@ -953,6 +953,31 @@ export function Navigation({
     },
   ];
 
+  const isDesktopListItemActive = (path: string) => {
+    const [pathname, query = ""] = path.split("?");
+    if (location.pathname !== pathname && !location.pathname.startsWith(`${pathname}/`)) {
+      return false;
+    }
+    const currentParams = new URLSearchParams(location.search);
+    if (!query) {
+      const hasMatchingQuerySpecificShortcut = desktopShortcutItems.some((entry) => {
+        const [shortcutPathname, shortcutQuery = ""] = entry.path.split("?");
+        if (shortcutPathname !== pathname || !shortcutQuery) return false;
+
+        const shortcutParams = new URLSearchParams(shortcutQuery);
+        return Array.from(shortcutParams.entries()).every(
+          ([key, value]) => currentParams.get(key) === value,
+        );
+      });
+      return !hasMatchingQuerySpecificShortcut;
+    }
+
+    const requestedParams = new URLSearchParams(query);
+    return Array.from(requestedParams.entries()).every(
+      ([key, value]) => currentParams.get(key) === value,
+    );
+  };
+
   const sidebarWidth = collapsed ? 72 : 220;
 
   const handleMobileNavStyleChange = async (style: MobileNavStyle) => {
@@ -2304,7 +2329,9 @@ export function Navigation({
                     </p>
                   </div>
                   <div className="space-y-1.5">
-                    {desktopLibraryItems.map((entry) => (
+                    {desktopLibraryItems.map((entry) => {
+                      const active = isDesktopListItemActive(entry.path);
+                      return (
                       <button
                         key={entry.title}
                         onClick={() => handleNav(entry.path)}
@@ -2317,7 +2344,8 @@ export function Navigation({
                         onTouchStart={() => {
                           void preloadRoute(entry.path);
                         }}
-                        className="group flex w-full items-center gap-3 rounded-[0.7rem] px-2.5 py-1.5 text-left transition-colors hover:bg-white/[0.065]"
+                        aria-current={active ? "page" : undefined}
+                        className={`group flex w-full items-center gap-3 rounded-[0.8rem] border px-1.5 py-1.5 text-left transition-colors ${active ? "border-white/[0.10] bg-white/[0.10] shadow-[0_16px_32px_-24px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.12)]" : "border-transparent hover:border-white/[0.08] hover:bg-white/[0.065]"}`}
                       >
                         <span
                           className={`relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-[0.6rem] border border-white/[0.08] bg-gradient-to-br ${entry.tone} shadow-[0_4px_12px_-8px_rgba(0,0,0,0.8)] transition-colors group-hover:border-white/[0.14]`}
@@ -2336,7 +2364,8 @@ export function Navigation({
                           </span>
                         </span>
                       </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -2347,11 +2376,14 @@ export function Navigation({
                     </p>
                   </div>
                   <div className="space-y-1.5">
-                    {desktopShortcutItems.map((entry) => (
+                    {desktopShortcutItems.map((entry) => {
+                      const active = isDesktopListItemActive(entry.path);
+                      return (
                       <button
                         key={entry.title}
                         onClick={() => handleNav(entry.path)}
-                        className="group flex w-full items-center gap-3 rounded-[0.7rem] px-2.5 py-1.5 text-left transition-colors hover:bg-white/[0.065]"
+                        aria-current={active ? "page" : undefined}
+                        className={`group flex w-full items-center gap-3 rounded-[0.8rem] border px-1.5 py-1.5 text-left transition-colors ${active ? "border-white/[0.10] bg-white/[0.10] shadow-[0_16px_32px_-24px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.12)]" : "border-transparent hover:border-white/[0.08] hover:bg-white/[0.065]"}`}
                       >
                         <span
                           className={`relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-[0.6rem] border border-white/[0.08] bg-gradient-to-br ${entry.tone} shadow-[0_4px_12px_-8px_rgba(0,0,0,0.8)] transition-colors group-hover:border-white/[0.14]`}
@@ -2370,7 +2402,8 @@ export function Navigation({
                           </span>
                         </span>
                       </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </>

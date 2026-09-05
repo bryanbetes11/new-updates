@@ -40,6 +40,7 @@ import { getEffectiveSongLyrics, getSongLyricsSource } from '../lib/songLyrics';
 import { groupEmojiReactions } from '../lib/reactions';
 import { playInteractionSound } from '../lib/interactionSounds';
 import { projectSongReadiness, SONG_READINESS_RULE_DAYS } from '../lib/songReadiness';
+import { watchSharedTechMessages } from '../lib/sharedTechMessages';
 import { DEFAULT_STAGE_REQUEST_MESSAGES, DEFAULT_TECH_MODE_MESSAGES, getTechMessageGroup, loadStageRequestMessages, loadTechModeMessages, type TechModeMessages } from '../lib/techModeMessages';
 import { TechModeMessageSettings } from '../components/TechModeMessageSettings';
 import { getOutMemberIdsForDate, type MemberAvailabilityWindow } from '../lib/memberAvailability';
@@ -741,7 +742,8 @@ export function EventDetail() {
       if (detail?.orgId === orgId) setTechModeMessages(detail.messages);
     };
     window.addEventListener('servesync:tech-mode-messages-updated', handleUpdate);
-    return () => window.removeEventListener('servesync:tech-mode-messages-updated', handleUpdate);
+    const stopWatching = orgId ? watchSharedTechMessages(orgId) : () => {};
+    return () => { stopWatching(); window.removeEventListener('servesync:tech-mode-messages-updated', handleUpdate); };
   }, [profile?.org_id]);
 
   useEffect(() => {
@@ -3722,7 +3724,7 @@ const openLyricsModal = (ss: SetlistSong) => {
     formatTime12Hour(event.start_time || ''),
     `${confirmedCount}/${assignments.length} confirmed`,
     event.proposal_due_date
-      ? `Due ${formatInTimeZone(parseISO(event.proposal_due_date), 'Asia/Manila', 'MMM dd, h:mm a')}`
+      ? `Submission deadline: ${formatInTimeZone(parseISO(event.proposal_due_date), 'Asia/Manila', 'MMM dd, h:mm a')}`
       : '',
   ].filter(Boolean);
   const eventShareUrl = typeof window !== 'undefined' ? `${window.location.origin}/share/events/${event.id}` : '';
@@ -4254,12 +4256,12 @@ const openLyricsModal = (ss: SetlistSong) => {
                 <p className={`mb-1 text-[10px] font-mono font-medium uppercase tracking-[0.22em] ${heroEyebrow}`}>
                   {heroIsPast ? 'Past event' : heroIsOverdue ? 'Setlist overdue' : heroIsDueSoon ? `Due in ${heroDaysUntilDue}d` : heroHasApprovedSetlist ? 'Setlist approved' : 'Schedule'}
                 </p>
-                <div className="flex items-start gap-3 max-[380px]:flex-col">
+                <div className="flex flex-col items-start gap-3 sm:flex-row">
                   <h1 className="min-w-0 flex-1 text-[1.75rem] font-black leading-[1.04] text-white sm:text-[2.5rem] lg:text-[4.5rem] xl:text-[5.5rem]" style={{ letterSpacing: '-0.04em' }}>
                     {eventDisplayTitle}
                   </h1>
                   {!assignmentDetailsBlocked && (
-                    <div className="flex shrink-0 items-center gap-2 max-[380px]:self-end">
+                    <div className="flex shrink-0 flex-wrap items-center gap-2">
                       {canPreviewMemberView && !isViewingAsMember && (
                         <button
                           type="button"
@@ -4291,20 +4293,20 @@ const openLyricsModal = (ss: SetlistSong) => {
                       <button
                         onClick={handleShareEvent}
                         disabled={sharingEvent}
-                        className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:scale-95 disabled:cursor-wait disabled:opacity-60"
+                        className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full px-3 border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:scale-95 disabled:cursor-wait disabled:opacity-60"
                         title="Share event"
                         aria-label="Share event"
                       >
                         <Upload className={`h-4 w-4 ${sharingEvent ? 'animate-pulse' : ''}`} strokeWidth={2.6} />
                       </button>
-                      {myAssignment && myAssignment.status !== 'declined' && (
+                      {myAssignment && myAssignment.status !== 'declined' && !isAttendanceAssignment(myAssignment) && (
                         <button
                           onClick={() => setShowSwapModal(true)}
-                          className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:scale-95"
+                          className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full px-3 border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:scale-95"
                           title={myAssignment.roles?.name === 'Song Leader' ? 'Request schedule swap' : 'Find a sub for your spot'}
                           aria-label={myAssignment.roles?.name === 'Song Leader' ? 'Request schedule swap' : 'Find a sub for your spot'}
                         >
-                          <ArrowLeftRight className="h-4 w-4" />
+                          <ArrowLeftRight className="h-4 w-4" /><span className="text-xs font-bold">{myAssignment?.roles?.name === 'Song Leader' ? 'Swap' : 'Sub'}</span>
                         </button>
                       )}
                       {eventConversationId === undefined ? (
@@ -4323,20 +4325,20 @@ const openLyricsModal = (ss: SetlistSong) => {
                               if (isOrgAdmin || isAdmin || isPlatformOwner) setShowCreateChatModal(true);
                               else navigate(`/messages/${eventConversationId}`);
                             }}
-                            className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:scale-95"
+                            className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full px-3 border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:scale-95"
                             title={(isOrgAdmin || isAdmin || isPlatformOwner) ? 'Choose event chat' : 'Open group chat'}
                             aria-label={(isOrgAdmin || isAdmin || isPlatformOwner) ? 'Choose event chat' : 'Open group chat'}
                           >
-                            <MessageCircle className="h-4 w-4" />
+                            <MessageCircle className="h-4 w-4" /><span className="text-xs font-bold">Chat</span>
                           </button>
                         ) : (
                           <button
                             onClick={() => setShowCreateChatModal(true)}
-                            className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:scale-95"
+                            className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full px-3 border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:scale-95"
                             title="Create group chat for this event"
                             aria-label="Create group chat for this event"
                           >
-                            <MessageCircle className="h-4 w-4" />
+                            <MessageCircle className="h-4 w-4" /><span className="text-xs font-bold">Chat</span>
                           </button>
                         )
                       )}
@@ -4344,13 +4346,13 @@ const openLyricsModal = (ss: SetlistSong) => {
                         <div className="relative shrink-0">
                           <button
                             onClick={() => setShowEventActionsMenu((open) => !open)}
-                            className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:scale-95"
+                            className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full px-3 border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:scale-95"
                             title="Event actions"
                             aria-label="Event actions"
                             aria-haspopup="menu"
                             aria-expanded={showEventActionsMenu}
                           >
-                            <MoreHorizontal className="h-4 w-4" />
+                            <MoreHorizontal className="h-4 w-4" /><span className="text-xs font-bold">Actions</span>
                           </button>
                           <AnimatePresence>
                             {showEventActionsMenu && (

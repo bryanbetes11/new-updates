@@ -1,14 +1,25 @@
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { Camera, Image, Lock, Trash2, Type, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { Select } from './Select';
 import { MentionTextarea } from './MentionTextarea';
+import { useRecoverableDraft } from '../hooks/useRecoverableDraft';
+import { draftRecoveryKey } from '../lib/draftRecovery';
 
 interface ContentBlock {
   type: 'text' | 'image';
   content: string;
+}
+
+const emptyDraft = { formTitle: '', formPriority: 'normal' as 'normal' | 'high' | 'urgent', formLeadersOnly: false, contentBlocks: [{ type: 'text', content: '' }] as ContentBlock[] };
+function isAnnouncementDraft(value: unknown): value is typeof emptyDraft {
+  if (!value || typeof value !== 'object') return false;
+  const draft = value as typeof emptyDraft;
+  return typeof draft.formTitle === 'string' && ['normal', 'high', 'urgent'].includes(draft.formPriority)
+    && typeof draft.formLeadersOnly === 'boolean' && Array.isArray(draft.contentBlocks) && draft.contentBlocks.length > 0
+    && draft.contentBlocks.every(block => block && ['text', 'image'].includes(block.type) && typeof block.content === 'string');
 }
 
 interface AnnouncementComposerFormProps {
@@ -26,22 +37,23 @@ export function AnnouncementComposerForm({
   submitLabel = 'Post Announcement',
   variant = 'default',
 }: AnnouncementComposerFormProps) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
   const [creating, setCreating] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [formTitle, setFormTitle] = useState('');
-  const [formPriority, setFormPriority] = useState<'normal' | 'high' | 'urgent'>('normal');
-  const [formLeadersOnly, setFormLeadersOnly] = useState(false);
-  const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([{ type: 'text', content: '' }]);
+  const [draft, setDraft, recovery] = useRecoverableDraft(draftRecoveryKey('announcement', profile?.org_id, user?.id), emptyDraft, isAnnouncementDraft);
+  const { formTitle, formPriority, formLeadersOnly, contentBlocks } = draft;
+  const setFormTitle = (value: string) => setDraft(current => ({ ...current, formTitle: value }));
+  const setFormPriority = (value: typeof formPriority) => setDraft(current => ({ ...current, formPriority: value }));
+  const setFormLeadersOnly = (value: (current: boolean) => boolean) => setDraft(current => ({ ...current, formLeadersOnly: value(current.formLeadersOnly) }));
+  const setContentBlocks = (value: ContentBlock[] | ((current: ContentBlock[]) => ContentBlock[])) => setDraft(current => ({ ...current, contentBlocks: typeof value === 'function' ? value(current.contentBlocks) : value }));
+  const titleId = useId();
+  const operationRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const resetForm = () => {
-    setFormTitle('');
-    setFormPriority('normal');
-    setFormLeadersOnly(false);
-    setContentBlocks([{ type: 'text', content: '' }]);
+    recovery.discard();
     setUploading(false);
     setCreating(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -62,23 +74,29 @@ export function AnnouncementComposerForm({
   };
 
   const handleFileSelect = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
+    if (!files || files.length === 0 || operationRef.current) return;
+    operationRef.current = true;
     setUploading(true);
-
+    try {
     for (const file of Array.from(files)) {
       if (!file.type.startsWith('image/')) continue;
       const url = await uploadImage(file);
       if (url) setContentBlocks(prev => [...prev, { type: 'image', content: url }]);
     }
 
+    } catch {
+      toast('error', 'Photo upload failed. Your draft is still available; try adding the photo again.');
+    } finally {
+    operationRef.current = false;
     setUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (cameraInputRef.current) cameraInputRef.current.value = '';
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user || operationRef.current || uploading || creating) return;
 
     const blocks = contentBlocks.filter(block => block.content.trim());
     if (blocks.length === 0) {
@@ -86,6 +104,7 @@ export function AnnouncementComposerForm({
       return;
     }
 
+    operationRef.current = true;
     setCreating(true);
 
     const plainContent = blocks
@@ -94,6 +113,7 @@ export function AnnouncementComposerForm({
       .join('\n');
     const firstImage = blocks.find(block => block.type === 'image');
 
+    try {
     const { error } = await supabase.from('announcements').insert({
       title: formTitle,
       content: plainContent || ' ',
@@ -114,6 +134,12 @@ export function AnnouncementComposerForm({
     toast('success', 'Announcement posted');
     resetForm();
     await onSuccess?.();
+    } catch {
+      toast('error', 'Could not post. Your draft has been kept. Please try again.');
+    } finally {
+      operationRef.current = false;
+      setCreating(false);
+    }
   };
 
   const isSpotify = variant === 'spotify';
@@ -130,14 +156,20 @@ export function AnnouncementComposerForm({
     ? 'mb-2 text-[12px] font-semibold text-white/32'
     : 'mb-2 text-xs text-gray-400 dark:text-gray-500';
   const selectClass = isSpotify
-    ? '[&>button]:h-12 [&>button]:rounded-[0.65rem] [&>button]:border-white/[0.08] [&>button]:bg-white/[0.055] [&>button]:px-3.5 [&>button]:text-[14px] [&>button]:font-semibold [&>button]:text-white [&>button]:focus:border-[#22c55e]/60 [&>button]:focus:bg-white/[0.075] [&>button]:focus:ring-2 [&>button]:focus:ring-[#22c55e]/15'
+    ? '[&>select]:h-12 [&>select]:rounded-[0.65rem] [&>select]:border-white/[0.08] [&>select]:bg-white/[0.055] [&>select]:px-3.5 [&>select]:text-[14px] [&>select]:font-semibold [&>select]:text-white [&>select]:focus:border-[#22c55e]/60 [&>select]:focus:bg-white/[0.075] [&>select]:focus:ring-2 [&>select]:focus:ring-[#22c55e]/15'
     : '';
 
   return (
     <form onSubmit={handleSubmit} className={isSpotify ? 'space-y-5' : 'space-y-4'}>
+      <div className="flex items-center justify-between gap-3 text-xs text-gray-500 dark:text-gray-300" role="status">
+        <span>{!recovery.available ? 'Draft recovery is unavailable in this browser. Keep this form open.' : recovery.restored ? 'Draft restored on this device.' : 'Draft saved on this device as you type.'}</span>
+        <button type="button" className="min-h-11 shrink-0 px-2 underline" disabled={uploading || creating} onClick={resetForm}>Discard draft</button>
+      </div>
+      <fieldset disabled={creating} className="min-w-0 space-y-4">
       <div>
-        <label className={labelClass}>Title</label>
+        <label htmlFor={titleId} className={labelClass}>Title</label>
         <input
+          id={titleId}
           type="text"
           value={formTitle}
           onChange={e => setFormTitle(e.target.value)}
@@ -150,6 +182,7 @@ export function AnnouncementComposerForm({
         <div className="flex-1">
           <label className={labelClass}>Priority</label>
           <Select
+            aria-label="Announcement priority"
             value={formPriority}
             onChange={value => setFormPriority(value as 'normal' | 'high' | 'urgent')}
             className={selectClass}
@@ -165,6 +198,7 @@ export function AnnouncementComposerForm({
           <label className={labelClass}>Visibility</label>
           <button
             type="button"
+            aria-label={`Announcement visibility: ${formLeadersOnly ? 'Leaders only' : 'All members'}`}
             onClick={() => setFormLeadersOnly(state => !state)}
             className={isSpotify
               ? `inline-flex h-12 w-full items-center justify-center gap-2 rounded-[0.65rem] border px-3.5 text-[13px] font-black transition-colors ${
@@ -196,6 +230,7 @@ export function AnnouncementComposerForm({
               {block.type === 'text' ? (
                 <div className="relative">
                   <MentionTextarea
+                    aria-label={`Announcement content ${index + 1}`}
                     value={block.content}
                     onChange={value => setContentBlocks(prev => prev.map((item, itemIndex) => (
                       itemIndex === index ? { ...item, content: value } : item
@@ -207,6 +242,7 @@ export function AnnouncementComposerForm({
                   {contentBlocks.length > 1 && (
                     <button
                       type="button"
+                      aria-label={`Remove text block ${index + 1}`}
                       onClick={() => setContentBlocks(prev => prev.filter((_, itemIndex) => itemIndex !== index))}
                       className="absolute right-2 top-2 rounded-md p-1 text-gray-400 opacity-0 transition-all hover:bg-gray-100 hover:text-red-500 group-hover:opacity-100 dark:hover:bg-gray-800"
                     >
@@ -219,6 +255,7 @@ export function AnnouncementComposerForm({
                   <img src={block.content} alt="" className={`max-h-60 w-full object-contain ${isSpotify ? 'bg-white/[0.04]' : 'bg-gray-100 dark:bg-gray-800'}`} />
                   <button
                     type="button"
+                    aria-label={`Remove photo ${index + 1}`}
                     onClick={() => setContentBlocks(prev => prev.filter((_, itemIndex) => itemIndex !== index))}
                     className="absolute right-2 top-2 rounded-lg bg-black/50 p-1.5 text-white transition-colors hover:bg-black/70"
                   >
@@ -285,12 +322,13 @@ export function AnnouncementComposerForm({
         )}
         <button
           type="submit"
-          disabled={creating}
+          disabled={creating || uploading}
           className={isSpotify ? 'inline-flex h-11 items-center justify-center rounded-full bg-[#22c55e] px-5 text-[13px] font-black text-black transition-transform hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60' : 'btn-primary'}
         >
-          {creating ? 'Posting...' : submitLabel}
+          {creating ? 'Posting...' : uploading ? 'Uploading photos…' : submitLabel}
         </button>
       </div>
+      </fieldset>
     </form>
   );
 }

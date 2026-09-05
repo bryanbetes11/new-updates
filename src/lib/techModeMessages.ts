@@ -61,11 +61,11 @@ export function loadStageRequestMessages(orgId?: string | null): TechModeMessage
 }
 
 export function saveTechModeMessages(orgId: string, messages: TechModeMessages) {
-  localStorage.setItem(storageKey(orgId), JSON.stringify(messages));
+  try { localStorage.setItem(storageKey(orgId), JSON.stringify(messages)); } catch { /* Shared settings remain canonical. */ }
   window.dispatchEvent(new CustomEvent('servesync:tech-mode-messages-updated', { detail: { orgId, messages } }));
 }
 
 export function saveStageRequestMessages(orgId: string, messages: TechModeMessages) {
-  localStorage.setItem(stageStorageKey(orgId), JSON.stringify(messages));
+  try { localStorage.setItem(stageStorageKey(orgId), JSON.stringify(messages)); } catch { /* Shared settings remain canonical. */ }
   window.dispatchEvent(new CustomEvent('servesync:stage-request-messages-updated', { detail: { orgId, messages } }));
 }

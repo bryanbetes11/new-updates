@@ -9,6 +9,7 @@ import {
   Calendar, Clock, LogOut, PlayCircle, RefreshCw,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { draftRecoveryKey, readRecovery, writeRecovery } from '../lib/draftRecovery';
 import { formatTime12Hour } from '../lib/timeFormat';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -803,14 +804,16 @@ function messageDraftKey(userId: string, conversationId: string) {
 
 function readMessageDraft(userId: string, conversationId: string) {
   if (!userId || !conversationId || typeof window === 'undefined') return '';
-  return window.localStorage.getItem(messageDraftKey(userId, conversationId)) ?? '';
+  try { return window.localStorage.getItem(messageDraftKey(userId, conversationId)) ?? ''; } catch { return ''; }
 }
 
 function writeMessageDraft(userId: string, conversationId: string, value: string) {
   if (!userId || !conversationId || typeof window === 'undefined') return;
   const key = messageDraftKey(userId, conversationId);
-  if (value.trim()) window.localStorage.setItem(key, value);
-  else window.localStorage.removeItem(key);
+  try {
+    if (value.trim()) window.localStorage.setItem(key, value);
+    else window.localStorage.removeItem(key);
+  } catch { /* Keep the active composer usable when storage is unavailable. */ }
   window.dispatchEvent(new CustomEvent(MESSAGE_DRAFT_CHANGED_EVENT, {
     detail: { conversationId },
   }));
@@ -1412,9 +1415,16 @@ function ComposerMentionHighlight({ text, profiles }: { text: string; profiles: 
   );
 }
 
+interface PendingDelivery { text: string; id: string; attachment: boolean }
+function isPendingDelivery(value: unknown): value is PendingDelivery {
+  if (!value || typeof value !== 'object') return false;
+  const pending = value as PendingDelivery;
+  return typeof pending.text === 'string' && typeof pending.id === 'string' && typeof pending.attachment === 'boolean';
+}
+
 function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply, onTyping, mentionProfiles, eventDetails }: {
   conversationId: string;
-  onSend: (text: string, imageUrl?: string) => void;
+  onSend: (text: string, clientMessageId?: string) => Promise<boolean>;
   replyTo: string | null;
   replyPreview: string | null;
   onCancelReply: () => void;
@@ -1429,8 +1439,43 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
   }>;
   eventDetails: EventDiscussionDetails | null;
 }) {
-  const { user } = useAuth();
-  const [text, setText] = useState(() => readMessageDraft(user?.id ?? '', conversationId));
+  const { user, profile } = useAuth();
+  const { toast } = useToast();
+  const uploadingRef = useRef(false);
+  const pendingKey = draftRecoveryKey(`chat-delivery:${conversationId}`, profile?.org_id, user?.id);
+  const [text, setTextState] = useState(() => readMessageDraft(user?.id ?? '', conversationId));
+  const latestTextRef = useRef(text);
+  const setText = useCallback((value: string) => {
+    latestTextRef.current = value;
+    writeMessageDraft(user?.id ?? '', conversationId, value);
+    setTextState(value);
+  }, [user?.id, conversationId]);
+  const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
+  const retryRef = useRef<PendingDelivery | null>(readRecovery(pendingKey, isPendingDelivery));
+  const [failedAttachment, setFailedAttachment] = useState<string | null>(() => retryRef.current?.attachment ? retryRef.current.text : null);
+  const sendPayload = async (payload: string, attachment = false) => {
+    if (sendingRef.current) return false;
+    sendingRef.current = true;
+    setSending(true);
+    const attempt = retryRef.current?.text === payload ? retryRef.current : { text: payload, id: crypto.randomUUID(), attachment };
+    retryRef.current = attempt;
+    writeRecovery(pendingKey, attempt);
+    try {
+      const ok = await onSend(payload, attempt.id);
+      if (ok) {
+        retryRef.current = null;
+        if (readRecovery(pendingKey, isPendingDelivery)?.id === attempt.id) writeRecovery(pendingKey, null);
+      }
+      return ok;
+    } catch { return false; }
+    finally { sendingRef.current = false; setSending(false); }
+  };
+  const sendAttachment = async (payload: string) => {
+    const ok = await sendPayload(payload, true);
+    setFailedAttachment(ok ? null : payload);
+    return ok;
+  };
   const [uploading, setUploading] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [quickEmoji, setQuickEmoji] = useState(() => localStorage.getItem('msg-quick-action') || '👍');
@@ -1538,7 +1583,9 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
   useEffect(() => {
     loadedDraftIdentityRef.current = user?.id ? `${user.id}:${conversationId}` : '';
     setText(readMessageDraft(user?.id ?? '', conversationId));
-  }, [conversationId, user?.id]);
+    retryRef.current = readRecovery(pendingKey, isPendingDelivery);
+    setFailedAttachment(retryRef.current?.attachment ? retryRef.current.text : null);
+  }, [conversationId, user?.id, setText, pendingKey]);
 
   useEffect(() => {
     if (!user?.id || loadedDraftIdentityRef.current !== `${user.id}:${conversationId}`) return;
@@ -1618,7 +1665,7 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
       if (textarea) textarea.setSelectionRange(value.length, value.length);
     }
     requestAnimationFrame(resizeComposer);
-  }, [resizeComposer, setEditableCaretOffset]);
+  }, [resizeComposer, setEditableCaretOffset, setText]);
 
   const selectCommand = useCallback((command: EventChatCommand) => {
     setShowEditableMentionDropdown(false);
@@ -1643,8 +1690,10 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
     syncEditableComposer(nextText);
   }, [syncEditableComposer, text]);
 
-  const handleSend = () => {
-    if (!text.trim()) return;
+  const handleSend = async () => {
+    if (!text.trim() || sendingRef.current || uploading || failedAttachment) return;
+    const draftAtSend = text;
+    const identityAtSend = loadedDraftIdentityRef.current;
     const serializedText = serializeComposerMentions(text, mentionProfiles);
     let outgoing = serializedText;
     const normalized = text.trim();
@@ -1663,7 +1712,8 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
       }
     }
     onTyping(false);
-    onSend(outgoing);
+    const ok = await sendPayload(outgoing);
+    if (!ok || latestTextRef.current !== draftAtSend || loadedDraftIdentityRef.current !== identityAtSend || readMessageDraft(user?.id ?? '', conversationId) !== draftAtSend) return;
     setText('');
     if (editableRef.current) {
       editableRef.current.textContent = '';
@@ -1799,7 +1849,7 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
       setEditableCaretOffset(nextCursor);
       resizeComposer();
     });
-  }, [editableMentionStart, getEditableCaretOffset, resizeComposer, setEditableCaretOffset, text]);
+  }, [editableMentionStart, getEditableCaretOffset, resizeComposer, setEditableCaretOffset, setText, text]);
 
   const stopEditableMentionEvent = useCallback((event: React.SyntheticEvent) => {
     event.preventDefault();
@@ -1926,42 +1976,29 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
     };
   }, [showSongPicker]);
 
-  const handleImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !user) return;
+  const uploadAttachment = async (file: File | undefined, type: 'image' | 'file') => {
+    if (!file || !user || uploadingRef.current || sendingRef.current || failedAttachment) return;
+    uploadingRef.current = true;
     setShowAttachMenu(false);
     setUploading(true);
-    const ext = file.name.split('.').pop();
-    const path = `${user.id}/${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from('chat-attachments').upload(path, file);
-    if (error) {
-      console.error('[Upload] Image upload failed:', error.message);
-      alert('Failed to send photo. Please try again.');
-    } else {
+    const path = `${user.id}/files/${crypto.randomUUID()}-${file.name}`;
+    try {
+      const { error } = await supabase.storage.from('chat-attachments').upload(path, file);
+      if (error) throw error;
       const { data: { publicUrl } } = supabase.storage.from('chat-attachments').getPublicUrl(path);
-      onSend(JSON.stringify({ type: 'image', url: publicUrl }));
+      await sendAttachment(JSON.stringify(type === 'image'
+        ? { type, url: publicUrl }
+        : { type, url: publicUrl, name: file.name, size: file.size }));
+    } catch { toast('error', 'Attachment upload failed. Your message is kept; choose the file again to retry.'); }
+    finally {
+      uploadingRef.current = false;
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+      if (attachRef.current) attachRef.current.value = '';
     }
-    setUploading(false);
-    if (fileRef.current) fileRef.current.value = '';
   };
-
-  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !user) return;
-    setShowAttachMenu(false);
-    setUploading(true);
-    const path = `${user.id}/files/${Date.now()}-${file.name}`;
-    const { error } = await supabase.storage.from('chat-attachments').upload(path, file);
-    if (error) {
-      console.error('[Upload] File upload failed:', error.message);
-      alert('Failed to send file. Please try again.');
-    } else {
-      const { data: { publicUrl } } = supabase.storage.from('chat-attachments').getPublicUrl(path);
-      onSend(JSON.stringify({ type: 'file', url: publicUrl, name: file.name, size: file.size }));
-    }
-    setUploading(false);
-    if (attachRef.current) attachRef.current.value = '';
-  };
+  const handleImage = (e: React.ChangeEvent<HTMLInputElement>) => uploadAttachment(e.target.files?.[0], 'image');
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => uploadAttachment(e.target.files?.[0], 'file');
 
   const handleQuickPointerDown = () => {
     longPressTimer.current = setTimeout(() => setShowQuickPicker(true), 500);
@@ -2091,6 +2128,7 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
           </motion.div>
         )}
       </AnimatePresence>
+      {failedAttachment && <div role="alert" className="flex items-center justify-between gap-2 px-4 py-2 text-xs text-amber-700 dark:text-amber-300">Message not sent.<button type="button" className="min-h-11 px-2 font-bold underline" disabled={sending} onClick={() => void sendAttachment(failedAttachment)}>Retry</button><button type="button" className="min-h-11 px-2 underline" onClick={() => { setFailedAttachment(null); retryRef.current = null; writeRecovery(pendingKey, null); }}>Discard</button></div>}
       <div className="relative z-[1] flex items-end gap-2 px-3 py-2.5">
         {/* + attach button */}
         <div className="relative shrink-0">
@@ -2098,7 +2136,7 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
             type="button"
             onMouseDown={e => e.preventDefault()}
             onClick={() => setShowAttachMenu(v => !v)}
-            disabled={uploading}
+            disabled={uploading || sending || !!failedAttachment}
             aria-label={showAttachMenu ? 'Close attachment menu' : 'Add an attachment'}
             aria-expanded={showAttachMenu}
             className="flex h-10 w-10 items-center justify-center rounded-full text-gray-400 transition-all hover:bg-gray-100 hover:text-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 disabled:opacity-40 dark:text-white/30 dark:hover:bg-white/[0.06] dark:hover:text-emerald-400"
@@ -2124,12 +2162,12 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
                   <label className="flex items-center gap-3 px-4 py-3 text-[13px] text-gray-700 dark:text-white/70 hover:bg-gray-50 dark:hover:bg-white/[0.05] transition-colors cursor-pointer">
                     <ImageIcon className="h-4 w-4 shrink-0" />
                     Photo / Video
-                    <input ref={fileRef} type="file" accept="image/*,video/*" onChange={handleImage} className="hidden" disabled={uploading} />
+                    <input ref={fileRef} type="file" accept="image/*,video/*" onChange={handleImage} className="hidden" disabled={uploading || sending || !!failedAttachment} />
                   </label>
                   <label className="flex items-center gap-3 px-4 py-3 text-[13px] text-gray-700 dark:text-white/70 hover:bg-gray-50 dark:hover:bg-white/[0.05] transition-colors cursor-pointer border-t border-gray-100 dark:border-white/[0.06]">
                     <Paperclip className="h-4 w-4 shrink-0" />
                     File
-                    <input ref={attachRef} type="file" accept="*/*" onChange={handleFile} className="hidden" disabled={uploading} />
+                    <input ref={attachRef} type="file" accept="*/*" onChange={handleFile} className="hidden" disabled={uploading || sending || !!failedAttachment} />
                   </label>
                 </motion.div>
               </>
@@ -2194,7 +2232,7 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
                 transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
                 onMouseDown={e => e.preventDefault()}
                 onClick={handleSend}
-                disabled={uploading}
+                disabled={uploading || sending || !!failedAttachment}
                 aria-label="Send message"
                 className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500 text-white shadow-md shadow-emerald-500/25 transition-colors hover:bg-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 active:scale-95 disabled:opacity-40"
               >
@@ -2207,12 +2245,12 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.4, opacity: 0 }}
                 transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
-                onClick={() => { if (!showQuickPicker) onSend(quickEmoji); }}
+                onClick={() => { if (!showQuickPicker) void sendAttachment(quickEmoji); }}
                 onPointerDown={handleQuickPointerDown}
                 onPointerUp={handleQuickPointerUp}
                 onPointerLeave={handleQuickPointerUp}
                 onContextMenu={e => e.preventDefault()}
-                disabled={uploading}
+                disabled={uploading || sending || !!failedAttachment}
                 aria-label={`Send ${quickEmoji}; press and hold for more reactions`}
                 className="flex h-10 w-10 select-none items-center justify-center rounded-full bg-gray-100 text-[22px] leading-none transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 active:scale-90 disabled:opacity-40 dark:bg-white/[0.06]"
               >
@@ -3744,6 +3782,7 @@ function ChatWindow({
   const prefersReducedMotion = useReducedMotion();
 
   const { profile } = useAuth();
+  const { toast } = useToast();
   const {
     messages, loading, loadError, typingUsers, memberReadTimes,
     sendMessage, sendTyping, pinMessage, deleteMessage, toggleReaction,
@@ -4144,11 +4183,15 @@ function ChatWindow({
     }
   }, [messages, reactionDetailsMessageId]);
 
-  const handleSend = useCallback(async (text: string) => {
+  const handleSend = useCallback(async (text: string, clientMessageId?: string) => {
     stopTyping();
-    await sendMessage(text, replyTo?.id);
-    setReplyTo(null);
-  }, [sendMessage, replyTo, stopTyping]);
+    try {
+      const error = await sendMessage(text, replyTo?.id, clientMessageId);
+      if (error) { toast('error', 'Message not sent. Your draft is kept; please try again.'); return false; }
+      setReplyTo(current => current?.id === replyTo?.id ? null : current);
+      return true;
+    } catch { toast('error', 'Message not sent. Your draft is kept; please try again.'); return false; }
+  }, [sendMessage, replyTo, stopTyping, toast]);
 
   const handleConfirmDelete = useCallback(async () => {
     setConfirmingDelete(true);
@@ -4914,6 +4957,7 @@ function ChatWindow({
       {!showInfo && !showEventDetail && !detailsSheetOpen && (
         <>
           <InputBar
+            key={conv.id}
             conversationId={conv.id}
             onSend={handleSend}
             replyTo={replyTo?.id ?? null}
@@ -5414,7 +5458,7 @@ export function Messages() {
           className="relative z-20 shrink-0 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+10px)] sm:pt-[max(env(safe-area-inset-top),1rem)] lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96 lg:pt-4"
         >
           <div className="flex items-center justify-between mb-4">
-            <h1 className="text-[20px] font-bold text-gray-900 dark:text-white tracking-[-0.02em]">Messages</h1>
+            <h1 className="text-[20px] font-bold text-gray-900 dark:text-white tracking-[-0.02em]">Chat</h1>
             <button
               type="button"
               onClick={() => setNewMsgOpen(true)}

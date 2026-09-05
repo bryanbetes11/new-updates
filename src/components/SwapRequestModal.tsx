@@ -6,6 +6,8 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Modal } from './Modal';
 import { Avatar } from './Avatar';
+import { eventsOverlap, leaveCoversDate, type ConflictEvent } from '../lib/substituteAvailability';
+import type { LeaveDates } from '../lib/workflowDates';
 import { formatTime12Hour } from '../lib/timeFormat';
 import type { EventAssignment, Profile } from '../types';
 
@@ -91,6 +93,10 @@ export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
   const [memberSearch, setMemberSearch] = useState('');
   // For sub mode: track who's already on this event
   const [assignedToEvent, setAssignedToEvent] = useState<Set<string>>(new Set());
+  const [availabilityWarnings, setAvailabilityWarnings] = useState<Record<string, string>>({});
+  const [checkingAvailability, setCheckingAvailability] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState(false);
+  const [availabilityReload, setAvailabilityReload] = useState(0);
   const [assignedRoleNames, setAssignedRoleNames] = useState<Record<string, string>>({});
 
   const [selectedMember, setSelectedMember] = useState<MemberProfile | null>(null);
@@ -105,9 +111,34 @@ export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
   const [submissionResult, setSubmissionResult] = useState<SubmissionResult | null>(null);
   const assignmentEventId = myAssignment?.event_id || myAssignment?.events?.id;
 
+  useEffect(() => {
+    const event = myAssignment?.events;
+    if (!open || !isSub || !event || !profile?.org_id) return;
+    let active = true;
+    setCheckingAvailability(true); setAvailabilityError(false); setAvailabilityWarnings({});
+    Promise.all([
+      supabase.from('user_availability').select('user_id, status, request_type, leave_type, unavailable_date, start_date, end_date').eq('org_id', profile.org_id).eq('status', 'approved').eq('request_type', 'leave'),
+      supabase.from('event_assignments').select('user_id, events!inner(id, title, event_date, start_time, end_time)').eq('org_id', profile.org_id).neq('status', 'declined').eq('events.event_date', event.event_date).neq('event_id', event.id),
+    ]).then(([leaves, assignments]) => {
+      if (leaves.error || assignments.error) throw new Error('Availability unavailable');
+      if (!active) return;
+      const warnings: Record<string, string> = {};
+      for (const row of assignments.data || []) {
+        const other = singleRelation(row.events) as ConflictEvent | null;
+        if (other && eventsOverlap(event, other)) warnings[row.user_id] = `Schedule overlaps: ${other.title || 'another event'}`;
+      }
+      for (const leave of (leaves.data || []) as (LeaveDates & { user_id: string })[]) {
+        if (leaveCoversDate(leave, event.event_date)) warnings[leave.user_id] = 'On approved leave for this date';
+      }
+      setAvailabilityWarnings(warnings);
+    }).catch(() => { if (active) setAvailabilityError(true); })
+      .finally(() => { if (active) setCheckingAvailability(false); });
+    return () => { active = false; };
+  }, [open, isSub, myAssignment?.events, profile?.org_id, availabilityReload]);
+
   // Load eligible members
   useEffect(() => {
-    if (!open || !user || !assignmentEventId) return;
+    if (!open || !user || !assignmentEventId || myRoleName === 'All Members') return;
     setLoadingMembers(true);
     setMembers([]);
     setAssignedToEvent(new Set());
@@ -176,7 +207,7 @@ export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
               .neq('status', 'declined'),
           ]);
 
-          const assignees = (evtData || []) as EventAssigneeRow[];
+          const assignees = ((evtData || []) as EventAssigneeRow[]).filter(assignment => singleRelation(assignment.roles)?.name !== 'All Members');
           const assignedIds = new Set<string>(assignees.map(assignment => assignment.user_id));
           const roleMap: Record<string, string> = {};
           for (const assignment of assignees) {
@@ -233,10 +264,11 @@ export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
     setSubmissionResult(null);
   };
 
-  const handleClose = () => { reset(); onClose(); };
+  const handleClose = () => { if (submitting) return; reset(); onClose(); };
 
   const handleSubmit = async () => {
-    if (!user || !myAssignment || !selectedMember || !reason.trim()) return;
+    if (!user || !myAssignment || !selectedMember || !reason.trim() || submitting || myRoleName === 'All Members') return;
+    if (isSub && (checkingAvailability || availabilityError || availabilityWarnings[selectedMember.id])) { setSubmitError('This member is unavailable or availability could not be checked. Go back and choose again.'); return; }
     if (!isSub && !selectedTarget) return;
     setSubmitError(null);
     const eventDate = myAssignment.events?.event_date;
@@ -432,6 +464,7 @@ export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
                 />
               </div>
 
+              {isSub && <p role={availabilityError ? 'alert' : 'status'} className="text-xs text-gray-600 dark:text-gray-300">{checkingAvailability ? 'Checking leave and schedule conflicts…' : availabilityError ? 'Availability could not be checked.' : 'Members on leave or assigned during this time are marked unavailable.'}{availabilityError && <button type="button" onClick={() => setAvailabilityReload(key => key + 1)} className="min-h-11 px-2 underline">Retry</button>}</p>}
               <div className="max-h-56 overflow-y-auto rounded-xl border border-gray-200 dark:border-white/[0.07] divide-y divide-gray-100 dark:divide-white/[0.05]">
                 {loadingMembers ? (
                   <p className="px-4 py-6 text-center text-[13px] text-gray-400 dark:text-white/30">Loading…</p>
@@ -445,17 +478,19 @@ export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
                   </div>
                 ) : filteredMembers.map(m => {
                   const alreadyOn = isSub && assignedToEvent.has(m.id);
+                  const warning = isSub ? availabilityWarnings[m.id] : undefined;
+                  const unavailable = alreadyOn || !!warning || (isSub && (checkingAvailability || availabilityError));
                   return (
                     <button
                       key={m.id}
-                      disabled={alreadyOn}
+                      disabled={unavailable}
                       onClick={() => {
-                        if (alreadyOn) return;
+                        if (unavailable) return;
                         setSelectedMember(m);
                         goTo(isSub ? 'reason' : 'pick_assignment');
                       }}
                       className={`group flex items-center gap-3 px-4 py-3 w-full text-left transition-colors ${
-                        alreadyOn
+                        unavailable
                           ? 'opacity-60 cursor-not-allowed'
                           : 'hover:bg-gray-50 dark:hover:bg-white/[0.04]'
                       }`}
@@ -465,13 +500,14 @@ export function SwapRequestModal({ open, onClose, myAssignment }: Props) {
                         <span className="block text-[13px] font-semibold text-gray-900 dark:text-white">
                           {m.nickname || `${m.first_name} ${m.last_name}`}
                         </span>
+                        {warning && <span className="block text-xs text-amber-700 dark:text-amber-300">{warning}</span>}
                         {alreadyOn && (
                           <span className="block text-[11px] font-mono text-amber-600 dark:text-amber-400 mt-0.5">
                             Already assigned to this event as {assignedRoleNames[m.id]}
                           </span>
                         )}
                       </div>
-                      {!alreadyOn && (
+                      {!unavailable && (
                         <ChevronRight className="h-3.5 w-3.5 text-gray-300 dark:text-white/20 group-hover:text-gray-500 transition-colors shrink-0" />
                       )}
                     </button>

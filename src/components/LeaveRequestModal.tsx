@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { format, parseISO } from 'date-fns';
 import { AlertTriangle, CalendarDays, Loader2, Users } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -6,6 +6,15 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { Modal } from './Modal';
 import { DatePicker } from './DatePicker';
+import { useRecoverableDraft } from '../hooks/useRecoverableDraft';
+import { draftRecoveryKey } from '../lib/draftRecovery';
+
+const emptyLeaveDraft = { leaveType: 'single' as 'single' | 'range', formDate: '', formStartDate: '', formEndDate: '', formReason: '' };
+function isLeaveDraft(value: unknown): value is typeof emptyLeaveDraft {
+  if (!value || typeof value !== 'object') return false;
+  const draft = value as typeof emptyLeaveDraft;
+  return ['single', 'range'].includes(draft.leaveType) && [draft.formDate, draft.formStartDate, draft.formEndDate, draft.formReason].every(value => typeof value === 'string');
+}
 
 interface TeamLeaveProfile {
   first_name: string;
@@ -48,11 +57,15 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
   const { user, profile } = useAuth();
   const userId = user?.id;
   const { toast } = useToast();
-  const [leaveType, setLeaveType] = useState<'single' | 'range'>('single');
-  const [formDate, setFormDate] = useState('');
-  const [formStartDate, setFormStartDate] = useState('');
-  const [formEndDate, setFormEndDate] = useState('');
-  const [formReason, setFormReason] = useState('');
+  const [draft, setDraft, recovery] = useRecoverableDraft(draftRecoveryKey('leave', profile?.org_id, userId), emptyLeaveDraft, isLeaveDraft);
+  const { leaveType, formDate, formStartDate, formEndDate, formReason } = draft;
+  const setLeaveType = (leaveType: 'single' | 'range') => setDraft(current => ({ ...current, leaveType }));
+  const setFormDate = (formDate: string) => setDraft(current => ({ ...current, formDate }));
+  const setFormStartDate = (formStartDate: string) => setDraft(current => ({ ...current, formStartDate }));
+  const setFormEndDate = (formEndDate: string) => setDraft(current => ({ ...current, formEndDate }));
+  const setFormReason = (formReason: string) => setDraft(current => ({ ...current, formReason }));
+  const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const [teamLeaveOverlaps, setTeamLeaveOverlaps] = useState<TeamLeaveOverlap[]>([]);
   const [teamLeaveLoading, setTeamLeaveLoading] = useState(false);
   const [teamLeaveError, setTeamLeaveError] = useState(false);
@@ -65,11 +78,6 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
 
   useEffect(() => {
     if (!open) return;
-    setLeaveType('single');
-    setFormDate('');
-    setFormStartDate('');
-    setFormEndDate('');
-    setFormReason('');
     setTeamLeaveOverlaps([]);
     setTeamLeaveError(false);
   }, [open]);
@@ -140,27 +148,20 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
   ]);
 
   const resetForm = () => {
-    setLeaveType('single');
-    setFormDate('');
-    setFormStartDate('');
-    setFormEndDate('');
-    setFormReason('');
+    recovery.discard();
   };
 
   const handleClose = () => {
-    resetForm();
+    if (submittingRef.current) return;
     onClose();
   };
 
   const handleLeaveTypeChange = (type: 'single' | 'range') => {
     setLeaveType(type);
-    setFormDate('');
-    setFormStartDate('');
-    setFormEndDate('');
   };
 
   const handleSubmit = async () => {
-    if (!user) return;
+    if (!user || submittingRef.current || hasInvalidDateRange) return;
     const isValid = (!leavePolicy.reason_required || formReason.trim()) && (leaveType === 'single' ? formDate : (formStartDate && formEndDate));
     if (!isValid) return;
 
@@ -184,6 +185,9 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
           status: 'pending',
         };
 
+    submittingRef.current = true;
+    setSubmitting(true);
+    try {
     const { error } = await supabase.from('user_availability').insert(payload);
     if (error) {
       toast('error', error.message.includes('duplicate') ? 'Date already marked' : 'Failed to submit');
@@ -192,11 +196,17 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
     toast('success', leavePolicy.approval_required ? 'Leave request submitted for approval' : 'Leave request approved automatically');
 
     resetForm();
-    handleClose();
+    onClose();
     onSuccess?.();
+    } catch {
+      toast('error', 'Could not submit. Your leave draft has been kept.');
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
   };
 
-  const isSubmitDisabled = (leavePolicy.reason_required && !formReason.trim())
+  const isSubmitDisabled = submitting || (leavePolicy.reason_required && !formReason.trim())
     || (leaveType === 'single' ? !formDate : (!formStartDate || !formEndDate))
     || hasInvalidDateRange;
 
@@ -208,7 +218,11 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
       size="md"
       mobileView="dialog"
     >
-      <div className="space-y-3">
+      <fieldset disabled={submitting} className="min-w-0 space-y-3">
+        <div className="flex items-center justify-between gap-2 text-xs text-gray-600 dark:text-gray-300" role="status">
+          <span>{!recovery.available ? 'Recovery unavailable; keep this form open.' : recovery.restored ? 'Draft restored on this device.' : 'Your draft is kept when you close this form.'}</span>
+          <button type="button" className="min-h-11 shrink-0 px-2 underline" disabled={submitting} onClick={resetForm}>Discard draft</button>
+        </div>
         {/* Leave Type Toggle */}
         <div>
           <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">
@@ -337,6 +351,7 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
           </label>
           <input
             type="text"
+            aria-label="Leave reason"
             value={formReason}
             onChange={e => setFormReason(e.target.value)}
             className="input-field"
@@ -361,10 +376,10 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
             disabled={isSubmitDisabled}
             className="btn-primary w-full sm:w-auto"
           >
-            Submit Request
+            {submitting ? 'Submitting…' : 'Submit Request'}
           </button>
         </div>
-      </div>
+      </fieldset>
     </Modal>
   );
 }

@@ -1,4 +1,5 @@
-import { useRef, useState, type ElementType, type KeyboardEvent } from 'react';
+import { useRef, type ElementType, type KeyboardEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { BookOpen, ListChecks, Video } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { SetlistsTab } from './library/SetlistsTab';
@@ -13,8 +14,14 @@ const tabs: { id: Tab; label: string; shortLabel: string; icon: ElementType }[] 
 ];
 
 export function Library() {
-  const requestedTab = new URLSearchParams(window.location.search).get('tab');
-  const [tab, setTab] = useState<Tab>(requestedTab === 'songs' ? 'songs' : requestedTab === 'sets' ? 'sets' : 'videos');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  const tab: Tab = requestedTab === 'songs' ? 'songs' : requestedTab === 'sets' ? 'sets' : 'videos';
+  const setTab = (next: Tab) => setSearchParams(current => {
+    const params = new URLSearchParams(current);
+    params.set('tab', next);
+    return params;
+  });
   const tabRefs = useRef<Record<Tab, HTMLButtonElement | null>>({
     songs: null,
     sets: null,

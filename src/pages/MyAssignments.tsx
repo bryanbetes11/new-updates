@@ -1,10 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { AlertCircle, ArrowLeftRight, Calendar, CheckCircle, Clock, ListChecks, Music, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { PageLoader } from '../components/LoadingSpinner';
+import { useRecoverableDraft } from '../hooks/useRecoverableDraft';
+import { draftRecoveryKey } from '../lib/draftRecovery';
+import { compareEventSchedule } from '../lib/eventChronology';
 import { formatTime12Hour } from '../lib/timeFormat';
 import { SwapRequestModal } from '../components/SwapRequestModal';
 import { useToast } from '../contexts/ToastContext';
@@ -32,7 +35,7 @@ const STATUS_CONFIG = {
 };
 
 export function MyAssignments() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -47,6 +50,24 @@ export function MyAssignments() {
   const [cancellingSwap, setCancellingSwap] = useState<string | null>(null);
   const [confirmingAssignmentId, setConfirmingAssignmentId] = useState<string | null>(null);
   const [confirmModalAssignment, setConfirmModalAssignment] = useState<EventAssignment | null>(null);
+  const [declineAssignment, setDeclineAssignment] = useState<EventAssignment | null>(null);
+  const [declineReason, setDeclineReason, declineRecovery] = useRecoverableDraft(draftRecoveryKey(`decline:${declineAssignment?.id || ''}`, profile?.org_id, user?.id), '', (value): value is string => typeof value === 'string');
+  const [declining, setDeclining] = useState(false);
+  const decliningRef = useRef(false);
+  const handleDecline = async () => {
+    if (!user || !declineAssignment || !declineReason.trim() || decliningRef.current) return;
+    decliningRef.current = true; setDeclining(true);
+    try {
+      const { data, error } = await supabase.from('event_assignments')
+        .update({ status: 'declined', decline_reason: declineReason.trim(), confirmed_at: null })
+        .eq('id', declineAssignment.id).eq('user_id', user.id).eq('status', declineAssignment.status).select('id, status').single();
+      if (error || data?.status !== 'declined') throw error;
+      setAssignments(current => current.map(item => item.id === declineAssignment.id ? { ...item, status: 'declined', decline_reason: declineReason.trim() } : item));
+      declineRecovery.discard(); setDeclineAssignment(null); dispatchBadgeCountsRefresh();
+      toast('success', 'Response saved');
+    } catch { toast('error', 'Could not save your response. Your reason is kept; please try again.'); }
+    finally { decliningRef.current = false; setDeclining(false); }
+  };
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -71,7 +92,7 @@ export function MyAssignments() {
 
         const list = ((data || []) as EventAssignment[])
           .filter(a => shouldShowInMyAssignments(a, today))
-          .sort((a, b) => parseISO(a.events!.event_date).getTime() - parseISO(b.events!.event_date).getTime());
+          .sort((a, b) => compareEventSchedule(a.events!, b.events!));
 
         setAssignments(list);
 
@@ -150,10 +171,17 @@ export function MyAssignments() {
   };
 
   const handleCancelSwap = async (swapId: string) => {
+    if (cancellingSwap || !user) return;
     setCancellingSwap(swapId);
-    await supabase.from('user_availability').update({ status: 'withdrawn' }).eq('id', swapId);
-    setSentSwapRequests(prev => prev.filter(r => r.id !== swapId));
-    setCancellingSwap(null);
+    try {
+      const { data, error } = await supabase.from('user_availability').update({ status: 'withdrawn' }).eq('id', swapId).eq('user_id', user.id).select('id, status').single();
+      if (error || data?.status !== 'withdrawn') throw error;
+      setSentSwapRequests(prev => prev.filter(r => r.id !== swapId));
+      dispatchBadgeCountsRefresh();
+      toast('success', 'Request cancelled');
+    } catch {
+      toast('error', 'Could not cancel your request. Please try again.');
+    } finally { setCancellingSwap(null); }
   };
 
   if (loading) return <PageLoader />;
@@ -324,7 +352,7 @@ export function MyAssignments() {
                     </div>
                     </button>
                     <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-3 px-3 pb-4 sm:contents sm:p-0">
-                      <div className="col-start-2 flex min-w-0 items-center gap-2 sm:contents">
+                      <div className="col-start-2 flex min-w-0 flex-wrap items-center gap-2 sm:contents">
                         {cfg && (
                           <span className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-[11px] font-bold ring-1 sm:hidden ${cfg.bg} ${cfg.text} ${cfg.ring}`}>
                             <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: cfg.dot }} />
@@ -339,19 +367,22 @@ export function MyAssignments() {
                             type="button"
                             onClick={() => setConfirmModalAssignment(a)}
                             disabled={confirmingAssignmentId !== null}
-                            className="inline-flex h-9 min-h-0 shrink-0 items-center justify-center rounded-lg bg-brand-500 px-3 text-[11px] font-bold text-white transition hover:bg-brand-400 disabled:cursor-wait disabled:opacity-55 sm:h-8 sm:self-center sm:px-2.5 sm:text-[10px]"
+                            className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg bg-brand-500 px-3 text-[11px] font-bold text-white transition hover:bg-brand-400 disabled:cursor-wait disabled:opacity-55 sm:self-center sm:px-2.5 sm:text-[10px]"
                             aria-label={`Confirm ${a.events?.title || 'assignment'}`}
                           >
                             {confirmingAssignmentId === a.id ? 'Confirming…' : 'Confirm'}
                           </button>
                         )}
-                        {a.status !== 'declined' && (
+                        {(a.status === 'pending' || (a.status === 'confirmed' && a.roles?.name === 'All Members')) && (
+                          <button type="button" onClick={() => setDeclineAssignment(a)} aria-label={`Decline ${a.events?.title || 'invitation'}`} className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg border border-gray-200 px-3 text-xs font-bold text-gray-600 dark:border-white/15 dark:text-white/70 sm:self-center">{a.roles?.name === 'All Members' ? "Can't attend" : 'Decline'}</button>
+                        )}
+                        {a.status !== 'declined' && a.roles?.name !== 'All Members' && (
                           <button
                             type="button"
                             title={a.roles?.name === 'Song Leader' ? 'Request Schedule Swap' : 'Find a Sub'}
                             aria-label={a.roles?.name === 'Song Leader' ? `Request a schedule swap for ${a.events?.title || 'this event'}` : `Find a substitute for ${a.events?.title || 'this event'}`}
                             onClick={() => setSwapModalAssignment(a)}
-                            className="inline-flex h-9 min-h-0 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-[11px] font-bold text-gray-600 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 dark:border-white/[0.09] dark:bg-white/[0.04] dark:text-white/55 dark:hover:border-brand-500/35 dark:hover:bg-brand-500/[0.10] dark:hover:text-brand-300 sm:h-8 sm:self-center sm:px-2.5 sm:text-[10px]"
+                            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-[11px] font-bold text-gray-600 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 dark:border-white/[0.09] dark:bg-white/[0.04] dark:text-white/55 dark:hover:border-brand-500/35 dark:hover:bg-brand-500/[0.10] dark:hover:text-brand-300 sm:self-center sm:px-2.5 sm:text-[10px]"
                           >
                             <ArrowLeftRight className="h-3.5 w-3.5" />
                             <span>{a.roles?.name === 'Song Leader' ? 'Swap' : 'Sub'}</span>
@@ -447,6 +478,14 @@ export function MyAssignments() {
 
       </div>
     </div>
+      <Modal open={!!declineAssignment} onClose={() => { if (!decliningRef.current) setDeclineAssignment(null); }} title={declineAssignment?.roles?.name === 'All Members' ? "Can't attend" : 'Decline assignment'} size="sm" closeOnBackdrop={!declining} closeOnEscape={!declining}>
+        <div className="space-y-4">
+          <p className="font-bold">{declineAssignment?.events?.title}</p>
+          <label className="block text-sm">Reason<textarea aria-label="Reason for declining" value={declineReason} onChange={event => setDeclineReason(event.target.value)} disabled={declining} className="input-field mt-2 min-h-24" /></label>
+          <p className="text-xs text-gray-500 dark:text-gray-400">{declineRecovery.available ? 'Your reason is kept on this device until you submit or discard it.' : 'Draft recovery is unavailable. Keep this form open.'}</p>
+          <div className="flex flex-wrap justify-end gap-2"><button type="button" disabled={declining} className="btn-secondary min-h-11" onClick={() => { declineRecovery.discard(); setDeclineAssignment(null); }}>Discard</button><button type="button" disabled={declining || !declineReason.trim()} className="btn-primary min-h-11" onClick={() => void handleDecline()}>{declining ? 'Saving…' : 'Save response'}</button></div>
+        </div>
+      </Modal>
       <SwapRequestModal
       open={!!swapModalAssignment}
       onClose={() => setSwapModalAssignment(null)}
@@ -518,7 +557,7 @@ export function MyAssignments() {
             </dl>
 
             <p className="mx-auto max-w-[19rem] text-balance text-center text-xs leading-relaxed text-gray-500 dark:text-white/40">
-              Confirming means you are available and committed to serve in this role.
+              {confirmModalAssignment.roles?.name === 'All Members' ? 'Confirming means you plan to attend this event.' : 'Confirming means you are available and committed to serve in this role.'}
             </p>
           </div>
         )}

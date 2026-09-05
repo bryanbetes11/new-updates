@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { format, parseISO, differenceInDays } from 'date-fns';
+import { relativeEventDay } from '../../lib/workflowDates';
+import { format, parseISO } from 'date-fns';
 import { motion, type Variants } from 'framer-motion';
 import {
   Music, Upload, CheckCircle, AlertTriangle, Calendar, Search,
@@ -1642,7 +1643,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
               ) : paginatedSetlists.map(sl => {
                 const isExpanded = expandedSetlist === sl.id;
                 const eventDate = sl.events?.event_date;
-                const daysSinceEvent = eventDate ? differenceInDays(new Date(), parseISO(eventDate)) : null;
+                const relativeDay = eventDate ? relativeEventDay(eventDate) : null;
                 const songCount = sl.setlist_songs?.length ?? 0;
                 const isSelected = selectedSetlists.has(sl.id);
                 const displayName = songLeaderMap[sl.event_id] || sl.events?.title || 'Untitled';
@@ -1719,8 +1720,8 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                               </span>
                             )}
                             <span className="text-[11px] text-white/30 font-mono">{songCount} song{songCount !== 1 ? 's' : ''}</span>
-                            {daysSinceEvent !== null && (
-                              <span className="text-[11px] text-white/25 font-mono hidden sm:inline">{daysSinceEvent}d ago</span>
+                            {relativeDay !== null && (
+                              <span className="text-[11px] text-white/60 font-mono hidden sm:inline">{relativeDay}</span>
                             )}
                             {eventType && eventType !== 'imported' && (
                               <span className="hidden sm:inline text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-white/[0.06] text-white/45 capitalize">{eventType.replace(/_/g, ' ')}</span>
@@ -1951,12 +1952,9 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
       )}
 
       {canManageSongLibrary && (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-          className="flex flex-col gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.08] p-4 sm:flex-row sm:items-center"
-        >
+        <details className="rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.08] px-4">
+          <summary className="min-h-11 cursor-pointer py-3 text-sm font-bold text-emerald-200">Import SongBookPro charts</summary>
+          <div className="flex flex-col gap-3 pb-4 sm:flex-row sm:items-center">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/20">
             <FileText className="h-5 w-5" />
           </span>
@@ -1973,7 +1971,8 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
             <Upload className="h-4 w-4" />
             {chartImportPreparing ? 'Reading charts…' : 'Choose .cho files'}
           </button>
-        </motion.div>
+          </div>
+        </details>
       )}
 
       {/* ── Filter pills ── */}

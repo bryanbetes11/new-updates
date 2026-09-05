@@ -1,3 +1,4 @@
+import { acknowledgeMessage } from '../lib/messageDelivery';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -92,6 +93,7 @@ export function useMessages(conversationId: string | null) {
   const typingTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const loadedConversationRef = useRef<string | null>(null);
+  const fetchRequestRef = useRef(0);
   const readFailureNotifiedRef = useRef(false);
 
   const fetchMemberReadTimes = useCallback(async () => {
@@ -105,6 +107,7 @@ export function useMessages(conversationId: string | null) {
 
   const fetchMessages = useCallback(async () => {
     if (!conversationId) return;
+    const requestId = ++fetchRequestRef.current;
     const isInitialLoad = loadedConversationRef.current !== conversationId;
     if (isInitialLoad) setLoading(true);
 
@@ -119,6 +122,7 @@ export function useMessages(conversationId: string | null) {
       .is('deleted_at', null)
       .order('created_at', { ascending: true });
 
+    if (requestId !== fetchRequestRef.current) return;
     if (error) {
       console.error('Failed to load conversation messages:', error);
       setLoadError('Messages could not be loaded. Please try again.');
@@ -147,6 +151,7 @@ export function useMessages(conversationId: string | null) {
       }
     }
 
+    if (requestId !== fetchRequestRef.current) return;
     setMessages(messageRows.map(message => ({
       id: message.id,
       conversation_id: message.conversation_id,
@@ -191,6 +196,7 @@ export function useMessages(conversationId: string | null) {
 
   useEffect(() => {
     if (!conversationId) {
+      fetchRequestRef.current += 1;
       loadedConversationRef.current = null;
       setMessages([]);
       setTypingUsers([]);
@@ -200,6 +206,7 @@ export function useMessages(conversationId: string | null) {
     setLoadError(null);
     fetchMessages();
     void markRead().then(fetchMemberReadTimes);
+    return () => { fetchRequestRef.current += 1; };
   }, [fetchMessages, fetchMemberReadTimes, markRead, conversationId]);
 
   useEffect(() => {
@@ -273,20 +280,20 @@ export function useMessages(conversationId: string | null) {
     });
   }, [user]);
 
-  const sendMessage = useCallback(async (content: string, replyTo?: string) => {
-    if (!conversationId || !user || !content.trim()) return null;
-    const { error } = await supabase.from('messages').insert({
-      conversation_id: conversationId,
-      sender_id: user.id,
-      content: content.trim(),
-      reply_to: replyTo || null,
-    });
+  const sendMessage = useCallback(async (content: string, replyTo?: string, clientMessageId: string = crypto.randomUUID()) => {
+    if (!conversationId || !user || !content.trim()) return { message: 'Conversation unavailable' };
+    const error = await acknowledgeMessage({
+      id: clientMessageId, conversation_id: conversationId, sender_id: user.id,
+      content: content.trim(), reply_to: replyTo || null,
+    }, message => supabase.from('messages').insert(message),
+    messageId => supabase.from('messages').select('content, reply_to').eq('id', messageId).eq('conversation_id', conversationId).eq('sender_id', user.id).maybeSingle());
     if (!error) {
+      void fetchMessages();
       markRead();
       dispatchMessagingRefresh();
     }
     return error;
-  }, [conversationId, user, markRead]);
+  }, [conversationId, user, markRead, fetchMessages]);
 
   const pinMessage = useCallback(async (messageId: string, pinned: boolean) => {
     if (!user) return false;

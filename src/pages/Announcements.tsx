@@ -463,7 +463,7 @@ export function Announcements() {
               onClick={openCreateAnnouncement}
               className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-white/[0.095] px-5 text-[13px] font-black text-white transition-all hover:bg-[#1ed760] hover:text-black active:scale-[0.97]"
             >
-              <Plus className="h-4 w-4" /> Post update
+              <Plus className="h-4 w-4" /> New announcement
             </button>
           )}
         </motion.div>
@@ -472,7 +472,7 @@ export function Announcements() {
         {loadError && announcements.length === 0 ? (
           <EmptyState
             icon={<AlertTriangle className="h-8 w-8" />}
-            title="News is unavailable"
+            title="Announcements are unavailable"
             description={loadError}
             action={
               <button type="button" onClick={fetchAnnouncements} className="btn-primary min-h-11">
@@ -818,7 +818,7 @@ export function Announcements() {
       </Modal>
 
       {/* ── Create Modal ──────────────────────────────── */}
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Creating Announcement" size="lg">
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="New announcement" size="lg">
         <AnnouncementComposerForm
           onCancel={() => setShowCreate(false)}
           onSuccess={async () => {

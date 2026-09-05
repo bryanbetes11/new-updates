@@ -109,9 +109,9 @@ export function AdminSettings() {
     const orgId = profile.org_id;
     let active = true;
     const load = async () => {
-      const { data, error } = await supabase.from('organization_policy_settings').select('*').eq('org_id', orgId).maybeSingle();
+      const { data, error } = await supabase.from('organization_policy_settings').select('org_id, attendance_open_minutes_before, attendance_grace_minutes, attendance_scan_session_minutes, attendance_incomplete_scan_minutes, attendance_pre_start_reminder_minutes, attendance_auto_absent_after_days, default_setlist_due_days_before, event_templates, setlist_submission_mode, setlist_reminder_policy, leave_policy').eq('org_id', orgId).maybeSingle();
       if (!active) return;
-      if (error) toast('error', 'Could not load organization policies');
+      if (error) { toast('error', 'Could not load organization policies. Reload before editing.'); setLoading(false); return; }
       const saved = data as (Omit<PolicySettings, 'event_templates' | 'setlist_reminder_policy' | 'leave_policy'> & { event_templates?: unknown; setlist_reminder_policy?: Partial<SetlistReminderPolicy> | null; leave_policy?: Partial<LeavePolicy> | null }) | null;
       setPolicy(saved ? {
         ...saved,
@@ -153,12 +153,14 @@ export function AdminSettings() {
   } : current);
 
   const savePolicy = async () => {
-    if (!policy || !user) return;
+    if (!policy || !user || saving) return;
     setSaving(true);
-    const { error } = await supabase.from('organization_policy_settings').upsert({ ...policy, updated_by: user.id, updated_at: new Date().toISOString() }, { onConflict: 'org_id' });
-    setSaving(false);
-    if (error) toast('error', 'Attendance policy could not be saved');
-    else toast('success', 'Organization policy saved — new check-ins and reminders use it immediately.');
+    try {
+      const { data, error } = await supabase.from('organization_policy_settings').update({ ...policy, updated_by: user.id, updated_at: new Date().toISOString() }).eq('org_id', policy.org_id).select('org_id').single();
+      if (error || !data) throw error;
+      toast('success', 'Organization policy saved — new check-ins and reminders use it immediately.');
+    } catch { toast('error', 'Organization policy could not be saved. Your edits are kept.'); }
+    finally { setSaving(false); }
   };
 
   const addEventType = () => {
@@ -197,6 +199,7 @@ export function AdminSettings() {
   };
 
   if (!(isOrgAdmin || isPlatformOwner)) return <div className="page-container page-bottom-pad"><div className="mx-auto flex min-h-[42vh] max-w-xl items-center justify-center text-center"><div><ShieldCheck className="mx-auto h-10 w-10 text-slate-400" /><h1 className="mt-3 text-lg font-black text-gray-900 dark:text-white">Admin access required</h1><p className="mt-1 text-sm text-gray-500 dark:text-white/45">Only church administrators can change organization policies.</p></div></div></div>;
+  if (!loading && !policy) return <div role="alert" className="p-6 text-sm">Church settings could not be loaded. <button type="button" className="btn-secondary min-h-11" onClick={() => window.location.reload()}>Reload settings</button></div>;
   if (loading || !policy) return <div className="flex min-h-64 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-emerald-500" /></div>;
 
   return (

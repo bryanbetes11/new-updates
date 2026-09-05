@@ -1211,7 +1211,7 @@ export function Dashboard() {
   }[]> = {
     all: [
       { title: 'My Assignments', subtitle: `${stats.total} upcoming`, tone: 'from-emerald-400 via-green-700 to-black', path: '/my-assignments', icon: Check },
-      { title: 'Upcoming Events', subtitle: `${displayEvents.length} events`, tone: 'from-blue-500 via-blue-900 to-slate-950', path: '/events', icon: Calendar },
+      { title: 'Upcoming Events', subtitle: `Next ${displayEvents.length} events`, tone: 'from-blue-500 via-blue-900 to-slate-950', path: '/events', icon: Calendar },
       { title: 'Team Chat', subtitle: 'Messages', tone: 'from-zinc-200 via-zinc-700 to-black', path: '/messages', icon: MessageCircle },
       { title: 'My Sets', subtitle: 'Setlists', tone: 'from-indigo-400 via-violet-500 to-emerald-300', path: '/sets', icon: ListChecks },
       { title: 'Request Leave', subtitle: 'Availability', tone: 'from-yellow-400 via-amber-800 to-black', path: '/request-leave', icon: UserX },

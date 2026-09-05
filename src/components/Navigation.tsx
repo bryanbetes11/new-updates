@@ -102,6 +102,7 @@ function AttendanceQrScanIcon({ className = "" }: { className?: string }) {
 interface NavItem {
   path: string;
   label: string;
+  shortLabel?: string;
   icon: NavIcon;
   tone?: string;
   badgeKey?:
@@ -171,7 +172,8 @@ const mobileNavItems: NavItem[] = [
   },
   {
     path: "/announcements",
-    label: "News",
+    label: "Announcements",
+    shortLabel: "News",
     icon: NewsIcon,
     badgeKey: "announcements",
     badgeColor: "blue",
@@ -197,7 +199,7 @@ const sidebarMainItems: NavItem[] = [
   },
   {
     path: "/announcements",
-    label: "News",
+    label: "Announcements",
     icon: NewsIcon,
     badgeKey: "announcements",
     badgeColor: "blue",
@@ -648,7 +650,7 @@ export function Navigation({
         {
           id: "page-team",
           kind: "page",
-          title: "Team",
+          title: "Team Roster",
           subtitle: "People, roles, and ministries",
           path: "/leadership/team",
         },
@@ -900,7 +902,7 @@ export function Navigation({
   const mobileTitle = location.pathname.startsWith("/events")
     ? "Events"
     : location.pathname.startsWith("/announcements")
-      ? "News"
+      ? "Announcements"
       : ["/library", "/songs", "/sets"].some((path) =>
             location.pathname.startsWith(path),
           )
@@ -1146,7 +1148,7 @@ export function Navigation({
     {
       icon: ListChecks,
       label: "Sets",
-      desc: "Past event sets",
+      desc: "Approved setlists",
       path: "/sets",
       show: true,
       color: "#10b981",
@@ -1172,7 +1174,7 @@ export function Navigation({
     },
     {
       icon: ListChecks,
-      label: "Approve Setlist",
+      label: "Setlist Queue",
       desc: "Review submitted setlists",
       path: "/leadership/setlists",
       show: isLeader || capabilities.review_setlists,
@@ -1181,7 +1183,7 @@ export function Navigation({
     },
     {
       icon: Calendar,
-      label: "Approve Leave",
+      label: "Leave Queue",
       desc: "Review leave requests",
       path: "/leadership/leave",
       show: !!canApproveLeave,
@@ -1199,7 +1201,7 @@ export function Navigation({
     },
     {
       icon: Users,
-      label: "Team",
+      label: "Team Roster",
       desc: "Manage team members",
       path: "/leadership/team",
       show: isLeader || isOrgAdmin || capabilities.manage_members,
@@ -1284,6 +1286,7 @@ export function Navigation({
         >
           <button
             data-collapsed-nav-item
+            aria-label={item.badgeKey === 'events' && badge > 0 ? `Events, ${badge} assignments awaiting your response` : item.label}
             onClick={openCollapsedItem}
             onPointerEnter={() => {
               void preloadRoute(item.path);
@@ -1331,6 +1334,7 @@ export function Navigation({
     return (
       <button
         key={item.path}
+        aria-label={item.badgeKey === 'events' && badge > 0 ? `Events, ${badge} assignments awaiting your response` : undefined}
         onClick={() => handleNav(item.path)}
         onPointerEnter={() => {
           void preloadRoute(item.path);
@@ -1666,7 +1670,7 @@ export function Navigation({
           <button
             onClick={() => handleNav("/messages")}
             className="relative flex h-11 w-11 items-center justify-center rounded-full text-white transition-colors hover:bg-white/[0.08]"
-            aria-label="Messages"
+            aria-label="Chat"
           >
             <MessageCircle className="h-6 w-6" />
             {unread.messages > 0 && (
@@ -2540,6 +2544,7 @@ export function Navigation({
                       void preloadRoute(item.path);
                     }}
                     data-mobile-nav-item="true"
+                    aria-label={item.badgeKey === 'events' && badge > 0 ? `Events, ${badge} assignments awaiting your response` : item.label}
                     data-active={active ? "true" : "false"}
                     aria-current={active ? "page" : undefined}
                     className={`relative flex flex-1 min-w-[44px] flex-col items-center justify-center gap-0.5 ${item.tabletPortraitOnly ? "tablet-portrait-nav-item" : ""} ${useDockedMobileNav ? "h-[56px] pt-1" : "h-12"}`}
@@ -2576,7 +2581,7 @@ export function Navigation({
                         useDockedMobileNav ? "text-[10px]" : "text-[9px]"
                       }`}
                     >
-                      {item.label}
+                      {item.shortLabel || item.label}
                     </span>
                   </button>
                 );

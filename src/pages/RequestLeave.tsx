@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { churchToday, nextApprovedLeave } from '../lib/workflowDates';
 import { format, parseISO } from 'date-fns';
 import { motion, type Variants } from 'framer-motion';
 import { Plus, Calendar, Trash2, Pencil, RotateCcw, Loader2 } from 'lucide-react';
@@ -83,10 +84,8 @@ export function RequestLeave() {
     total: availability.length,
   };
   const latestRequest = availability[0];
-  const nextApproved = availability
-    .filter(a => a.status === 'approved')
-    .filter(a => (a.leave_type === 'single' ? a.unavailable_date : a.start_date))
-    .sort((a, b) => String(a.leave_type === 'single' ? a.unavailable_date : a.start_date).localeCompare(String(b.leave_type === 'single' ? b.unavailable_date : b.start_date)))[0];
+  const nextApproved = nextApprovedLeave(availability);
+  const leaveIsCurrent = nextApproved && String(nextApproved.leave_type === 'single' ? nextApproved.unavailable_date : nextApproved.start_date) <= churchToday();
 
   return (
     <div className="page-container page-bottom-pad overflow-hidden">
@@ -140,7 +139,7 @@ export function RequestLeave() {
             <div className="min-w-0">
               {nextApproved ? (
                 <>
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700/70 dark:text-emerald-300/80">Next approved leave</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700/70 dark:text-emerald-300/80">{leaveIsCurrent ? 'Current approved leave' : 'Next approved leave'}</p>
                   <p className="mt-1 truncate text-sm font-extrabold text-gray-800 dark:text-white">
                     {format(parseISO((nextApproved.leave_type === 'single' ? nextApproved.unavailable_date : nextApproved.start_date)!), 'MMM d, yyyy')}
                     <span className="font-mono text-xs font-semibold text-gray-400 dark:text-emerald-100/55"> · Leaders can plan around it</span>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { motion } from 'framer-motion';
@@ -16,6 +16,7 @@ import { PageLoader } from '../components/LoadingSpinner';
 import { PushNotificationSetting } from '../components/PushNotificationSetting';
 import { NotificationPreferencesSetting } from '../components/NotificationPreferencesSetting';
 import { RoleBadge, sortRolesLeadershipFirst } from '../components/RoleBadge';
+import { mergeUntouchedFields } from '../lib/draftRecovery';
 import { phoneHref } from '../lib/phone';
 import { APP_BUILD_ID, APP_UPDATE_PUBLISHED_AT, APP_VERSION_LABEL } from '../lib/appUpdate';
 import { checkForAppUpdate } from '../lib/serviceWorkerUpdate';
@@ -78,6 +79,7 @@ export function Profile() {
   const [form, setForm] = useState({
     first_name: '', second_name: '', middle_name: '', last_name: '', nickname: '', phone: '', gender: '', birthday: '', official_join_date: '',
   });
+  const formBaseline = useRef<{ identity: string; value: typeof form } | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [myDisciplineRecords, setMyDisciplineRecords] = useState<DisciplineRecord[]>([]);
   const [disciplineExpanded, setDisciplineExpanded] = useState<string | null>(null);
@@ -89,7 +91,7 @@ export function Profile() {
 
   useEffect(() => {
     if (profile) {
-      setForm({
+      const incoming = {
         first_name: profile.first_name,
         second_name: profile.second_name || '',
         middle_name: profile.middle_name || '',
@@ -99,7 +101,11 @@ export function Profile() {
         gender: profile.gender || '',
         birthday: profile.birthday || '',
         official_join_date: profile.official_join_date || '',
-      });
+      };
+      const identity = `${profile.org_id}:${profile.id}`;
+      const previous = formBaseline.current;
+      setForm(current => previous?.identity === identity ? mergeUntouchedFields(current, previous.value, incoming) : incoming);
+      formBaseline.current = { identity, value: incoming };
       setNewEmail(user?.email || profile.email || '');
     }
   }, [profile, user?.email]);
@@ -148,6 +154,7 @@ export function Profile() {
     const { error } = await supabase.from('profiles').update(updatePayload).eq('id', user.id);
     setLoading(false);
     if (error) { toast('error', `Failed to save: ${error.message}`); return; }
+    formBaseline.current = { identity: `${profile.org_id}:${profile.id}`, value: { ...form } };
     toast('success', 'Profile updated');
     setEditing(false);
     refreshProfile();
@@ -199,7 +206,8 @@ export function Profile() {
     const { error: uploadError } = await supabase.storage.from('avatars').upload(path, file, { upsert: true });
     if (uploadError) { toast('error', 'Upload failed'); setAvatarUploading(false); return; }
     const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
-    await supabase.from('profiles').update({ avatar_url: `${publicUrl}?t=${Date.now()}`, updated_at: new Date().toISOString() }).eq('id', user.id);
+    const { error: profileError } = await supabase.from('profiles').update({ avatar_url: `${publicUrl}?t=${Date.now()}`, updated_at: new Date().toISOString() }).eq('id', user.id);
+    if (profileError) { toast('error', 'Could not save your profile picture. Please try again.'); setAvatarUploading(false); return; }
     await refreshProfile();
     setAvatarUploading(false);
     toast('success', 'Profile picture updated');

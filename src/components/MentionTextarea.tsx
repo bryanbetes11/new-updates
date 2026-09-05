@@ -18,6 +18,7 @@ interface Profile {
 }
 
 interface MentionTextareaProps {
+  'aria-label'?: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
@@ -58,6 +59,7 @@ function MentionTextOverlay({ text, profiles, className }: { text: string; profi
 }
 
 export function MentionTextarea({
+  'aria-label': ariaLabel,
   value,
   onChange,
   placeholder,
@@ -278,6 +280,7 @@ export function MentionTextarea({
     <div className="relative min-w-0 flex-1 self-stretch rounded-xl bg-white dark:bg-[#252428]">
       {value && <MentionTextOverlay text={value} profiles={profiles} className={overlayClassName} />}
       <textarea
+        aria-label={ariaLabel}
         ref={ref}
         value={value}
         onChange={handleChange}

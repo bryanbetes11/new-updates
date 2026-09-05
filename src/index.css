@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Apply to every rendered lyric/chord span; Safari may otherwise select a
+   descendant during a long press. Note textareas sit outside this trigger. */
+[data-chart-note-trigger="true"],
+[data-chart-note-trigger="true"] * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
 /* Tactile-looking fallback for Apple touch browsers, which do not expose the
    web Vibration API. The marker is added at runtime only on affected devices. */
 html[data-touch-feedback="apple"] .touch-feedback-light,

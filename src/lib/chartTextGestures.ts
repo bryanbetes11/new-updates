@@ -1,24 +1,43 @@
-export function bindChartTextGestures(element: HTMLElement, options: {getSize: () => number; onSize: (size: number) => void; onPinching: (active: boolean) => void}) {
+export function bindChartTextGestures(element: HTMLElement, options: {getSize: () => number; onSize: (size: number) => void; onPinching: (active: boolean) => void; onPreview?: (scale: number) => void}) {
     let startDistance = 0;
     let startSize = 0;
     let wheelDelta = 0;
+    let pendingSize = 0;
+    let active = false;
     const apply = (value: number) => options.onSize(Math.max(8, Math.min(36, Math.round(value))));
     const distance = (event: TouchEvent) => Math.hypot(event.touches[0].clientX - event.touches[1].clientX, event.touches[0].clientY - event.touches[1].clientY);
     const start = (event: TouchEvent) => {
-      if (event.touches.length !== 2) return;
+      if (event.touches.length !== 2 || active) return;
       event.preventDefault();
       event.stopPropagation();
       startDistance = distance(event);
       startSize = options.getSize();
+      pendingSize = startSize;
+      active = true;
       options.onPinching(true);
     };
     const move = (event: TouchEvent) => {
+      if (!active) return;
+      event.preventDefault();
+      event.stopPropagation();
       if (!startDistance || event.touches.length !== 2) return;
       event.preventDefault();
       event.stopPropagation();
-      apply(startSize * distance(event) / startDistance);
+      pendingSize = Math.max(8, Math.min(36, Math.round(startSize * distance(event) / startDistance)));
+      options.onPreview?.(pendingSize / startSize);
     };
-    const end = () => { startDistance = 0; options.onPinching(false); };
+    const end = (event: TouchEvent) => {
+      if (!active) return;
+      event.preventDefault();
+      event.stopPropagation();
+      // Keep ownership until every finger is lifted, including one-finger tails.
+      if (event.touches?.length) return;
+      active = false;
+      startDistance = 0;
+      options.onPreview?.(1);
+      if (pendingSize !== startSize) apply(pendingSize);
+      options.onPinching(false);
+    };
     const wheel = (event: WheelEvent) => {
       if (!event.altKey || event.ctrlKey || event.metaKey) return;
       event.preventDefault();
@@ -29,15 +48,16 @@ export function bindChartTextGestures(element: HTMLElement, options: {getSize: (
     };
     element.addEventListener('touchstart', start, { passive: false, capture: true });
     element.addEventListener('touchmove', move, { passive: false, capture: true });
-    element.addEventListener('touchend', end);
-    element.addEventListener('touchcancel', end);
+    element.addEventListener('touchend', end, { passive: false, capture: true });
+    element.addEventListener('touchcancel', end, { passive: false, capture: true });
     element.addEventListener('wheel', wheel, { passive: false });
     return () => {
       element.removeEventListener('touchstart', start, true);
       element.removeEventListener('touchmove', move, true);
-      element.removeEventListener('touchend', end);
-      element.removeEventListener('touchcancel', end);
+      element.removeEventListener('touchend', end, true);
+      element.removeEventListener('touchcancel', end, true);
       element.removeEventListener('wheel', wheel);
+      options.onPreview?.(1);
       options.onPinching(false);
     };
 }

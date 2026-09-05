@@ -4,7 +4,8 @@ function check(condition: boolean, message: string) { if (!condition) throw new 
 const element = new EventTarget() as unknown as HTMLElement;
 let size = 16;
 let pinching = false;
-const dispose = bindChartTextGestures(element, { getSize: () => size, onSize: value => { size = value; }, onPinching: value => { pinching = value; } });
+let preview = 1;
+const dispose = bindChartTextGestures(element, { getSize: () => size, onPreview: value => { preview = value; }, onSize: value => { size = value; }, onPinching: value => { pinching = value; } });
 function emit(type: string, properties: Record<string, unknown>) {
   const event = new Event(type, { cancelable: true });
   Object.assign(event, properties);
@@ -20,11 +21,13 @@ check(size === 18, 'Do not intercept browser zoom modifiers');
 const touches = (distance: number) => [{ clientX: 0, clientY: 0 }, { clientX: distance, clientY: 0 }];
 emit('touchstart', { touches: touches(100) });
 emit('touchmove', { touches: touches(150) });
-check(size === 27 && pinching, 'Pinch out must scale from the starting size');
+check(size === 18 && preview === 1.5 && pinching, 'Pinch previews without expensive state updates');
 emit('touchmove', { touches: touches(10) });
-check(size === 8, 'Pinch must respect minimum font size');
+check(preview === 8 / 18, 'Preview respects minimum font size');
 emit('touchmove', { touches: touches(400) });
-check(size === 36, 'Pinch must respect maximum font size');
+check(preview === 2 && size === 18, 'Preview respects maximum without saving each move');
+emit('touchend', { touches: [{ clientX: 0, clientY: 0 }] });
+check(pinching && size === 18, 'One remaining finger keeps pinch ownership');
 emit('touchcancel', {});
 check(!pinching, 'Cancelled touch must release the pinch state');
 emit('touchmove', { touches: touches(100) });

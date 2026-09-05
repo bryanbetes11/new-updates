@@ -7,6 +7,14 @@ export function ChartNoteTrigger({ children, enabled, label, onOpen }: {
   label: string;
   onOpen: () => void;
 }) {
+  const triggerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const element = triggerRef.current;
+    if (!element || !enabled) return;
+    const preventSelection = (event: Event) => event.preventDefault();
+    element.addEventListener('selectstart', preventSelection);
+    return () => element.removeEventListener('selectstart', preventSelection);
+  }, [enabled]);
   const pending = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null);
   const cancel = () => {
     if (pending.current) clearTimeout(pending.current.timer);
@@ -25,11 +33,11 @@ export function ChartNoteTrigger({ children, enabled, label, onOpen }: {
     };
   }, []);
 
-  return <div className="min-w-0 max-w-full rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400"
+  return <div ref={triggerRef} data-chart-note-trigger={enabled ? 'true' : undefined} className="min-w-0 max-w-full rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400"
     role={enabled ? 'button' : undefined} tabIndex={enabled ? 0 : undefined}
     aria-label={enabled ? `Notes for ${label}` : undefined}
     title={enabled ? 'Hold to open notes, or double-click. Keyboard: Enter.' : undefined}
-    style={enabled ? { WebkitTouchCallout: 'none', userSelect: 'none' } : undefined}
+    style={enabled ? { WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' } : undefined}
     onPointerDown={event => {
       cancel();
       if (!enabled || !event.isPrimary || event.button !== 0) return;

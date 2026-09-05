@@ -12,6 +12,12 @@ export function useChartTextGestures(ref: RefObject<HTMLElement>, enabled: boole
       getSize: () => current.current.size,
       onSize: value => current.current.onSize(value),
       onPinching: setPinching,
+      onPreview: scale => {
+        const content = element.firstElementChild as HTMLElement | null;
+        if (!content) return;
+        content.style.transformOrigin = `0 ${element.scrollTop}px`;
+        content.style.transform = scale === 1 ? '' : `scale(${scale})`;
+      },
     });
   }, [ref, enabled]);
   return pinching;

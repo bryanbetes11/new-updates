@@ -1,8 +1,9 @@
+import { ChartNavigation } from './ChartNavigation';
 import { useCallback, useLayoutEffect, useRef } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowDown, ArrowUp, Bold, Captions, Check, ChevronLeft, ChevronRight, Copy, Edit3, FileText, Gauge, Italic, ListOrdered, Lock, Minus, Music2, Pause, Play, Plus, RotateCcw, Save, Settings2, StickyNote, Trash2, Users, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Bold, Captions, Check, ChevronLeft, Copy, Edit3, FileText, Gauge, Italic, ListOrdered, Lock, Minus, Music2, Pause, Play, Plus, RotateCcw, Save, Settings2, StickyNote, Trash2, Users, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useRecoverableDraft } from '../hooks/useRecoverableDraft';
 import { draftRecoveryKey } from '../lib/draftRecovery';
@@ -305,6 +306,7 @@ interface SongChartViewerProps {
   onSaveSectionOrder?: (order: string[] | null) => Promise<void> | void;
   onEditingChange?: (isEditing: boolean) => void;
   onDisplayKeyChange?: (displayKey: string) => void;
+  externalDesktopNavigation?: boolean;
   footerNavigation?: {
     currentLabel: string;
     nextSongTitle?: string;
@@ -561,6 +563,7 @@ export function SongChartViewer({
   onEditingChange,
   onDisplayKeyChange,
   footerNavigation,
+  externalDesktopNavigation = false,
 }: SongChartViewerProps) {
   const { user, profile } = useAuth();
   const displaySettingsStorageKey = `${CHART_SETTINGS_STORAGE_KEY}:${user?.id || 'anonymous'}:${preferenceScopeId || 'all-songs'}`;
@@ -1245,37 +1248,7 @@ export function SongChartViewer({
     return () => observer.disconnect();
   }, [fullBleed, isEditing, lyricFontSize, displaySettings, arrangedChartSections, selfNotes, teamNotes, noteRecovery, notesLoading, noteError, privateNotes.error, privateNotes.legacyCount]);
 
-  const chartFooter = footerNavigation && (
-              <div
-                className="service-mode-chart-footer flex flex-col gap-2 md:flex-row md:items-center md:gap-4"
-                onPointerDown={event => event.stopPropagation()}
-              >
-                <div className="min-w-0 md:w-1/3">
-                  <p className="text-[11px] font-bold text-gray-500 dark:text-white/50">{footerNavigation.currentLabel}</p>
-                  <p className="text-sm font-bold text-gray-900 dark:text-white">{footerNavigation.canGoNext ? `Next Song: ${footerNavigation.nextSongTitle || 'Untitled song'}` : 'End of setlist'}</p>
-                </div>
-                <div className="grid grid-cols-2 gap-2 md:flex-1">
-                  <button
-                    type="button"
-                    onClick={footerNavigation.onPrevious}
-                    disabled={!footerNavigation.canGoPrevious}
-                    className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-black/[0.07] bg-gray-100 px-4 text-sm font-black text-gray-700 shadow-sm transition active:scale-[0.97] disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 disabled:shadow-none disabled:active:scale-100 dark:border-white/[0.08] dark:bg-white/[0.08] dark:text-white/70 dark:disabled:bg-white/[0.07] dark:disabled:text-white/35"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    Previous
-                  </button>
-                  <button
-                    type="button"
-                    onClick={footerNavigation.onNext}
-                    disabled={!footerNavigation.canGoNext}
-                    className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-black text-white shadow-lg shadow-emerald-600/25 transition active:scale-[0.97] disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none disabled:active:scale-100 dark:disabled:bg-white/[0.07] dark:disabled:text-white/30"
-                  >
-                    Next
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            );
+  const chartFooter = footerNavigation && <ChartNavigation {...footerNavigation} />;
 
   return (
     <div
@@ -2090,7 +2063,7 @@ export function SongChartViewer({
             <div className={fullBleed ? 'md:hidden' : ''}>{chartFooter}</div>
           </div>
         </div>
-        {fullBleed && <div className="hidden shrink-0 border-t border-black/[0.06] bg-white px-4 py-2 dark:border-white/[0.08] dark:bg-[#111412] md:block" style={{paddingBottom:'max(8px, env(safe-area-inset-bottom))'}}>{chartFooter}</div>}
+        {fullBleed && !externalDesktopNavigation && <div className="hidden shrink-0 border-t border-black/[0.06] bg-white px-4 py-2 dark:border-white/[0.08] dark:bg-[#111412] md:block" style={{paddingBottom:'max(8px, env(safe-area-inset-bottom))'}}>{chartFooter}</div>}
         </>
       )}
       {typeof document !== 'undefined' && createPortal(

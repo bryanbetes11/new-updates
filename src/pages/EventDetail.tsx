@@ -1,3 +1,4 @@
+import { ChartNavigation } from '../components/ChartNavigation';
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
@@ -689,6 +690,7 @@ export function EventDetail() {
   const [lyricsModalSong, setLyricsModalSong] = useState<SetlistSong | null>(null);
   const [chartModalSong, setChartModalSong] = useState<SetlistSong | null>(null);
   const [serviceModeIndex, setServiceModeIndex] = useState<number | null>(null);
+  const servicePinchBlockUntil = useRef(0);
   const [serviceChartEditing, setServiceChartEditing] = useState(false);
   const [serviceModeEntering, setServiceModeEntering] = useState(false);
   const [serviceModeDisplayKey, setServiceModeDisplayKey] = useState('');
@@ -3833,7 +3835,7 @@ const openLyricsModal = (ss: SetlistSong) => {
     setServiceCloseConfirmOpen(true);
   };
   const goToServiceSong = (direction: -1 | 1) => {
-    if (serviceSwipeAnimating.current || serviceModeIndex === null) return;
+    if (Date.now() < servicePinchBlockUntil.current || serviceSwipeAnimating.current || serviceModeIndex === null) return;
     const currentIndex = serviceModeIndex;
     const targetIndex = Math.min(serviceModeSongs.length - 1, Math.max(0, currentIndex + direction));
 
@@ -3881,11 +3883,11 @@ const openLyricsModal = (ss: SetlistSong) => {
     goToServiceSong(1);
   };
   const handleServiceDragStart = () => {
-    if (serviceSwipeAnimating.current || serviceChartEditing || serviceModeEntering) return;
+    if (Date.now() < servicePinchBlockUntil.current || serviceSwipeAnimating.current || serviceChartEditing || serviceModeEntering) { serviceTrackX.set(0); return; }
     serviceTrackAnimation.current?.stop();
   };
   const handleServiceDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-    if (serviceSwipeAnimating.current || serviceChartEditing || serviceModeEntering) return;
+    if (Date.now() < servicePinchBlockUntil.current || serviceSwipeAnimating.current || serviceChartEditing || serviceModeEntering) { serviceTrackX.set(0); return; }
 
     const threshold = Math.min(Math.max(serviceSwipeWidth * 0.22, 72), 120);
     const hasEnoughDistance = Math.abs(info.offset.x) >= threshold;
@@ -7437,11 +7439,23 @@ const openLyricsModal = (ss: SetlistSong) => {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.12, ease: 'easeOut' }}
-                        className={`service-mode-chart-frame relative z-10 min-h-0 flex-1 overflow-visible bg-white dark:bg-[#0c0f0d] ${stageCommsView === 'tech' ? 'hidden' : ''}`}
+                        className={`service-mode-chart-frame relative z-10 flex min-h-0 flex-1 flex-col overflow-visible bg-white dark:bg-[#0c0f0d] ${stageCommsView === 'tech' ? 'hidden' : ''}`}
                         aria-hidden={stageCommsView === 'tech'}
                         {...(stageCommsView === 'tech' ? { inert: '' } : {})}
                       >
-                        <div ref={serviceSongStageRef} className="service-mode-song-stage">
+                        <div ref={serviceSongStageRef} className="service-mode-song-stage !relative flex-1"
+                          onTouchStartCapture={event => {
+                            if (event.touches.length >= 2) {
+                              servicePinchBlockUntil.current = Infinity;
+                              serviceTrackAnimation.current?.stop();
+                              serviceTrackX.set(0);
+                            }
+                          }}
+                          onTouchEndCapture={event => {
+                            if (servicePinchBlockUntil.current === Infinity && event.touches.length === 0) servicePinchBlockUntil.current = Date.now() + 400;
+                          }}
+                          onTouchCancelCapture={() => { servicePinchBlockUntil.current = Date.now() + 400; serviceTrackX.set(0); }}>
+
                           <motion.div
                             className="service-mode-song-track"
                             style={{ x: serviceTrackX }}
@@ -7453,6 +7467,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                             dragDirectionLock
                             dragElastic={0.08}
                             dragMomentum={false}
+                            onDrag={() => { if (Date.now() < servicePinchBlockUntil.current) serviceTrackX.set(0); }}
                             onDragStart={handleServiceDragStart}
                             onDragEnd={handleServiceDragEnd}
                           >
@@ -7487,6 +7502,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                   onDisplayKeyChange={offset === 0 ? setServiceModeDisplayKey : undefined}
                                   onSave={offset === 0 ? (text, assignedSongKey) => handleSaveChart(song.song_id, text, assignedSongKey) : undefined}
                                   onSaveSectionOrder={offset === 0 ? (order) => handleSaveSetlistSongSectionOrder(song.id, order) : undefined}
+                                  externalDesktopNavigation
                                   footerNavigation={offset === 0 ? {
                                     currentLabel: `${index + 1} of ${serviceModeSongs.length}`,
                                     nextSongTitle: serviceModeSongs[index + 1]?.songs?.title,
@@ -7499,6 +7515,17 @@ const openLyricsModal = (ss: SetlistSong) => {
                               </div>
                             ))}
                           </motion.div>
+                        </div>
+                        <div className="hidden shrink-0 border-t border-black/[0.06] bg-white px-4 py-2 dark:border-white/[0.08] dark:bg-[#111412] md:block" style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }}>
+                          <ChartNavigation
+                            currentLabel={`${(serviceModeIndex ?? 0) + 1} of ${serviceModeSongs.length}`}
+                            nextSongTitle={serviceModeSongs[(serviceModeIndex ?? 0) + 1]?.songs?.title}
+                            disabled={serviceChartEditing || serviceModeEntering}
+                            canGoPrevious={!isFirstServiceSong}
+                            canGoNext={!isLastServiceSong}
+                            onPrevious={goToPreviousServiceSong}
+                            onNext={goToNextServiceSong}
+                          />
                         </div>
                       </motion.div>
                     </motion.div>

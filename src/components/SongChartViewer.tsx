@@ -114,6 +114,7 @@ const SHARP_KEY_OPTIONS = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A',
 const FLAT_KEY_OPTIONS = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
 
 interface ChartDisplaySettings {
+  columns: 'auto' | 'single';
   settingsVersion: number;
   lyricFontSize: number;
   chordFontSize: number;
@@ -150,6 +151,7 @@ interface InitialEditorState {
 }
 
 const DEFAULT_CHART_SETTINGS: ChartDisplaySettings = {
+  columns: 'auto',
   settingsVersion: CHART_SETTINGS_VERSION,
   lyricFontSize: 16,
   chordFontSize: 16,
@@ -167,6 +169,7 @@ function normalizeChartDisplaySettings(parsed: Partial<ChartDisplaySettings> | n
   if (!parsed) return DEFAULT_CHART_SETTINGS;
   const shouldUseNewDefaults = parsed.settingsVersion !== CHART_SETTINGS_VERSION;
   return {
+    columns: parsed.columns === 'single' ? 'single' : 'auto',
     settingsVersion: CHART_SETTINGS_VERSION,
     lyricFontSize: shouldUseNewDefaults ? DEFAULT_CHART_SETTINGS.lyricFontSize : normalizeFontSize(parsed.lyricFontSize, DEFAULT_CHART_SETTINGS.lyricFontSize),
     chordFontSize: shouldUseNewDefaults ? DEFAULT_CHART_SETTINGS.lyricFontSize : normalizeFontSize(parsed.lyricFontSize, DEFAULT_CHART_SETTINGS.lyricFontSize),
@@ -305,6 +308,7 @@ interface SongChartViewerProps {
   onSave?: (text: string, assignedSongKey?: string) => Promise<void> | void;
   onSaveSectionOrder?: (order: string[] | null) => Promise<void> | void;
   onEditingChange?: (isEditing: boolean) => void;
+  onColumnControlsReady?: (control: { mode: 'auto' | 'single'; toggle: () => void }) => void;
   onDisplayKeyChange?: (displayKey: string) => void;
   externalDesktopNavigation?: boolean;
   footerNavigation?: {
@@ -562,6 +566,7 @@ export function SongChartViewer({
   onSaveSectionOrder,
   onEditingChange,
   onDisplayKeyChange,
+  onColumnControlsReady,
   footerNavigation,
   externalDesktopNavigation = false,
 }: SongChartViewerProps) {
@@ -646,6 +651,10 @@ export function SongChartViewer({
   );
   const draftMetadata = useMemo(() => parseChordProMetadata(draftChordProText || ''), [draftChordProText]);
   const draftDetectedKey = useMemo(() => detectChordProKey(draftChordProText || '', draftMetadata.key || ''), [draftChordProText, draftMetadata.key]);
+  useEffect(() => {
+    onColumnControlsReady?.({ mode: displaySettings.columns, toggle: () => setDisplaySettings(settings => ({ ...settings, columns: settings.columns === 'single' ? 'auto' : 'single' })) });
+  }, [displaySettings.columns, onColumnControlsReady]);
+
   const lyricFontSize = normalizeFontSize(displaySettings.lyricFontSize, DEFAULT_CHART_SETTINGS.lyricFontSize);
   const chordFontSize = lyricFontSize;
   const sectionBadgeFontSize = normalizeFontSize(displaySettings.sectionBadgeFontSize, DEFAULT_CHART_SETTINGS.sectionBadgeFontSize);
@@ -755,7 +764,7 @@ export function SongChartViewer({
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasAssignedKeyChange, hasDraftChanges]);
 
-  const pinchingText = useChartTextGestures(chartScrollRef, fullBleed && !isEditing && editingNote === null, lyricFontSize, size => {
+  const pinchingText = useChartTextGestures(chartScrollRef, fullBleed && !isEditing, lyricFontSize, size => {
     setDisplaySettings(settings => ({ ...settings, lyricFontSize: size, chordFontSize: size, noteFontSize: size }));
     setAutoScrollEnabled(false);
   });
@@ -1225,6 +1234,11 @@ export function SongChartViewer({
       columns.style.columnFill = 'balance';
       columns.style.columnCount = '1';
       if (!window.matchMedia('(min-width: 768px)').matches) return;
+      if (displaySettings.columns === 'single') {
+        columns.style.maxWidth = '56rem';
+        columns.style.marginInline = 'auto';
+        return;
+      }
       const availableHeight = Math.max(1, Math.floor(scroll.clientHeight - (columns.getBoundingClientRect().top - scroll.getBoundingClientRect().top + scroll.scrollTop)));
       const gap = parseFloat(getComputedStyle(columns).columnGap) || 32;
       const minColumnWidth = Math.max(220, lyricFontSize * 18);
@@ -1337,6 +1351,8 @@ export function SongChartViewer({
                 <Captions className="h-3.5 w-3.5" />
                 <span>Lyrics</span>
               </button>
+
+
             </>
           )}
           {editable && !isEditing && (

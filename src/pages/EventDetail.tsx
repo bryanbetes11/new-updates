@@ -691,6 +691,7 @@ export function EventDetail() {
   const [chartModalSong, setChartModalSong] = useState<SetlistSong | null>(null);
   const [serviceModeIndex, setServiceModeIndex] = useState<number | null>(null);
   const servicePinchBlockUntil = useRef(0);
+  const [serviceColumnControl, setServiceColumnControl] = useState<{ mode: 'auto' | 'single'; toggle: () => void } | null>(null);
   const [serviceChartEditing, setServiceChartEditing] = useState(false);
   const [serviceModeEntering, setServiceModeEntering] = useState(false);
   const [serviceModeDisplayKey, setServiceModeDisplayKey] = useState('');
@@ -7358,6 +7359,9 @@ const openLyricsModal = (ss: SetlistSong) => {
                         </div>
                         {stageCommsView === 'tech' && (isOrgAdmin || isAdmin || isPlatformOwner) && <button type="button" onClick={() => setTechMessageSettingsOpen(true)} aria-label="Customize Tech Mode messages" title="Customize quick messages" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-black/[0.06] bg-white/90 text-gray-600 shadow-sm transition hover:border-emerald-300 hover:text-emerald-700 dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/70 dark:hover:border-emerald-500/30 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300"><Settings2 className="h-4.5 w-4.5" /></button>}
                         {stageCommsView === 'stage' && <>
+                        {stageCommsView === 'stage' && <button type="button" onClick={() => serviceColumnControl?.toggle()} aria-label="Single-column chart" aria-pressed={serviceColumnControl?.mode === 'single'} title="Toggle automatic or single-column chart" className="hidden h-11 shrink-0 items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 text-xs font-bold text-emerald-700 dark:text-emerald-200 md:inline-flex">
+                          {serviceColumnControl?.mode === 'single' ? '1 column' : 'Auto columns'}
+                        </button>}
                         <button
                           onClick={() => {
                             setServiceArrangementOpen(value => !value);
@@ -7499,6 +7503,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                   autoScrollEnabled={offset === 0 ? serviceAutoScrollEnabled : false}
                                   onAutoScrollEnabledChange={offset === 0 ? setServiceAutoScrollEnabled : undefined}
                                   onEditingChange={offset === 0 ? setServiceChartEditing : undefined}
+                                  onColumnControlsReady={offset === 0 ? setServiceColumnControl : undefined}
                                   onDisplayKeyChange={offset === 0 ? setServiceModeDisplayKey : undefined}
                                   onSave={offset === 0 ? (text, assignedSongKey) => handleSaveChart(song.song_id, text, assignedSongKey) : undefined}
                                   onSaveSectionOrder={offset === 0 ? (order) => handleSaveSetlistSongSectionOrder(song.id, order) : undefined}

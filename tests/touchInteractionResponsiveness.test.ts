@@ -12,7 +12,7 @@ assert.match(
 
 assert.match(
   eventDetail,
-  /title="Preview Live Mode"[\s\S]*?mobileView="dialog"[\s\S]*?instantOpen/,
+  /title="Enter Live Mode"[\s\S]*?mobileView="dialog"[\s\S]*?instantOpen/,
   'the Live Mode audience picker should be an immediately mounted mobile dialog',
 );
 

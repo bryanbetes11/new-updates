@@ -5,6 +5,10 @@ export interface ServiceModeResumeState {
   eventId: string;
   songIndex: number;
   updatedAt: number;
+  audience?: 'stage' | 'tech';
+  orgId?: string;
+  userId?: string;
+  songId?: string;
 }
 
 function getLocalStorage() {
@@ -28,7 +32,7 @@ function removeStoredServiceMode() {
   }
 }
 
-export function getActiveServiceMode(): ServiceModeResumeState | null {
+export function getActiveServiceMode(orgId?: string | null, userId?: string): ServiceModeResumeState | null {
   const storage = getLocalStorage();
   if (!storage) return null;
 
@@ -37,20 +41,22 @@ export function getActiveServiceMode(): ServiceModeResumeState | null {
     if (!raw) return null;
 
     const parsed = JSON.parse(raw) as Partial<ServiceModeResumeState>;
-    if (!parsed.eventId || typeof parsed.songIndex !== 'number' || typeof parsed.updatedAt !== 'number') {
+    if (!parsed.eventId || !Number.isInteger(parsed.songIndex) || !Number.isFinite(parsed.updatedAt)) {
       removeStoredServiceMode();
       return null;
     }
 
-    if (Date.now() - parsed.updatedAt > SERVICE_MODE_RESUME_MAX_AGE_MS) {
+    if (Date.now() - parsed.updatedAt! > SERVICE_MODE_RESUME_MAX_AGE_MS || parsed.updatedAt! > Date.now()+60000 || (userId && (parsed.userId !== userId || parsed.orgId !== orgId))) {
       removeStoredServiceMode();
       return null;
     }
 
     return {
       eventId: parsed.eventId,
-      songIndex: Math.max(0, parsed.songIndex),
-      updatedAt: parsed.updatedAt,
+      songIndex: Math.max(0, parsed.songIndex!),
+      updatedAt: parsed.updatedAt!,
+      audience: parsed.audience === 'tech' ? 'tech' : 'stage',
+      userId: parsed.userId, orgId: parsed.orgId, songId: parsed.songId,
     };
   } catch {
     removeStoredServiceMode();
@@ -58,7 +64,7 @@ export function getActiveServiceMode(): ServiceModeResumeState | null {
   }
 }
 
-export function saveActiveServiceMode(eventId: string, songIndex: number) {
+export function saveActiveServiceMode(eventId: string, songIndex: number, audience: 'stage' | 'tech' = 'stage', orgId?: string | null, userId?: string, songId?: string) {
   const storage = getLocalStorage();
   if (!storage) return;
 
@@ -69,6 +75,7 @@ export function saveActiveServiceMode(eventId: string, songIndex: number) {
         eventId,
         songIndex: Math.max(0, songIndex),
         updatedAt: Date.now(),
+        audience, orgId: orgId || undefined, userId, songId,
       } satisfies ServiceModeResumeState)
     );
   } catch {
@@ -83,5 +90,5 @@ export function clearActiveServiceMode(eventId?: string) {
 }
 
 export function serviceModeResumePath(state: ServiceModeResumeState) {
-  return `/events/${state.eventId}?mode=restore&song=${state.songIndex}`;
+  return `/events/${state.eventId}?mode=restore&song=${state.songIndex}&audience=${state.audience || 'stage'}`;
 }

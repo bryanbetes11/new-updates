@@ -2,8 +2,15 @@ import { useCallback, useLayoutEffect, useRef } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowDown, ArrowUp, Bold, Captions, Check, ChevronLeft, ChevronRight, Copy, CornerDownRight, Edit3, FileText, Gauge, Italic, ListOrdered, Lock, Minus, Music2, Pause, Play, Plus, RotateCcw, Save, Settings2, StickyNote, Trash2, Users, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Bold, Captions, Check, ChevronLeft, ChevronRight, Copy, Edit3, FileText, Gauge, Italic, ListOrdered, Lock, Minus, Music2, Pause, Play, Plus, RotateCcw, Save, Settings2, StickyNote, Trash2, Users, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useRecoverableDraft } from '../hooks/useRecoverableDraft';
+import { draftRecoveryKey } from '../lib/draftRecovery';
+import { useChartTextGestures } from '../hooks/useChartTextGestures';
+import { ChartLineNote } from './ChartLineNote';
+import { ChartNoteTrigger } from './ChartNoteTrigger';
+import { usePrivateSongNotes } from '../hooks/usePrivateSongNotes';
+import { AlignedChartLine } from './AlignedChartLine';
 import { useAuth } from '../contexts/AuthContext';
 import { loadSyncedPreference, saveSyncedPreference } from '../lib/syncedPreferences';
 import { ChordProLine, detectChordProKey, formatChordProForPlainEditor, getKeyTransposeOffset, parseChordPro, parseChordProMetadata, plainEditorSectionsToChordPro, plainEditorToChordPro, transposeChordPro, transposeKey } from '../lib/chordPro';
@@ -15,6 +22,7 @@ const SECTION_TONES = [
     chord: 'text-violet-700 dark:text-violet-300',
     lyric: 'text-slate-950 dark:!text-violet-50',
     badge: 'border-violet-200 bg-violet-100 text-violet-800 shadow-violet-500/10 dark:border-violet-400/25 dark:bg-violet-400/15 dark:text-violet-100 dark:shadow-violet-500/10',
+    highlight: 'bg-violet-200 text-violet-950 dark:bg-violet-200 dark:text-violet-950',
     dot: 'bg-violet-500 dark:bg-violet-300',
   },
   {
@@ -23,6 +31,7 @@ const SECTION_TONES = [
     chord: 'text-sky-700 dark:text-sky-300',
     lyric: 'text-slate-950 dark:!text-sky-50',
     badge: 'border-sky-200 bg-sky-100 text-sky-800 shadow-sky-500/10 dark:border-sky-400/25 dark:bg-sky-400/15 dark:text-sky-100 dark:shadow-sky-500/10',
+    highlight: 'bg-blue-200 text-blue-950 dark:bg-blue-200 dark:text-blue-950',
     dot: 'bg-sky-500 dark:bg-sky-300',
   },
   {
@@ -31,6 +40,7 @@ const SECTION_TONES = [
     chord: 'text-amber-700 dark:text-amber-300',
     lyric: 'text-slate-950 dark:!text-amber-50',
     badge: 'border-amber-200 bg-amber-100 text-amber-900 shadow-amber-500/10 dark:border-amber-400/25 dark:bg-amber-400/15 dark:text-amber-100 dark:shadow-amber-500/10',
+    highlight: 'bg-indigo-200 text-indigo-950 dark:bg-indigo-200 dark:text-indigo-950',
     dot: 'bg-amber-500 dark:bg-amber-300',
   },
   {
@@ -39,6 +49,7 @@ const SECTION_TONES = [
     chord: 'text-cyan-700 dark:text-cyan-300',
     lyric: 'text-slate-950 dark:!text-cyan-50',
     badge: 'border-cyan-200 bg-cyan-100 text-cyan-800 shadow-cyan-500/10 dark:border-cyan-400/25 dark:bg-cyan-400/15 dark:text-cyan-100 dark:shadow-cyan-500/10',
+    highlight: 'bg-blue-200 text-blue-950 dark:bg-blue-200 dark:text-blue-950',
     dot: 'bg-cyan-500 dark:bg-cyan-300',
   },
   {
@@ -47,6 +58,7 @@ const SECTION_TONES = [
     chord: 'text-teal-700 dark:text-teal-300',
     lyric: 'text-slate-950 dark:!text-teal-50',
     badge: 'border-teal-200 bg-teal-100 text-teal-800 shadow-teal-500/10 dark:border-teal-400/25 dark:bg-teal-400/15 dark:text-teal-100 dark:shadow-teal-500/10',
+    highlight: 'bg-teal-200 text-teal-950 dark:bg-teal-200 dark:text-teal-950',
     dot: 'bg-teal-500 dark:bg-teal-300',
   },
   {
@@ -55,6 +67,7 @@ const SECTION_TONES = [
     chord: 'text-emerald-700 dark:text-emerald-300',
     lyric: 'text-slate-950 dark:!text-emerald-50',
     badge: 'border-emerald-200 bg-emerald-100 text-emerald-800 shadow-emerald-500/10 dark:border-emerald-400/25 dark:bg-emerald-400/15 dark:text-emerald-100 dark:shadow-emerald-500/10',
+    highlight: 'bg-emerald-200 text-emerald-950 dark:bg-emerald-200 dark:text-emerald-950',
     dot: 'bg-emerald-500 dark:bg-emerald-300',
   },
   {
@@ -63,6 +76,7 @@ const SECTION_TONES = [
     chord: 'text-rose-700 dark:text-rose-300',
     lyric: 'text-slate-950 dark:!text-rose-50',
     badge: 'border-rose-200 bg-rose-100 text-rose-800 shadow-rose-500/10 dark:border-rose-400/25 dark:bg-rose-400/15 dark:text-rose-100 dark:shadow-rose-500/10',
+    highlight: 'bg-rose-200 text-rose-950 dark:bg-rose-200 dark:text-rose-950',
     dot: 'bg-rose-500 dark:bg-rose-300',
   },
   {
@@ -71,6 +85,7 @@ const SECTION_TONES = [
     chord: 'text-orange-700 dark:text-orange-300',
     lyric: 'text-slate-950 dark:!text-orange-50',
     badge: 'border-orange-200 bg-orange-100 text-orange-800 shadow-orange-500/10 dark:border-orange-400/25 dark:bg-orange-400/15 dark:text-orange-100 dark:shadow-orange-500/10',
+    highlight: 'bg-orange-200 text-orange-950 dark:bg-orange-200 dark:text-orange-950',
     dot: 'bg-orange-500 dark:bg-orange-300',
   },
 ];
@@ -80,6 +95,7 @@ const DEFAULT_SECTION_TONE = {
   chord: 'text-emerald-700 dark:text-emerald-300',
   lyric: 'text-slate-950 dark:!text-slate-100',
   badge: 'border-slate-200 bg-slate-100 text-slate-800 shadow-slate-500/10 dark:border-white/15 dark:bg-white/10 dark:text-slate-100 dark:shadow-black/10',
+    highlight: 'bg-slate-200 text-slate-950 dark:bg-slate-200 dark:text-slate-950',
   dot: 'bg-slate-500 dark:bg-slate-300',
 };
 
@@ -134,10 +150,10 @@ interface InitialEditorState {
 
 const DEFAULT_CHART_SETTINGS: ChartDisplaySettings = {
   settingsVersion: CHART_SETTINGS_VERSION,
-  lyricFontSize: 10,
-  chordFontSize: 10,
+  lyricFontSize: 16,
+  chordFontSize: 16,
   sectionBadgeFontSize: 10,
-  noteFontSize: 11,
+  noteFontSize: 16,
   lyricBold: false,
   lyricItalic: false,
   chordBold: true,
@@ -152,9 +168,9 @@ function normalizeChartDisplaySettings(parsed: Partial<ChartDisplaySettings> | n
   return {
     settingsVersion: CHART_SETTINGS_VERSION,
     lyricFontSize: shouldUseNewDefaults ? DEFAULT_CHART_SETTINGS.lyricFontSize : normalizeFontSize(parsed.lyricFontSize, DEFAULT_CHART_SETTINGS.lyricFontSize),
-    chordFontSize: shouldUseNewDefaults ? DEFAULT_CHART_SETTINGS.chordFontSize : normalizeFontSize(parsed.chordFontSize, DEFAULT_CHART_SETTINGS.chordFontSize),
+    chordFontSize: shouldUseNewDefaults ? DEFAULT_CHART_SETTINGS.lyricFontSize : normalizeFontSize(parsed.lyricFontSize, DEFAULT_CHART_SETTINGS.lyricFontSize),
     sectionBadgeFontSize: normalizeFontSize(parsed.sectionBadgeFontSize, DEFAULT_CHART_SETTINGS.sectionBadgeFontSize),
-    noteFontSize: normalizeFontSize(parsed.noteFontSize, DEFAULT_CHART_SETTINGS.noteFontSize),
+    noteFontSize: shouldUseNewDefaults ? DEFAULT_CHART_SETTINGS.lyricFontSize : normalizeFontSize(parsed.lyricFontSize, DEFAULT_CHART_SETTINGS.lyricFontSize),
     lyricBold: typeof parsed.lyricBold === 'boolean' ? parsed.lyricBold : DEFAULT_CHART_SETTINGS.lyricBold,
     lyricItalic: typeof parsed.lyricItalic === 'boolean' ? parsed.lyricItalic : DEFAULT_CHART_SETTINGS.lyricItalic,
     chordBold: typeof parsed.chordBold === 'boolean' ? parsed.chordBold : DEFAULT_CHART_SETTINGS.chordBold,
@@ -291,6 +307,7 @@ interface SongChartViewerProps {
   onDisplayKeyChange?: (displayKey: string) => void;
   footerNavigation?: {
     currentLabel: string;
+    nextSongTitle?: string;
     canGoPrevious: boolean;
     canGoNext: boolean;
     onPrevious?: () => void;
@@ -311,6 +328,15 @@ interface EditingSectionNote {
   sectionKey: string;
   sectionLabel: string;
   scope: NoteScope;
+}
+
+interface NoteRecovery { active: EditingSectionNote | null; drafts: Record<string,string> }
+const EMPTY_NOTE_RECOVERY:NoteRecovery={active:null,drafts:{}};
+function isNoteRecovery(value:unknown):value is NoteRecovery {
+  if(!value || typeof value!=='object')return false;
+  const v=value as NoteRecovery;
+  return !!v.drafts && typeof v.drafts==='object' && Object.values(v.drafts).every(x=>typeof x==='string')
+    && (v.active===null || (!!v.active && ['self','team'].includes(v.active.scope) && typeof v.active.sectionKey==='string' && typeof v.active.sectionLabel==='string'));
 }
 
 interface ChartSection {
@@ -536,7 +562,7 @@ export function SongChartViewer({
   onDisplayKeyChange,
   footerNavigation,
 }: SongChartViewerProps) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const displaySettingsStorageKey = `${CHART_SETTINGS_STORAGE_KEY}:${user?.id || 'anonymous'}:${preferenceScopeId || 'all-songs'}`;
   const initialEditorState = useMemo(() => getInitialEditorState(draftStorageId || songId, songId, chordproText), []); // eslint-disable-line react-hooks/exhaustive-deps
   const initialMetadata = parseChordProMetadata(chordproText ?? '');
@@ -549,10 +575,21 @@ export function SongChartViewer({
   const [draftSections, setDraftSections] = useState<EditableChartSection[]>(initialEditorState.draftSections);
   const [sectionEditorEnabled, setSectionEditorEnabled] = useState(initialEditorState.sectionEditorEnabled);
   const [savedPlainDraft, setSavedPlainDraft] = useState(() => formatChordProForPlainEditor(chordproText || ''));
-  const [selfNotes, setSelfNotes] = useState<Record<string, string>>({});
+  const privateNotes = usePrivateSongNotes(songId, user?.id, profile?.org_id);
+  const selfNotes = privateNotes.notes;
   const [teamNotes, setTeamNotes] = useState<Record<string, TeamSectionNote>>({});
-  const [editingNote, setEditingNote] = useState<EditingSectionNote | null>(null);
-  const [noteDraft, setNoteDraft] = useState('');
+  const [noteRecovery, setNoteRecovery, noteRecoveryStatus] = useRecoverableDraft<NoteRecovery>(
+    draftRecoveryKey(`chart-notes:${draftStorageId || songId}`,profile?.org_id,user?.id), EMPTY_NOTE_RECOVERY, isNoteRecovery);
+  const editingNote = noteRecovery.active;
+  const noteIdentity = (note:EditingSectionNote) => `${note.scope}:${note.sectionKey}`;
+  const noteDraft = editingNote ? noteRecovery.drafts[noteIdentity(editingNote)] || '' : '';
+  const setNoteDraft = (text:string) => setNoteRecovery(current => current.active ? {...current,drafts:{...current.drafts,[noteIdentity(current.active)]:text}} : current);
+  const setEditingNote = (note:EditingSectionNote|null) => setNoteRecovery(current => {
+    if(note)return {...current,active:note};
+    const drafts={...current.drafts};
+    if(current.active)delete drafts[noteIdentity(current.active)];
+    return {active:null,drafts};
+  });
   const [localChartSaving, setLocalChartSaving] = useState(false);
   const [notesLoading, setNotesLoading] = useState(false);
   const [notesSaving, setNotesSaving] = useState(false);
@@ -575,6 +612,8 @@ export function SongChartViewer({
   const [chartSaveError, setChartSaveError] = useState<string | null>(null);
   const plainTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const chartScrollRef = useRef<HTMLDivElement | null>(null);
+  const chartColumnsRef = useRef<HTMLDivElement | null>(null);
+
   const mountedSongIdRef = useRef(songId);
   const selectionRef = useRef<{ start?: number; end?: number }>({
     start: initialEditorState.selectionStart,
@@ -582,7 +621,6 @@ export function SongChartViewer({
   });
   const chartAnimationIdentity = `${songId ?? ''}:${chordproText}`;
   const previousChartAnimationIdentityRef = useRef(chartAnimationIdentity);
-  const isSwitchingChartContent = previousChartAnimationIdentityRef.current !== chartAnimationIdentity;
   const savedPlainDraftFromProps = useMemo(() => formatChordProForPlainEditor(chordproText || ''), [chordproText]);
   const draftStorageKey = useMemo(() => chartEditorDraftStorageKey(draftStorageId || songId), [draftStorageId, songId]);
   const sectionDraft = useMemo(() => editableSectionsToPlainEditor(draftSections), [draftSections]);
@@ -606,9 +644,9 @@ export function SongChartViewer({
   const draftMetadata = useMemo(() => parseChordProMetadata(draftChordProText || ''), [draftChordProText]);
   const draftDetectedKey = useMemo(() => detectChordProKey(draftChordProText || '', draftMetadata.key || ''), [draftChordProText, draftMetadata.key]);
   const lyricFontSize = normalizeFontSize(displaySettings.lyricFontSize, DEFAULT_CHART_SETTINGS.lyricFontSize);
-  const chordFontSize = normalizeFontSize(displaySettings.chordFontSize, DEFAULT_CHART_SETTINGS.chordFontSize);
+  const chordFontSize = lyricFontSize;
   const sectionBadgeFontSize = normalizeFontSize(displaySettings.sectionBadgeFontSize, DEFAULT_CHART_SETTINGS.sectionBadgeFontSize);
-  const noteFontSize = normalizeFontSize(displaySettings.noteFontSize, DEFAULT_CHART_SETTINGS.noteFontSize);
+  const noteFontSize = lyricFontSize;
   const autoScrollSpeed = normalizeAutoScrollSpeed(displaySettings.autoScrollSpeed);
   const arrangementOpen = controlledArrangementOpen ?? internalArrangementOpen;
   const setArrangementOpen = useCallback((next: boolean | ((current: boolean) => boolean)) => {
@@ -714,11 +752,16 @@ export function SongChartViewer({
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasAssignedKeyChange, hasDraftChanges]);
 
+  const pinchingText = useChartTextGestures(chartScrollRef, fullBleed && !isEditing && editingNote === null, lyricFontSize, size => {
+    setDisplaySettings(settings => ({ ...settings, lyricFontSize: size, chordFontSize: size, noteFontSize: size }));
+    setAutoScrollEnabled(false);
+  });
+  const editingChartOrNote = isEditing || editingNote !== null || pinchingText;
   useEffect(() => {
-    onEditingChange?.(isEditing);
+    onEditingChange?.(editingChartOrNote);
     if (isEditing) setSettingsOpen(false);
     if (isEditing) setAutoScrollEnabled(false);
-  }, [isEditing, onEditingChange, setAutoScrollEnabled]);
+  }, [editingChartOrNote, isEditing, onEditingChange, setAutoScrollEnabled]);
 
   useEffect(() => {
     if (!isEditing) {
@@ -837,7 +880,6 @@ export function SongChartViewer({
   );
   const showControls = controlsVisible || isEditing;
   const showTopBar = !hideTitleHeader || showControls || arrangementOpen;
-  const selfNotesStorageKey = songId ? `servesync:song-section-notes:${songId}` : '';
 
   useEffect(() => {
     onDisplayKeyChange?.(displayKey);
@@ -908,24 +950,6 @@ export function SongChartViewer({
   }, [chartAnimationIdentity]);
 
   useEffect(() => {
-    setEditingNote(null);
-    setNoteDraft('');
-    setNoteError(null);
-
-    if (!selfNotesStorageKey) {
-      setSelfNotes({});
-      return;
-    }
-
-    try {
-      const raw = localStorage.getItem(selfNotesStorageKey);
-      setSelfNotes(raw ? JSON.parse(raw) : {});
-    } catch {
-      setSelfNotes({});
-    }
-  }, [selfNotesStorageKey]);
-
-  useEffect(() => {
     let cancelled = false;
 
     async function loadTeamNotes(showLoading = false) {
@@ -977,36 +1001,38 @@ export function SongChartViewer({
     };
   }, [songId]);
 
-  const persistSelfNotes = (nextNotes: Record<string, string>) => {
-    setSelfNotes(nextNotes);
-    if (!selfNotesStorageKey) return;
-    localStorage.setItem(selfNotesStorageKey, JSON.stringify(nextNotes));
-  };
-
   const openSectionNote = (sectionKey: string, sectionLabel: string, scope: NoteScope) => {
+    setAutoScrollEnabled(false);
     setNoteError(null);
-    setEditingNote({ sectionKey, sectionLabel, scope });
-    setNoteDraft(scope === 'self' ? (selfNotes[sectionKey] || '') : (teamNotes[sectionKey]?.note || ''));
+    const active={sectionKey,sectionLabel,scope};
+    const key=noteIdentity(active);
+    setNoteRecovery(current=>({...current,active,drafts:{...current.drafts,[key]:current.drafts[key] ?? (scope==='self' ? selfNotes[sectionKey] || '' : teamNotes[sectionKey]?.note || '')}}));
   };
 
-  const saveSectionNote = async () => {
+  const saveSectionNote = async (deleteNote = false) => {
     if (!editingNote || !songId) return;
 
-    const note = noteDraft.trim();
+    if (notesSaving) return;
+    const savedIdentity = noteIdentity(editingNote);
+    const clearSavedNote = () => setNoteRecovery(current => {
+      const drafts={...current.drafts}; delete drafts[savedIdentity];
+      return {active:current.active && noteIdentity(current.active)===savedIdentity ? null : current.active,drafts};
+    });
+    const note = deleteNote ? '' : noteDraft.trim();
+    if (!deleteNote && !note) return;
     setNotesSaving(true);
     setNoteError(null);
 
     if (editingNote.scope === 'self') {
-      const nextNotes = { ...selfNotes };
-      if (note) nextNotes[editingNote.sectionKey] = note;
-      else delete nextNotes[editingNote.sectionKey];
-      persistSelfNotes(nextNotes);
-      setEditingNote(null);
-      setNoteDraft('');
-      setNotesSaving(false);
+      try {
+        await privateNotes.save(editingNote.sectionKey, note);
+        clearSavedNote();
+      } catch { setNoteError('Could not save your private note to your account. Your draft is still here; reconnect and retry.'); }
+      finally { setNotesSaving(false); }
       return;
     }
 
+    try {
     if (!note) {
       const { error } = await supabase
         .from('song_section_notes')
@@ -1024,8 +1050,7 @@ export function SongChartViewer({
           delete nextNotes[editingNote.sectionKey];
           return nextNotes;
         });
-        setEditingNote(null);
-        setNoteDraft('');
+        clearSavedNote();
       }
       setNotesSaving(false);
       return;
@@ -1051,11 +1076,11 @@ export function SongChartViewer({
       setNoteError('Could not save the team note.');
     } else if (data) {
       setTeamNotes(prev => ({ ...prev, [editingNote.sectionKey]: data as TeamSectionNote }));
-      setEditingNote(null);
-      setNoteDraft('');
+      clearSavedNote();
     }
 
-    setNotesSaving(false);
+    } catch { setNoteError('Could not save the team note. Your draft is still here.'); }
+    finally { setNotesSaving(false); }
   };
 
   const handleSaveChartDraft = async () => {
@@ -1182,6 +1207,75 @@ export function SongChartViewer({
   const deleteDraftSection = (id: string) => {
     setDraftSections(sections => sections.filter(section => section.id !== id));
   };
+
+  // Try a complete at-a-glance layout without changing the chosen font size.
+  // If no readable one-to-three-column layout fits, use a centered scroll view.
+  useLayoutEffect(() => {
+    const scroll = chartScrollRef.current;
+    const columns = chartColumnsRef.current;
+    if (!fullBleed || !scroll || !columns || isEditing) return;
+    const layout = () => {
+      columns.style.height = '';
+      columns.style.transform = '';
+      columns.style.maxWidth = '';
+      columns.style.marginInline = '';
+      columns.style.columnFill = 'balance';
+      columns.style.columnCount = '1';
+      if (!window.matchMedia('(min-width: 768px)').matches) return;
+      const availableHeight = Math.max(1, Math.floor(scroll.clientHeight - (columns.getBoundingClientRect().top - scroll.getBoundingClientRect().top + scroll.scrollTop)));
+      const gap = parseFloat(getComputedStyle(columns).columnGap) || 32;
+      const minColumnWidth = Math.max(220, lyricFontSize * 18);
+      const maxColumns = Math.min(3, Math.max(1, Math.floor((columns.clientWidth + gap) / (minColumnWidth + gap))));
+      for (let count = 1; count <= maxColumns; count++) {
+        columns.style.columnCount = String(count);
+        if (Math.ceil(columns.getBoundingClientRect().height) <= availableHeight) {
+          columns.style.height = `${availableHeight}px`;
+          columns.style.columnFill = 'auto';
+          scroll.scrollTop = 0;
+          return;
+        }
+      }
+      columns.style.columnCount = '1';
+      columns.style.maxWidth = '56rem';
+      columns.style.marginInline = 'auto';
+    };
+    layout();
+    const observer = new ResizeObserver(layout);
+    observer.observe(scroll);
+    return () => observer.disconnect();
+  }, [fullBleed, isEditing, lyricFontSize, displaySettings, arrangedChartSections, selfNotes, teamNotes, noteRecovery, notesLoading, noteError, privateNotes.error, privateNotes.legacyCount]);
+
+  const chartFooter = footerNavigation && (
+              <div
+                className="service-mode-chart-footer flex flex-col gap-2 md:flex-row md:items-center md:gap-4"
+                onPointerDown={event => event.stopPropagation()}
+              >
+                <div className="min-w-0 md:w-1/3">
+                  <p className="text-[11px] font-bold text-gray-500 dark:text-white/50">{footerNavigation.currentLabel}</p>
+                  <p className="text-sm font-bold text-gray-900 dark:text-white">{footerNavigation.canGoNext ? `Next Song: ${footerNavigation.nextSongTitle || 'Untitled song'}` : 'End of setlist'}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2 md:flex-1">
+                  <button
+                    type="button"
+                    onClick={footerNavigation.onPrevious}
+                    disabled={!footerNavigation.canGoPrevious}
+                    className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-black/[0.07] bg-gray-100 px-4 text-sm font-black text-gray-700 shadow-sm transition active:scale-[0.97] disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 disabled:shadow-none disabled:active:scale-100 dark:border-white/[0.08] dark:bg-white/[0.08] dark:text-white/70 dark:disabled:bg-white/[0.07] dark:disabled:text-white/35"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    onClick={footerNavigation.onNext}
+                    disabled={!footerNavigation.canGoNext}
+                    className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-black text-white shadow-lg shadow-emerald-600/25 transition active:scale-[0.97] disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none disabled:active:scale-100 dark:disabled:bg-white/[0.07] dark:disabled:text-white/30"
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            );
 
   return (
     <div
@@ -1483,17 +1577,18 @@ export function SongChartViewer({
                     </label>
                   </div>
                 </div>
-                <div className="grid gap-1.5 rounded-2xl border border-sky-200/80 bg-sky-50/70 p-2 shadow-sm shadow-sky-500/5 dark:border-sky-400/20 dark:bg-sky-500/10 dark:shadow-sky-950/10">
-                  <span className="flex items-center justify-between text-[12px] font-black uppercase tracking-[0.16em] text-sky-900 dark:text-sky-100">
-                    Lyrics <span className="rounded-full bg-white/80 px-2 py-0.5 font-mono text-[11px] text-sky-700 ring-1 ring-sky-200/80 dark:bg-sky-300/10 dark:text-sky-100 dark:ring-sky-300/20">{lyricFontSize}px</span>
+                <div className="grid gap-2 rounded-2xl border border-sky-200/80 bg-sky-50/70 p-2 shadow-sm dark:border-sky-400/20 dark:bg-sky-500/10">
+                  <span className="flex items-center justify-between text-xs font-black uppercase tracking-wider text-sky-900 dark:text-sky-100">
+                    Text size <span>{lyricFontSize}px</span>
                   </span>
-                  <div className="grid grid-cols-[1.3fr_0.85fr_0.85fr] gap-1.5">
-                    <div className="grid grid-cols-[28px_1fr_28px] items-center gap-1 rounded-full border border-black/[0.06] bg-white/80 p-0.5 dark:border-white/[0.08] dark:bg-white/[0.04]">
+                  <span className="text-xs text-sky-900/70 dark:text-sky-100/70">Notes, chords &amp; lyrics</span>
+                  <span className="text-xs text-sky-900/70 dark:text-sky-100/70">Pinch the chart or use Alt + mouse wheel</span>
+                    <div className="grid grid-cols-[44px_1fr_44px] items-center gap-1 rounded-full border border-black/[0.06] bg-white/80 p-0.5 dark:border-white/[0.08] dark:bg-white/[0.04]">
                       <button
                         type="button"
-                        aria-label="Decrease lyrics font size"
-                        onClick={() => setDisplaySettings(settings => ({ ...settings, lyricFontSize: stepFontSize(settings.lyricFontSize, -1, DEFAULT_CHART_SETTINGS.lyricFontSize) }))}
-                        className="flex h-8 items-center justify-center rounded-full bg-gray-100 text-gray-600 transition active:scale-[0.96] disabled:opacity-40 dark:bg-white/[0.08] dark:text-white/65"
+                        aria-label="Decrease notes, chords and lyrics font size"
+                        onClick={() => setDisplaySettings(settings => ({ ...settings, lyricFontSize: stepFontSize(settings.lyricFontSize, -1, DEFAULT_CHART_SETTINGS.lyricFontSize), chordFontSize: stepFontSize(settings.lyricFontSize, -1, DEFAULT_CHART_SETTINGS.lyricFontSize), noteFontSize: stepFontSize(settings.lyricFontSize, -1, DEFAULT_CHART_SETTINGS.lyricFontSize) }))}
+                        className="flex h-11 items-center justify-center rounded-full bg-gray-100 text-gray-600 transition active:scale-[0.96] disabled:opacity-40 dark:bg-white/[0.08] dark:text-white/65"
                         disabled={lyricFontSize <= CHART_FONT_SIZE_MIN}
                       >
                         <Minus className="h-3.5 w-3.5" />
@@ -1503,14 +1598,16 @@ export function SongChartViewer({
                       </div>
                       <button
                         type="button"
-                        aria-label="Increase lyrics font size"
-                        onClick={() => setDisplaySettings(settings => ({ ...settings, lyricFontSize: stepFontSize(settings.lyricFontSize, 1, DEFAULT_CHART_SETTINGS.lyricFontSize) }))}
-                        className="flex h-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 transition active:scale-[0.96] disabled:opacity-40 dark:bg-emerald-500/10 dark:text-emerald-300"
+                        aria-label="Increase notes, chords and lyrics font size"
+                        onClick={() => setDisplaySettings(settings => ({ ...settings, lyricFontSize: stepFontSize(settings.lyricFontSize, 1, DEFAULT_CHART_SETTINGS.lyricFontSize), chordFontSize: stepFontSize(settings.lyricFontSize, 1, DEFAULT_CHART_SETTINGS.lyricFontSize), noteFontSize: stepFontSize(settings.lyricFontSize, 1, DEFAULT_CHART_SETTINGS.lyricFontSize) }))}
+                        className="flex h-11 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 transition active:scale-[0.96] disabled:opacity-40 dark:bg-emerald-500/10 dark:text-emerald-300"
                         disabled={lyricFontSize >= CHART_FONT_SIZE_MAX}
                       >
                         <Plus className="h-3.5 w-3.5" />
                       </button>
                     </div>
+                  <div className="grid grid-cols-[1fr_1fr_1fr] items-center gap-1.5">
+                    <span className="text-xs font-bold text-sky-900 dark:text-sky-100">Lyrics</span>
                     <button
                       type="button"
                       onClick={() => setDisplaySettings(settings => ({ ...settings, lyricBold: !settings.lyricBold }))}
@@ -1536,77 +1633,8 @@ export function SongChartViewer({
                       Italic
                     </button>
                   </div>
-                </div>
-                <div className="grid gap-1.5 rounded-2xl border border-violet-200/80 bg-violet-50/70 p-2 shadow-sm shadow-violet-500/5 dark:border-violet-400/20 dark:bg-violet-500/10 dark:shadow-violet-950/10">
-                  <span className="flex items-center justify-between text-[12px] font-black uppercase tracking-[0.16em] text-violet-900 dark:text-violet-100">
-                    Badge <span className="rounded-full bg-white/80 px-2 py-0.5 font-mono text-[11px] text-violet-700 ring-1 ring-violet-200/80 dark:bg-violet-300/10 dark:text-violet-100 dark:ring-violet-300/20">{sectionBadgeFontSize}px</span>
-                  </span>
-                  <div className="grid grid-cols-[38px_1fr_38px] items-center gap-1.5 rounded-full border border-black/[0.06] bg-white/80 p-0.5 dark:border-white/[0.08] dark:bg-white/[0.04]">
-                    <button
-                      type="button"
-                      aria-label="Decrease section badge font size"
-                      onClick={() => setDisplaySettings(settings => ({ ...settings, sectionBadgeFontSize: stepFontSize(settings.sectionBadgeFontSize, -1, DEFAULT_CHART_SETTINGS.sectionBadgeFontSize) }))}
-                      className="flex h-8 items-center justify-center rounded-full bg-gray-100 text-gray-600 transition active:scale-[0.96] disabled:opacity-40 dark:bg-white/[0.08] dark:text-white/65"
-                      disabled={sectionBadgeFontSize <= CHART_FONT_SIZE_MIN}
-                    >
-                      <Minus className="h-3.5 w-3.5" />
-                    </button>
-                    <div className="text-center text-sm font-black text-gray-900 dark:text-white">
-                      {sectionBadgeFontSize}
-                    </div>
-                    <button
-                      type="button"
-                      aria-label="Increase section badge font size"
-                      onClick={() => setDisplaySettings(settings => ({ ...settings, sectionBadgeFontSize: stepFontSize(settings.sectionBadgeFontSize, 1, DEFAULT_CHART_SETTINGS.sectionBadgeFontSize) }))}
-                      className="flex h-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 transition active:scale-[0.96] disabled:opacity-40 dark:bg-emerald-500/10 dark:text-emerald-300"
-                      disabled={sectionBadgeFontSize >= CHART_FONT_SIZE_MAX}
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                  <div className={`inline-flex items-center justify-center gap-1.5 rounded-full border px-2.5 py-1.5 font-black uppercase tracking-[0.14em] shadow-sm ${DEFAULT_SECTION_TONE.badge}`} style={{ fontSize: `${sectionBadgeFontSize}px`, lineHeight: 1.15 }}>
-                    <span className={`h-2 w-2 rounded-full ${DEFAULT_SECTION_TONE.dot}`} />
-                    Section
-                  </div>
-                </div>
-                <div className="grid gap-1.5 rounded-2xl border border-amber-200/80 bg-amber-50/70 p-2 shadow-sm shadow-amber-500/5 dark:border-amber-400/20 dark:bg-amber-500/10 dark:shadow-amber-950/10">
-                  <span className="flex items-center justify-between text-[12px] font-black uppercase tracking-[0.16em] text-amber-900 dark:text-amber-100">
-                    Notes <span className="rounded-full bg-white/80 px-2 py-0.5 font-mono text-[11px] text-amber-700 ring-1 ring-amber-200/80 dark:bg-amber-300/10 dark:text-amber-100 dark:ring-amber-300/20">{noteFontSize}px</span>
-                  </span>
-                  <div className="grid grid-cols-[38px_1fr_38px] items-center gap-1.5 rounded-full border border-black/[0.06] bg-white/80 p-0.5 dark:border-white/[0.08] dark:bg-white/[0.04]">
-                    <button type="button" aria-label="Decrease notes font size" onClick={() => setDisplaySettings(settings => ({ ...settings, noteFontSize: stepFontSize(settings.noteFontSize, -1, DEFAULT_CHART_SETTINGS.noteFontSize) }))} disabled={noteFontSize <= CHART_FONT_SIZE_MIN} className="flex h-8 items-center justify-center rounded-full bg-gray-100 text-gray-600 transition active:scale-[0.96] disabled:opacity-40 dark:bg-white/[0.08] dark:text-white/65"><Minus className="h-3.5 w-3.5" /></button>
-                    <div className="text-center font-black text-amber-950 dark:text-amber-100" style={{ fontFamily: '"Comic Sans MS", "Bradley Hand", cursive', fontSize: `${noteFontSize}px` }}>Note</div>
-                    <button type="button" aria-label="Increase notes font size" onClick={() => setDisplaySettings(settings => ({ ...settings, noteFontSize: stepFontSize(settings.noteFontSize, 1, DEFAULT_CHART_SETTINGS.noteFontSize) }))} disabled={noteFontSize >= CHART_FONT_SIZE_MAX} className="flex h-8 items-center justify-center rounded-full bg-amber-100 text-amber-800 transition active:scale-[0.96] disabled:opacity-40 dark:bg-amber-500/15 dark:text-amber-200"><Plus className="h-3.5 w-3.5" /></button>
-                  </div>
-                </div>
-                <div className="grid gap-1.5 rounded-2xl border border-emerald-200/80 bg-emerald-50/70 p-2 shadow-sm shadow-emerald-500/5 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:shadow-emerald-950/10">
-                  <span className="flex items-center justify-between text-[12px] font-black uppercase tracking-[0.16em] text-emerald-900 dark:text-emerald-100">
-                    Chords <span className="rounded-full bg-white/80 px-2 py-0.5 font-mono text-[11px] text-emerald-700 ring-1 ring-emerald-200/80 dark:bg-emerald-300/10 dark:text-emerald-100 dark:ring-emerald-300/20">{displaySettings.lyricsOnly ? 'Hidden' : `${chordFontSize}px`}</span>
-                  </span>
-                  <div className="grid grid-cols-[1.3fr_0.85fr_0.85fr] gap-1.5">
-                    <div className={`grid grid-cols-[28px_1fr_28px] items-center gap-1 rounded-full border border-black/[0.06] bg-white/80 p-0.5 transition dark:border-white/[0.08] dark:bg-white/[0.04] ${displaySettings.lyricsOnly ? 'opacity-45 saturate-0' : ''}`}>
-                      <button
-                        type="button"
-                        aria-label="Decrease chords font size"
-                        onClick={() => setDisplaySettings(settings => ({ ...settings, chordFontSize: stepFontSize(settings.chordFontSize, -1, DEFAULT_CHART_SETTINGS.chordFontSize) }))}
-                        className="flex h-8 items-center justify-center rounded-full bg-gray-100 text-gray-600 transition active:scale-[0.96] disabled:opacity-40 dark:bg-white/[0.08] dark:text-white/65"
-                        disabled={displaySettings.lyricsOnly || chordFontSize <= CHART_FONT_SIZE_MIN}
-                      >
-                        <Minus className="h-3.5 w-3.5" />
-                      </button>
-                      <div className="text-center text-sm font-black text-gray-900 dark:text-white">
-                        {chordFontSize}
-                      </div>
-                      <button
-                        type="button"
-                        aria-label="Increase chords font size"
-                        onClick={() => setDisplaySettings(settings => ({ ...settings, chordFontSize: stepFontSize(settings.chordFontSize, 1, DEFAULT_CHART_SETTINGS.chordFontSize) }))}
-                        className="flex h-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 transition active:scale-[0.96] disabled:opacity-40 dark:bg-emerald-500/10 dark:text-emerald-300"
-                        disabled={displaySettings.lyricsOnly || chordFontSize >= CHART_FONT_SIZE_MAX}
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
+                  <div className="grid grid-cols-[1fr_1fr_1fr] items-center gap-1.5">
+                    <span className="text-xs font-bold text-emerald-900 dark:text-emerald-100">Chords</span>
                     <button
                       type="button"
                       onClick={() => setDisplaySettings(settings => ({ ...settings, chordBold: !settings.chordBold }))}
@@ -1635,6 +1663,40 @@ export function SongChartViewer({
                     </button>
                   </div>
                 </div>
+                <div className="grid gap-1.5 rounded-2xl border border-violet-200/80 bg-violet-50/70 p-2 shadow-sm shadow-violet-500/5 dark:border-violet-400/20 dark:bg-violet-500/10 dark:shadow-violet-950/10">
+                  <span className="flex items-center justify-between text-[12px] font-black uppercase tracking-[0.16em] text-violet-900 dark:text-violet-100">
+                    Section label <span className="rounded-full bg-white/80 px-2 py-0.5 font-mono text-[11px] text-violet-700 ring-1 ring-violet-200/80 dark:bg-violet-300/10 dark:text-violet-100 dark:ring-violet-300/20">{sectionBadgeFontSize}px</span>
+                  </span>
+                  <div className="grid grid-cols-[38px_1fr_38px] items-center gap-1.5 rounded-full border border-black/[0.06] bg-white/80 p-0.5 dark:border-white/[0.08] dark:bg-white/[0.04]">
+                    <button
+                      type="button"
+                      aria-label="Decrease section label font size"
+                      onClick={() => setDisplaySettings(settings => ({ ...settings, sectionBadgeFontSize: stepFontSize(settings.sectionBadgeFontSize, -1, DEFAULT_CHART_SETTINGS.sectionBadgeFontSize) }))}
+                      className="flex h-8 items-center justify-center rounded-full bg-gray-100 text-gray-600 transition active:scale-[0.96] disabled:opacity-40 dark:bg-white/[0.08] dark:text-white/65"
+                      disabled={sectionBadgeFontSize <= CHART_FONT_SIZE_MIN}
+                    >
+                      <Minus className="h-3.5 w-3.5" />
+                    </button>
+                    <div className="text-center text-sm font-black text-gray-900 dark:text-white">
+                      {sectionBadgeFontSize}
+                    </div>
+                    <button
+                      type="button"
+                      aria-label="Increase section label font size"
+                      onClick={() => setDisplaySettings(settings => ({ ...settings, sectionBadgeFontSize: stepFontSize(settings.sectionBadgeFontSize, 1, DEFAULT_CHART_SETTINGS.sectionBadgeFontSize) }))}
+                      className="flex h-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 transition active:scale-[0.96] disabled:opacity-40 dark:bg-emerald-500/10 dark:text-emerald-300"
+                      disabled={sectionBadgeFontSize >= CHART_FONT_SIZE_MAX}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <div className={`inline-flex items-center justify-center gap-1.5 py-1 font-bold uppercase tracking-[0.12em] ${DEFAULT_SECTION_TONE.label}`} style={{ fontSize: `${sectionBadgeFontSize}px`, lineHeight: 1.15 }}>
+                    <span className={`h-3 w-0.5 rounded-sm ${DEFAULT_SECTION_TONE.dot}`} />
+                    Section
+                  </div>
+                </div>
+
+
               </div>
             </motion.div>
           )}
@@ -1867,7 +1929,8 @@ export function SongChartViewer({
           </div>
         </div>
       ) : (
-        <div ref={chartScrollRef} className={`min-h-0 flex-1 overflow-y-auto ${fullBleed ? 'service-mode-chart-scroll px-4 pt-4 sm:px-6 sm:pt-6' : 'px-5 py-5'}`}>
+        <>
+        <div ref={chartScrollRef} className={`min-h-0 flex-1 overflow-y-auto ${fullBleed ? 'service-mode-chart-scroll px-4 pt-4 sm:px-6 md:pt-3 md:!pb-0' : 'px-5 py-5'}`}>
           <div className={`mx-auto ${fullBleed ? 'max-w-none space-y-0' : 'max-w-3xl space-y-4'}`}>
             {noteError && (
               <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
@@ -1879,6 +1942,9 @@ export function SongChartViewer({
                 Loading notes...
               </div>
             )}
+            {privateNotes.error && <p role="status" className="mb-2 text-xs text-amber-700 dark:text-amber-300">{privateNotes.error}</p>}
+            {privateNotes.legacyCount > 0 && <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-white/70"><span>{privateNotes.legacyCount} older private notes found on this device.</span><button type="button" disabled={privateNotes.importing} onClick={() => void privateNotes.importLegacy()} className="min-h-9 rounded-lg border border-current px-2 font-semibold disabled:opacity-50">{privateNotes.importing ? 'Importing…' : 'Import to my account'}</button></div>}
+            <div ref={chartColumnsRef} className={fullBleed ? 'md:gap-8' : 'space-y-4'}>
             {arrangedChartSections.map((section, arrangementIndex) => {
               const selfNote = selfNotes[section.key];
               const teamNote = teamNotes[section.key]?.note;
@@ -1890,20 +1956,19 @@ export function SongChartViewer({
                   key={`${section.key}-${arrangementIndex}`}
                   className={
                     fullBleed
-                      ? 'group/section border-t border-black/[0.06] px-0.5 py-5 first:border-t-0 dark:border-white/[0.08]'
+                      ? 'group/section border-t border-black/[0.06] px-0.5 py-5 md:py-3 first:border-t-0 dark:border-white/[0.08]'
                       : 'group/section rounded-[24px] border border-black/[0.05] bg-white/75 p-4 shadow-sm dark:border-white/[0.07] dark:bg-white/[0.035]'
                   }
                 >
-                  <div className={`${fullBleed ? 'mb-3' : 'mb-4'} flex flex-wrap items-center gap-2`}>
+                  <div className={`${fullBleed ? 'mb-2' : 'mb-3'} relative flex min-h-5 [break-after:avoid-column] flex-wrap items-center gap-2`}>
                     <div
-                      className={`mr-auto inline-flex items-center gap-2 rounded-full border px-3.5 py-2 font-black uppercase tracking-[0.18em] shadow-sm ${section.tone.badge}`}
+                      className={`mr-auto inline-flex max-w-[calc(100%-5rem)] items-center rounded-sm px-1.5 py-0.5 font-bold uppercase tracking-[0.1em] ${section.tone.highlight}`}
                       style={{ fontSize: `${sectionBadgeFontSize}px`, lineHeight: 1.15 }}
                     >
-                      <span className={`h-2 w-2 rounded-full shadow-[0_0_0_4px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_4px_rgba(255,255,255,0.08)] ${section.tone.dot}`} />
                       <span>{section.label}</span>
                     </div>
                     {songId && (
-                      <div className={`inline-flex shrink-0 items-center gap-1 rounded-full border border-black/[0.04] bg-white/45 p-1 shadow-sm shadow-black/[0.02] transition dark:border-white/[0.06] dark:bg-white/[0.035] ${selfNote || teamNote || isEditingSelf || isEditingTeam ? 'opacity-100' : 'opacity-0 group-hover/section:opacity-100 group-focus-within/section:opacity-100 group-active/section:opacity-100'}`}>
+                      <div className={`absolute right-0 top-1/2 -translate-y-1/2 inline-flex shrink-0 items-center gap-1 rounded-full border border-black/[0.04] bg-white/45 p-1 shadow-sm shadow-black/[0.02] transition dark:border-white/[0.06] dark:bg-white/[0.035] ${selfNote || teamNote || isEditingSelf || isEditingTeam ? 'opacity-100' : 'opacity-0 group-hover/section:opacity-100 group-focus-within/section:opacity-100 group-active/section:opacity-100'}`}>
                         <button
                           onClick={() => openSectionNote(section.key, section.label, 'self')}
                           className={`relative inline-flex h-7 w-7 items-center justify-center rounded-full transition active:scale-[0.94] ${
@@ -1969,19 +2034,21 @@ export function SongChartViewer({
                               <Trash2 className="h-3.5 w-3.5" /> Clear
                             </button>
                           </div>
+                          <p className="mb-2 text-xs text-gray-500 dark:text-white/65">{editingNote.scope === 'self' ? 'Only you can see this. ' : 'Shared with your team after saving. '}{noteRecoveryStatus.available ? 'Unsaved cues recover on this device.' : 'Recovery unavailable — keep this screen open.'}</p>
                           <textarea
+                            disabled={notesSaving}
                             value={noteDraft}
                             onChange={event => setNoteDraft(event.target.value)}
                             className="min-h-28 w-full resize-none rounded-none border-0 bg-transparent px-0 py-1 text-sm font-semibold leading-relaxed text-gray-900 outline-none placeholder:text-gray-400 focus:ring-0 dark:text-white dark:placeholder:text-white/35"
                             style={{ fontFamily: '"Comic Sans MS", "Bradley Hand", cursive', fontSize: `${noteFontSize}px` }}
                             placeholder={`Add a note for ${section.label.toLowerCase()}...`}
                           />
-                          <div className="mt-2 flex justify-end gap-2 border-t border-black/[0.04] pt-2 dark:border-white/[0.06]">
-                            <button onClick={() => setEditingNote(null)} className="h-9 rounded-full px-3 text-xs font-bold text-gray-500 hover:bg-black/[0.04] dark:text-white/50 dark:hover:bg-white/[0.06]">
-                              Cancel
+                          <div className="mt-2 flex flex-wrap justify-end gap-2 border-t border-black/[0.04] pt-2 dark:border-white/[0.06]">{(editingNote.scope === 'self' ? selfNotes[editingNote.sectionKey] : teamNotes[editingNote.sectionKey]?.note) && <button type="button" onClick={() => void saveSectionNote(true)} disabled={notesSaving} className="mr-auto inline-flex min-h-11 items-center gap-1 rounded-lg px-3 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-500/10"><Trash2 className="h-3.5 w-3.5" />Delete note</button>}
+                            <button disabled={notesSaving} onClick={() => setEditingNote(null)} className="min-h-11 rounded-full px-3 text-xs font-bold text-gray-500 hover:bg-black/[0.04] dark:text-white/50 dark:hover:bg-white/[0.06]">
+                              Discard draft
                             </button>
-                            <button onClick={saveSectionNote} disabled={notesSaving} className="h-9 rounded-full bg-emerald-600 px-4 text-xs font-black text-white disabled:opacity-60">
-                              {notesSaving ? 'Saving...' : noteDraft.trim() ? 'Save note' : 'Delete note'}
+                            <button onClick={() => void saveSectionNote()} disabled={notesSaving || !noteDraft.trim()} className="min-h-11 rounded-full bg-emerald-600 px-4 text-xs font-black text-white disabled:opacity-60">
+                              {notesSaving ? 'Saving...' : 'Save note'}
                             </button>
                           </div>
                         </div>
@@ -1992,8 +2059,10 @@ export function SongChartViewer({
                   <div className="space-y-1 font-mono">
                     {section.lines.map((line, index) => {
                       if (line.type === 'blank') return <div key={index} className="h-4" />;
-                      const hasChords = Boolean(line.chords?.trim());
-                      const hasLyrics = Boolean(line.lyrics?.trim());
+                      const previousLine = section.lines[index - 1];
+                      const nextLine = section.lines[index + 1];
+                      const followsChordRow = !line.chords?.trim() && !!line.lyrics?.trim() && previousLine?.type === 'lyrics' && !!previousLine.chords?.trim() && !previousLine.lyrics?.trim();
+                      const leadsLyricRow = !!line.chords?.trim() && !line.lyrics?.trim() && nextLine?.type === 'lyrics' && !!nextLine.lyrics?.trim() && !nextLine.chords?.trim();
                       const lineNoteKey = `${section.key}:line:${index}`;
                       const lineLabel = `${section.label} · line ${index + 1}`;
                       const lineSelfNote = selfNotes[lineNoteKey];
@@ -2001,58 +2070,15 @@ export function SongChartViewer({
                       const isEditingLineSelf = editingNote?.sectionKey === lineNoteKey && editingNote.scope === 'self';
                       const isEditingLineTeam = editingNote?.sectionKey === lineNoteKey && editingNote.scope === 'team';
                       return (
-                        <div key={index} className="group/line relative min-w-0 rounded-xl py-1 pr-16 whitespace-pre-wrap break-words transition hover:bg-amber-50/50 dark:hover:bg-amber-300/[0.025]">
-                          <AnimatePresence initial={false}>
-                            {hasChords && !displaySettings.lyricsOnly && (
-                              <motion.div
-                                key="chords"
-                                className={`${section.tone.chord} whitespace-pre-wrap`}
-                                initial={false}
-                                animate={{ opacity: 1, y: 0, scaleY: 1, filter: 'blur(0px)', height: 'auto' }}
-                                exit={
-                                  isSwitchingChartContent
-                                    ? { opacity: 1, y: 0, scaleY: 1, height: 'auto', filter: 'blur(0px)', transition: { duration: 0 } }
-                                    : {
-                                        opacity: 0,
-                                        y: -14,
-                                        scaleY: 0.18,
-                                        height: 0,
-                                        filter: 'blur(14px)',
-                                        textShadow: '0 18px 32px rgba(16,185,129,0.55)',
-                                      }
-                                }
-                                transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-                                style={{
-                                  overflow: 'hidden',
-                                  fontSize: `${chordFontSize}px`,
-                                  fontWeight: displaySettings.chordBold ? 900 : 400,
-                                  fontStyle: displaySettings.chordItalic ? 'italic' : 'normal',
-                                  lineHeight: 1.55,
-                                  transformOrigin: 'left top',
-                                  WebkitTextStroke: displaySettings.chordBold ? '0.35px currentColor' : '0px transparent',
-                                  textShadow: displaySettings.chordBold ? '0 0 0.01px currentColor' : 'none',
-                                }}
-                              >
-                                {line.chords || ' '}
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                          {hasLyrics && (
-                            <div
-                              className={`${section.tone.lyric} whitespace-pre-wrap`}
-                              style={{
-                                fontSize: `${lyricFontSize}px`,
-                                fontWeight: displaySettings.lyricBold ? 800 : 400,
-                                fontStyle: displaySettings.lyricItalic ? 'italic' : 'normal',
-                                lineHeight: 1.6,
-                              }}
-                            >
-                              {line.lyrics}
-                            </div>
-                          )}
-                          {songId && <div className={`absolute right-1 top-1 flex items-center gap-1 transition ${lineSelfNote || lineTeamNote || isEditingLineSelf || isEditingLineTeam ? 'opacity-100' : 'opacity-0 group-hover/line:opacity-100 group-focus-within/line:opacity-100'}`}><button type="button" onClick={() => openSectionNote(lineNoteKey, lineLabel, 'self')} aria-label={`Add private note to ${lineLabel}`} title="Private line note" className={`flex h-7 w-7 items-center justify-center rounded-full border ${lineSelfNote ? 'border-sky-300 bg-sky-100 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/15 dark:text-sky-200' : 'border-black/[0.06] bg-white/90 text-gray-400 dark:border-white/[0.08] dark:bg-[#161b18] dark:text-white/40'}`}><Lock className="h-3.5 w-3.5" /></button><button type="button" onClick={() => openSectionNote(lineNoteKey, lineLabel, 'team')} aria-label={`Add team note to ${lineLabel}`} title="Team line note" className={`flex h-7 w-7 items-center justify-center rounded-full border ${lineTeamNote ? 'border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-200' : 'border-black/[0.06] bg-white/90 text-gray-400 dark:border-white/[0.08] dark:bg-[#161b18] dark:text-white/40'}`}><StickyNote className="h-3.5 w-3.5" /></button></div>}
-                          {(lineSelfNote || lineTeamNote) && <div className="mt-1.5 grid gap-1.5">{lineSelfNote && !isEditingLineSelf && <div className="flex max-w-full items-start gap-1.5 text-cyan-500 dark:text-cyan-300"><CornerDownRight aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 stroke-[1.75]" /><button type="button" onClick={() => openSectionNote(lineNoteKey, lineLabel, 'self')} className="w-fit max-w-[calc(100%-1.625rem)] -rotate-[0.25deg] rounded-lg bg-cyan-100 px-3 py-1.5 text-left font-medium leading-relaxed text-cyan-950 shadow-[0_4px_14px_rgba(6,182,212,0.16)] transition hover:bg-cyan-200 dark:bg-cyan-400/20 dark:text-cyan-50 dark:hover:bg-cyan-400/25" style={{ fontFamily: '"Comic Sans MS", "Bradley Hand", cursive', fontSize: `${noteFontSize}px` }}><span className="whitespace-pre-wrap">{lineSelfNote}</span></button></div>}{lineTeamNote && !isEditingLineTeam && <div className="flex max-w-full items-start gap-1.5 text-orange-500 dark:text-orange-300"><CornerDownRight aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 stroke-[1.75]" /><button type="button" onClick={() => openSectionNote(lineNoteKey, lineLabel, 'team')} className="w-fit max-w-[calc(100%-1.625rem)] rotate-[0.2deg] rounded-lg bg-orange-200 px-3 py-1.5 text-left font-medium leading-relaxed text-orange-950 shadow-[0_4px_14px_rgba(249,115,22,0.2)] transition hover:bg-orange-300 dark:bg-orange-400/25 dark:text-orange-50 dark:hover:bg-orange-400/30" style={{ fontFamily: '"Comic Sans MS", "Bradley Hand", cursive', fontSize: `${noteFontSize}px` }}><span className="whitespace-pre-wrap">{lineTeamNote}</span></button></div>}</div>}
-                          {(isEditingLineSelf || isEditingLineTeam) && <div className="mt-2 rounded-xl border border-amber-200 bg-[#fffdf4] p-2 dark:border-amber-500/20 dark:bg-amber-400/[0.06]"><p className="mb-1 text-[9px] font-black uppercase tracking-[0.14em] text-amber-700 dark:text-amber-300">{editingNote.scope === 'self' ? 'Private line note' : 'Team line note'}</p><textarea autoFocus value={noteDraft} onChange={event => setNoteDraft(event.target.value)} rows={3} placeholder="Write a cue or flow note…" className="w-full resize-y border-0 bg-transparent p-0 leading-relaxed text-gray-900 outline-none focus:ring-0 dark:text-white" style={{ fontFamily: '"Comic Sans MS", "Bradley Hand", cursive', fontSize: `${noteFontSize}px` }} /><div className="mt-2 flex justify-end gap-2"><button type="button" onClick={() => setEditingNote(null)} className="h-8 px-3 text-xs font-bold text-gray-500">Cancel</button><button type="button" onClick={saveSectionNote} disabled={notesSaving} className="h-8 rounded-lg bg-amber-500 px-3 text-xs font-black text-amber-950 disabled:opacity-50">{notesSaving ? 'Saving…' : noteDraft.trim() ? 'Save note' : 'Delete'}</button></div></div>}
+                        <div key={index} className={`group/line relative flex break-inside-avoid-column min-w-0 flex-wrap items-end gap-x-3 rounded-xl py-1 whitespace-pre-wrap break-words transition hover:bg-amber-50/50 dark:hover:bg-amber-300/[0.025] ${leadsLyricRow ? '!pb-0 -mb-1 [break-after:avoid-column]' : ''} ${followsChordRow ? '!pt-0 [break-before:avoid-column]' : ''}`}>
+                          <ChartNoteTrigger enabled={!!songId && !!line.lyrics?.trim() && !notesSaving} label={lineLabel} onOpen={() => openSectionNote(lineNoteKey, lineLabel, lineTeamNote && !lineSelfNote ? 'team' : 'self')}>
+                          <AlignedChartLine chords={displaySettings.lyricsOnly ? '' : line.chords || ''} lyrics={line.lyrics || ''} chordSize={chordFontSize} lyricSize={lyricFontSize} chordClass={section.tone.chord} lyricClass={section.tone.lyric} chordBold={displaySettings.chordBold} lyricBold={displaySettings.lyricBold} chordItalic={displaySettings.chordItalic} lyricItalic={displaySettings.lyricItalic} />
+                          </ChartNoteTrigger>
+                          {(lineSelfNote || lineTeamNote) && <div className="flex max-w-full flex-wrap items-end gap-1.5">
+                            {lineSelfNote && !isEditingLineSelf && <ChartLineNote text={lineSelfNote} scope="self" fontSize={noteFontSize} onEdit={() => openSectionNote(lineNoteKey, lineLabel, 'self')} />}
+                            {lineTeamNote && !isEditingLineTeam && <ChartLineNote text={lineTeamNote} scope="team" fontSize={noteFontSize} onEdit={() => openSectionNote(lineNoteKey, lineLabel, 'team')} />}
+                          </div>}
+                          {(isEditingLineSelf || isEditingLineTeam) && <div className="mt-2 basis-full rounded-xl border border-amber-200 bg-[#fffdf4] p-2 dark:border-amber-500/20 dark:bg-amber-400/[0.06]"><div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 font-sans"><div className="inline-flex gap-1" role="group" aria-label="Note visibility">{(['self', 'team'] as const).map(scope => <button key={scope} type="button" aria-pressed={editingNote.scope === scope} disabled={notesSaving} onClick={() => openSectionNote(lineNoteKey, lineLabel, scope)} className={`min-h-8 rounded-md border px-2 text-[11px] font-semibold ${editingNote.scope === scope ? 'border-amber-400 bg-amber-200 text-amber-950' : 'border-gray-300 text-gray-600 dark:border-white/20 dark:text-white/70'}`}>{scope === 'self' ? 'Only me' : 'Team'}</button>)}</div><span className="text-[11px] leading-tight text-gray-500 dark:text-white/60">{editingNote.scope === 'self' ? 'Only you can see this' : 'Shared after saving'}</span></div><textarea aria-label="Line note text" autoFocus value={noteDraft} onChange={event => setNoteDraft(event.target.value)} disabled={notesSaving} rows={2} placeholder="Write a cue or flow note…" className="w-full resize-y border-0 bg-transparent p-0 leading-relaxed text-gray-900 outline-none focus:ring-0 dark:text-white" style={{ fontFamily: '"Comic Sans MS", "Bradley Hand", cursive', fontSize: `${noteFontSize}px` }} /><div className="mt-2 flex flex-wrap justify-end gap-2">{(editingNote.scope === 'self' ? selfNotes[editingNote.sectionKey] : teamNotes[editingNote.sectionKey]?.note) && <button type="button" onClick={() => void saveSectionNote(true)} disabled={notesSaving} className="mr-auto inline-flex min-h-11 items-center gap-1 rounded-lg px-3 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-500/10"><Trash2 className="h-3.5 w-3.5" />Delete note</button>}<button type="button" onClick={() => setEditingNote(null)} disabled={notesSaving} className="min-h-11 px-3 text-xs font-bold text-gray-500">Discard draft</button><button type="button" onClick={() => void saveSectionNote()} disabled={notesSaving || !noteDraft.trim()} className="min-h-11 rounded-lg bg-amber-500 px-3 text-xs font-black text-amber-950 disabled:opacity-50">{notesSaving ? 'Saving…' : 'Save note'}</button></div></div>}
                         </div>
                       );
                     })}
@@ -2060,38 +2086,12 @@ export function SongChartViewer({
                 </section>
               );
             })}
-            {footerNavigation && (
-              <div
-                className="service-mode-chart-footer rounded-[24px] border border-black/[0.06] bg-white/85 p-3 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.045]"
-                onPointerDown={event => event.stopPropagation()}
-              >
-                <p className="mb-2 text-center text-[11px] font-black uppercase tracking-[0.18em] text-gray-400 dark:text-white/35">
-                  {footerNavigation.currentLabel}
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={footerNavigation.onPrevious}
-                    disabled={!footerNavigation.canGoPrevious}
-                    className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-black/[0.07] bg-gray-100 px-4 text-sm font-black text-gray-700 shadow-sm transition active:scale-[0.97] disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 disabled:shadow-none disabled:active:scale-100 dark:border-white/[0.08] dark:bg-white/[0.08] dark:text-white/70 dark:disabled:bg-white/[0.07] dark:disabled:text-white/35"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    Previous
-                  </button>
-                  <button
-                    type="button"
-                    onClick={footerNavigation.onNext}
-                    disabled={!footerNavigation.canGoNext}
-                    className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-black text-white shadow-lg shadow-emerald-600/25 transition active:scale-[0.97] disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none disabled:active:scale-100 dark:disabled:bg-white/[0.07] dark:disabled:text-white/30"
-                  >
-                    Next
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            )}
+            </div>
+            <div className={fullBleed ? 'md:hidden' : ''}>{chartFooter}</div>
           </div>
         </div>
+        {fullBleed && <div className="hidden shrink-0 border-t border-black/[0.06] bg-white px-4 py-2 dark:border-white/[0.08] dark:bg-[#111412] md:block" style={{paddingBottom:'max(8px, env(safe-area-inset-bottom))'}}>{chartFooter}</div>}
+        </>
       )}
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>

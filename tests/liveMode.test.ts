@@ -1,0 +1,32 @@
+import { mergeLiveMessages, ownLiveRequests, isOpenLiveRequest, onlineLiveParticipants, liveStatusLabel, type LiveMessage } from '../src/lib/liveMode';
+import { getActiveServiceMode, saveActiveServiceMode, serviceModeResumePath } from '../src/lib/serviceModeResume';
+import { splitAlignedChartLine } from '../src/lib/alignedChartLine';
+const assert=(condition:unknown,message:string)=>{if(!condition)throw new Error(message);};
+const pairs=splitAlignedChartLine('C      G/B       Am(2)','Jesus, God is revealed');
+assert(pairs.map(p=>p.chords).join('').trimEnd()==='C      G/B       Am(2)','Wrapping must preserve exact chord positions');
+assert(pairs.map(p=>p.lyrics).join('').trimEnd()==='Jesus, God is revealed','Wrapping must preserve every lyric and space');
+assert(pairs.every(p=>!p.chords.trim()||!p.chords.trim().endsWith('/')),'Slash chords must not split across rows');
+assert(splitAlignedChartLine('C  G/B  Am  F','').length===4,'Instrumental chords wrap at chord boundaries');
+const base:LiveMessage={id:'a',event_id:'event',kind:'stage_request',sender_id:'alice',sender_name:'Alice',sender_role:'Guitar',recipient_id:null,text:'More monitor',status:'sent',operator_name:null,revision:0,created_at:'2026-09-05T07:00:00Z',updated_at:'2026-09-05T07:00:00Z'};
+const done={...base,status:'done' as const,revision:2};
+assert(mergeLiveMessages([done],[base])[0].status==='done','Stale fetch must not revert a completed request');
+assert(mergeLiveMessages([base],[done,done]).length===1,'Duplicate deliveries must merge by ID');
+assert(ownLiveRequests([base,{...base,id:'b',sender_id:'bob',status:'done'}],'alice')[0].status==='sent','Another performer status must not replace my status');
+assert(isOpenLiveRequest(base)&&!isOpenLiveRequest(done),'Resolved queue classification');
+assert(!isOpenLiveRequest({...base,status:'cancelled'}),'Cancelled requests belong in history');
+assert(liveStatusLabel('seen')==='Seen'&&liveStatusLabel('sent')==='Received','Human acknowledgement must be distinct from receipt');
+assert(onlineLiveParticipants([{user_id:'alice',audience:'stage',last_seen:'2026-09-05T07:00:00Z'}],Date.parse('2026-09-05T07:01:01Z')).length===0,'Expired heartbeat must not count online');
+const original=Object.getOwnPropertyDescriptor(globalThis,'window');
+const values=new Map<string,string>();
+Object.defineProperty(globalThis,'window',{configurable:true,value:{localStorage:{getItem:(key:string)=>values.get(key)??null,setItem:(key:string,value:string)=>values.set(key,value),removeItem:(key:string)=>values.delete(key)}}});
+try {
+  saveActiveServiceMode('event',2,'tech','church','alice','song-c');
+  const saved=getActiveServiceMode('church','alice');
+  assert(saved?.audience==='tech'&&saved.songId==='song-c','Resume must preserve audience and stable song ID');
+  assert(saved&&serviceModeResumePath(saved).includes('audience=tech'),'Fresh launch must restore Tech');
+  assert(getActiveServiceMode('other-church','alice')===null,'Recovery must not cross churches');
+  saveActiveServiceMode('event',2,'tech','church','alice');
+  assert(getActiveServiceMode('church','bob')===null,'Recovery must not cross accounts');
+  values.set('servesync:active-service-mode',JSON.stringify({eventId:'event',songIndex:0.5,updatedAt:Date.now()}));
+  assert(getActiveServiceMode()===null,'Fractional indexes must be rejected');
+} finally { if(original)Object.defineProperty(globalThis,'window',original);else Reflect.deleteProperty(globalThis,'window'); }

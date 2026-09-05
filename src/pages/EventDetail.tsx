@@ -1,11 +1,15 @@
-import { useEffect, useLayoutEffect, useRef, useState, useCallback, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { addDays, format, parseISO, differenceInDays } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { animate, motion, useMotionValue, AnimatePresence, useReducedMotion, type PanInfo } from 'framer-motion';
-import { ArrowLeft, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, ListOrdered, Pause, Play, Settings2, MoreHorizontal, Upload, Calendar, CalendarOff, Loader2, BellRing, Eye, EyeOff, Lock, Wifi, WifiOff, Smile, Guitar, Drum, KeyboardMusic, Mic, Crown } from 'lucide-react';
+import { ArrowLeft, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, ListOrdered, Pause, Play, Settings2, MoreHorizontal, Upload, Calendar, CalendarOff, Loader2, BellRing, Eye, EyeOff, Lock, Wifi, WifiOff, Smile } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useLiveModeSession } from '../hooks/useLiveModeSession';
+import { LiveModeComms } from '../components/LiveModeComms';
+import { isOpenLiveRequest } from '../lib/liveMode';
+import { useScreenAwake } from '../hooks/useScreenAwake';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { Modal } from '../components/Modal';
@@ -41,7 +45,7 @@ import { groupEmojiReactions } from '../lib/reactions';
 import { playInteractionSound } from '../lib/interactionSounds';
 import { projectSongReadiness, SONG_READINESS_RULE_DAYS } from '../lib/songReadiness';
 import { watchSharedTechMessages } from '../lib/sharedTechMessages';
-import { DEFAULT_STAGE_REQUEST_MESSAGES, DEFAULT_TECH_MODE_MESSAGES, getTechMessageGroup, loadStageRequestMessages, loadTechModeMessages, type TechModeMessages } from '../lib/techModeMessages';
+import { DEFAULT_STAGE_REQUEST_MESSAGES, DEFAULT_TECH_MODE_MESSAGES, loadStageRequestMessages, loadTechModeMessages, type TechModeMessages } from '../lib/techModeMessages';
 import { TechModeMessageSettings } from '../components/TechModeMessageSettings';
 import { getOutMemberIdsForDate, type MemberAvailabilityWindow } from '../lib/memberAvailability';
 
@@ -86,19 +90,6 @@ interface SetlistRevisionCommentReaction {
 type RevisionCommentReactionFlight = ReactionFlightPath & {
   commentId: string;
   token: number;
-};
-
-type LiveCommsMessage = {
-  id: string;
-  kind: 'stage_request' | 'tech_instruction' | 'request_status';
-  text: string;
-  senderId: string;
-  senderName: string;
-  senderRole: string;
-  recipientUserId?: string;
-  requestId?: string;
-  status?: 'sent' | 'adjusting' | 'done';
-  createdAt: string;
 };
 
 interface PostEventObservationReply {
@@ -273,16 +264,6 @@ function getServingRoleLabel(roleName: string) {
 }
 
 const TECH_BOOTH_ROLE_NAMES = new Set(['audio', 'lights', 'visuals']);
-
-function getStageRoleIcon(roleName: string) {
-  const normalizedRole = roleName.trim().toLowerCase();
-  if (normalizedRole.includes('song leader') || normalizedRole.includes('worship leader')) return Crown;
-  if (normalizedRole.includes('vocal') || normalizedRole.includes('singer')) return Mic;
-  if (normalizedRole.includes('key') || normalizedRole.includes('piano')) return KeyboardMusic;
-  if (normalizedRole.includes('drum')) return Drum;
-  if (normalizedRole.includes('guitar') || normalizedRole.includes('bass')) return Guitar;
-  return Music;
-}
 
 type SetlistBuilderSong = {
   song_id: string;
@@ -567,7 +548,7 @@ export function EventDetail() {
   const { user, profile, roles, userRoles, organization, loading: authLoading, isLeader, isOrgAdmin, isAdmin, isAdminCoordinator, isProductionDirector, isMusicDirector, isSetlistCoordinator, isPlatformOwner, canPreviewMemberView, isViewingAsMember, isViewingAsSongLeader, setViewingAsSongLeader } = useAuth();
   const { toast } = useToast();
   const prefersReducedMotion = useReducedMotion();
-  const canUseServiceModePilot = isOrgAdmin || isAdmin || isPlatformOwner;
+  const canPreviewLiveMode = isOrgAdmin || isAdmin || isPlatformOwner;
   const canDeleteRevisionComments = isOrgAdmin || isAdmin || isPlatformOwner;
 
   const isMissingSetlistSubmissionTableError = useCallback((message?: string | null) => {
@@ -587,6 +568,9 @@ export function EventDetail() {
     setEventArtworkUrls((current) => current.join('|') === urls.join('|') ? current : urls);
   }, []);
   const [assignments, setAssignments] = useState<EventAssignment[]>([]);
+  const liveAssignments = assignments.filter(a => a.user_id === user?.id && a.status === 'confirmed' && a.roles?.name.toLowerCase() !== 'all members');
+  const canUseServiceModePilot = canPreviewLiveMode || liveAssignments.length > 0;
+  const assignedLiveAudience = liveAssignments.some(a => TECH_BOOTH_ROLE_NAMES.has(a.roles?.name.toLowerCase() || '')) ? 'tech' : 'stage';
   const [members, setMembers] = useState<{ id: string; first_name: string; last_name: string; ministry_status: string }[]>([]);
   const [memberRoles, setMemberRoles] = useState<{ user_id: string; role_id: string }[]>([]);
   const [memberAvailability, setMemberAvailability] = useState<MemberAvailabilityWindow[]>([]);
@@ -715,20 +699,15 @@ export function EventDetail() {
   const [serviceCloseConfirmOpen, setServiceCloseConfirmOpen] = useState(false);
   const [stageCommsOpen, setStageCommsOpen] = useState(false);
   const [stageCommsView, setStageCommsView] = useState<'stage' | 'tech'>('stage');
-  const [stageCommsStatus, setStageCommsStatus] = useState<'idle' | 'sent' | 'adjusting' | 'done'>('idle');
   const [liveModeAudiencePickerIndex, setLiveModeAudiencePickerIndex] = useState<number | null>(null);
-  const [techRecipient, setTechRecipient] = useState('');
-  const [techMessageSent, setTechMessageSent] = useState('');
-  const [techComposerOpen, setTechComposerOpen] = useState(false);
   const [techMessageSettingsOpen, setTechMessageSettingsOpen] = useState(false);
   const [techModeMessages, setTechModeMessages] = useState<TechModeMessages>(DEFAULT_TECH_MODE_MESSAGES);
   const [stageRequestMessages, setStageRequestMessages] = useState<TechModeMessages>(DEFAULT_STAGE_REQUEST_MESSAGES);
-  const [liveCommsMessages, setLiveCommsMessages] = useState<LiveCommsMessage[]>([]);
-  const [liveRequestStatuses, setLiveRequestStatuses] = useState<Record<string, 'sent' | 'adjusting' | 'done'>>({});
-  const [dismissedTechInstructionIds, setDismissedTechInstructionIds] = useState<string[]>([]);
-  const liveCommsChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const [showRehearsalSummary, setShowRehearsalSummary] = useState(false);
-  const [isOnline, setIsOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine);
+  const liveSession = useLiveModeSession(id, profile?.org_id, user?.id, serviceModeIndex !== null && canUseServiceModePilot, stageCommsView);
+  useScreenAwake(serviceModeIndex !== null);
+  const incomingInstructionIds = liveSession.messages.filter(m => m.kind === 'tech_instruction' && m.recipient_id === user?.id && m.status !== 'seen').map(m=>m.id).join(',');
+  useEffect(()=>{ if(incomingInstructionIds && stageCommsView === 'stage') setStageCommsOpen(true); },[incomingInstructionIds,stageCommsView]);
   const [songPreparation, setSongPreparation] = useState<Record<string, EventSongPreparation>>({});
   const [serviceSongStageWidth, setServiceSongStageWidth] = useState(0);
   const [chartSaving, setChartSaving] = useState(false);
@@ -756,29 +735,6 @@ export function EventDetail() {
     return () => window.removeEventListener('servesync:stage-request-messages-updated', handleUpdate);
   }, [profile?.org_id]);
 
-  useEffect(() => {
-    if (!id || !user?.id) return;
-    const channel = supabase
-      .channel(`event-live-comms-${id}`)
-      .on('broadcast', { event: 'live-message' }, ({ payload }) => {
-        const message = payload as LiveCommsMessage;
-        if (!message?.id) return;
-        if (message.kind === 'request_status' && message.requestId && message.status) {
-          setLiveRequestStatuses(current => ({ ...current, [message.requestId!]: message.status! }));
-          setStageCommsStatus(message.status);
-        } else if (message.text) {
-          setLiveCommsMessages(current => current.some(item => item.id === message.id) ? current : [...current, message].slice(-50));
-          if (message.kind === 'tech_instruction' && message.recipientUserId === user.id) setStageCommsOpen(true);
-        }
-        playInteractionSound('tap');
-      })
-      .subscribe();
-    liveCommsChannelRef.current = channel;
-    return () => {
-      liveCommsChannelRef.current = null;
-      void supabase.removeChannel(channel);
-    };
-  }, [id, user?.id]);
   const [lyricsInput, setLyricsInput] = useState('');
   const [savingLyrics, setSavingLyrics] = useState(false);
   const [fetchingLyrics, setFetchingLyrics] = useState(false);
@@ -983,7 +939,7 @@ export function EventDetail() {
     const params = new URLSearchParams(location.search);
     const modeParam = params.get('mode');
     const shouldRestoreFromUrl = modeParam === 'service' || modeParam === 'rehearsal' || modeParam === 'restore';
-    const savedMode = getActiveServiceMode();
+    const savedMode = getActiveServiceMode(profile?.org_id, user?.id);
 
     if (!canUseServiceModePilot) {
       if (savedMode?.eventId === id) clearActiveServiceMode(id);
@@ -1002,22 +958,27 @@ export function EventDetail() {
       : setlistSongs.length > 0
         ? setlistSongs
         : linkedSetlistSongs)
-      .filter((song): song is SetlistSong => !!song && typeof song === 'object');
+      .filter((song): song is SetlistSong => !!song && typeof song === 'object').slice().sort((a,b)=>(a.position||0)-(b.position||0));
     if (availableSongs.length === 0) return;
     if (event?.event_type !== 'Rehearsals' && setlist?.status !== 'approved') return;
 
     const shouldRestoreFromStorage = savedMode?.eventId === id;
     if (!shouldRestoreFromUrl && !shouldRestoreFromStorage) return;
 
-    const requestedIndex = Number(params.get('song') ?? savedMode?.songIndex ?? 0);
+    const savedSongIndex = savedMode?.songId ? availableSongs.findIndex(song => song.song_id === savedMode.songId) : -1;
+    const requestedIndex = savedSongIndex >= 0 ? savedSongIndex : Number(params.get('song') ?? savedMode?.songIndex ?? 0);
     const restoredIndex = Math.min(Math.max(Number.isFinite(requestedIndex) ? requestedIndex : 0, 0), availableSongs.length - 1);
     setServiceChartEditing(false);
     setServiceArrangementOpen(false);
     setServiceAutoScrollEnabled(false);
     setServiceModeEntering(false);
-	setStageCommsView(params.get('audience') === 'tech' ? 'tech' : 'stage');
+	setStageCommsView(canPreviewLiveMode ? (params.get('audience') === 'tech' || (!params.has('audience') && savedMode?.audience === 'tech') ? 'tech' : 'stage') : assignedLiveAudience);
     setServiceModeIndex(restoredIndex);
-  }, [authLoading, canUseServiceModePilot, event?.event_type, id, linkedSetlistSongs, loading, location.pathname, location.search, navigate, serviceModeIndex, setlist?.status, setlistSongs]);
+  }, [authLoading, canUseServiceModePilot, canPreviewLiveMode, assignedLiveAudience, event?.event_type, id, linkedSetlistSongs, loading, location.pathname, location.search, navigate, serviceModeIndex, setlist?.status, setlistSongs, profile?.org_id, user?.id]);
+
+  const linkedReferenceSongs = useMemo(() => linkedSetlistSongs.filter((song):song is SetlistSong => !!song && typeof song === 'object').slice().sort((a,b)=>(a.position||0)-(b.position||0)),[linkedSetlistSongs]);
+  const orderedSetlistSongs = useMemo(() => setlistSongs.filter((song):song is SetlistSong => !!song && typeof song === 'object').slice().sort((a,b)=>(a.position||0)-(b.position||0)),[setlistSongs]);
+  const serviceModeSongs = event?.event_type === 'Rehearsals' && linkedReferenceSongs.length > 0 ? linkedReferenceSongs : orderedSetlistSongs.length > 0 ? orderedSetlistSongs : linkedReferenceSongs;
 
   useEffect(() => {
     if (serviceChartEditing) {
@@ -1030,7 +991,7 @@ export function EventDetail() {
     if (!id || !canUseServiceModePilot || serviceModeIndex === null) return;
     if (serviceModeClosing.current) return;
 
-    saveActiveServiceMode(id, serviceModeIndex);
+    saveActiveServiceMode(id, serviceModeIndex, stageCommsView, profile?.org_id, user?.id, serviceModeSongs[serviceModeIndex]?.song_id);
     const params = new URLSearchParams(location.search);
     params.set('mode', event?.event_type === 'Rehearsals' ? 'rehearsal' : 'service');
     params.set('song', String(serviceModeIndex));
@@ -1039,7 +1000,8 @@ export function EventDetail() {
     const nextLocation = `${location.pathname}?${nextSearch}`;
     const currentLocation = `${location.pathname}${location.search}`;
     if (nextLocation !== currentLocation) navigate(nextLocation, { replace: true });
-  }, [canUseServiceModePilot, event?.event_type, id, location.pathname, location.search, navigate, serviceModeIndex, stageCommsView]);
+  }, [canUseServiceModePilot, event?.event_type, id, location.pathname, location.search, navigate, serviceModeIndex, stageCommsView, profile?.org_id, user?.id, serviceModeSongs]);
+
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -1288,46 +1250,6 @@ export function EventDetail() {
 
     return () => { cancelled = true; };
   }, [canUseServiceModePilot, event?.event_type, event?.id, event?.linked_event_id]);
-
-  useEffect(() => {
-    const syncConnection = () => setIsOnline(navigator.onLine);
-    window.addEventListener('online', syncConnection);
-    window.addEventListener('offline', syncConnection);
-    return () => {
-      window.removeEventListener('online', syncConnection);
-      window.removeEventListener('offline', syncConnection);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (serviceModeIndex === null) return;
-
-    let wakeLock: { release: () => Promise<void> } | null = null;
-    let cancelled = false;
-    const requestWakeLock = async () => {
-      const wakeLockApi = (navigator as Navigator & { wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void> }> } }).wakeLock;
-      if (!wakeLockApi || document.visibilityState !== 'visible') return;
-      try {
-        const lock = await wakeLockApi.request('screen');
-        if (cancelled) await lock.release();
-        else wakeLock = lock;
-      } catch (error) {
-        console.info('Screen wake lock is unavailable:', error);
-      }
-    };
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible' && !wakeLock) void requestWakeLock();
-    };
-
-    void requestWakeLock();
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => {
-      cancelled = true;
-      document.removeEventListener('visibilitychange', handleVisibility);
-      void wakeLock?.release();
-      wakeLock = null;
-    };
-  }, [serviceModeIndex]);
 
   useEffect(() => {
     if (serviceModeIndex === null) return;
@@ -3684,19 +3606,6 @@ const openLyricsModal = (ss: SetlistSong) => {
       linkedServiceDateLabel = '';
     }
   }
-  const linkedReferenceSongs = linkedSetlistSongs
-    .filter((song): song is SetlistSong => !!song && typeof song === 'object')
-    .slice()
-    .sort((a, b) => (a.position || 0) - (b.position || 0));
-  const orderedSetlistSongs = setlistSongs
-    .filter((song): song is SetlistSong => !!song && typeof song === 'object')
-    .slice()
-    .sort((a, b) => (a.position || 0) - (b.position || 0));
-  const serviceModeSongs = event.event_type === 'Rehearsals' && linkedReferenceSongs.length > 0
-    ? linkedReferenceSongs
-    : orderedSetlistSongs.length > 0
-      ? orderedSetlistSongs
-      : linkedReferenceSongs;
   const eventDetailSongs = serviceModeSongs;
   const selectedProposalSubmissions = selectedSongProposals
     ? [selectedSongProposals.conflict.currentSubmission, ...selectedSongProposals.conflict.otherSubmissions]
@@ -3828,24 +3737,6 @@ const openLyricsModal = (ss: SetlistSong) => {
 		  status: assignment.status,
 		};
 	  });
-	const selectedTechRecipient = techPerformers.find(member => member.label === techRecipient) || techPerformers[0] || null;
-	const techConfirmedCount = techPerformers.filter(member => member.status === 'confirmed').length;
-	const techPendingCount = techPerformers.length - techConfirmedCount;
-	const liveStageRequests = liveCommsMessages.filter(message => message.kind === 'stage_request');
-	const activeLiveStageRequests = liveStageRequests.filter(message => liveRequestStatuses[message.id] !== 'done');
-	const resolvedLiveRequestCount = liveStageRequests.filter(message => liveRequestStatuses[message.id] === 'done').length;
-	const latestTechInstruction = [...liveCommsMessages].reverse().find(message => message.kind === 'tech_instruction' && message.recipientUserId === user?.id);
-	const activeTechInstruction = latestTechInstruction && !dismissedTechInstructionIds.includes(latestTechInstruction.id) ? latestTechInstruction : null;
-	const sendLiveCommsMessage = async (message: LiveCommsMessage) => {
-	  if (message.kind === 'request_status' && message.requestId && message.status) {
-	    setLiveRequestStatuses(current => ({ ...current, [message.requestId!]: message.status! }));
-	  } else {
-	    setLiveCommsMessages(current => current.some(item => item.id === message.id) ? current : [...current, message].slice(-50));
-	  }
-	  const result = await liveCommsChannelRef.current?.send({ type: 'broadcast', event: 'live-message', payload: message });
-	  if (result !== 'ok') toast('error', 'Message could not reach the other Live Mode devices');
-	  return result === 'ok';
-	};
 	const rehearsalReadyCount = serviceModeSongs.filter(song => songPreparation[song.id]?.readiness === 'ready').length;
 	const rehearsalNeedsWorkCount = serviceModeSongs.filter(song => songPreparation[song.id]?.readiness === 'needs_work').length;
 	  const serviceModeSourceLabel = event.event_type === 'Rehearsals' && linkedReferenceSongs.length > 0
@@ -3855,7 +3746,7 @@ const openLyricsModal = (ss: SetlistSong) => {
 	    : linkedServiceEvent?.title || 'linked Sunday Service';
 	  const showServiceModeEntryPoints = canUseServiceModePilot;
   const serviceModeLabel = 'Live Mode';
-  const techOpenRequestCount = liveStageRequests.length - resolvedLiveRequestCount;
+  const techOpenRequestCount = liveSession.messages.filter(isOpenLiveRequest).length;
   const serviceModeLoadingTitle = event.event_type === 'Rehearsals' ? 'Preparing rehearsal flow.' : 'Preparing your setlist.';
   const serviceModeLoadingSteps = [
     { label: 'Opening charts', detail: `${serviceModeSongs.length} ${serviceModeSongs.length === 1 ? 'song' : 'songs'}`, icon: FileText },
@@ -3901,7 +3792,8 @@ const openLyricsModal = (ss: SetlistSong) => {
     if (!canUseServiceModePilot) return;
     if (serviceModeSongs.length === 0) return;
     if (event.event_type !== 'Rehearsals' && setlist?.status !== 'approved') return;
-    setLiveModeAudiencePickerIndex(index);
+    if (canPreviewLiveMode) setLiveModeAudiencePickerIndex(index);
+    else enterServiceMode(index, assignedLiveAudience);
   };
   const closeServiceMode = () => {
     serviceModeClosing.current = true;
@@ -7162,15 +7054,15 @@ const openLyricsModal = (ss: SetlistSong) => {
         <Modal
           open={liveModeAudiencePickerIndex !== null}
           onClose={() => setLiveModeAudiencePickerIndex(null)}
-          title="Preview Live Mode"
+          title="Enter Live Mode"
           size="sm"
           mobileView="dialog"
           instantOpen
         >
           <div className="space-y-4">
             <div>
-              <p className="text-sm font-bold text-gray-900 dark:text-white">Which experience would you like to test?</p>
-              <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-white/45">This selector is available only to admin accounts. Team members enter the experience assigned to their event role.</p>
+              <p className="text-sm font-bold text-gray-900 dark:text-white">Choose your workspace</p>
+              <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-white/45">Cues are sent to this event. Admins can choose either view; confirmed team members enter their assigned workspace.</p>
             </div>
             <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
               <button
@@ -7361,7 +7253,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                       transition={{ duration: 0.12, ease: 'easeOut' }}
                     >
                       <div
-                        className="service-mode-topbar relative z-[80] flex shrink-0 items-center gap-2 border-b border-black/[0.06] bg-white px-4 pb-3 pt-3 shadow-sm dark:border-white/[0.08] dark:bg-[#0c0f0d]"
+                        className="service-mode-topbar relative z-[80] flex shrink-0 items-center gap-1 sm:gap-2 border-b border-black/[0.06] bg-white px-2 sm:px-4 pb-3 pt-3 shadow-sm dark:border-white/[0.08] dark:bg-[#0c0f0d]"
                         style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)' }}
                       >
 						<button ref={serviceModeCloseButtonRef} type="button" onClick={requestCloseServiceMode} aria-label={`Close ${serviceModeLabel}`} className="rounded-full p-2 text-gray-500 hover:bg-black/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-white/55 dark:hover:bg-white/[0.08]">
@@ -7374,14 +7266,14 @@ const openLyricsModal = (ss: SetlistSong) => {
                               if (stageCommsView === 'stage') setServiceSongPickerOpen(value => !value);
                             }}
                             aria-expanded={stageCommsView === 'stage' ? serviceSongPickerOpen : undefined}
-                            className={`group flex w-full min-w-0 items-center gap-2 rounded-2xl px-2 py-1 text-left transition ${stageCommsView === 'stage' ? 'hover:bg-emerald-50/70 active:scale-[0.99] dark:hover:bg-emerald-500/10' : 'cursor-default'}`}
+                            className={`group flex w-full min-w-0 items-center gap-1 sm:gap-2 rounded-2xl px-0 sm:px-2 py-1 text-left transition ${stageCommsView === 'stage' ? 'hover:bg-emerald-50/70 active:scale-[0.99] dark:hover:bg-emerald-500/10' : 'cursor-default'}`}
                           >
                             <span className="min-w-0 flex-1">
 							  <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700 dark:text-emerald-300">
 								{stageCommsView === 'tech' ? 'Tech Team · Live Mode' : serviceModeLabel}
-								<span className={`inline-flex items-center gap-1 tracking-normal ${isOnline ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-600 dark:text-red-300'}`} title={isOnline ? 'Connected' : 'Offline'}>
-								  {isOnline ? <Wifi className="h-3 w-3" aria-hidden="true" /> : <WifiOff className="h-3 w-3" aria-hidden="true" />}
-								  <span className="sr-only">{isOnline ? 'Connected' : 'Offline'}</span>
+								<span className={`inline-flex items-center gap-1 tracking-normal ${liveSession.connection === 'Live' ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-600 dark:text-red-300'}`} title={liveSession.connection}>
+								  {liveSession.connection === 'Live' ? <Wifi className="h-3 w-3" aria-hidden="true" /> : <WifiOff className="h-3 w-3" aria-hidden="true" />}
+								  <span className="hidden sm:inline text-[9px] normal-case tracking-normal">{liveSession.connection}</span>
 								</span>
 							  </span>
                               <span className="flex min-w-0 items-center gap-1.5">
@@ -7403,7 +7295,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                               <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-amber-300/40 bg-amber-400/15 px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-amber-700 dark:text-amber-200">
                                 <span className="h-1.5 w-1.5 rounded-full bg-amber-400" /> {techOpenRequestCount} open
                               </span>
-                            ) : <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm transition group-hover:border-emerald-300 group-hover:bg-emerald-100 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
+                            ) : <span className="hidden sm:flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm transition group-hover:border-emerald-300 group-hover:bg-emerald-100 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
                               <motion.span
                                 animate={{ rotate: serviceSongPickerOpen ? 180 : 0 }}
                                 transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
@@ -7462,7 +7354,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                             )}
                           </AnimatePresence>
                         </div>
-                        {stageCommsView === 'tech' && (isOrgAdmin || isAdmin || isPlatformOwner) && <button type="button" onClick={() => setTechMessageSettingsOpen(true)} aria-label="Customize Tech Mode messages" title="Customize quick messages" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.06] bg-white/90 text-gray-600 shadow-sm transition hover:border-emerald-300 hover:text-emerald-700 dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/70 dark:hover:border-emerald-500/30 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300"><Settings2 className="h-4.5 w-4.5" /></button>}
+                        {stageCommsView === 'tech' && (isOrgAdmin || isAdmin || isPlatformOwner) && <button type="button" onClick={() => setTechMessageSettingsOpen(true)} aria-label="Customize Tech Mode messages" title="Customize quick messages" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-black/[0.06] bg-white/90 text-gray-600 shadow-sm transition hover:border-emerald-300 hover:text-emerald-700 dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/70 dark:hover:border-emerald-500/30 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300"><Settings2 className="h-4.5 w-4.5" /></button>}
                         {stageCommsView === 'stage' && <>
                         <button
                           onClick={() => {
@@ -7470,7 +7362,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                             setServiceChartControlsVisible(false);
                           }}
                           disabled={serviceChartEditing || serviceModeEntering}
-                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100 ${
+                          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100 ${
                             serviceArrangementOpen
                               ? 'border-amber-500 bg-amber-500 text-white shadow-lg shadow-amber-500/25'
                               : 'border-black/[0.06] bg-white/90 text-gray-600 shadow-sm hover:border-amber-200 hover:bg-amber-50 hover:text-amber-700 dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/70 dark:hover:border-amber-500/30 dark:hover:bg-amber-500/10 dark:hover:text-amber-300'
@@ -7484,7 +7376,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                         <button
                           onClick={() => setServiceAutoScrollEnabled(value => !value)}
                           disabled={serviceChartEditing || serviceModeEntering}
-                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100 ${
+                          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100 ${
                             serviceAutoScrollEnabled
                               ? 'border-emerald-500 bg-emerald-600 text-white shadow-lg shadow-emerald-600/25'
                               : 'border-black/[0.06] bg-white/90 text-gray-600 shadow-sm hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/70 dark:hover:border-emerald-500/30 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300'
@@ -7497,7 +7389,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                         </button>
                         <button
                           onClick={() => setServiceChartControlsVisible(value => !value)}
-                          className={`order-last flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition active:scale-95 ${
+                          className={`order-last flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 transition active:scale-95 ${
                             serviceChartControlsVisible
                               ? 'border-emerald-500 bg-emerald-600 text-white shadow-lg shadow-emerald-600/25'
                               : 'border-black/[0.06] bg-white/90 text-gray-600 shadow-sm hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/70 dark:hover:border-emerald-500/30 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300'
@@ -7519,143 +7411,35 @@ const openLyricsModal = (ss: SetlistSong) => {
                         <button
                           type="button"
                           onClick={() => setStageCommsOpen(value => !value)}
-                          className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition active:scale-95 ${
+                          className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 transition active:scale-95 ${
                             stageCommsOpen
                               ? 'border-emerald-400 bg-emerald-500 text-black shadow-lg shadow-emerald-500/30'
                               : 'border-black/[0.06] bg-white/90 text-gray-600 shadow-sm hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/70 dark:hover:border-emerald-500/30 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300'
                           }`}
                           aria-label={stageCommsOpen ? 'Close Stage Comms' : 'Open Stage Comms'}
                           aria-pressed={stageCommsOpen}
-                          title="Stage Comms demo"
+                          title="Stage communications"
                         >
                           <MessageCircle className="h-4.5 w-4.5" />
-                          {stageCommsStatus !== 'idle' && stageCommsStatus !== 'done' && (
+                          {liveSession.messages.some(m => (m.kind === 'tech_instruction' && m.recipient_id === user?.id && m.status !== 'seen') || (isOpenLiveRequest(m) && m.sender_id === user?.id)) && (
                             <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-[#0c0f0d]" />
                           )}
                         </button>
                         </>}
                       </div>
 
-                      {stageCommsView === 'tech' && (
-                        <section className="absolute inset-x-0 bottom-0 top-[4.1rem] z-[78] overflow-y-auto bg-[#070a08] text-white" aria-label="Tech Team Live Mode">
-                          <AnimatePresence>
-                            {techComposerOpen && <motion.button type="button" aria-label="Close message panel" className="absolute inset-0 z-20 cursor-default bg-transparent" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setTechComposerOpen(false)} />}
-                          </AnimatePresence>
-                          <div className="mx-auto grid min-h-full max-w-[1180px] grid-cols-1 gap-0 lg:grid-cols-[20rem_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)_auto]">
-                            <aside className="order-1 border-b border-white/[0.08] p-4 lg:border-b-0 lg:border-r" aria-label="Connected performers">
-                              <div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-black">Performers</h2><p className="mt-1 text-[9px] font-bold text-white/30"><span className="text-emerald-300/70">{techConfirmedCount} confirmed</span>{techPendingCount > 0 ? <span className="text-amber-300/70"> · {techPendingCount} pending</span> : null}</p></div><span className="rounded-md bg-white/[0.06] px-2 py-1 text-[9px] font-black text-white/45">{techPerformers.length}</span></div>
-                              <div className="mt-4 space-y-2">
-                                {techPerformers.map((member, memberIndex) => {
-                                  const selected = selectedTechRecipient?.id === member.id;
-                                  const memberTone = ['emerald', 'violet', 'amber', 'sky'][memberIndex % 4];
-                                  const RoleIcon = getStageRoleIcon(member.role);
-                                  const composerVisible = selected && techComposerOpen;
-                                  return <div key={member.id} className="relative">
-                                    <div className={`flex w-full items-center gap-2 rounded-2xl border p-2 transition ${selected ? 'border-emerald-400/[0.14] bg-emerald-400/[0.045]' : 'border-transparent hover:bg-white/[0.04]'}`}>
-                                      <button type="button" onClick={() => { setTechRecipient(member.label); setTechMessageSent(''); setTechComposerOpen(false); }} className="flex min-w-0 flex-1 items-center gap-3 p-1 text-left">
-                                        <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${memberTone === 'emerald' ? 'bg-emerald-400/15 text-emerald-300' : memberTone === 'violet' ? 'bg-violet-400/15 text-violet-300' : memberTone === 'sky' ? 'bg-sky-400/15 text-sky-300' : 'bg-amber-400/15 text-amber-300'}`}><RoleIcon className="h-5 w-5" /></span>
-                                        <span className="min-w-0 flex-1"><span className="flex items-center gap-2"><span className="truncate text-sm font-black">{member.name}</span>{member.status !== 'confirmed' ? <span className="shrink-0 rounded-md bg-amber-400/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-amber-300/80">Pending</span> : null}</span><span className="block truncate text-[11px] text-white/40">{member.role}</span></span>
-                                      </button>
-                                      <button type="button" aria-label={`Send message to ${member.name}`} aria-expanded={composerVisible} onClick={() => { setTechRecipient(member.label); setTechMessageSent(''); setTechComposerOpen(current => selected ? !current : true); }} className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition ${composerVisible ? 'border-emerald-400/30 bg-emerald-400/15 text-emerald-200' : 'border-white/[0.08] bg-white/[0.04] text-white/45 hover:border-emerald-400/25 hover:text-emerald-300'}`}><Send className="h-4 w-4" /></button>
-                                    </div>
-                                    <AnimatePresence>
-                                      {composerVisible && <motion.div initial={{ opacity: 0, x: -8, scale: 0.98 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, x: -6, scale: 0.98 }} className="absolute left-0 top-[calc(100%+0.5rem)] z-30 w-full rounded-3xl border border-emerald-400/20 bg-[#111713] p-4 shadow-2xl shadow-black/50 lg:left-[calc(100%+0.75rem)] lg:top-0 lg:w-80">
-                                        <div className="flex items-start justify-between gap-3"><div><p className="text-[9px] font-black uppercase tracking-[0.16em] text-emerald-300/70">Send directly to</p><h3 className="mt-1 text-base font-black">{member.name} <span className="font-semibold text-white/40">· {member.role}</span></h3></div><button type="button" onClick={() => setTechComposerOpen(false)} aria-label="Close message panel" className="rounded-full p-1.5 text-white/40 hover:bg-white/[0.06]"><X className="h-4 w-4" /></button></div>
-                                        <div className="mt-4 grid grid-cols-2 gap-2">{techModeMessages[getTechMessageGroup(member.role)].map(message => <button key={message} type="button" onClick={async () => { playInteractionSound('tap'); const sent = await sendLiveCommsMessage({ id: crypto.randomUUID(), kind: 'tech_instruction', text: message, senderId: user?.id || '', senderName: profile?.first_name || 'Tech Team', senderRole: 'Tech Team', recipientUserId: member.userId, createdAt: new Date().toISOString() }); if (sent) setTechMessageSent(message); }} className="min-h-14 rounded-2xl border border-white/[0.09] bg-white/[0.05] px-2 text-[11px] font-black text-white/70 transition hover:border-emerald-400/35 hover:bg-emerald-400/[0.10] hover:text-emerald-200 active:scale-[0.97]">{message}</button>)}</div>
-                                        {techMessageSent && <div className="mt-3 flex items-start gap-2 rounded-xl bg-emerald-400/[0.10] p-2 text-[10px] font-bold text-emerald-200"><CheckCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> Sent “{techMessageSent}”.</div>}
-                                      </motion.div>}
-                                    </AnimatePresence>
-                                  </div>;
-                                })}
-                                {techPerformers.length === 0 && <p className="rounded-2xl border border-dashed border-white/10 p-4 text-xs text-white/40">No stage assignments yet.</p>}
-                              </div>
-                            </aside>
-
-                            <section className="order-2 min-w-0 p-4 sm:p-5" aria-label="Live requests">
-                              <div className="flex flex-wrap items-center justify-between gap-3">
-                                <div><h2 className="text-sm font-black">Requests</h2><p className="mt-0.5 text-[10px] text-white/35">Incoming messages from the stage</p></div>
-                              </div>
-                              <div className="mt-3 flex items-center justify-between border-b border-white/[0.08] pb-3"><span className="text-[10px] font-black uppercase tracking-[0.16em] text-white/40">Live request queue</span><span className="rounded-md bg-emerald-400/10 px-2 py-1 text-[9px] font-black text-emerald-300">{techOpenRequestCount} LIVE</span></div>
-                              <div className="mt-4 space-y-3">{activeLiveStageRequests.map(message => { const status = liveRequestStatuses[message.id] || 'sent'; return <motion.article initial={prefersReducedMotion ? false : { opacity: 0, y: -10, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, x: 24, height: 0 }} key={message.id} className={`rounded-3xl border p-4 transition ${status === 'adjusting' ? 'border-amber-400/35 bg-amber-400/[0.06]' : 'border-emerald-400/35 bg-emerald-400/[0.055] shadow-[0_0_28px_rgba(52,211,153,0.08)]'}`}><div className="flex items-start gap-3"><motion.span animate={prefersReducedMotion || status !== 'sent' ? undefined : { scale: [1, 1.12, 1] }} transition={{ repeat: 2, duration: 0.55 }} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-400/15 text-emerald-300"><Music className="h-5 w-5" /></motion.span><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="text-sm font-black">{message.senderName} <span className="font-semibold text-white/40">· {message.senderRole}</span></p><span className={`text-[10px] font-black uppercase ${status === 'adjusting' ? 'text-amber-300' : 'text-emerald-300'}`}>{status === 'sent' ? 'New' : status}</span></div><p className="mt-2 text-lg font-bold">{message.text}</p></div></div><div className="mt-4 grid grid-cols-3 gap-2">{(['sent', 'adjusting', 'done'] as const).map(nextStatus => <button key={nextStatus} type="button" onClick={() => { void sendLiveCommsMessage({ id: crypto.randomUUID(), kind: 'request_status', text: nextStatus, senderId: user?.id || '', senderName: profile?.first_name || 'Tech Team', senderRole: 'Tech Team', requestId: message.id, status: nextStatus, recipientUserId: message.senderId, createdAt: new Date().toISOString() }); }} className={`min-h-11 rounded-xl border text-[11px] font-black capitalize transition ${status === nextStatus ? nextStatus === 'adjusting' ? 'border-amber-400 bg-amber-400/15 text-amber-200' : 'border-emerald-400 bg-emerald-400/15 text-emerald-200' : 'border-white/[0.08] bg-white/[0.04] text-white/55 hover:bg-white/[0.08]'}`}>{nextStatus === 'sent' ? 'Seen' : nextStatus}</button>)}</div></motion.article>;})}{activeLiveStageRequests.length === 0 && <div className="rounded-3xl border border-dashed border-emerald-400/20 p-10 text-center"><CheckCircle className="mx-auto h-7 w-7 text-emerald-300" /><p className="mt-2 text-sm font-black">No live requests</p><p className="mt-1 text-[10px] text-white/35">New messages from the stage will appear here.</p></div>}</div>
-                            </section>
-
-                            <footer className="order-3 border-t border-white/[0.08] bg-white/[0.018] px-4 py-3 lg:col-span-2" aria-label="Live session footer">
-                              <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-                                <div className="flex items-center gap-4" aria-label="Session overview">
-                                  {[['Open', techOpenRequestCount, 'text-amber-300'], ['Resolved', resolvedLiveRequestCount, 'text-emerald-300'], ['Assigned', techPerformers.length, 'text-white'], ['Confirmed', techConfirmedCount, 'text-emerald-300']].map(([label, value, tone]) => <div key={String(label)} className="flex items-baseline gap-1.5"><span className={`text-base font-black ${tone}`}>{value}</span><span className="text-[9px] font-bold uppercase tracking-wide text-white/35">{label}</span></div>)}
-                                </div>
-                                <span className="hidden h-7 w-px bg-white/[0.08] sm:block" />
-                                <div className="min-w-0 flex-1"><p className="truncate text-xs font-black"><span className="mr-2 text-[9px] uppercase tracking-[0.15em] text-emerald-300">Live set</span>{serviceModeSong?.songs?.title || 'Set in progress'}</p><p className="mt-0.5 text-[9px] text-white/35">Song {(serviceModeIndex ?? 0) + 1} of {serviceModeSongs.length || 1}{serviceModeSongKey ? ` · Key ${serviceModeSongKey}` : ''}</p></div>
-                                <div className="flex items-center gap-2"><Wifi className="h-5 w-5 text-emerald-300" /><div><p className="text-[10px] font-black">StageLink Network</p><p className="text-[9px] font-bold text-emerald-300">Connected · {techPerformers.length} assigned</p></div></div>
-                              </div>
-                            </footer>
-                          </div>
-                        </section>
-                      )}
-
-                      <AnimatePresence>
-                        {techMessageSettingsOpen && profile?.org_id && <motion.div className="absolute inset-0 z-[190] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setTechMessageSettingsOpen(false)}>
-                          <motion.div role="dialog" aria-modal="true" aria-labelledby="tech-message-settings-title" className="max-h-[86vh] w-full max-w-3xl overflow-y-auto rounded-[28px] bg-white px-5 text-gray-950 shadow-2xl dark:bg-[#141815] dark:text-white" initial={{ y: 18, scale: 0.97 }} animate={{ y: 0, scale: 1 }} exit={{ y: 10, scale: 0.98 }} onClick={event => event.stopPropagation()}>
-                            <div className="sticky top-0 z-30 -mx-5 mb-4 flex items-start justify-between gap-3 border-b border-gray-200 bg-white px-5 pb-4 pt-5 dark:border-white/[0.08] dark:bg-[#141815]"><div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-500">Admin settings</p><h2 id="tech-message-settings-title" className="mt-1 text-xl font-black">Tech Mode messages</h2><p className="mt-1 text-xs text-gray-500 dark:text-white/45">Customize the four quick instructions for every stage role.</p></div><button type="button" onClick={() => setTechMessageSettingsOpen(false)} aria-label="Close settings" className="rounded-full p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-white/[0.08]"><X className="h-5 w-5" /></button></div>
-                            <TechModeMessageSettings orgId={profile.org_id} compact onSaved={() => { toast('success', 'Tech Mode messages saved'); setTechMessageSettingsOpen(false); }} />
-                          </motion.div>
-                        </motion.div>}
-                      </AnimatePresence>
-
-                      <AnimatePresence initial={false}>
-                        {stageCommsOpen && (
-                          <motion.section
-                            initial={{ opacity: 0, y: -10, scale: 0.985 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: -8, scale: 0.985 }}
-                            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-                            className="relative z-[75] shrink-0 border-b border-emerald-400/20 bg-[#08100c] px-3 py-3 text-white shadow-[0_18px_45px_-28px_rgba(16,185,129,0.8)]"
-                            aria-label="Stage Comms demo"
-                          >
-                            <div className="mx-auto max-w-3xl">
-                              {activeTechInstruction ? <motion.div key={activeTechInstruction.id} initial={prefersReducedMotion ? false : { opacity: 0, y: -10, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ type: 'spring', stiffness: 380, damping: 24 }} className="rounded-2xl border border-sky-400/40 bg-sky-400/[0.13] px-4 py-3 shadow-[0_0_30px_rgba(56,189,248,0.12)]"><div className="flex items-center gap-2"><motion.span animate={prefersReducedMotion ? undefined : { scale: [1, 1.22, 1] }} transition={{ repeat: 2, duration: 0.55 }} className="h-2.5 w-2.5 rounded-full bg-sky-300" /><p className="text-[9px] font-black uppercase tracking-[0.14em] text-sky-300">Message from Tech</p></div><div className="mt-1.5 flex items-center justify-between gap-4"><p className="text-lg font-black text-sky-100">{activeTechInstruction.text}</p><button type="button" onClick={() => { setDismissedTechInstructionIds(current => [...current, activeTechInstruction.id]); setStageCommsOpen(false); }} className="min-h-10 shrink-0 rounded-xl bg-sky-300 px-4 text-xs font-black text-sky-950">Got it</button></div></motion.div> : <div>
-                                  <div className="mb-2 flex items-center justify-between">
-                                    <p className="text-xs font-black">{profile?.first_name || 'Stage member'} · {myAssignment?.roles?.name || 'Stage role'}</p>
-                                    <p className="text-[10px] font-bold text-white/40">Tap once to send</p>
-                                  </div>
-                                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                                    {stageRequestMessages[getTechMessageGroup(myAssignment?.roles?.name || '')].map((label, index) => {
-                                      const RequestIcon = index === 3 ? AlertTriangle : MessageCircle;
-                                      const tones = ['bg-emerald-500/18 text-emerald-200 border-emerald-400/25', 'bg-white/[0.06] text-white/80 border-white/10', 'bg-violet-500/18 text-violet-200 border-violet-400/25', 'bg-amber-500/18 text-amber-200 border-amber-400/25'];
-                                      return (
-                                      <button
-                                        key={label}
-                                        type="button"
-                                        onClick={async () => {
-                                          playInteractionSound('tap');
-                                          const sent = await sendLiveCommsMessage({ id: crypto.randomUUID(), kind: 'stage_request', text: label, senderId: user?.id || '', senderName: profile?.first_name || 'Stage member', senderRole: myAssignment?.roles?.name || 'Stage role', createdAt: new Date().toISOString() });
-                                          if (sent) setStageCommsStatus('sent');
-                                        }}
-                                        className={`flex min-h-16 items-center justify-center gap-2 rounded-2xl border px-3 text-xs font-black transition active:scale-[0.97] ${tones[index]}`}
-                                      >
-                                        <RequestIcon className="h-5 w-5" /> {label}
-                                      </button>
-                                    );})}
-                                  </div>
-                                  {stageCommsStatus !== 'idle' && (
-                                    <div className="mt-2 flex items-center justify-between rounded-xl border border-emerald-400/20 bg-emerald-400/[0.08] px-3 py-2">
-                                      <p className="text-xs font-bold text-emerald-100">
-                                        {stageCommsStatus === 'sent' ? 'Request sent to Tech Booth' : stageCommsStatus === 'adjusting' ? 'Tech is adjusting' : 'Adjustment complete'}
-                                      </p>
-                                      <span className="text-[10px] font-black uppercase tracking-wide text-emerald-300">{stageCommsStatus}</span>
-                                    </div>
-                                  )}
-                              </div>}
-                            </div>
-                          </motion.section>
-                        )}
-                      </AnimatePresence>
+                      {techMessageSettingsOpen && <div role="dialog" aria-label="Tech message settings" className="absolute inset-0 z-[100] overflow-y-auto bg-white p-5 dark:bg-[#0c0f0d]"><button type="button" className="mb-4 min-h-11 rounded-xl border px-4" onClick={()=>setTechMessageSettingsOpen(false)}>Back to Live Mode</button>{profile?.org_id && <TechModeMessageSettings orgId={profile.org_id} compact />}</div>}
+                      {(stageCommsView === 'tech' || stageCommsOpen) && <div className={stageCommsView === 'tech' ? 'min-h-0 flex-1 overflow-y-auto' : 'max-h-[55dvh] shrink-0 overflow-y-auto'}>
+                        <LiveModeComms session={liveSession} audience={stageCommsView} userId={user?.id || ''} performers={techPerformers} role={myAssignment?.roles?.name || 'Stage'} requests={stageRequestMessages} instructions={techModeMessages} eventTitle={event.title} />
+                      </div>}
                       <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.12, ease: 'easeOut' }}
-                        className="service-mode-chart-frame relative z-10 min-h-0 flex-1 overflow-visible bg-white dark:bg-[#0c0f0d]"
+                        className={`service-mode-chart-frame relative z-10 min-h-0 flex-1 overflow-visible bg-white dark:bg-[#0c0f0d] ${stageCommsView === 'tech' ? 'hidden' : ''}`}
+                        aria-hidden={stageCommsView === 'tech'}
+                        {...(stageCommsView === 'tech' ? { inert: '' } : {})}
                       >
                         <div ref={serviceSongStageRef} className="service-mode-song-stage">
                           <motion.div
@@ -7676,6 +7460,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                               <div
                                 key={`${song.song_id}-${index}`}
 								aria-hidden={offset !== 0}
+                                {...(offset !== 0 ? { inert: '' } : {})}
                                 className={`service-mode-song-panel ${offset === 0 ? '' : 'pointer-events-none'}`}
                                 style={{ transform: `translate3d(${offset * 100}%, 0, 0)` }}
                               >
@@ -7704,6 +7489,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                   onSaveSectionOrder={offset === 0 ? (order) => handleSaveSetlistSongSectionOrder(song.id, order) : undefined}
                                   footerNavigation={offset === 0 ? {
                                     currentLabel: `${index + 1} of ${serviceModeSongs.length}`,
+                                    nextSongTitle: serviceModeSongs[index + 1]?.songs?.title,
                                     canGoPrevious: index > 0,
                                     canGoNext: index < serviceModeSongs.length - 1,
                                     onPrevious: goToPreviousServiceSong,

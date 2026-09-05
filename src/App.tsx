@@ -244,9 +244,9 @@ function PasswordRecoveryRedirect() {
 function ServiceModeResumeRedirect() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { loading, isOrgAdmin, isAdmin, isPlatformOwner } = useAuth();
+  const { loading, user, profile } = useAuth();
   const hasTriedServiceModeResume = useRef(false);
-  const canUseServiceModePilot = isOrgAdmin || isAdmin || isPlatformOwner;
+  const canUseServiceModePilot = !!user;
 
   useEffect(() => {
     if (loading || hasTriedServiceModeResume.current) return;
@@ -258,7 +258,7 @@ function ServiceModeResumeRedirect() {
     }
 
     const restoreServiceMode = () => {
-      const activeMode = getActiveServiceMode();
+      const activeMode = getActiveServiceMode(profile?.org_id, user?.id);
       if (!activeMode) return;
 
       const target = serviceModeResumePath(activeMode);
@@ -275,7 +275,7 @@ function ServiceModeResumeRedirect() {
     };
 
     restoreServiceMode();
-  }, [canUseServiceModePilot, loading, location.pathname, location.search, navigate]);
+  }, [canUseServiceModePilot, loading, location.pathname, location.search, navigate, profile?.org_id, user?.id]);
 
   return null;
 }

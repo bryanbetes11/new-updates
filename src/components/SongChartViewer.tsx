@@ -114,6 +114,7 @@ const SHARP_KEY_OPTIONS = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A',
 const FLAT_KEY_OPTIONS = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
 
 interface ChartDisplaySettings {
+  notesEnabled: boolean;
   columns: 'auto' | 'single';
   settingsVersion: number;
   lyricFontSize: number;
@@ -151,6 +152,7 @@ interface InitialEditorState {
 }
 
 const DEFAULT_CHART_SETTINGS: ChartDisplaySettings = {
+  notesEnabled: true,
   columns: 'auto',
   settingsVersion: CHART_SETTINGS_VERSION,
   lyricFontSize: 16,
@@ -169,6 +171,7 @@ function normalizeChartDisplaySettings(parsed: Partial<ChartDisplaySettings> | n
   if (!parsed) return DEFAULT_CHART_SETTINGS;
   const shouldUseNewDefaults = parsed.settingsVersion !== CHART_SETTINGS_VERSION;
   return {
+    notesEnabled: parsed.notesEnabled !== false,
     columns: parsed.columns === 'single' ? 'single' : 'auto',
     settingsVersion: CHART_SETTINGS_VERSION,
     lyricFontSize: shouldUseNewDefaults ? DEFAULT_CHART_SETTINGS.lyricFontSize : normalizeFontSize(parsed.lyricFontSize, DEFAULT_CHART_SETTINGS.lyricFontSize),
@@ -1014,6 +1017,7 @@ export function SongChartViewer({
   }, [songId]);
 
   const openSectionNote = (sectionKey: string, sectionLabel: string, scope: NoteScope) => {
+    if (!displaySettings.notesEnabled && !(scope === 'self' ? selfNotes[sectionKey] : teamNotes[sectionKey]?.note)) return;
     setAutoScrollEnabled(false);
     setNoteError(null);
     const active={sectionKey,sectionLabel,scope};
@@ -1312,14 +1316,15 @@ export function SongChartViewer({
                   setArrangementOpen(false);
                 }}
                 disabled={!detectedKey}
+                aria-label={`Change key: ${displayKey || "unknown"}`}
                 aria-expanded={keyPickerOpen}
-                className={`inline-flex h-10 min-w-[74px] shrink-0 items-center justify-center whitespace-nowrap rounded-full border-2 px-3 text-[13px] font-black transition active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-[102px] sm:px-4 sm:text-sm ${
+                className={`inline-flex h-10 min-w-[44px] shrink-0 items-center justify-center whitespace-nowrap rounded-full border-2 px-3 text-[13px] font-black transition active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-[44px] sm:px-3 sm:text-sm ${
                   keyPickerOpen
                     ? 'border-emerald-500 bg-emerald-600 text-white shadow-lg shadow-emerald-600/20'
                     : 'border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm shadow-emerald-500/10 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-300'
                 }`}
               >
-                {displayKey ? `Key ${displayKey}` : 'Key --'}
+                {displayKey || '--'}
               </button>
               <button
                 type="button"
@@ -1351,6 +1356,7 @@ export function SongChartViewer({
                 <Captions className="h-3.5 w-3.5" />
                 <span>Lyrics</span>
               </button>
+              <button type="button" aria-label="Enable adding notes" aria-pressed={displaySettings.notesEnabled} onClick={() => setDisplaySettings(settings => ({ ...settings, notesEnabled: !settings.notesEnabled }))} className={`inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border-2 px-3 text-[13px] font-bold ${displaySettings.notesEnabled ? 'border-amber-400/40 bg-amber-100 text-amber-900 dark:bg-amber-400/15 dark:text-amber-200' : 'border-black/10 text-gray-500 dark:border-white/10 dark:text-white/60'}`}><StickyNote className="h-3.5 w-3.5" />Notes {displaySettings.notesEnabled ? 'on' : 'off'}</button>
 
 
             </>
@@ -1956,7 +1962,7 @@ export function SongChartViewer({
                     >
                       <span>{section.label}</span>
                     </div>
-                    {songId && (
+                    {songId && displaySettings.notesEnabled && (
                       <div className={`absolute right-0 top-1/2 -translate-y-1/2 inline-flex shrink-0 items-center gap-1 rounded-full border border-black/[0.04] bg-white/45 p-1 shadow-sm shadow-black/[0.02] transition dark:border-white/[0.06] dark:bg-white/[0.035] ${selfNote || teamNote || isEditingSelf || isEditingTeam ? 'opacity-100' : 'opacity-0 group-hover/section:opacity-100 group-focus-within/section:opacity-100 group-active/section:opacity-100'}`}>
                         <button
                           onClick={() => openSectionNote(section.key, section.label, 'self')}
@@ -2059,8 +2065,8 @@ export function SongChartViewer({
                       const isEditingLineSelf = editingNote?.sectionKey === lineNoteKey && editingNote.scope === 'self';
                       const isEditingLineTeam = editingNote?.sectionKey === lineNoteKey && editingNote.scope === 'team';
                       return (
-                        <div key={index} className={`group/line relative flex break-inside-avoid-column min-w-0 flex-wrap items-end gap-x-3 rounded-xl py-1 whitespace-pre-wrap break-words transition hover:bg-amber-50/50 dark:hover:bg-amber-300/[0.025] ${leadsLyricRow ? '!pb-0 -mb-1 [break-after:avoid-column]' : ''} ${followsChordRow ? '!pt-0 [break-before:avoid-column]' : ''}`}>
-                          <ChartNoteTrigger enabled={!!songId && !!line.lyrics?.trim() && !notesSaving} label={lineLabel} onOpen={() => openSectionNote(lineNoteKey, lineLabel, lineTeamNote && !lineSelfNote ? 'team' : 'self')}>
+                        <div key={index} className={`group/line relative flex break-inside-avoid-column min-w-0 flex-wrap items-end gap-x-3 rounded-xl py-1 whitespace-pre-wrap break-words transition ${displaySettings.notesEnabled && line.lyrics?.trim() ? 'hover:bg-amber-50/50 dark:hover:bg-amber-300/[0.025]' : ''} ${leadsLyricRow ? '!pb-0 -mb-1 [break-after:avoid-column]' : ''} ${followsChordRow ? '!pt-0 [break-before:avoid-column]' : ''}`}>
+                          <ChartNoteTrigger enabled={displaySettings.notesEnabled && !!songId && !!line.lyrics?.trim() && !notesSaving} label={lineLabel} onOpen={() => openSectionNote(lineNoteKey, lineLabel, lineTeamNote && !lineSelfNote ? 'team' : 'self')}>
                           <AlignedChartLine chords={displaySettings.lyricsOnly ? '' : line.chords || ''} lyrics={line.lyrics || ''} chordSize={chordFontSize} lyricSize={lyricFontSize} chordClass={section.tone.chord} lyricClass={section.tone.lyric} chordBold={displaySettings.chordBold} lyricBold={displaySettings.lyricBold} chordItalic={displaySettings.chordItalic} lyricItalic={displaySettings.lyricItalic} />
                           </ChartNoteTrigger>
                           {(lineSelfNote || lineTeamNote) && <div className="flex max-w-full flex-wrap items-end gap-1.5">

@@ -4,8 +4,8 @@
 
 /* Apply to every rendered lyric/chord span; Safari may otherwise select a
    descendant during a long press. Note textareas sit outside this trigger. */
-[data-chart-note-trigger="true"],
-[data-chart-note-trigger="true"] * {
+[data-chart-reading-text="true"],
+[data-chart-reading-text="true"] * {
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
@@ -1406,4 +1406,12 @@ html[data-survey-preview-device="phone"] .survey-modal-surface > div {
   border: 0;
   border-radius: 0;
   box-shadow: none;
+}
+
+/* Chords are reading content, not note targets. Keep chart gestures available. */
+[data-chart-chords="true"] {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  cursor: default;
 }

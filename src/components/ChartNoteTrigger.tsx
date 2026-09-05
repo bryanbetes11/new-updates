@@ -10,11 +10,11 @@ export function ChartNoteTrigger({ children, enabled, label, onOpen }: {
   const triggerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const element = triggerRef.current;
-    if (!element || !enabled) return;
+    if (!element) return;
     const preventSelection = (event: Event) => event.preventDefault();
     element.addEventListener('selectstart', preventSelection);
     return () => element.removeEventListener('selectstart', preventSelection);
-  }, [enabled]);
+  }, []);
   const pending = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null);
   const cancel = () => {
     if (pending.current) clearTimeout(pending.current.timer);
@@ -33,22 +33,22 @@ export function ChartNoteTrigger({ children, enabled, label, onOpen }: {
     };
   }, []);
 
-  return <div ref={triggerRef} data-chart-note-trigger={enabled ? 'true' : undefined} className="min-w-0 max-w-full rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400"
+  return <div ref={triggerRef} data-chart-reading-text="true" data-chart-note-trigger={enabled ? 'true' : undefined} className="min-w-0 max-w-full rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400"
     role={enabled ? 'button' : undefined} tabIndex={enabled ? 0 : undefined}
     aria-label={enabled ? `Notes for ${label}` : undefined}
     title={enabled ? 'Hold to open notes, or double-click. Keyboard: Enter.' : undefined}
-    style={enabled ? { WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' } : undefined}
+    style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
     onPointerDown={event => {
       cancel();
-      if (!enabled || !event.isPrimary || event.button !== 0) return;
+      if (!enabled || !event.isPrimary || event.button !== 0 || (event.target as Element).closest('[data-chart-chords="true"]')) return;
       pending.current = { x: event.clientX, y: event.clientY, timer: setTimeout(() => { pending.current = null; onOpen(); }, 550) };
     }}
     onPointerMove={event => {
       if (pending.current && Math.hypot(event.clientX - pending.current.x, event.clientY - pending.current.y) > 8) cancel();
     }}
     onPointerUp={cancel} onPointerCancel={cancel} onPointerLeave={cancel}
-    onContextMenu={event => { if (enabled) event.preventDefault(); }}
-    onDoubleClick={() => { if (enabled) { cancel(); onOpen(); } }}
+    onContextMenu={event => event.preventDefault()}
+    onDoubleClick={event => { if (enabled && !(event.target as Element).closest('[data-chart-chords="true"]')) { cancel(); onOpen(); } }}
     onKeyDown={event => {
       if (enabled && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); event.stopPropagation(); onOpen(); }
     }}

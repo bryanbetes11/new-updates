@@ -6472,17 +6472,17 @@ const openLyricsModal = (ss: SetlistSong) => {
         >
           <div className="flex h-full min-h-0 flex-col">
             {setlistBuilderSongs.length > 0 && (
-              <div className="mb-3 shrink-0 overflow-hidden rounded-2xl border border-emerald-200 bg-emerald-50/70 dark:border-emerald-400/15 dark:bg-emerald-500/[0.06]">
-                <div className="flex items-center justify-between gap-3 border-b border-emerald-200/70 px-3 py-2.5 dark:border-emerald-400/10">
+              <div className="mb-2 shrink-0 overflow-hidden rounded-2xl border border-emerald-200 bg-emerald-50/70 sm:mb-3 dark:border-emerald-400/15 dark:bg-emerald-500/[0.06]">
+                <div className="flex items-center justify-between gap-2 border-b border-emerald-200/70 px-2 py-2 sm:gap-3 sm:px-3 sm:py-2.5 dark:border-emerald-400/10">
                   <div>
                     <p className="text-xs font-bold text-emerald-900 dark:text-emerald-100">
                       Selected songs ({setlistBuilderSongs.length})
                     </p>
-                    <p className="mt-0.5 text-[10px] text-emerald-700/70 dark:text-emerald-200/55">Drag or use the arrows to set the service order.</p>
+                    <p className="mt-0.5 text-[10px] text-emerald-700/70 sm:text-[10px] dark:text-emerald-200/55">Drag or use the arrows to set the service order.</p>
                   </div>
                   <ListOrdered className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" aria-hidden="true" />
                 </div>
-                <div className="max-h-52 overflow-y-auto p-1.5 scrollbar-thin">
+                <div className="max-h-44 overflow-y-auto p-1.5 sm:max-h-52 scrollbar-thin">
                   {setlistBuilderSongs.map((draft, index) => {
                     const song = songs.find(candidate => candidate.id === draft.song_id);
                     if (!song) return null;
@@ -6498,13 +6498,13 @@ const openLyricsModal = (ss: SetlistSong) => {
                           setSetlistBuilderDragIndex(index);
                         }}
                         onDragEnd={() => setSetlistBuilderDragIndex(null)}
-                        className={`flex items-center gap-2 rounded-xl px-2 py-2 transition-colors ${setlistBuilderDragIndex === index ? 'bg-emerald-100 dark:bg-emerald-500/10' : 'hover:bg-white/70 dark:hover:bg-white/[0.04]'}`}
+                        className={`flex items-center gap-2 rounded-xl px-2 py-1.5 transition-colors ${setlistBuilderDragIndex === index ? 'bg-emerald-100 dark:bg-emerald-500/10' : 'hover:bg-white/70 dark:hover:bg-white/[0.04]'}`}
                       >
                         <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-emerald-500/60 active:cursor-grabbing" aria-hidden="true" />
                         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-white text-[10px] font-bold text-emerald-700 ring-1 ring-emerald-200 dark:bg-black/20 dark:text-emerald-200 dark:ring-emerald-400/15">{index + 1}</span>
-                        <SongArtwork song={song} youtubeUrl={draft.youtube_url || song.youtube_url} className="h-9 w-9 rounded-lg" />
+                        <SongArtwork song={song} youtubeUrl={draft.youtube_url || song.youtube_url} className="h-8 w-8 rounded-lg sm:h-9 sm:w-9" />
                         <button type="button" onClick={() => openSongConfig(draft.song_id)} className="min-w-0 flex-1 text-left">
-                          <p className="truncate text-xs font-bold text-gray-900 dark:text-white">{song.title}</p>
+                          <p className="truncate text-[12px] font-bold leading-tight text-gray-900 sm:text-xs dark:text-white">{song.title}</p>
                           <p className="mt-0.5 truncate text-[10px] text-gray-500 dark:text-gray-400">
                             {[draft.category, draft.performed_key].filter(Boolean).join(' · ')}
                           </p>
@@ -6514,7 +6514,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                             type="button"
                             onClick={() => moveSetlistBuilderSong(index, index - 1)}
                             disabled={index === 0}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-white hover:text-emerald-700 disabled:opacity-25 dark:hover:bg-white/[0.06] dark:hover:text-emerald-200"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-white hover:text-emerald-700 disabled:opacity-25 dark:hover:bg-white/[0.06] dark:hover:text-emerald-200 sm:h-9 sm:w-9"
                             aria-label={`Move ${song.title} up`}
                           >
                             <ArrowUp className="h-3.5 w-3.5" />
@@ -6523,7 +6523,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                             type="button"
                             onClick={() => moveSetlistBuilderSong(index, index + 1)}
                             disabled={index === setlistBuilderSongs.length - 1}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-white hover:text-emerald-700 disabled:opacity-25 dark:hover:bg-white/[0.06] dark:hover:text-emerald-200"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-white hover:text-emerald-700 disabled:opacity-25 dark:hover:bg-white/[0.06] dark:hover:text-emerald-200 sm:h-9 sm:w-9"
                             aria-label={`Move ${song.title} down`}
                           >
                             <ArrowDown className="h-3.5 w-3.5" />
@@ -6531,7 +6531,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                           <button
                             type="button"
                             onClick={() => setSetlistBuilderSongs(current => current.filter(item => item.song_id !== draft.song_id))}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-300"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-300 sm:h-9 sm:w-9"
                             aria-label={`Remove ${song.title}`}
                           >
                             <X className="h-3.5 w-3.5" />
@@ -6543,22 +6543,22 @@ const openLyricsModal = (ss: SetlistSong) => {
                 </div>
               </div>
             )}
-            <div className="relative mb-2 shrink-0 bg-gray-50 dark:bg-[#101312]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-              <input
-                type="text"
-                value={songSearch}
-                onChange={e => setSongSearch(e.target.value)}
-                placeholder="Search songs..."
-                className="input-field pl-9 py-2 text-sm"
-                autoComplete="off"
-              />
-            </div>
+              <div className="relative mb-1.5 shrink-0 bg-gray-50 dark:bg-[#101312] sm:mb-2">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={songSearch}
+                  onChange={e => setSongSearch(e.target.value)}
+                  placeholder="Search songs..."
+                  className="input-field h-10 pl-9 py-1.5 text-sm sm:h-auto sm:py-2"
+                  autoComplete="off"
+                />
+              </div>
             <div
               data-setlist-song-scroll="true"
               tabIndex={0}
               aria-label="Available songs"
-              className="no-scrollbar min-h-0 flex-1 touch-pan-y space-y-1 overflow-y-auto overscroll-contain outline-none [-webkit-overflow-scrolling:touch]"
+              className="no-scrollbar min-h-0 flex-1 touch-pan-y space-y-0.5 overflow-y-auto overscroll-contain outline-none [-webkit-overflow-scrolling:touch] sm:space-y-1"
             >
               {songs
                 .filter(s => !setlistSongs.some(ss => ss.song_id === s.id) && !setlistBuilderSongs.some(draft => draft.song_id === s.id))
@@ -6578,7 +6578,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                   return (
                     <div
                       key={song.id}
-                      className={`flex w-full items-start gap-3 rounded-xl p-3 text-left transition-colors ${proposalReservation
+                      className={`flex w-full items-start gap-2 rounded-xl p-2 text-left transition-colors sm:gap-3 sm:p-3 ${proposalReservation
                         ? 'cursor-not-allowed bg-amber-50/80 opacity-80 ring-1 ring-inset ring-amber-300/80 dark:bg-amber-500/[0.08] dark:ring-amber-500/30'
                         : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`}
                     >
@@ -6589,22 +6589,22 @@ const openLyricsModal = (ss: SetlistSong) => {
                           : openSongConfig(song.id)}
                         aria-label={proposalReservation ? `View duplicate proposal details for ${song.title}` : `Configure ${song.title}`}
                         title={proposalReservation ? getProposalReservationMessage(proposalReservation) : undefined}
-                        className="flex min-w-0 flex-1 items-start gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+                        className="flex min-w-0 flex-1 items-start gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 sm:gap-3"
                       >
-                        <SongArtwork song={song} youtubeUrl={song.youtube_url} className="h-11 w-11 shrink-0 rounded-lg" />
+                        <SongArtwork song={song} youtubeUrl={song.youtube_url} className="h-9 w-9 shrink-0 rounded-lg sm:h-11 sm:w-11" />
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-gray-900 dark:text-white">{song.title}</p>
+                          <p className="text-[13px] font-medium leading-tight text-gray-900 sm:text-sm dark:text-white">{song.title}</p>
                           <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
                             <span className={`truncate text-xs ${song.artist?.trim() ? 'text-gray-500 dark:text-gray-400' : 'font-semibold text-amber-600 dark:text-amber-400'}`}>
                               {song.artist?.trim() || 'Artist required before use'}
                             </span>
                             {song.song_key && (
-                              <span className="shrink-0 rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] font-bold text-gray-500 dark:bg-white/[0.06] dark:text-white/45">
+                              <span className="shrink-0 rounded-full bg-gray-100 px-1.5 py-0.5 text-[8px] font-bold text-gray-500 sm:text-[9px] dark:bg-white/[0.06] dark:text-white/45">
                                 {song.song_key}
                               </span>
                             )}
                             {proposalReservation && (
-                              <span className="inline-flex min-w-0 shrink items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-300">
+                              <span className="inline-flex min-w-0 shrink items-center gap-1 text-[9px] font-bold text-amber-700 sm:text-[10px] dark:text-amber-300">
                                 <span className="text-gray-300 dark:text-gray-600" aria-hidden="true">·</span>
                                 <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />
                                 <span className="truncate">Duplicate - Open to see details</span>
@@ -6624,7 +6624,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                             youtubeUrl: song.youtube_url || null,
                           });
                         }}
-                        className={`mt-0.5 inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-bold ring-1 transition-[filter,transform] hover:brightness-110 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 ${projection.meetsRule
+                        className={`mt-0.5 inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[9px] font-bold ring-1 transition-[filter,transform] hover:brightness-110 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 sm:px-2 sm:py-1 sm:text-[10px] ${projection.meetsRule
                           ? 'bg-green-50 text-green-700 ring-green-200/70 dark:bg-green-950/60 dark:text-green-300 dark:ring-green-700/40'
                           : 'bg-red-50 text-red-700 ring-red-200/70 dark:bg-red-950/60 dark:text-red-300 dark:ring-red-700/40'}`}
                         title={projection.daysAtTarget === null ? `New song; meets the rule by ${eventDateLabel}` : `${projection.daysAtTarget} days since last approved use by ${eventDateLabel}`}

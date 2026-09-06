@@ -35,11 +35,11 @@ export function SetlistBuilderPage({ title, onBack, children, footer }: { title:
     </header>
     <div className="no-scrollbar flex min-h-0 flex-1 flex-col overflow-hidden"><div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col p-4 md:p-6">
       <section aria-label="Song category guide" className="shrink-0 rounded-2xl border border-black/[0.08] bg-white dark:border-white/10 dark:bg-[#181d1b]">
-        <div className="flex items-center gap-3 px-3 py-2.5">
+        <div className="flex items-center gap-3 px-3 py-2">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-300/10 dark:text-emerald-200"><BookOpen className="h-4 w-4" /></span>
           <span className="flex-1"><span className="block text-sm font-bold">Choose with purpose</span><span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">A guide for each part of the service</span></span>
         </div>
-        <div className="px-3 pb-3">
+        <div className="px-3 pb-2.5">
           <div className="grid grid-cols-4 gap-1 rounded-xl bg-gray-100 p-1 dark:bg-black/20 md:hidden" role="group" aria-label="Song roles">
             {Object.keys(SONG_ROLE_GUIDE).map(role => <button key={role} type="button" aria-pressed={activeRole===role} onClick={()=>setActiveRole(role)} className={`min-h-11 rounded-lg px-1 text-xs font-bold transition-colors ${activeRole===role ? roleColors[role] : 'text-gray-500 hover:bg-black/5 dark:text-gray-400 dark:hover:bg-white/5'}`}>{role}</button>)}
           </div>

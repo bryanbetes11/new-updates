@@ -1,3 +1,5 @@
+import { SetlistBuilderPage } from '../components/SetlistBuilderPage';
+import { SONG_ROLE_GUIDE } from '../lib/songRoleGuide';
 import { ChartNavigation } from '../components/ChartNavigation';
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -592,11 +594,21 @@ export function EventDetail() {
   const [showSongConfig, setShowSongConfig] = useState(false);
   const [selectedSongForConfig, setSelectedSongForConfig] = useState<string | null>(null);
   const [songConfig, setSongConfig] = useState({ category: '', youtube_url: '', performed_key: '', artist: '' });
+  const [songGuideReviewed, setSongGuideReviewed] = useState(false);
+  useEffect(() => { setSongGuideReviewed(false); }, [selectedSongForConfig, songConfig.category, showSongConfig]);
   const [setlistBuilderSongs, setSetlistBuilderSongs] = useState<SetlistBuilderSong[]>([]);
   const [setlistBuilderActive, setSetlistBuilderActive] = useState(false);
   const [setlistBuilderDragIndex, setSetlistBuilderDragIndex] = useState<number | null>(null);
   const [savingSetlistBuilder, setSavingSetlistBuilder] = useState(false);
   const [showSetlistExitConfirm, setShowSetlistExitConfirm] = useState(false);
+  useEffect(() => {
+    if (new URLSearchParams(location.search).get('view') === 'setlist') {
+      setSetlistBuilderActive(true);
+      setShowSetlist(true);
+    } else {
+      setShowSetlist(false);
+    }
+  }, [location.search]);
   const [assignmentDrafts, setAssignmentDrafts] = useState<AssignmentDraftRow[]>(() => [createAssignmentDraftRow()]);
   const [multiMemberSelections, setMultiMemberSelections] = useState<Record<string, string[]>>({});
   const [assigningBatch, setAssigningBatch] = useState(false);
@@ -1925,17 +1937,25 @@ export function EventDetail() {
   };
 
   const openSetlistBuilder = () => {
-    setSetlistBuilderSongs([]);
+    if (!setlistBuilderActive) {
+      setSetlistBuilderSongs([]);
+      setSongSearch('');
+    }
     setSetlistBuilderDragIndex(null);
-    setSongSearch('');
     setSetlistBuilderActive(true);
     setShowSetlist(true);
+    const params = new URLSearchParams(location.search);
+    params.set('view', 'setlist');
+    navigate({ pathname: location.pathname, search: params.toString() });
   };
 
   const closeSetlistBuilder = (force = false) => {
     if (savingSetlistBuilder && !force) return;
     setShowSetlist(false);
     setSetlistBuilderActive(false);
+    const params = new URLSearchParams(location.search);
+    params.delete('view');
+    navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
     setSetlistBuilderSongs([]);
     setSetlistBuilderDragIndex(null);
     setSongSearch('');
@@ -2154,7 +2174,6 @@ export function EventDetail() {
       artist: stagedSong.artist,
     } : { category: '', youtube_url: '', performed_key: '', artist: song?.artist || '' });
     setShowSongConfig(true);
-    setShowSetlist(false);
   };
 
   const resetSongConfigModal = (returnToBuilder = false) => {
@@ -2166,7 +2185,7 @@ export function EventDetail() {
 
   const closeSongConfigFlow = () => {
     if (setlistBuilderActive) {
-      requestSetlistBuilderClose();
+      resetSongConfigModal(true);
       return;
     }
     resetSongConfigModal(false);
@@ -2273,7 +2292,7 @@ export function EventDetail() {
   };
 
   const confirmAddSong = async () => {
-    if (!selectedSongForConfig || addingSetlistSong) return;
+    if (!selectedSongForConfig || addingSetlistSong || !songConfig.category || !songGuideReviewed) return;
     const proposalReservation = songProposalReservations[selectedSongForConfig];
     if (proposalReservation) {
       toast('error', getProposalReservationMessage(proposalReservation));
@@ -6424,15 +6443,36 @@ const openLyricsModal = (ss: SetlistSong) => {
           </div>
         </Modal>
 
-        <Modal
-          open={showSetlist}
-          onClose={requestSetlistBuilderClose}
+        {showSetlist && (canManageSetlist || canEditSetlist) && <SetlistBuilderPage
           title={setlist ? 'Add Songs to Setlist' : 'Build Setlist'}
-          size="lg"
+          onBack={requestSetlistBuilderClose}
+          footer={<>
+            <button
+              type="button"
+              onClick={() => setShowAddSong(true)}
+              className="btn-secondary w-full"
+            >
+              <Plus className="h-4 w-4" /> New Song
+            </button>
+            <button
+              type="button"
+              onClick={saveSetlistBuilder}
+              disabled={setlistBuilderSongs.length === 0 || savingSetlistBuilder}
+              className="btn-primary min-h-11 w-full justify-center disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {savingSetlistBuilder
+                ? 'Saving setlist…'
+                : setlistBuilderSongs.length === 0
+                  ? 'Continue'
+                  : setlist
+                    ? `Add ${setlistBuilderSongs.length} ${setlistBuilderSongs.length === 1 ? 'song' : 'songs'}`
+                    : `Create setlist with ${setlistBuilderSongs.length} ${setlistBuilderSongs.length === 1 ? 'song' : 'songs'}`}
+            </button>
+          </>}
         >
-          <div className="space-y-3">
+          <div className="flex h-full min-h-0 flex-col">
             {setlistBuilderSongs.length > 0 && (
-              <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-emerald-50/70 dark:border-emerald-400/15 dark:bg-emerald-500/[0.06]">
+              <div className="mb-3 shrink-0 overflow-hidden rounded-2xl border border-emerald-200 bg-emerald-50/70 dark:border-emerald-400/15 dark:bg-emerald-500/[0.06]">
                 <div className="flex items-center justify-between gap-3 border-b border-emerald-200/70 px-3 py-2.5 dark:border-emerald-400/10">
                   <div>
                     <p className="text-xs font-bold text-emerald-900 dark:text-emerald-100">
@@ -6503,7 +6543,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                 </div>
               </div>
             )}
-            <div className="relative">
+            <div className="relative mb-2 shrink-0 bg-gray-50 dark:bg-[#101312]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               <input
                 type="text"
@@ -6514,7 +6554,12 @@ const openLyricsModal = (ss: SetlistSong) => {
                 autoComplete="off"
               />
             </div>
-            <div className={`${setlistBuilderSongs.length > 0 ? 'h-[34dvh] sm:h-[34vh]' : 'h-[56dvh] sm:h-[50vh]'} max-h-[34rem] space-y-1 overflow-y-auto scrollbar-thin`}>
+            <div
+              data-setlist-song-scroll="true"
+              tabIndex={0}
+              aria-label="Available songs"
+              className="no-scrollbar min-h-0 flex-1 touch-pan-y space-y-1 overflow-y-auto overscroll-contain outline-none [-webkit-overflow-scrolling:touch]"
+            >
               {songs
                 .filter(s => !setlistSongs.some(ss => ss.song_id === s.id) && !setlistBuilderSongs.some(draft => draft.song_id === s.id))
                 .filter(s => {
@@ -6606,31 +6651,10 @@ const openLyricsModal = (ss: SetlistSong) => {
                 </p>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => { setShowSetlist(false); setShowAddSong(true); }}
-              className="btn-secondary w-full"
-            >
-              <Plus className="h-4 w-4" /> Create New Song
-            </button>
-            <button
-              type="button"
-              onClick={saveSetlistBuilder}
-              disabled={setlistBuilderSongs.length === 0 || savingSetlistBuilder}
-              className="btn-primary min-h-11 w-full justify-center disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {savingSetlistBuilder
-                ? 'Saving setlist…'
-                : setlistBuilderSongs.length === 0
-                  ? 'Select songs to continue'
-                  : setlist
-                    ? `Add ${setlistBuilderSongs.length} ${setlistBuilderSongs.length === 1 ? 'song' : 'songs'}`
-                    : `Create setlist with ${setlistBuilderSongs.length} ${setlistBuilderSongs.length === 1 ? 'song' : 'songs'}`}
-            </button>
           </div>
-        </Modal>
+        </SetlistBuilderPage>}
 
-        <Modal open={showAddSong} onClose={() => { if (!creatingSong) { setShowAddSong(false); setNewSongError(''); if (setlistBuilderActive) setShowSetlist(true); } }} title="Create New Song" size="lg">
+        <Modal open={showAddSong} onClose={() => { if (!creatingSong) { setShowAddSong(false); setNewSongError(''); if (setlistBuilderActive) setShowSetlist(true); } }} title="Create New Song" size="lg" mobileView="dialog">
           <form onSubmit={e => { e.preventDefault(); handleCreateSong(); }} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Title</label>
@@ -6705,7 +6729,7 @@ const openLyricsModal = (ss: SetlistSong) => {
               <button
                 type="button"
                 onClick={confirmAddSong}
-                disabled={!songConfig.category || !songConfig.artist.trim() || addingSetlistSong || selectedSongConfigProjection?.meetsRule === false}
+                disabled={!songGuideReviewed || !songConfig.category || !songConfig.artist.trim() || addingSetlistSong || selectedSongConfigProjection?.meetsRule === false}
                 className={selectedSongConfigProjection?.meetsRule === false
                   ? 'inline-flex min-h-12 min-w-0 w-full cursor-not-allowed items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-red-300 bg-red-50 px-3 text-[11px] font-black text-red-700 opacity-100 shadow-none dark:border-red-500/35 dark:bg-red-500/[0.12] dark:text-red-200 sm:min-h-11 sm:w-auto sm:min-w-40 sm:text-xs'
                   : 'btn-primary min-h-12 min-w-0 w-full justify-center whitespace-nowrap px-3 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-11 sm:w-auto sm:min-w-40'}
@@ -6878,20 +6902,6 @@ const openLyricsModal = (ss: SetlistSong) => {
               );
             })()}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Key for this set</label>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-                <Select
-                  value={songConfig.performed_key}
-                  onChange={v => setSongConfig({ ...songConfig, performed_key: v })}
-                  options={['C', 'C#', 'Db', 'D', 'D#', 'Eb', 'E', 'F', 'F#', 'Gb', 'G', 'G#', 'Ab', 'A', 'A#', 'Bb', 'B'].map(k => ({ value: k, label: k }))}
-                  placeholder="Select key"
-                />
-                <VoiceKeyDetector
-                  onApply={performedKey => setSongConfig(current => ({ ...current, performed_key: performedKey }))}
-                />
-              </div>
-            </div>
-            <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Category</label>
               <Select
                 value={songConfig.category}
@@ -6906,6 +6916,30 @@ const openLyricsModal = (ss: SetlistSong) => {
                 ]}
                 placeholder="Select category"
               />
+              {songConfig.category && (
+                <div className="mt-3 rounded-xl border border-emerald-500/20 bg-emerald-50 p-3 dark:bg-emerald-400/5">
+                  <p className="text-xs font-bold text-emerald-800 dark:text-emerald-200">{songConfig.category} · Song guide</p>
+                  <p className="mt-1.5 text-sm leading-relaxed text-gray-600 dark:text-gray-300">{SONG_ROLE_GUIDE[songConfig.category] || (songConfig.category === 'Offering' ? 'Choose a biblically grounded song that supports giving as a grateful response to God’s grace.' : 'Choose a biblically grounded song that serves the purpose of this part of the service.')}</p>
+                  <label className="mt-3 flex min-h-11 cursor-pointer items-center gap-3 border-t border-emerald-500/15 pt-3 text-sm font-medium">
+                    <input type="checkbox" checked={songGuideReviewed} onChange={e => setSongGuideReviewed(e.target.checked)} className="h-4 w-4 shrink-0 accent-emerald-600" />
+                    I’ve reviewed the lyrics for this category
+                  </label>
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Key for this set</label>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <Select
+                  value={songConfig.performed_key}
+                  onChange={v => setSongConfig({ ...songConfig, performed_key: v })}
+                  options={['C', 'C#', 'Db', 'D', 'D#', 'Eb', 'E', 'F', 'F#', 'Gb', 'G', 'G#', 'Ab', 'A', 'A#', 'Bb', 'B'].map(k => ({ value: k, label: k }))}
+                  placeholder="Select key"
+                />
+                <VoiceKeyDetector
+                  onApply={performedKey => setSongConfig(current => ({ ...current, performed_key: performedKey }))}
+                />
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">YouTube Link (optional)</label>

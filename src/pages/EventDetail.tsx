@@ -90,6 +90,13 @@ interface SetlistRevisionCommentReaction {
   created_at: string;
 }
 
+interface SetlistRevisionDiscussionView {
+  setlist_id: string;
+  user_id: string;
+  viewed_at: string;
+  profiles?: { first_name: string; last_name: string; avatar_url: string | null } | null;
+}
+
 type RevisionCommentReactionFlight = ReactionFlightPath & {
   commentId: string;
   token: number;
@@ -633,21 +640,29 @@ export function EventDetail() {
   const [deleting, setDeleting] = useState(false);
   const [showRevisionRequest, setShowRevisionRequest] = useState(false);
   const [revisionReason, setRevisionReason] = useState('');
+  const [attachGuideToRevision, setAttachGuideToRevision] = useState(false);
   const [revisionComments, setRevisionComments] = useState<SetlistRevisionComment[]>([]);
+  const [revisionDiscussionViews, setRevisionDiscussionViews] = useState<SetlistRevisionDiscussionView[]>([]);
   const [revisionDiscussionOverride, setRevisionDiscussionOverride] = useState<{
     setlistId: string;
     status: string;
     expanded: boolean;
   } | null>(null);
   const [revisionCommentText, setRevisionCommentText] = useState('');
+  const [editingRevisionCommentId, setEditingRevisionCommentId] = useState<string | null>(null);
+  const [editingRevisionCommentText, setEditingRevisionCommentText] = useState('');
   const [replyingToRevisionComment, setReplyingToRevisionComment] = useState<SetlistRevisionComment | null>(null);
   const revisionCommentInputRef = useRef<HTMLTextAreaElement>(null);
+  const revisionCommentEditInputRef = useRef<HTMLTextAreaElement>(null);
   const [postingRevisionComment, setPostingRevisionComment] = useState(false);
   const [deletingRevisionCommentId, setDeletingRevisionCommentId] = useState<string | null>(null);
+  const [savingRevisionCommentEdit, setSavingRevisionCommentEdit] = useState(false);
   const [revisionReactionPickerCommentId, setRevisionReactionPickerCommentId] = useState<string | null>(null);
   const [pendingRevisionReactionReveal, setPendingRevisionReactionReveal] = useState<{ commentId: string; emoji: string } | null>(null);
   const [revisionReactionLanding, setRevisionReactionLanding] = useState<{ commentId: string; emoji: string; token: number } | null>(null);
   const [revisionReactionFlight, setRevisionReactionFlight] = useState<RevisionCommentReactionFlight | null>(null);
+  const revisionDiscussionViewsRef = useRef<SetlistRevisionDiscussionView[]>([]);
+  const pendingRevisionDiscussionViewsRef = useRef(new Set<string>());
   const revisionReactionMutationsRef = useRef(new Set<string>());
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
@@ -804,6 +819,10 @@ export function EventDetail() {
   useEffect(() => {
     postEventObservationViewsRef.current = postEventObservationViews;
   }, [postEventObservationViews]);
+
+  useEffect(() => {
+    revisionDiscussionViewsRef.current = revisionDiscussionViews;
+  }, [revisionDiscussionViews]);
 
   useEffect(() => {
     const metaThemeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
@@ -1314,13 +1333,105 @@ export function EventDetail() {
     setRevisionComments((data || []) as unknown as SetlistRevisionComment[]);
   }, []);
 
+  const refreshRevisionDiscussionViews = useCallback(async (setlistId: string) => {
+    const { data, error } = await supabase
+      .from('setlist_revision_discussion_views')
+      .select('setlist_id, user_id, viewed_at, profiles!setlist_revision_discussion_views_user_id_fkey(first_name, last_name, avatar_url)')
+      .eq('setlist_id', setlistId)
+      .order('viewed_at', { ascending: false });
+
+    if (error) throw error;
+    const views = (data || []) as unknown as SetlistRevisionDiscussionView[];
+    revisionDiscussionViewsRef.current = views;
+    setRevisionDiscussionViews(views);
+    return views;
+  }, []);
+
+  const handleRevisionDiscussionSeen = useCallback(async (setlistId: string) => {
+    const viewerId = user?.id;
+    if (!viewerId) return;
+
+    if (
+      pendingRevisionDiscussionViewsRef.current.has(setlistId) ||
+      revisionDiscussionViewsRef.current.some(view => view.setlist_id === setlistId && view.user_id === viewerId)
+    ) return;
+
+    pendingRevisionDiscussionViewsRef.current.add(setlistId);
+    try {
+      const { data: inserted, error } = await supabase.rpc('record_setlist_revision_discussion_view', {
+        p_setlist_id: setlistId,
+      });
+      if (error) throw error;
+
+      if (inserted) {
+        const newView: SetlistRevisionDiscussionView = {
+          setlist_id: setlistId,
+          user_id: viewerId,
+          viewed_at: new Date().toISOString(),
+          profiles: profile ? {
+            first_name: profile.first_name,
+            last_name: profile.last_name,
+            avatar_url: profile.avatar_url,
+          } : null,
+        };
+        setRevisionDiscussionViews(current => {
+          if (current.some(view => view.setlist_id === setlistId && view.user_id === viewerId)) return current;
+          const next = [newView, ...current];
+          revisionDiscussionViewsRef.current = next;
+          return next;
+        });
+      } else if (!revisionDiscussionViewsRef.current.some(view => view.setlist_id === setlistId && view.user_id === viewerId)) {
+        await refreshRevisionDiscussionViews(setlistId);
+      }
+    } catch (error) {
+      console.warn('Failed to record revision discussion view:', error);
+    } finally {
+      pendingRevisionDiscussionViewsRef.current.delete(setlistId);
+    }
+  }, [profile, refreshRevisionDiscussionViews, user?.id]);
+
+  const revisionDiscussionViewerCount = useMemo(() => {
+    if (!setlist?.id) return 0;
+    const uniqueByUser = new Map<string, string>();
+    revisionDiscussionViews
+      .filter(view => view.setlist_id === setlist.id)
+      .forEach(view => {
+        const latest = uniqueByUser.get(view.user_id);
+        if (!latest || view.viewed_at > latest) {
+          uniqueByUser.set(view.user_id, view.viewed_at);
+        }
+      });
+    return uniqueByUser.size;
+  }, [revisionDiscussionViews, setlist?.id]);
+
+  const showRevisionDiscussion = setlist
+    ? revisionDiscussionOverride?.setlistId === setlist.id && revisionDiscussionOverride.status === setlist.status
+      ? revisionDiscussionOverride.expanded
+      : setlist.status !== 'approved'
+    : false;
+
   useEffect(() => {
     if (!setlist?.id) {
       setRevisionComments([]);
+      setRevisionDiscussionViews([]);
       return;
     }
     void fetchRevisionComments(setlist.id);
   }, [fetchRevisionComments, setlist?.id]);
+
+  useEffect(() => {
+    if (!setlist?.id) {
+      setRevisionDiscussionViews([]);
+      return;
+    }
+
+    void refreshRevisionDiscussionViews(setlist.id);
+  }, [refreshRevisionDiscussionViews, setlist?.id]);
+
+  useEffect(() => {
+    if (!setlist?.id || !showRevisionDiscussion || !user?.id) return;
+    void handleRevisionDiscussionSeen(setlist.id);
+  }, [handleRevisionDiscussionSeen, showRevisionDiscussion, setlist?.id, user?.id]);
 
   useEffect(() => {
     if (!setlist?.id) return;
@@ -1337,10 +1448,15 @@ export function EventDetail() {
         { event: '*', schema: 'public', table: 'setlist_revision_comment_reactions', filter: `setlist_id=eq.${setlistId}` },
         () => { void fetchRevisionComments(setlistId); },
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'setlist_revision_discussion_views', filter: `setlist_id=eq.${setlistId}` },
+        () => { void refreshRevisionDiscussionViews(setlistId); },
+      )
       .subscribe();
 
     return () => { void supabase.removeChannel(channel); };
-  }, [fetchRevisionComments, setlist?.id]);
+  }, [fetchRevisionComments, refreshRevisionDiscussionViews, setlist?.id]);
 
   useEffect(() => {
     const activeSetlistIds = [setlist?.id, linkedSetlist?.id].filter((value): value is string => Boolean(value));
@@ -2564,27 +2680,236 @@ export function EventDetail() {
     fetchAll();
   };
 
+  const getSongGuideText = useCallback((category: string): string | null => {
+    if (!category) return null;
+    if (SONG_ROLE_GUIDE[category]) return SONG_ROLE_GUIDE[category];
+    if (category === 'Offering') {
+      return 'Choose a biblically grounded song that supports giving as a grateful response to God’s grace.';
+    }
+    return null;
+  }, []);
+
+  const setlistGuideSections = useMemo(() => {
+    const categories = new Set<string>();
+    for (const setlistSong of setlistSongs) {
+      const guideText = getSongGuideText(setlistSong.song_category || '');
+      if (guideText) categories.add(setlistSong.song_category);
+    }
+    return Array.from(categories);
+  }, [getSongGuideText, setlistSongs]);
+
+  const setlistGuideAttachment = useMemo(() => {
+    if (!setlistGuideSections.length) return '';
+    return setlistGuideSections
+      .map((category) => {
+        const guideText = getSongGuideText(category);
+        if (!guideText) return null;
+        return `- ${category}: ${guideText}`;
+      })
+      .filter((line): line is string => Boolean(line))
+      .join('\n');
+  }, [getSongGuideText, setlistGuideSections]);
+
+  const buildRevisionRequestNotes = (reason: string) => {
+    const trimmedReason = reason.trim();
+    if (!trimmedReason) return '';
+    if (!attachGuideToRevision || !setlistGuideAttachment) return trimmedReason;
+    return `${trimmedReason}\n\nGuide attached for this setlist:\n${setlistGuideAttachment}`;
+  };
+
+  const findMentionedMemberIdsFromText = (content: string, excludeUserId?: string) => {
+    const mentions = new Set<string>();
+    const tokens = content.match(/@([^\s@]+)/g) || [];
+    if (!tokens.length) return [];
+
+    const normalizedMembers = members.map((member) => {
+      const plain = `${member.first_name} ${member.last_name}`.trim();
+      return {
+        id: member.id,
+        handles: [
+          plain.replace(/\s+/g, '_').toLowerCase(),
+          plain.toLowerCase(),
+          `${member.first_name}`.toLowerCase(),
+          `${member.last_name}`.toLowerCase(),
+        ].filter(Boolean),
+      };
+    });
+
+    for (const token of tokens) {
+      const raw = token.slice(1);
+      const normalized = raw.replace(/\s+/g, '_').toLowerCase();
+      const memberMatch = normalizedMembers.find(member => member.handles.includes(normalized));
+      if (memberMatch) {
+        mentions.add(memberMatch.id);
+      }
+    }
+
+    const result = Array.from(mentions);
+    return excludeUserId ? result.filter(memberId => memberId !== excludeUserId) : result;
+  };
+
+  const sendRevisionCommentMentionNotifications = async ({
+    actorId,
+    recipientIds,
+    relatedSetlistId,
+    eventId,
+    actorProfileName,
+  }: {
+    actorId: string;
+    recipientIds: string[];
+    relatedSetlistId: string;
+    eventId: string;
+    actorProfileName: string;
+  }) => {
+    if (!user || !profile?.org_id) return;
+    if (!recipientIds.length) return;
+    if (!event || !setlist) return;
+
+    const eventLabel = `${event.event_type} · ${event.title}`;
+    const eventDateLabel = event.event_date ? format(parseISO(event.event_date), 'MMM d, yyyy') : 'Upcoming date';
+
+    const { data: existingMentions = [] } = await supabase
+      .from('notifications')
+      .select('user_id')
+      .eq('type', 'mention')
+      .eq('event_id', event.id)
+      .in('user_id', recipientIds)
+      .eq('data->>setlist_id', relatedSetlistId)
+      .eq('data->>revision_discussion', 'true')
+      .eq('data->>author_id', actorId);
+
+    const alreadyNotified = new Set((existingMentions || []).map(item => item.user_id));
+    const notificationsToInsert = recipientIds
+      .filter((recipientId) => !alreadyNotified.has(recipientId))
+      .map(recipientId => ({
+        user_id: recipientId,
+        org_id: profile.org_id,
+        type: 'mention',
+        category: 'setlist',
+        title: `Mentioned in ${eventLabel}`,
+        body: `${actorProfileName} mentioned you in the revision discussion for ${event.title} (${event.event_type}) on ${eventDateLabel}.`,
+        data: {
+          event_id: eventId,
+          setlist_id: relatedSetlistId,
+          revision_discussion: 'true',
+          author_id: actorId,
+          url: `/events/${eventId}?tab=revision`,
+        },
+        is_read: false,
+        required: false,
+        priority: 'normal',
+        delivery_channels: { in_app: true, push: true },
+        scheduled_for: new Date().toISOString(),
+        dismissed_at: null,
+        push_status: 'pending',
+        push_attempted_at: null,
+        push_sent_at: null,
+        dedupe_key: `${relatedSetlistId}:revision_mention:${actorId}:${recipientId}`,
+      }));
+
+    if (notificationsToInsert.length > 0) {
+      const { error } = await supabase.from('notifications').insert(notificationsToInsert);
+      if (error) {
+        console.warn('[EventDetail] Failed to send revision comment mention notifications:', error);
+      }
+    }
+  };
+
   const handleRevisionRequest = async () => {
-    await handleSetlistAction('revision_requested', revisionReason);
+    await handleSetlistAction('revision_requested', buildRevisionRequestNotes(revisionReason));
+
+    if (setlist && user && event && profile?.org_id) {
+      const reviewRequestEventLabel = `${event.event_type} · ${event.title}`;
+      const eventDateLabel = event.event_date ? format(parseISO(event.event_date), 'MMM d, yyyy') : 'Upcoming date';
+      const reason = buildRevisionRequestNotes(revisionReason);
+      const requestorName = `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.email || 'A team member';
+      const audience = members
+        .map(member => member.id)
+        .filter(memberId => memberId !== user.id);
+      const revisionNotificationFingerprint = `${setlist.id}:${user.id}:${event.id}:${reason.toLowerCase().trim()}`;
+
+      if (audience.length > 0) {
+        const dedupeKeyBase = `${profile.org_id}:${revisionNotificationFingerprint}`;
+        const existingRows = await supabase
+          .from('notifications')
+          .select('user_id')
+          .eq('type', 'setlist_revision')
+          .eq('event_id', event.id)
+          .eq('dedupe_key', dedupeKeyBase);
+
+        const alreadyNotified = new Set((existingRows.data || []).map(item => item.user_id));
+
+        const revisionsToSend = audience
+          .filter(id => !alreadyNotified.has(id))
+          .map(recipientId => ({
+            user_id: recipientId,
+            org_id: profile.org_id,
+            type: 'setlist_revision',
+            category: 'setlist',
+            title: `Revision Requested: ${reviewRequestEventLabel}`,
+            body: `${requestorName} requested a revision for ${event.title} (${event.event_type}) on ${eventDateLabel}. Reason: ${reason || 'No reason provided.'}`,
+            data: {
+              url: `/events/${event.id}?tab=revision`,
+              event_id: event.id,
+              setlist_id: setlist.id,
+              event_type: event.event_type,
+              event_date: event.event_date,
+              revision_requested_by: user.id,
+            },
+            dedupe_key: dedupeKeyBase,
+            is_read: false,
+            required: false,
+            priority: 'normal',
+            delivery_channels: { in_app: true, push: true },
+            scheduled_for: new Date().toISOString(),
+            dismissed_at: null,
+            push_status: 'pending',
+            push_attempted_at: null,
+            push_sent_at: null,
+          }));
+
+        if (revisionsToSend.length > 0) {
+          const { error: revisionNotificationError } = await supabase.from('notifications').insert(revisionsToSend);
+          if (revisionNotificationError) {
+            console.warn('[EventDetail] Failed to send revision request notifications:', revisionNotificationError);
+          }
+        }
+      }
+    }
+
     setShowRevisionRequest(false);
     setRevisionReason('');
+    setAttachGuideToRevision(false);
   };
 
   const handlePostRevisionComment = async () => {
+    const canParticipateRevisionDiscussion = canReviewSetlist || isSongLeader;
+    if (!canParticipateRevisionDiscussion) return;
     const content = revisionCommentText.trim();
     if (!setlist || !user || !content || postingRevisionComment) return;
 
     setPostingRevisionComment(true);
-    const { error } = await supabase.from('setlist_revision_comments').insert({
+    const { error, data: inserted } = await supabase.from('setlist_revision_comments').insert({
       setlist_id: setlist.id,
       user_id: user.id,
       content,
       reply_to: replyingToRevisionComment?.id || null,
-    });
+    }).select('id')
+    .single();
 
     if (error) {
       toast('error', error.message || 'Could not add the revision comment');
     } else {
+      const mentionedIds = findMentionedMemberIdsFromText(content, user.id);
+      if (inserted) {
+        await sendRevisionCommentMentionNotifications({
+          actorId: user.id,
+          recipientIds: mentionedIds,
+          relatedSetlistId: setlist.id,
+          eventId: event.id,
+          actorProfileName: `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'A team member',
+        });
+      }
       setRevisionCommentText('');
       setReplyingToRevisionComment(null);
       await fetchRevisionComments(setlist.id);
@@ -2622,6 +2947,66 @@ export function EventDetail() {
       toast('success', hasReplies ? 'Comment and replies deleted' : 'Comment deleted');
     }
     setDeletingRevisionCommentId(null);
+  };
+
+  const handleStartEditRevisionComment = (comment: SetlistRevisionComment) => {
+    if (!canDeleteRevisionComments && user?.id !== comment.user_id) return;
+    setEditingRevisionCommentId(comment.id);
+    setEditingRevisionCommentText(comment.content);
+    setReplyingToRevisionComment(null);
+    window.setTimeout(() => {
+      const input = revisionCommentEditInputRef.current;
+      input?.focus();
+      input?.setSelectionRange(input.value.length, input.value.length);
+    }, 0);
+  };
+
+  const handleCancelEditRevisionComment = () => {
+    setEditingRevisionCommentId(null);
+    setEditingRevisionCommentText('');
+  };
+
+  const handleSaveRevisionComment = async (comment: SetlistRevisionComment) => {
+    if (!user || !comment.id) return;
+    const content = editingRevisionCommentText.trim();
+    if (!content || savingRevisionCommentEdit) return;
+    const previousContent = comment.content || '';
+
+    setSavingRevisionCommentEdit(true);
+    const query = supabase
+      .from('setlist_revision_comments')
+      .update({ content })
+      .eq('id', comment.id);
+
+    if (!canDeleteRevisionComments) {
+      query.eq('user_id', user.id);
+    }
+
+    const { error } = await query;
+
+    if (error) {
+      toast('error', error.message || 'Could not update the revision comment');
+    } else {
+      const oldMentions = new Set(findMentionedMemberIdsFromText(previousContent, user.id));
+      const newMentions = new Set(findMentionedMemberIdsFromText(content, user.id));
+      const newlyAddedMentions = Array.from(newMentions).filter(id => !oldMentions.has(id));
+      if (newlyAddedMentions.length > 0) {
+        await sendRevisionCommentMentionNotifications({
+          actorId: user.id,
+          recipientIds: newlyAddedMentions,
+          relatedSetlistId: setlist.id,
+          eventId: event.id,
+          actorProfileName: `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'A team member',
+        });
+      }
+      toast('success', 'Comment updated');
+      setEditingRevisionCommentId(null);
+      setEditingRevisionCommentText('');
+      if (setlist?.id) {
+        await fetchRevisionComments(setlist.id);
+      }
+    }
+    setSavingRevisionCommentEdit(false);
   };
 
   const handleRevisionCommentReaction = async (
@@ -2796,6 +3181,9 @@ export function EventDetail() {
   };
 
   const startRevisionCommentReply = (comment: SetlistRevisionComment) => {
+    if (!canParticipateRevisionDiscussion) return;
+    setEditingRevisionCommentId(null);
+    setEditingRevisionCommentText('');
     setReplyingToRevisionComment(comment);
     const mentionHandle = [comment.profiles?.first_name, comment.profiles?.last_name]
       .filter(Boolean)
@@ -3564,6 +3952,7 @@ const openLyricsModal = (ss: SetlistSong) => {
   const isSetlistCreator = isViewingAsSongLeader || (!isRolePreviewActive && (setlist ? setlist.created_by === user?.id : false));
   const canSeeEventSongReadiness = isViewingAsSongLeader || isSetlistCreator || isSetlistCoordinator || isOrgAdmin || isAdmin || isPlatformOwner;
   const canReviewSetlist = isLeader || isOrgAdmin || isPlatformOwner || isAdmin || isProductionDirector || isMusicDirector || isSetlistCoordinator;
+  const canParticipateRevisionDiscussion = canReviewSetlist || isSongLeader;
   const canSubmitSetlist = isSetlistCreator || canManageSetlist;
   const pendingReviewAge = setlist?.status === 'pending_review'
     ? describeSetlistReviewAge(setlist.submitted_at || setlist.created_at)
@@ -4071,11 +4460,6 @@ const openLyricsModal = (ss: SetlistSong) => {
   const newSongTitleMatch = newSong.title.trim()
     ? songs.find(song => normalizeSongTitle(song.title) === normalizeSongTitle(newSong.title)) || null
     : null;
-  const showRevisionDiscussion = setlist
-    ? revisionDiscussionOverride?.setlistId === setlist.id && revisionDiscussionOverride.status === setlist.status
-      ? revisionDiscussionOverride.expanded
-      : setlist.status !== 'approved'
-    : false;
 
   return (
     <div className="page-container page-bottom-pad relative isolate overflow-x-clip bg-[#050505]">
@@ -4534,7 +4918,7 @@ const openLyricsModal = (ss: SetlistSong) => {
           );
         })()}
 
-        {setlist && (canReviewSetlist || isSongLeader) && setlist.status !== 'rejected' && (setlist.status === 'revision_requested' || revisionComments.length > 0 || !!setlist.review_note || !!setlist.approval_notes) && (
+        {setlist && user && (canParticipateRevisionDiscussion || revisionComments.length > 0 || !!setlist.review_note || !!setlist.approval_notes) && setlist.status !== 'rejected' && (setlist.status === 'revision_requested' || revisionComments.length > 0 || !!setlist.review_note || !!setlist.approval_notes) && (
           <div className="card overflow-hidden animate-slide-up">
             <button
               type="button"
@@ -4564,6 +4948,10 @@ const openLyricsModal = (ss: SetlistSong) => {
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <span className="badge badge-yellow">{revisionComments.length}</span>
+                <span className="inline-flex h-7 items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-gray-700 ring-1 ring-black/[0.09] dark:bg-white/[0.08] dark:text-white/80 dark:ring-white/[0.12]">
+                  <Eye aria-hidden="true" className="h-3.5 w-3.5" />
+                  <span>Seen {revisionDiscussionViewerCount}</span>
+                </span>
                 <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform duration-300 ease-out dark:text-white/35 ${showRevisionDiscussion ? 'rotate-180' : ''}`} />
               </div>
             </button>
@@ -4609,6 +4997,8 @@ const openLyricsModal = (ss: SetlistSong) => {
                   && !reactionGroups.some(reaction => reaction.emoji === pendingRevisionReactionReveal?.emoji)
                 );
                 const isReactionPickerOpen = revisionReactionPickerCommentId === comment.id;
+                const canEditRevisionComment = canDeleteRevisionComments || user?.id === comment.user_id;
+                const isEditingRevisionComment = editingRevisionCommentId === comment.id;
                 return (
                   <div
                     key={comment.id}
@@ -4624,6 +5014,36 @@ const openLyricsModal = (ss: SetlistSong) => {
                           <p className="min-w-0 truncate text-[11px] text-gray-500 before:mr-1.5 before:text-gray-400 before:content-['|'] dark:text-gray-400 dark:before:text-gray-600">{format(parseISO(comment.created_at), 'MMM d, yyyy · h:mm a')}</p>
                         </div>
                         <div className="relative flex shrink-0 items-center gap-0.5">
+                          {canEditRevisionComment && !isEditingRevisionComment && (
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditRevisionComment(comment)}
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-black/[0.035] hover:text-amber-600 dark:hover:bg-white/[0.05] dark:hover:text-amber-400 sm:h-7 sm:w-7"
+                              title="Edit comment"
+                              aria-label={`Edit comment by ${authorName}`}
+                            >
+                              <Edit className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                          {isEditingRevisionComment && (
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={handleCancelEditRevisionComment}
+                                className="inline-flex h-9 px-2 items-center justify-center rounded-lg text-xs font-semibold text-gray-500 transition-colors hover:bg-black/[0.035] hover:text-amber-600 dark:hover:bg-white/[0.05] dark:hover:text-amber-400 sm:h-7"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleSaveRevisionComment(comment)}
+                                disabled={savingRevisionCommentEdit}
+                                className="inline-flex h-9 px-2 items-center justify-center rounded-lg text-xs font-semibold text-amber-600 transition-colors hover:bg-amber-500/[0.07] hover:text-amber-700 dark:text-amber-400 sm:h-7"
+                              >
+                                {savingRevisionCommentEdit ? 'Saving...' : 'Save'}
+                              </button>
+                            </div>
+                          )}
                           <button
                             type="button"
                             onClick={() => {
@@ -4637,8 +5057,16 @@ const openLyricsModal = (ss: SetlistSong) => {
                           >
                             <Smile className="h-3.5 w-3.5" />
                           </button>
-                          <button type="button" onClick={() => startRevisionCommentReply(comment)} className="min-h-9 rounded-lg px-1.5 py-1 text-xs font-semibold text-amber-600 transition-colors hover:bg-amber-500/[0.07] hover:text-amber-700 dark:text-amber-400 sm:min-h-7">Reply</button>
-                          {canDeleteRevisionComments && (
+                          {canParticipateRevisionDiscussion && (
+                            <button
+                              type="button"
+                              onClick={() => startRevisionCommentReply(comment)}
+                              className="min-h-9 rounded-lg px-1.5 py-1 text-xs font-semibold text-amber-600 transition-colors hover:bg-amber-500/[0.07] hover:text-amber-700 dark:text-amber-400 sm:min-h-7"
+                            >
+                              Reply
+                            </button>
+                          )}
+                          {canDeleteRevisionComments && !isEditingRevisionComment && (
                             <button
                               type="button"
                               onClick={() => void handleDeleteRevisionComment(comment)}
@@ -4671,7 +5099,21 @@ const openLyricsModal = (ss: SetlistSong) => {
                           </AnimatePresence>
                         </div>
                       </div>
-                      <p className="mt-1 whitespace-pre-wrap break-words pl-7 text-sm leading-5 text-gray-700 dark:text-gray-200"><FormattedText text={comment.content} /></p>
+                      {isEditingRevisionComment ? (
+                        <div className="mt-1 pl-7">
+                          <MentionTextarea
+                            textareaRef={revisionCommentEditInputRef}
+                            value={editingRevisionCommentText}
+                            onChange={setEditingRevisionCommentText}
+                            className="input-field whitespace-pre-wrap min-h-16 resize-none"
+                            rows={2}
+                            maxLength={4000}
+                            aria-label="Edit revision comment"
+                          />
+                        </div>
+                      ) : (
+                        <p className="mt-1 whitespace-pre-wrap break-words pl-7 text-sm leading-5 text-gray-700 dark:text-gray-200"><FormattedText text={comment.content} /></p>
+                      )}
 
                       {(reactionGroups.length > 0 || needsLandingPlaceholder) && (
                         <div className="relative mt-2 flex min-w-0 flex-wrap items-center gap-1.5 pl-7">
@@ -4751,27 +5193,31 @@ const openLyricsModal = (ss: SetlistSong) => {
                 );
               })}
 
-              {replyingToRevisionComment && (
+              {replyingToRevisionComment && canParticipateRevisionDiscussion && (
                 <div className="flex items-center justify-between gap-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
                   <span className="truncate">Replying to {replyingToRevisionComment.profiles?.first_name || 'comment'}</span>
                   <button type="button" onClick={() => setReplyingToRevisionComment(null)} className="font-semibold">Cancel</button>
                 </div>
               )}
-              <MentionTextarea
-                textareaRef={revisionCommentInputRef}
-                value={revisionCommentText}
-                onChange={setRevisionCommentText}
-                placeholder={replyingToRevisionComment ? 'Write a reply… (type @ to mention)' : 'Add a comment… (type @ to mention)'}
-                className={`input-field whitespace-pre-wrap ${replyingToRevisionComment ? 'min-h-11 resize-none overflow-y-hidden' : 'min-h-16 resize-y'}`}
-                rows={replyingToRevisionComment ? 1 : 2}
-                maxLength={4000}
-              />
-              <div className="flex justify-end">
-                <button type="button" onClick={handlePostRevisionComment} disabled={!revisionCommentText.trim() || postingRevisionComment} className="btn-primary inline-flex items-center gap-2 disabled:opacity-50">
-                  {postingRevisionComment ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                  {replyingToRevisionComment ? 'Post Reply' : 'Post Comment'}
-                </button>
-              </div>
+              {canParticipateRevisionDiscussion && (
+                <>
+                  <MentionTextarea
+                    textareaRef={revisionCommentInputRef}
+                    value={revisionCommentText}
+                    onChange={setRevisionCommentText}
+                    placeholder={replyingToRevisionComment ? 'Write a reply… (type @ to mention)' : 'Add a comment… (type @ to mention)'}
+                    className={`input-field whitespace-pre-wrap ${replyingToRevisionComment ? 'min-h-11 resize-none overflow-y-hidden' : 'min-h-16 resize-y'}`}
+                    rows={replyingToRevisionComment ? 1 : 2}
+                    maxLength={4000}
+                  />
+                  <div className="flex justify-end">
+                    <button type="button" onClick={handlePostRevisionComment} disabled={!revisionCommentText.trim() || postingRevisionComment} className="btn-primary inline-flex items-center gap-2 disabled:opacity-50">
+                      {postingRevisionComment ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                      {replyingToRevisionComment ? 'Post Reply' : 'Post Comment'}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
               </motion.div>
             )}
@@ -6097,7 +6543,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                             {viewerName}{viewer.user_id === user?.id ? ' (You)' : ''}
                           </p>
                           <p className="mt-0.5 text-[11px] text-gray-500 dark:text-white/40">
-                            Seen {format(parseISO(viewer.viewed_at), 'MMM d, h:mm a')}
+                            Seen {format(parseISO(viewer.viewed_at), 'M/d · h:mm a')}
                           </p>
                         </div>
                       </div>
@@ -8256,6 +8702,29 @@ const openLyricsModal = (ss: SetlistSong) => {
                 required
               />
               <p className="mt-1.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">The song leader will be notified and can see this reason.</p>
+            </div>
+            <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5 dark:border-amber-700/35 dark:bg-amber-900/15">
+              <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-sm font-medium text-gray-700 dark:text-gray-300">
+                <span>Attach category guide notes to this request</span>
+                <input
+                  type="checkbox"
+                  checked={attachGuideToRevision}
+                  onChange={(event) => setAttachGuideToRevision(event.target.checked)}
+                  className="h-4 w-4 shrink-0 accent-amber-600"
+                />
+              </label>
+              {attachGuideToRevision && setlistGuideAttachment ? (
+                <p className="mt-1.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                  The guide text for the setlist&apos;s recognized categories will be appended to your note:
+                  <span className="block mt-1 text-[10px] leading-[1.45]">{setlistGuideSections.join(', ') || 'None detected yet'}</span>
+                </p>
+              ) : attachGuideToRevision && !setlistGuideAttachment ? (
+                <p className="mt-1.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                  No recognized category guide text is available yet. Add song roles (Opening, Praise, Worship, Closing, Offering) or continue with notes only.
+                </p>
+              ) : (
+                <p className="mt-1.5 text-xs leading-relaxed text-gray-400 dark:text-gray-500">Turn on this option to attach the service guide references for this request.</p>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-2 border-t border-gray-200/60 pt-4 dark:border-white/[0.06] sm:flex sm:justify-end sm:gap-3">
               <button onClick={() => setShowRevisionRequest(false)} className="btn-secondary min-h-11 w-full justify-center sm:w-auto">Cancel</button>

@@ -6,8 +6,8 @@ const source = readFileSync(resolve(process.cwd(), 'src/pages/EventDetail.tsx'),
 
 assert.match(
   source,
-  /revisionDiscussionOverride[\s\S]*?setlist\.status !== 'approved'/,
-  'approved setlists must collapse the revision discussion by default',
+  /revisionDiscussionOverride[\s\S]*?isAssignedSongLeader && setlist\.status !== 'approved'/,
+  'only the assigned Song Leader may see a revision discussion opened by default',
 );
 assert.match(
   source,
@@ -28,4 +28,14 @@ assert.match(
   source,
   /transition=\{prefersReducedMotion \? \{ duration: 0 \}/,
   'revision discussion animation must respect reduced-motion preferences',
+);
+assert.match(
+  source,
+  /\.rpc\('record_setlist_revision_discussion_view',[\s\S]*?p_setlist_id: setlistId/,
+  'opening a revision discussion must persist a first-seen receipt',
+);
+assert.match(
+  source,
+  /setlist_revision_discussion_views[\s\S]*?setRevisionDiscussionViews/,
+  'the Seen badge must refresh from the persisted receipts',
 );

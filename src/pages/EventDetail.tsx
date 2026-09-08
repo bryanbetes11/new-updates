@@ -1404,10 +1404,14 @@ export function EventDetail() {
     return uniqueByUser.size;
   }, [revisionDiscussionViews, setlist?.id]);
 
+  const isAssignedSongLeader = assignments.some(
+    assignment => assignment.user_id === user?.id && assignment.roles?.name === 'Song Leader',
+  );
+
   const showRevisionDiscussion = setlist
     ? revisionDiscussionOverride?.setlistId === setlist.id && revisionDiscussionOverride.status === setlist.status
       ? revisionDiscussionOverride.expanded
-      : setlist.status !== 'approved'
+      : isAssignedSongLeader && setlist.status !== 'approved'
     : false;
 
   useEffect(() => {
@@ -5836,33 +5840,46 @@ const openLyricsModal = (ss: SetlistSong) => {
                       {/* Song editing — creator/editor when not finalized */}
                       {showSetlistEditControls && ((canManageSetlist && !['approved', 'rejected'].includes(setlist.status)) || (canEditSetlist && setlist.status === 'approved')) ? (
                         <>
-                          <button onClick={openSetlistBuilder} className="btn-secondary text-xs">
-                            <Plus className="h-3.5 w-3.5" /> Add Song
-                          </button>
-                          <button onClick={() => setShowAddSong(true)} className="btn-ghost text-xs">
-                            <Plus className="h-3.5 w-3.5" /> New Song
-                          </button>
+                          {setlist.status === 'approved' && (
+                            <button onClick={openSetlistBuilder} className="btn-secondary text-xs">
+                              <Plus className="h-3.5 w-3.5" /> Add Song
+                            </button>
+                          )}
                         </>
                       ) : null}
 
                       {/* CREATOR ACTIONS */}
                       {canSubmitSetlist && setlist.status === 'draft' && (
-                        <button
-                          onClick={() => handleSetlistAction('pending_review')}
-                          disabled={hasMissingLyrics}
-                          className="btn-primary text-xs ml-auto disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <Send className="h-3.5 w-3.5" /> Submit Proposal
-                        </button>
+                        <div className="ml-auto flex flex-wrap gap-2">
+                          {showSetlistEditControls && canManageSetlist && (
+                            <button onClick={openSetlistBuilder} className="btn-secondary text-xs">
+                              <Plus className="h-3.5 w-3.5" /> Add Song
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleSetlistAction('pending_review')}
+                            disabled={hasMissingLyrics}
+                            className="btn-primary text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <Send className="h-3.5 w-3.5" /> Submit Proposal
+                          </button>
+                        </div>
                       )}
                       {canSubmitSetlist && setlist.status === 'revision_requested' && (
-                        <button
-                          onClick={() => handleSetlistAction('pending_review')}
-                          disabled={hasMissingLyrics}
-                          className="btn-primary text-xs ml-auto disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <Send className="h-3.5 w-3.5" /> Resubmit
-                        </button>
+                        <div className="ml-auto flex flex-wrap gap-2">
+                          {showSetlistEditControls && canManageSetlist && (
+                            <button onClick={openSetlistBuilder} className="btn-secondary text-xs">
+                              <Plus className="h-3.5 w-3.5" /> Add Song
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleSetlistAction('pending_review')}
+                            disabled={hasMissingLyrics}
+                            className="btn-primary text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <Send className="h-3.5 w-3.5" /> Resubmit
+                          </button>
+                        </div>
                       )}
                       {canSubmitSetlist && setlist.status === 'rejected' && (
                         <button onClick={() => handleSetlistAction('draft')} className="btn-secondary text-xs ml-auto">
@@ -5918,25 +5935,27 @@ const openLyricsModal = (ss: SetlistSong) => {
                       onChange={e => setServiceTheme(e.target.value)}
                       className="w-full text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 placeholder-gray-400 dark:placeholder-gray-500 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 dark:focus:ring-brand-400"
                     />
-                    <button
-                      onClick={() => {
-                        if (!ensureArtistsReady('check')) return;
-                        if (!ensureLyricsReady('check')) return;
-                        navigateCard('checking', 'forward');
-                      }}
-                      disabled={hasMissingLyrics || missingArtistSongs.length > 0}
-                      className="w-full btn-primary text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <Sparkles className="h-4 w-4" /> Check Setlist
-                    </button>
-                    {checkReport && (
+                    <div className="flex gap-2">
                       <button
-                        onClick={() => navigateCard('report', 'forward')}
-                        className="w-full btn-secondary text-sm flex items-center justify-center gap-2"
+                        onClick={() => {
+                          if (!ensureArtistsReady('check')) return;
+                          if (!ensureLyricsReady('check')) return;
+                          navigateCard('checking', 'forward');
+                        }}
+                        disabled={hasMissingLyrics || missingArtistSongs.length > 0}
+                        className={`${checkReport ? 'flex-1' : 'w-full'} btn-primary text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
                       >
-                        <FileText className="h-4 w-4" /> View Last Result
+                        <Sparkles className="h-4 w-4 shrink-0" /> <span>Check Setlist</span>
                       </button>
-                    )}
+                      {checkReport && (
+                        <button
+                          onClick={() => navigateCard('report', 'forward')}
+                          className="flex-1 btn-secondary text-sm flex items-center justify-center gap-2"
+                        >
+                          <FileText className="h-4 w-4 shrink-0" /> <span>View Last Result</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

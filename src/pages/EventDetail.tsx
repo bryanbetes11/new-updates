@@ -6303,7 +6303,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                 </span>
                               )}
                             </div>
-                            {a.roles && <RoleBadge role={a.roles} size="sm" />}
+                            {a.roles && <RoleBadge role={isAttendanceAssignment(a) ? { ...a.roles, name: 'Participant' } : a.roles} size="sm" />}
                             {a.status === 'declined' && a.decline_reason && (
                               <button
                                 type="button"

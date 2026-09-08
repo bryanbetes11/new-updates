@@ -267,6 +267,7 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
   const dayEntries = calendarEntries.filter(e => e.date === event.event_date && e.type === 'leave');
   const songLeader = songLeaderMap?.[event.id];
   const setlistInfo = setlistInfoMap?.[event.id];
+  const hasSetlistSongs = (setlistInfo?.songCount ?? 0) > 0;
   const hasApprovedSetlist = setlistInfo?.status === 'approved';
   const now = new Date();
   const proposalDueDate = event.proposal_due_date ? parseISO(event.proposal_due_date) : null;
@@ -487,8 +488,8 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
 
       <div className="flex shrink-0 items-center gap-2 lg:gap-3">
         {!canManageLifecycle && (
-          <span className={`hidden rounded-full border px-4 py-2 text-[12px] font-bold lg:inline-flex ${hasApprovedSetlist ? 'border-[#22c55e]/20 bg-[#22c55e]/10 text-[#22c55e]' : setlistInfo?.status === 'pending_review' ? 'border-amber-400/20 bg-amber-400/10 text-amber-300' : 'border-white/[0.08] text-white/62'}`}>
-            {hasApprovedSetlist ? 'Ready' : setlistInfo?.status === 'pending_review' ? 'Pending review' : 'No songs yet'}
+          <span className={`hidden rounded-full border px-4 py-2 text-[12px] font-bold lg:inline-flex ${hasApprovedSetlist ? 'border-[#22c55e]/20 bg-[#22c55e]/10 text-[#22c55e]' : setlistInfo?.status === 'pending_review' ? 'border-amber-400/20 bg-amber-400/10 text-amber-300' : hasSetlistSongs ? 'border-sky-400/20 bg-sky-400/10 text-sky-300' : 'border-white/[0.08] text-white/62'}`}>
+            {hasApprovedSetlist ? 'Ready' : setlistInfo?.status === 'pending_review' ? 'Pending review' : hasSetlistSongs ? 'Draft' : 'No songs yet'}
           </span>
         )}
         <EventDateChip

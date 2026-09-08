@@ -1847,7 +1847,7 @@ export function Dashboard() {
                       />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[12px] font-black text-white">{memberName}</span>
-                        <span className="mt-0.5 block truncate text-[11px] font-semibold text-white/45">{dateLabel ? format(parseISO(dateLabel), 'MMM d') : 'Upcoming'}</span>
+                        <span className="mt-0.5 block truncate text-[11px] font-semibold text-white/45">{dateLabel ? format(parseISO(dateLabel), 'MMM d') : 'Upcoming'}{member.reason ? ` · ${member.reason}` : ''}</span>
                       </span>
                     </button>
                   );

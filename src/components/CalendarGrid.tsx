@@ -10,6 +10,7 @@ interface CalendarEntry {
   type: 'birthday' | 'leave';
   date: string;
   name: string;
+  reason?: string;
   status?: string;
 }
 
@@ -230,7 +231,7 @@ export function CalendarGrid({ events, calendarEntries, songLeaderMap, setlistSt
                     }`}
                   >
                     {entry.type === 'birthday' ? <Cake className="h-2.5 w-2.5 shrink-0" /> : <CalendarOff className="h-2.5 w-2.5 shrink-0" />}
-                    <span className="truncate">{entry.name.split(' ')[0]}</span>
+                    <span className="truncate">{entry.name.split(' ')[0]}{entry.reason ? ` — ${entry.reason}` : ''}</span>
                   </div>
                 ))}
                 {dayEntries.length > 2 && (

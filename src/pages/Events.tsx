@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { format, parseISO, startOfDay, differenceInDays, eachDayOfInterval } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { motion } from 'framer-motion';
-import { Calendar, Plus, Search, Users, Trash2, CalendarOff, AlertCircle, Clock, X, PartyPopper, Heart, Sparkles, List, CheckCircle } from 'lucide-react';
+import { Calendar, Plus, Search, Users, Trash2, CalendarOff, AlertCircle, Clock, Timer, X, PartyPopper, Heart, Sparkles, List, CheckCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -15,7 +15,7 @@ import { EventsSkeleton } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
 import { formatTime12Hour } from '../lib/timeFormat';
 import { withRequestTimeout } from '../lib/requestTimeout';
-import { describeSetlistReviewAge, getSetlistPendingMessage } from '../lib/setlistReviewAge';
+import { describeSetlistReviewAge } from '../lib/setlistReviewAge';
 import { EventArtwork } from '../components/EventArtwork';
 import { EventTypeLabel } from '../components/EventTypeLabel';
 import { EventDateChip } from '../components/EventDateChip';
@@ -31,7 +31,7 @@ import { getOutMemberIdsForDate, type MemberAvailabilityWindow } from '../lib/me
 
 interface AssignmentRow { user_id: string; role_id: string; }
 const ALL_MEMBERS_USER_ID = '__all_active_members__';
-interface CalendarEntry { type: 'birthday' | 'leave'; date: string; name: string; status?: string; userId?: string; }
+interface CalendarEntry { type: 'birthday' | 'leave'; date: string; name: string; reason?: string; status?: string; userId?: string; }
 interface EventSongArtwork {
   id: string;
   song_id?: string | null;
@@ -232,6 +232,15 @@ function EmptyEventArtwork({ className = 'h-16 w-16' }: { className?: string }) 
   );
 }
 
+function PendingSetlistRibbon({ pendingDays, compact = false }: { pendingDays: number; compact?: boolean }) {
+  return (
+    <span className={`pointer-events-none absolute z-10 inline-flex items-center justify-center gap-0.5 bg-amber-400 font-black text-black shadow-[0_3px_10px_rgba(0,0,0,0.35)] ${compact ? 'left-[-1.2rem] top-[0.65rem] w-[4.2rem] -rotate-45 py-0.5 text-[7px] tracking-[-0.02em]' : 'left-[-2.15rem] top-[1.05rem] w-[7.5rem] -rotate-45 py-1 text-[9px] tracking-[0.01em]'}`}>
+      <Timer className={compact ? 'h-2 w-2' : 'h-2.5 w-2.5'} />
+      Pending {pendingDays}d
+    </span>
+  );
+}
+
 function formatSongLeaderName(profile: RelatedProfile) {
   const firstName = profile.first_name?.trim();
   const lastName = profile.last_name?.trim();
@@ -250,6 +259,7 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
   const [lifecycleDialogMode, setLifecycleDialogMode] = useState<EventLifecycleDialogMode | null>(null);
   const [lifecycleAnchorRect, setLifecycleAnchorRect] = useState<EventActionAnchorRect | null>(null);
   const [savingLifecycle, setSavingLifecycle] = useState(false);
+  const [leaveReasonsOpen, setLeaveReasonsOpen] = useState(false);
   const eventButtonRef = useRef<HTMLButtonElement>(null);
   const longPressTimerRef = useRef<number | null>(null);
   const longPressTriggeredRef = useRef(false);
@@ -266,7 +276,6 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
   const pendingReviewAge = setlistInfo?.status === 'pending_review'
     ? describeSetlistReviewAge(setlistInfo.submitted_at || setlistInfo.created_at)
     : null;
-  const pendingReviewMessage = pendingReviewAge ? getSetlistPendingMessage(pendingReviewAge, false) : null;
   const scheduleHasEnded = hasEventScheduleEnded(event, now);
   const canManageLifecycle = isPlatformOwner && (isPast || scheduleHasEnded);
 
@@ -383,6 +392,7 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
             ) : (
               <EmptyEventArtwork className="h-full w-full rounded-none border-0" />
             )}
+            {pendingReviewAge && <PendingSetlistRibbon pendingDays={pendingReviewAge.pendingDays ?? 0} />}
             <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/85 to-transparent" />
             <span className="absolute left-2 top-2 rounded-md border border-white/10 bg-black/75 px-2 py-1 text-[9px] font-black uppercase tracking-[0.08em] text-white shadow-lg backdrop-blur-sm">
               {format(parseISO(event.event_date), 'MMM dd')}
@@ -407,22 +417,28 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
               <span className="truncate text-[10px] font-semibold text-white/42">{formatTime12Hour(event.start_time || '')}{event.end_time && ` – ${formatTime12Hour(event.end_time)}`}</span>
             </div>
             {dayEntries.length > 0 ? (
-              <p className="mt-1 truncate text-[9px] font-semibold text-amber-300/70">Out: {dayEntries.map(entry => entry.name).join(', ')}</p>
+              <span role="button" tabIndex={0} onClick={(event) => { event.stopPropagation(); setLeaveReasonsOpen(true); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); setLeaveReasonsOpen(true); } }} className="mt-1 inline-flex max-w-full touch-manipulation cursor-pointer items-center gap-1 rounded-full border border-amber-400/25 bg-amber-400/[0.08] px-2 py-0.5 text-[9px] font-bold leading-4 text-amber-200 transition-colors hover:bg-amber-400/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300">
+                <CalendarOff className="h-2.5 w-2.5 shrink-0" />
+                <span className="truncate">{dayEntries.length} unavailable · View reason{dayEntries.length === 1 ? '' : 's'}</span>
+              </span>
             ) : null}
           </div>
         </>
       ) : <>
-      {setlistInfo?.songCount ? (
-        <EventArtwork
-          eventType={event.event_type}
-          title={event.title}
-          artworkUrls={setlistInfo.artworkUrls || []}
-          songs={setlistInfo.artworkSongs}
-          className={`${artworkClassName} rounded-[0.35rem]`}
-        />
-      ) : (
-        <EmptyEventArtwork className={artworkClassName} />
-      )}
+      <div className={`relative shrink-0 ${artworkClassName}`}>
+        {setlistInfo?.songCount ? (
+          <EventArtwork
+            eventType={event.event_type}
+            title={event.title}
+            artworkUrls={setlistInfo.artworkUrls || []}
+            songs={setlistInfo.artworkSongs}
+            className="h-full w-full rounded-[0.35rem]"
+          />
+        ) : (
+          <EmptyEventArtwork className="h-full w-full" />
+        )}
+        {pendingReviewAge && <PendingSetlistRibbon compact pendingDays={pendingReviewAge.pendingDays ?? 0} />}
+      </div>
 
       {/* Body */}
       <div className="min-w-0 flex-1">
@@ -438,15 +454,6 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
           {showDueSoonStyle && (
             <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-lg bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400">
               <AlertCircle className="h-3 w-3" /> Due in {daysUntilDue}d
-            </span>
-          )}
-          {pendingReviewMessage && (
-            <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-lg ${
-              (pendingReviewAge?.pendingDays ?? 0) > 1
-                ? 'bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400'
-                : 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400'
-            }`}>
-              <Clock className="h-3 w-3" /> {pendingReviewMessage}
             </span>
           )}
           {isPast && (
@@ -471,13 +478,10 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
         </div>
 
         {dayEntries.length > 0 && (
-          <div
-            className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[10px] font-semibold text-amber-300/75"
-            title={`Out: ${dayEntries.map(entry => entry.name).join(', ')}`}
-          >
+          <span role="button" tabIndex={0} onClick={(event) => { event.stopPropagation(); setLeaveReasonsOpen(true); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); setLeaveReasonsOpen(true); } }} className="mt-1.5 flex w-fit max-w-full min-w-0 touch-manipulation cursor-pointer items-center gap-1.5 rounded-full border border-amber-400/25 bg-amber-400/[0.08] px-2 py-0.5 text-[10px] font-bold leading-4 text-amber-200 transition-colors hover:bg-amber-400/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300">
             <CalendarOff className="h-3 w-3 shrink-0 text-amber-400/70" />
-            <span className="truncate">Out: {dayEntries.map(entry => entry.name).join(', ')}</span>
-          </div>
+            <span className="truncate">{dayEntries.length} unavailable · View reason{dayEntries.length === 1 ? '' : 's'}</span>
+          </span>
         )}
       </div>
 
@@ -496,6 +500,23 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
       </div>
       </>}
       </button>
+
+      {dayEntries.length > 0 && (
+        <Modal open={leaveReasonsOpen} onClose={() => setLeaveReasonsOpen(false)} title={`Unavailable for ${format(parseISO(event.event_date), 'MMM d')}`} size="sm">
+          <div className="space-y-3">
+            <p className="text-sm leading-6 text-gray-500 dark:text-white/55">These approved leave reasons may affect coverage for this event.</p>
+            <div className="space-y-2">
+              {dayEntries.map((entry, index) => (
+                <div key={`${entry.userId || entry.name}-${index}`} className="rounded-xl border border-black/[0.07] bg-gray-50 px-4 py-3 dark:border-white/[0.08] dark:bg-white/[0.05]">
+                  <p className="text-sm font-black text-gray-900 dark:text-white">{entry.name}</p>
+                  <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-white/65">{entry.reason || 'No reason provided'}</p>
+                </div>
+              ))}
+            </div>
+            <button type="button" onClick={() => setLeaveReasonsOpen(false)} className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-gray-900 px-4 text-sm font-semibold text-white dark:bg-white dark:text-gray-950">Close</button>
+          </div>
+        </Modal>
+      )}
 
       {canManageLifecycle && variant === 'list' && (
         <button
@@ -950,7 +971,7 @@ export function Events() {
         withRequestTimeout(supabase.from('profiles').select('id, first_name, last_name, gender, birthday'), emptyListResponse(), 'Event members list'),
         withRequestTimeout(supabase.from('user_roles').select('user_id, role_id'), emptyListResponse(), 'Event member roles'),
         withRequestTimeout(supabase.from('profiles').select('first_name, last_name, birthday').not('birthday', 'is', null), emptyListResponse(), 'Birthdays list'),
-        withRequestTimeout(supabase.from('user_availability').select('user_id, request_type, leave_type, unavailable_date, start_date, end_date, status, profiles!user_availability_user_id_fkey(first_name, last_name)').eq('status', 'approved'), emptyListResponse(), 'Approved leave list'),
+        withRequestTimeout(supabase.from('user_availability').select('user_id, request_type, leave_type, unavailable_date, start_date, end_date, status, reason, profiles!user_availability_user_id_fkey(first_name, last_name)').eq('status', 'approved'), emptyListResponse(), 'Approved leave list'),
         withRequestTimeout(supabase.from('event_assignments').select('event_id, profiles(first_name, last_name, gender), roles!inner(name)').eq('roles.name', 'Song Leader'), emptyListResponse(), 'Song leader list'),
         withRequestTimeout(
           supabase
@@ -1053,10 +1074,10 @@ export function Events() {
         const name = `${profile?.first_name} ${profile?.last_name}`;
         if (availability.leave_type === 'range' && availability.start_date && availability.end_date) {
           eachDayOfInterval({ start: parseISO(availability.start_date), end: parseISO(availability.end_date) }).forEach(day => {
-            entries.push({ type: 'leave', date: format(day, 'yyyy-MM-dd'), name, status: availability.status, userId: availability.user_id });
+            entries.push({ type: 'leave', date: format(day, 'yyyy-MM-dd'), name, reason: availability.reason || undefined, status: availability.status, userId: availability.user_id });
           });
         } else if (availability.unavailable_date) {
-          entries.push({ type: 'leave', date: availability.unavailable_date, name, status: availability.status, userId: availability.user_id });
+          entries.push({ type: 'leave', date: availability.unavailable_date, name, reason: availability.reason || undefined, status: availability.status, userId: availability.user_id });
         }
       });
       setCalendarEntries(entries);

@@ -1415,3 +1415,9 @@ html[data-survey-preview-device="phone"] .survey-modal-surface > div {
   -webkit-touch-callout: none;
   cursor: default;
 }
+
+/* The dedicated builder owns scrolling, including after a song dialog closes. */
+html:has(.setlist-builder-page),
+body:has(.setlist-builder-page) {
+  overflow: hidden !important;
+}

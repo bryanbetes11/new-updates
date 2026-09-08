@@ -2822,7 +2822,9 @@ export function EventDetail() {
       const reviewRequestEventLabel = `${event.event_type} · ${event.title}`;
       const eventDateLabel = event.event_date ? format(parseISO(event.event_date), 'MMM d, yyyy') : 'Upcoming date';
       const reason = buildRevisionRequestNotes(revisionReason);
-      const requestorName = `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.email || 'A team member';
+      const requestorName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim()
+        || user?.email
+        || 'A team member';
       const audience = members
         .map(member => member.id)
         .filter(memberId => memberId !== user.id);
@@ -2886,7 +2888,7 @@ export function EventDetail() {
     const canParticipateRevisionDiscussion = canReviewSetlist || isSongLeader;
     if (!canParticipateRevisionDiscussion) return;
     const content = revisionCommentText.trim();
-    if (!setlist || !user || !content || postingRevisionComment) return;
+    if (!setlist || !user || !event || !content || postingRevisionComment) return;
 
     setPostingRevisionComment(true);
     const { error, data: inserted } = await supabase.from('setlist_revision_comments').insert({
@@ -2907,7 +2909,9 @@ export function EventDetail() {
           recipientIds: mentionedIds,
           relatedSetlistId: setlist.id,
           eventId: event.id,
-          actorProfileName: `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'A team member',
+          actorProfileName: `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim()
+            || user?.email
+            || 'A team member',
         });
       }
       setRevisionCommentText('');
@@ -2967,7 +2971,7 @@ export function EventDetail() {
   };
 
   const handleSaveRevisionComment = async (comment: SetlistRevisionComment) => {
-    if (!user || !comment.id) return;
+    if (!user || !comment.id || !setlist || !event) return;
     const content = editingRevisionCommentText.trim();
     if (!content || savingRevisionCommentEdit) return;
     const previousContent = comment.content || '';
@@ -2996,7 +3000,9 @@ export function EventDetail() {
           recipientIds: newlyAddedMentions,
           relatedSetlistId: setlist.id,
           eventId: event.id,
-          actorProfileName: `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'A team member',
+          actorProfileName: `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim()
+            || user?.email
+            || 'A team member',
         });
       }
       toast('success', 'Comment updated');

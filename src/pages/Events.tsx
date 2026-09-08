@@ -503,7 +503,7 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
       </button>
 
       {dayEntries.length > 0 && (
-        <Modal open={leaveReasonsOpen} onClose={() => setLeaveReasonsOpen(false)} title={`Unavailable for ${format(parseISO(event.event_date), 'MMM d')}`} size="sm">
+        <Modal open={leaveReasonsOpen} onClose={() => setLeaveReasonsOpen(false)} title={`Unavailable for ${format(parseISO(event.event_date), 'MMM d')}`} size="sm" mobileView="dialog" dialogClassName="max-w-[calc(100%-2rem)] sm:max-w-sm">
           <div className="space-y-3">
             <p className="text-sm leading-6 text-gray-500 dark:text-white/55">These approved leave reasons may affect coverage for this event.</p>
             <div className="space-y-2">

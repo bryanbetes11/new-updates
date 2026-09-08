@@ -29,6 +29,11 @@ assert.ok(
   'The compact reason control must remain touch-friendly, compact, and visibly button-like',
 );
 assert.match(
+  eventsSource,
+  /title=\{`Unavailable for \$\{format\(parseISO\(event\.event_date\), 'MMM d'\)\}`\} size="sm" mobileView="dialog"/,
+  'Leave reasons must use a floating dialog presentation on mobile',
+);
+assert.match(
   calendarSource,
   /entry\.reason \? ` — \$\{entry\.reason\}` : ''/,
   'Calendar cells must show why an unavailable member is out',

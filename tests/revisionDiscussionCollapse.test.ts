@@ -39,3 +39,13 @@ assert.match(
   /setlist_revision_discussion_views[\s\S]*?setRevisionDiscussionViews/,
   'the Seen badge must refresh from the persisted receipts',
 );
+assert.match(
+  source,
+  /See who has viewed this discussion[\s\S]*?handleOpenRevisionDiscussionViewers/,
+  'the Seen badge must open the discussion viewer list',
+);
+assert.match(
+  source,
+  /title="Discussion seen by"[\s\S]*?No one has opened this discussion yet\./,
+  'the discussion viewer list must provide a mobile-friendly empty state',
+);

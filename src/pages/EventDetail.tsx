@@ -643,6 +643,8 @@ export function EventDetail() {
   const [attachGuideToRevision, setAttachGuideToRevision] = useState(false);
   const [revisionComments, setRevisionComments] = useState<SetlistRevisionComment[]>([]);
   const [revisionDiscussionViews, setRevisionDiscussionViews] = useState<SetlistRevisionDiscussionView[]>([]);
+  const [showRevisionDiscussionViewers, setShowRevisionDiscussionViewers] = useState(false);
+  const [loadingRevisionDiscussionViewers, setLoadingRevisionDiscussionViewers] = useState(false);
   const [revisionDiscussionOverride, setRevisionDiscussionOverride] = useState<{
     setlistId: string;
     status: string;
@@ -1390,19 +1392,33 @@ export function EventDetail() {
     }
   }, [profile, refreshRevisionDiscussionViews, user?.id]);
 
-  const revisionDiscussionViewerCount = useMemo(() => {
-    if (!setlist?.id) return 0;
-    const uniqueByUser = new Map<string, string>();
+  const handleOpenRevisionDiscussionViewers = useCallback(() => {
+    if (!setlist?.id) return;
+    setShowRevisionDiscussionViewers(true);
+    setLoadingRevisionDiscussionViewers(true);
+    void refreshRevisionDiscussionViews(setlist.id)
+      .catch(error => {
+        console.error('Failed to refresh revision discussion viewers:', error);
+        toast('error', 'Failed to load who has seen this discussion');
+      })
+      .finally(() => setLoadingRevisionDiscussionViewers(false));
+  }, [refreshRevisionDiscussionViews, setlist?.id, toast]);
+
+  const revisionDiscussionViewers = useMemo(() => {
+    if (!setlist?.id) return [];
+    const latestByUser = new Map<string, SetlistRevisionDiscussionView>();
     revisionDiscussionViews
       .filter(view => view.setlist_id === setlist.id)
       .forEach(view => {
-        const latest = uniqueByUser.get(view.user_id);
-        if (!latest || view.viewed_at > latest) {
-          uniqueByUser.set(view.user_id, view.viewed_at);
-        }
+        const current = latestByUser.get(view.user_id);
+        if (!current || view.viewed_at > current.viewed_at) latestByUser.set(view.user_id, view);
       });
-    return uniqueByUser.size;
+    return [...latestByUser.values()].sort((a, b) => b.viewed_at.localeCompare(a.viewed_at));
   }, [revisionDiscussionViews, setlist?.id]);
+
+  const revisionDiscussionViewerCount = useMemo(() => {
+    return revisionDiscussionViewers.length;
+  }, [revisionDiscussionViewers]);
 
   const isAssignedSongLeader = assignments.some(
     assignment => assignment.user_id === user?.id && assignment.roles?.name === 'Song Leader',
@@ -4930,22 +4946,22 @@ const openLyricsModal = (ss: SetlistSong) => {
 
         {setlist && user && (canParticipateRevisionDiscussion || revisionComments.length > 0 || !!setlist.review_note || !!setlist.approval_notes) && setlist.status !== 'rejected' && (setlist.status === 'revision_requested' || revisionComments.length > 0 || !!setlist.review_note || !!setlist.approval_notes) && (
           <div className="card overflow-hidden animate-slide-up">
-            <button
-              type="button"
-              onClick={() => {
-                setRevisionDiscussionOverride({
-                  setlistId: setlist.id,
-                  status: setlist.status,
-                  expanded: !showRevisionDiscussion,
-                });
-              }}
-              aria-expanded={showRevisionDiscussion}
-              aria-controls="revision-discussion-content"
-              className={`flex min-h-12 w-full items-center justify-between gap-3 px-3.5 py-3 text-left transition-colors hover:bg-black/[0.025] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-500/70 dark:hover:bg-white/[0.035] sm:px-4 ${showRevisionDiscussion ? 'border-b border-gray-200/70 dark:border-white/[0.08]' : ''}`}
-            >
-              <div className="flex min-w-0 items-center gap-2">
+            <div className={`flex min-h-12 items-center gap-3 px-3.5 py-2.5 transition-colors hover:bg-black/[0.025] dark:hover:bg-white/[0.035] sm:px-4 ${showRevisionDiscussion ? 'border-b border-gray-200/70 dark:border-white/[0.08]' : ''}`}>
+              <button
+                type="button"
+                onClick={() => {
+                  setRevisionDiscussionOverride({
+                    setlistId: setlist.id,
+                    status: setlist.status,
+                    expanded: !showRevisionDiscussion,
+                  });
+                }}
+                aria-expanded={showRevisionDiscussion}
+                aria-controls="revision-discussion-content"
+                className="flex min-w-0 flex-1 items-center gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/70"
+              >
                 <MessageCircle className="h-4 w-4 shrink-0 text-amber-500" />
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-gray-900 dark:text-white">
                     {setlist.status === 'revision_requested' ? 'Revision Requested' : 'Revision Discussion'}
                   </p>
@@ -4955,16 +4971,31 @@ const openLyricsModal = (ss: SetlistSong) => {
                     </p>
                   )}
                 </div>
-              </div>
+                <ChevronDown className={`h-4 w-4 shrink-0 text-gray-400 transition-transform duration-300 ease-out dark:text-white/35 ${showRevisionDiscussion ? 'rotate-180' : ''}`} />
+              </button>
               <div className="flex shrink-0 items-center gap-2">
                 <span className="badge badge-yellow">{revisionComments.length}</span>
-                <span className="inline-flex h-7 items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-gray-700 ring-1 ring-black/[0.09] dark:bg-white/[0.08] dark:text-white/80 dark:ring-white/[0.12]">
+                <span
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`See who has viewed this discussion (${revisionDiscussionViewerCount})`}
+                  onClick={event => {
+                    event.stopPropagation();
+                    handleOpenRevisionDiscussionViewers();
+                  }}
+                  onKeyDown={event => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    handleOpenRevisionDiscussionViewers();
+                  }}
+                  className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-gray-700 ring-1 ring-black/[0.09] transition-colors hover:bg-white dark:bg-white/[0.08] dark:text-white/80 dark:ring-white/[0.12] dark:hover:bg-white/[0.14]"
+                >
                   <Eye aria-hidden="true" className="h-3.5 w-3.5" />
                   <span>Seen {revisionDiscussionViewerCount}</span>
                 </span>
-                <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform duration-300 ease-out dark:text-white/35 ${showRevisionDiscussion ? 'rotate-180' : ''}`} />
               </div>
-            </button>
+            </div>
 
             <AnimatePresence initial={false}>
             {showRevisionDiscussion && (
@@ -6554,6 +6585,62 @@ const openLyricsModal = (ss: SetlistSong) => {
                 </p>
                 <div className="max-h-80 space-y-1.5 overflow-y-auto pr-1">
                   {viewingObservationViewers.map(viewer => {
+                    const viewerName = `${viewer.profiles?.first_name || ''} ${viewer.profiles?.last_name || ''}`.trim() || 'Team member';
+                    return (
+                      <div key={viewer.user_id} className="flex items-center gap-3 rounded-xl bg-gray-50 px-3 py-2.5 dark:bg-white/[0.04]">
+                        <Avatar
+                          src={viewer.profiles?.avatar_url}
+                          firstName={viewer.profiles?.first_name || '?'}
+                          lastName={viewer.profiles?.last_name}
+                          size="sm"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-bold text-gray-800 dark:text-white/85">
+                            {viewerName}{viewer.user_id === user?.id ? ' (You)' : ''}
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-gray-500 dark:text-white/40">
+                            Seen {format(parseISO(viewer.viewed_at), 'M/d · h:mm a')}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        </Modal>
+
+        <Modal
+          open={showRevisionDiscussionViewers}
+          onClose={() => setShowRevisionDiscussionViewers(false)}
+          title="Discussion seen by"
+          size="sm"
+          mobileView="dialog"
+        >
+          <div className="space-y-3">
+            {loadingRevisionDiscussionViewers ? (
+              <div role="status" className="flex min-h-32 items-center justify-center gap-2 text-sm text-gray-500 dark:text-white/45">
+                <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
+                Loading viewers…
+              </div>
+            ) : revisionDiscussionViewers.length === 0 ? (
+              <div className="py-7 text-center">
+                <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-400 dark:bg-white/[0.05] dark:text-white/30">
+                  <Eye aria-hidden="true" className="h-5 w-5" />
+                </span>
+                <p className="mt-3 text-sm font-bold text-gray-800 dark:text-white/80">No viewers yet</p>
+                <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-white/40">No one has opened this discussion yet.</p>
+              </div>
+            ) : (
+              <>
+                <p className="text-xs leading-relaxed text-gray-500 dark:text-white/45">
+                  {revisionDiscussionViewers.length === 1
+                    ? '1 person has seen this discussion.'
+                    : `${revisionDiscussionViewers.length} people have seen this discussion.`}
+                </p>
+                <div className="max-h-80 space-y-1.5 overflow-y-auto pr-1">
+                  {revisionDiscussionViewers.map(viewer => {
                     const viewerName = `${viewer.profiles?.first_name || ''} ${viewer.profiles?.last_name || ''}`.trim() || 'Team member';
                     return (
                       <div key={viewer.user_id} className="flex items-center gap-3 rounded-xl bg-gray-50 px-3 py-2.5 dark:bg-white/[0.04]">

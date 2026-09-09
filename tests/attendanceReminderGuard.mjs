@@ -1,0 +1,41 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { PGlite } from '@electric-sql/pglite';
+const db = new PGlite();
+const org = '00000000-0000-4000-8000-000000000001';
+const user = '00000000-0000-4000-8000-000000000002';
+const event = '00000000-0000-4000-8000-000000000003';
+const session = '00000000-0000-4000-8000-000000000004';
+try {
+  await db.exec(`create schema private; create role anon; create role authenticated;
+    create table notifications(user_id uuid,org_id uuid,type text,data jsonb);
+    create table attendance_qr_scan_sessions(id uuid,org_id uuid,user_id uuid,consumed_at timestamptz,expires_at timestamptz);
+    create table events(id uuid,org_id uuid,event_date date,start_time time);
+    create table event_assignments(event_id uuid,org_id uuid,user_id uuid,status text);
+    create table event_attendance(event_id uuid,org_id uuid,user_id uuid);
+    create table organization_policy_settings(org_id uuid,attendance_open_minutes_before integer);
+    insert into attendance_qr_scan_sessions values('${session}','${org}','${user}',null,now()+interval '5 minutes');
+    insert into events values('${event}','${org}',timezone('Asia/Manila',now())::date,timezone('Asia/Manila',now())::time);
+    insert into event_assignments values('${event}','${org}','${user}','confirmed');`);
+  await db.exec(await readFile(new URL('../supabase/migrations/20260909070804_guard_incomplete_attendance_reminders.sql',import.meta.url),'utf8'));
+  const insert = async (type='attendance_scan_incomplete', orgId=org) => {
+    const result = await db.query(`insert into notifications values($1,$2,$3,$4) returning *`, [user,orgId,type,{session_id:session}]);
+    return result.rows.length;
+  };
+  assert.equal(await insert(),1,'a genuine unfinished check-in is reminded');
+  await db.exec(`insert into event_attendance values('${event}','${org}','${user}')`);
+  assert.equal(await insert(),0,'repeat/unused scan after attendance must not notify');
+  assert.equal(await insert('attendance_qr_recorded'),1,'confirmation unaffected');
+  await db.exec('delete from event_attendance');
+  assert.equal(await insert('attendance_scan_incomplete',user),0,'cross-org session rejected');
+  await db.exec('update attendance_qr_scan_sessions set consumed_at=now()');
+  assert.equal(await insert(),0,'consumed scan rejected');
+  await db.exec("update attendance_qr_scan_sessions set consumed_at=null, expires_at=now()-interval '1 second'");
+  assert.equal(await insert(),0,'expired scan rejected');
+  await db.exec("update attendance_qr_scan_sessions set expires_at=now()+interval '5 minutes'; update event_assignments set status='declined'");
+  assert.equal(await insert(),0,'declined assignment rejected');
+  await db.exec("update event_assignments set status='confirmed'; update events set event_date=event_date+1");
+  assert.equal(await insert(),0,'future event does not create incomplete scan warning');
+  assert.equal((await db.query("select has_function_privilege('authenticated','private.guard_incomplete_attendance_reminder()','execute') ok")).rows[0].ok,false);
+  console.log('PASS attendance reminder guard: missing attendance, repeat scan, confirmation, org isolation, consumed/expired scan, declined and future assignments');
+} finally { await db.close(); }

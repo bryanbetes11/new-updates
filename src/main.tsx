@@ -4,6 +4,7 @@ import App from './App.tsx';
 import './index.css';
 import { registerAppServiceWorker } from './lib/serviceWorkerUpdate.ts';
 import { initializeDeviceLayout } from './lib/device.ts';
+import { capturePushNotificationOpen } from './lib/notificationOpenTracking';
 import {
   clearExpiredRouteRecoveryMarker,
   installVitePreloadFailureLogging,
@@ -11,6 +12,7 @@ import {
 } from './components/RouteRecoveryBoundary.tsx';
 
 initializeDeviceLayout();
+capturePushNotificationOpen();
 installVitePreloadFailureLogging();
 
 createRoot(document.getElementById('root')!).render(

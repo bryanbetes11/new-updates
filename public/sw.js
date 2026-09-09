@@ -88,15 +88,24 @@ self.addEventListener('push', function(event) {
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
 
-  const urlToOpen = event.notification.data?.url || '/dashboard';
+  const destination = new URL(event.notification.data?.url || '/dashboard', self.location.origin);
+  if (destination.origin !== self.location.origin) {
+    destination.href = new URL('/dashboard', self.location.origin).href;
+  }
+  const notificationId = event.notification.data?.notification_id;
+  if (event.notification.data?.notification_type !== 'message'
+      && typeof notificationId === 'string'
+      && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(notificationId)) {
+    destination.searchParams.set('_notification_open', notificationId);
+  }
+  const urlToOpen = destination.href;
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(windowClients) {
       for (let i = 0; i < windowClients.length; i++) {
         const client = windowClients[i];
         if ('focus' in client) {
-          client.navigate(urlToOpen);
-          return client.focus();
+          return client.navigate(urlToOpen).then(navigated => (navigated || client).focus());
         }
       }
       return clients.openWindow(urlToOpen);

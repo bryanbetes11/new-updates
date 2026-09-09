@@ -12,6 +12,7 @@ import { useToast } from '../contexts/ToastContext';
 import { NotificationsSkeleton } from '../components/LoadingSpinner';
 import { withRequestTimeout } from '../lib/requestTimeout';
 import type { Notification } from '../types';
+import { recordNotificationOpen } from '../lib/notificationOpenTracking';
 
 const typeIcons: Record<string, typeof Bell> = {
   assignment: Users,
@@ -193,6 +194,7 @@ export function Notifications() {
   };
 
   const handleClick = (n: Notification) => {
+    recordNotificationOpen(user?.id, n.id, 'page');
     markRead(n.id);
     if (n.data?.conversation_id) {
       navigate('/messages');
@@ -227,6 +229,7 @@ export function Notifications() {
               <p className="mt-2 text-[13px] font-semibold text-white/45">
                 {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up'}
               </p>
+              <p className="mt-2 text-xs text-white/50">Your church admins can see when you open new notifications. Marking them read does not count as an open.</p>
             </div>
           {notifications.length > 0 && (
             <div className="flex shrink-0 items-center gap-2">

@@ -11,6 +11,7 @@ import {
 import { RefreshCw } from "lucide-react";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { NotificationOpenTracker } from './components/NotificationOpenTracker';
 import { ToastProvider } from "./contexts/ToastContext";
 import { Layout } from "./components/Layout";
 import { PageLoader } from "./components/LoadingSpinner";
@@ -192,6 +193,7 @@ const NotificationSettings = lazy(() =>
     ({ NotificationSettings }) => ({ default: NotificationSettings }),
   ),
 );
+const NotificationActivity = lazy(() => import('./pages/leadership/NotificationActivity').then(({ NotificationActivity }) => ({ default: NotificationActivity })));
 const SurveyManagement = lazy(() =>
   import("./pages/leadership/SurveyManagement").then(
     ({ SurveyManagement }) => ({ default: SurveyManagement }),
@@ -475,6 +477,7 @@ export default function App() {
       <PasswordRecoveryRedirect />
       <ThemeProvider>
         <AuthProvider>
+          <NotificationOpenTracker />
           <StartupGate>
             <ServiceModeResumeRedirect />
             <LastRouteTracker />
@@ -617,6 +620,7 @@ export default function App() {
                       <Route path="/admin/settings" element={<AdminSettings />} />
                       <Route path="/admin/church" element={<OrganizationSettings />} />
                       <Route path="/admin/notifications" element={<NotificationSettings />} />
+                      <Route path="/admin/notification-activity" element={<NotificationActivity />} />
                       <Route path="/admin/attendance-qr" element={<AttendanceQrPilot />} />
                       <Route path="/admin/reflections" element={<SurveyManagement />} />
                       <Route path="/admin/billing" element={<OrganizationBilling />} />

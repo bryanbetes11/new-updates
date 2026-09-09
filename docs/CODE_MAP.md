@@ -15,7 +15,7 @@ Paths are relative to the repository root. These are entry points, not an exhaus
 | Chat | `src/pages/Messages.tsx` | `src/hooks/useMessages.ts`, `src/lib/chatEventReferences.ts` |
 | Draft recovery and preferences | `src/hooks/useRecoverableDraft.ts` | `src/lib/draftRecovery.ts`, `src/lib/syncedPreferences.ts` |
 | Leave requests and availability | `src/pages/RequestLeave.tsx` | `src/lib/memberAvailability.ts`, `src/lib/substituteAvailability.ts` |
-| Admin and notification settings | `src/pages/leadership/AdminSettings.tsx` | `src/pages/leadership/NotificationSettings.tsx`, `src/pages/Notifications.tsx` |
+| Admin and notification settings | `src/pages/leadership/AdminSettings.tsx` | `src/pages/leadership/NotificationSettings.tsx`, `src/pages/leadership/NotificationActivity.tsx`, `src/pages/Notifications.tsx`, `src/lib/notificationOpenTracking.ts` |
 | PWA updates | `src/lib/serviceWorkerUpdate.ts` | `vite.config.ts`; locate worker and manifest references from there |
 | Database and permissions | `supabase/migrations/` | `docs/multi-tenant-checklist.md`, `docs/multi-tenant-verification-checks.md` |
 | Automated tests | `tests/run.mjs`, `tests/*.test.ts` | `tsconfig.tests.json`, `docs/VERIFICATION.md` |

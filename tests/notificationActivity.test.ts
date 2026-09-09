@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { firstNotificationOpen, isNotificationId, pushDeliveryLabel } from '../src/lib/notificationActivity';
+assert.equal(isNotificationId('00000000-0000-4000-8000-000000000031'),true);
+assert.equal(isNotificationId('not-a-notification'),false);
+assert.equal(pushDeliveryLabel('sent'),'Push accepted');
+assert.equal(firstNotificationOpen({push_opened_at:null,bell_opened_at:null,page_opened_at:null}),null);
+assert.equal(firstNotificationOpen({push_opened_at:'2026-09-09T08:00:00Z',bell_opened_at:'2026-09-09T07:00:00Z',page_opened_at:null}),'2026-09-09T07:00:00Z');
+const bell = readFileSync('src/components/NotificationBell.tsx','utf8');
+const page = readFileSync('src/pages/Notifications.tsx','utf8');
+assert.match(bell,/recordNotificationOpen\(user\?\.id, notification\.id, 'bell'\)/);
+assert.match(page,/recordNotificationOpen\(user\?\.id, n\.id, 'page'\)/);
+assert.doesNotMatch(bell.slice(bell.indexOf('const markAllRead'),bell.indexOf('const markAllRead')+550),/recordNotificationOpen/);

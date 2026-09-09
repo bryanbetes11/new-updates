@@ -18,6 +18,7 @@ import { Avatar } from '../../components/Avatar';
 import { SongChartViewer } from '../../components/SongChartViewer';
 import { SongArtwork } from '../../components/SongArtwork';
 import { parseChordProMetadata } from '../../lib/chordPro';
+import { readChartUploadFiles } from '../../lib/songBookProImport';
 import { withSaveTimeout } from '../../lib/saveTimeout';
 import { filterSetlistsBySearch } from '../../lib/setlistSearch';
 import { buildSongUsages, type SongUsageSummary } from '../../lib/songUsage';
@@ -720,29 +721,15 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
     if (fileRef.current) fileRef.current.value = '';
   };
 
-  const readFileAsText = (file: File): Promise<string> => new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = () => reject(reader.error || new Error('Failed to read file'));
-    reader.readAsText(file);
-  });
-
   const handleChartUpload = async (files: FileList | null) => {
     if (!files || files.length === 0 || !user || !canManageSongLibrary) return;
     setChartImportPreparing(true);
     try {
-      const chartFiles: Array<{ name: string; text: string }> = [];
-
-      for (const file of Array.from(files)) {
-        if (file.name.toLowerCase().endsWith('.zip')) {
-          toast('info', 'For Bolt publishing, upload exported .cho files directly instead of a .zip backup.');
-        } else if (file.name.toLowerCase().endsWith('.cho')) {
-          chartFiles.push({ name: file.name, text: await readFileAsText(file) });
-        }
-      }
+      const { charts: chartFiles, skipped } = await readChartUploadFiles(Array.from(files));
+      if (skipped) toast('info', `${skipped} empty, deleted, or non-text chart(s) skipped. PDF charts are not supported here.`);
 
       if (chartFiles.length === 0) {
-        toast('error', 'No .cho song charts found in that file');
+        toast('error', 'No editable song charts found. Choose .cho files or a SongBookPro .sbp export containing text charts.');
         return;
       }
 
@@ -1948,7 +1935,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
     <div className="space-y-5 pb-2">
 
       {canManageSongLibrary && (
-        <input ref={chartFileRef} type="file" accept=".cho" multiple className="hidden" onChange={e => handleChartUpload(e.target.files)} />
+        <input ref={chartFileRef} type="file" accept=".cho,.sbp" multiple className="hidden" onChange={e => handleChartUpload(e.target.files)} />
       )}
 
       {canManageSongLibrary && (
@@ -1960,7 +1947,8 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
           </span>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-black text-white">Import SongBookPro charts</p>
-            <p className="mt-1 text-xs leading-5 text-white/45">Choose multiple .cho files, review duplicates and existing matches, then import only the versions you approve.</p>
+            <p className="mt-1 text-xs leading-5 text-white/45">Choose .cho charts or SongBookPro .sbp files, review duplicates and existing matches, then import only the versions you approve.</p>
+            <p className="mt-1 text-xs leading-5 text-white/45">Charts only, up to 500 songs / 20 MB. Setlists and display transpositions are not imported; charts keep their stored keys.</p>
           </div>
           <button
             type="button"
@@ -1969,7 +1957,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
             className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-4 text-sm font-black text-black transition hover:bg-emerald-400 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Upload className="h-4 w-4" />
-            {chartImportPreparing ? 'Reading charts…' : 'Choose .cho files'}
+            {chartImportPreparing ? 'Reading charts…' : 'Choose chart files'}
           </button>
           </div>
         </details>

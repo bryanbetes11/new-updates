@@ -223,6 +223,7 @@ export function AdminSettings() {
             { to: '/admin/attendance-qr', label: 'Attendance QR', detail: 'Create and manage the church check-in QR code.', icon: QrCode, tone: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-300' },
             { to: '/admin/church', label: 'Church profile', detail: 'Manage organization details and church identity.', icon: Building2, tone: 'bg-violet-500/10 text-violet-600 dark:text-violet-300' },
             { to: '/admin/notifications', label: 'Notification settings', detail: 'Configure member notification delivery.', icon: Bell, tone: 'bg-amber-500/10 text-amber-600 dark:text-amber-300' },
+            { to: '/admin/notification-activity', label: 'Notification activity', detail: 'See member opens from push alerts and the app.', icon: Bell, tone: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' },
             { to: '/admin/reflections', label: 'Member reflections', detail: 'Review and manage ministry reflection prompts.', icon: ClipboardCheck, tone: 'bg-rose-500/10 text-rose-600 dark:text-rose-300' },
             { to: '/admin/billing', label: 'Organization billing', detail: 'Review your ServeSync organization plan.', icon: CreditCard, tone: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' },
           ].map((tool) => {

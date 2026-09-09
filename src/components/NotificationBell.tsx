@@ -15,6 +15,7 @@ import {
   setInteractionSoundsVolume,
 } from '../lib/interactionSounds';
 import { useToast } from '../contexts/ToastContext';
+import { recordNotificationOpen } from '../lib/notificationOpenTracking';
 
 const PREVIEW_LIMIT = 5;
 const SOUND_VOLUME_LEVELS = [
@@ -172,6 +173,7 @@ export function NotificationBell() {
   };
 
   const handleNotification = async (notification: Notification) => {
+    recordNotificationOpen(user?.id, notification.id, 'bell');
     if (!notification.is_read) {
       await supabase.from('notifications').update({ is_read: true }).eq('id', notification.id);
       setCount((current) => Math.max(0, current - 1));
@@ -300,6 +302,7 @@ export function NotificationBell() {
                 <p className="mt-0.5 text-[11px] font-semibold text-white/45">
                   {count > 0 ? `${count} unread` : 'You’re all caught up'}
                 </p>
+                <p className="mt-1 max-w-56 text-[10px] leading-4 text-white/45">Your church admins can see when you open new alerts.</p>
               </div>
               <div className="ml-auto flex items-center gap-1.5">
                 <PushNotificationSetting surface="compact" />

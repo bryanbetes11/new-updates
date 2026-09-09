@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getBuiltInNotificationCopy } from '../../lib/notificationCopy';
 import { AdminPageBackLink } from '../../components/AdminPageBackLink';
+import { DEFAULT_EVENT_TEMPLATE_POLICIES, normalizeEventTemplatePolicies } from '../../lib/eventPolicy';
 
 type Priority = 'low' | 'normal' | 'high' | 'urgent';
 
@@ -24,6 +25,7 @@ type Rule = {
   reminder_offsets: number[];
   template_title: string | null;
   template_body: string | null;
+  event_type_templates: Record<string, { title?: string | null; body?: string | null }>;
 };
 
 type SystemSettings = {
@@ -52,7 +54,7 @@ const categoryLabels: Record<string, string> = {
 };
 
 const notificationPreviewValues: Record<string, string> = {
-  role: 'Song Leader', event: 'Sunday Service', 'event date': 'August 16, 2026', date: 'August 16, 2026',
+  role: 'Song Leader', event: 'Sunday Service · Sunday Gathering', 'event title': 'Sunday Gathering', 'event type': 'Sunday Service', 'event date': 'August 16, 2026', date: 'August 16, 2026',
   'start time': '7:30 AM', member: 'Bro. Bryan Betes', 'song leader': 'Bro. Bryan Betes', count: '3',
   'offense level': '2nd Offense', quarter: 'Q3 2026', 'next action': 'Leadership follow-up',
   'review notes': 'Please update the final song order.', category: 'Audio', status: 'Open',
@@ -65,8 +67,8 @@ const notificationPreviewValues: Record<string, string> = {
   'ministry role': 'Song Leader', 'conduct record': 'Attendance follow-up',
 };
 
-function renderNotificationPreview(value: string) {
-  return Object.entries(notificationPreviewValues).reduce((result, [key, sample]) => {
+function renderNotificationPreview(value: string, eventType = 'Sunday Service') {
+  return Object.entries({ ...notificationPreviewValues, 'event type': eventType, event: `${eventType} · Sunday Gathering` }).reduce((result, [key, sample]) => {
     const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return result
       .replace(new RegExp(`\\[${escaped}\\]`, 'gi'), sample)
@@ -80,6 +82,8 @@ export function NotificationSettings() {
   const { toast } = useToast();
   const [settings, setSettings] = useState<SystemSettings>({ push_delivery_enabled: true, default_timezone: 'Asia/Manila' });
   const [rules, setRules] = useState<Rule[]>([]);
+  const [eventWordingReady, setEventWordingReady] = useState(false);
+  const [eventTypes, setEventTypes] = useState(Object.keys(DEFAULT_EVENT_TEMPLATE_POLICIES));
   const [loading, setLoading] = useState(true);
   const [savingSection, setSavingSection] = useState<string | null>(null);
   const [settingsDirty, setSettingsDirty] = useState(false);
@@ -123,16 +127,19 @@ export function NotificationSettings() {
     if (!profile?.org_id || !canManageNotifications) return;
     let active = true;
     const load = async () => {
-      const [settingsResult, rulesResult, readinessResult] = await Promise.all([
+      const [settingsResult, rulesResult, readinessResult, policyResult] = await Promise.all([
         supabase.from('notification_system_settings').select('push_delivery_enabled, default_timezone').eq('org_id', profile.org_id).maybeSingle(),
         supabase.from('notification_rules').select('*').eq('org_id', profile.org_id).order('category').order('label'),
         supabase.rpc('get_org_push_readiness'),
+        supabase.from('organization_policy_settings').select('event_templates').eq('org_id', profile.org_id).maybeSingle(),
       ]);
       if (!active) return;
       if (settingsResult.error || rulesResult.error) toast('error', 'Could not load notification controls');
       else {
         if (settingsResult.data) setSettings(settingsResult.data as SystemSettings);
         setRules((rulesResult.data || []) as Rule[]);
+        setEventWordingReady(Boolean(rulesResult.data?.length && 'event_type_templates' in rulesResult.data[0]));
+        if (policyResult.data) setEventTypes(Object.keys(normalizeEventTemplatePolicies(policyResult.data.event_templates)));
       }
       const readinessMembers = (readinessResult.data || []) as PushReadinessMember[];
       const hasDetailedData = !readinessResult.error && readinessMembers.length > 0;
@@ -184,6 +191,10 @@ export function NotificationSettings() {
 
   const saveCategory = async (category: string, categoryRules: Rule[]) => {
     if (!user) return;
+    if (!eventWordingReady && categoryRules.some(rule => Object.keys(rule.event_type_templates || {}).length)) {
+      toast('error', 'Event-type wording needs the database migration before it can be saved. Your edits are still here.');
+      return;
+    }
     setSavingSection(category);
     const results = await Promise.all(categoryRules.map(rule => supabase.from('notification_rules').update({
       enabled: rule.enabled,
@@ -193,6 +204,7 @@ export function NotificationSettings() {
       priority: rule.priority,
       template_title: rule.template_title || null,
       template_body: rule.template_body || null,
+      ...(eventWordingReady ? { event_type_templates: rule.event_type_templates || {} } : {}),
       updated_by: user.id,
     }).eq('id', rule.id)));
     setSavingSection(null);
@@ -243,14 +255,24 @@ export function NotificationSettings() {
   const sendRuleTest = async (rule: Rule) => {
     const builtIn = getBuiltInNotificationCopy(rule.type, rule.label, rule.description);
     setTestingRuleId(rule.id);
-    const { error } = await supabase.rpc('send_notification_template_test_to_admin_dev', {
+    const { data, error } = await supabase.rpc('send_notification_template_test_to_admins', {
       p_rule_type: rule.type,
       p_title: rule.template_title ?? builtIn.title,
       p_body: rule.template_body ?? builtIn.body,
     });
     setTestingRuleId(null);
-    if (error) toast('error', 'Could not send the template test to Admin Dev');
-    else toast('success', 'Test sent to Admin Dev using the current title and message');
+    if (error) {
+      toast('error', error.code === 'PGRST202'
+        ? 'Admin test sending needs the pending database migration. No test was sent.'
+        : error.message || 'The admin test could not be queued. Please try again.');
+      return;
+    }
+    const result = data as { admin_count: number; queued_count: number; push_queued_count: number; skipped_count: number } | null;
+    if (!result?.queued_count) {
+      toast('error', 'No tests were queued. Check the Test notification rule and admin notification preferences.');
+      return;
+    }
+    toast('success', `Test queued for ${result.queued_count} of ${result.admin_count} admins. Push requested for ${result.push_queued_count}.${result.skipped_count ? ` ${result.skipped_count} skipped by notification settings.` : ''} Device delivery depends on push setup.`);
   };
 
   if (!canManageNotifications) return null;
@@ -292,6 +314,7 @@ export function NotificationSettings() {
       )}
 
       {activeTab === 'controls' && <>
+      {!eventWordingReady && <p role="status" className="rounded-xl bg-amber-50 p-4 text-sm text-amber-800 dark:bg-amber-400/10 dark:text-amber-200">Event-type wording is available to preview. Saving it and enabling Out Today require the pending database migration. Existing notification controls still work.</p>}
       <section className="overflow-hidden rounded-[2rem] border border-emerald-200/70 bg-white shadow-sm dark:border-emerald-400/10 dark:bg-white/[0.025]">
         <div className="bg-gradient-to-br from-emerald-50 to-white px-5 py-5 dark:from-emerald-400/[0.08] dark:to-transparent sm:px-6">
           <div className="flex items-start gap-3">
@@ -359,7 +382,7 @@ export function NotificationSettings() {
                       </select>
                     </label>
                   </div>
-                  <NotificationCopyEditor rule={rule} organizationName={organization?.name || 'MCJC Church'} patchRule={patchRule} testing={testingRuleId === rule.id} onTest={() => sendRuleTest(rule)} />
+                  <NotificationCopyEditor rule={rule} eventTypes={eventTypes} organizationName={organization?.name || 'MCJC Church'} patchRule={patchRule} testing={testingRuleId === rule.id} onTest={sendRuleTest} />
                 </div>
               </details>
             ))}
@@ -485,28 +508,52 @@ function PushReadinessPanel({
   );
 }
 
-function NotificationCopyEditor({
-  rule,
+export function NotificationCopyEditor({
+  rule: savedRule,
+  eventTypes,
   organizationName,
-  patchRule,
+  patchRule: patchSavedRule,
   testing,
   onTest,
 }: {
   rule: Rule;
+  eventTypes: string[];
   organizationName: string;
   patchRule: (id: string, patch: Partial<Rule>) => void;
   testing: boolean;
-  onTest: () => void;
+  onTest: (rule: Rule) => void;
 }) {
+  const [eventType, setEventType] = useState('');
+  const supportsEventTypes = ['events', 'assignments', 'attendance', 'setlists', 'deadlines'].includes(savedRule.category)
+    && savedRule.type !== 'out_today';
+  const override = savedRule.event_type_templates?.[eventType];
+  const rule = eventType ? { ...savedRule, template_title: override?.title ?? savedRule.template_title, template_body: override?.body ?? savedRule.template_body } : savedRule;
+  const patchRule = (id: string, patch: Partial<Rule>) => {
+    if (!eventType) return patchSavedRule(id, patch);
+    patchSavedRule(id, { event_type_templates: { ...savedRule.event_type_templates, [eventType]: {
+      ...override,
+      ...('template_title' in patch ? { title: patch.template_title || null } : {}),
+      ...('template_body' in patch ? { body: patch.template_body || null } : {}),
+    } } });
+  };
   const builtIn = getBuiltInNotificationCopy(rule.type, rule.label, rule.description);
-  const hasCustomTitle = rule.template_title !== null;
-  const hasCustomBody = rule.template_body !== null;
-  const availableValues = Array.from(new Set(`${builtIn.title} ${builtIn.body}`.match(/\[[^\]]+\]/g) || []));
-  const previewTitle = renderNotificationPreview(rule.template_title ?? builtIn.title);
-  const previewBody = renderNotificationPreview(rule.template_body ?? builtIn.body);
+  const hasCustomTitle = eventType ? override?.title != null : rule.template_title != null;
+  const hasCustomBody = eventType ? override?.body != null : rule.template_body != null;
+  const availableValues = Array.from(new Set((`${builtIn.title} ${builtIn.body}${supportsEventTypes ? ' [event type] [event title] [event date]' : ''}`).match(/\[[^\]]+\]/g) || []));
+  const previewTitle = renderNotificationPreview(rule.template_title ?? builtIn.title, eventType || undefined);
+  const renderedBody = renderNotificationPreview(rule.template_body ?? builtIn.body, eventType || undefined);
+  const previewBody = supportsEventTypes && !renderedBody.toLowerCase().includes((eventType || 'Sunday Service').toLowerCase()) ? `${renderedBody} · ${eventType || 'Sunday Service'}` : renderedBody;
 
   return (
     <div className="space-y-3">
+      {supportsEventTypes && <label className="block text-xs font-bold text-gray-500 dark:text-white/60">
+        Wording for
+        <select value={eventType} onChange={event => setEventType(event.target.value)} className="input mt-1.5 w-full">
+          <option value="">All event types (default)</option>
+          {Array.from(new Set([...eventTypes, ...Object.keys(savedRule.event_type_templates || {})])).map(type => <option key={type} value={type}>{type}</option>)}
+        </select>
+        <span className="mt-1 block font-normal">{eventType ? `Only ${eventType} uses these overrides. Reset a field to inherit the default.` : 'Choose an event type for separate wording, including Revamp Session.'}</span>
+      </label>}
       <label className="block text-xs font-bold uppercase tracking-wide text-gray-400 dark:text-white/35">
         <span className="flex items-center justify-between gap-3">
           <span>{hasCustomTitle ? 'Custom title' : 'Current built-in title'}</span>
@@ -561,10 +608,10 @@ function NotificationCopyEditor({
             <p className="mt-1 text-[10px] font-semibold text-white/45">from ServeSync</p>
           </div>
         </div>
-        <p className="text-[10px] leading-4 text-white/40">Sample values are used only for this preview and the Admin Dev test.</p>
+        <p className="text-[10px] leading-4 text-white/40">Sample values are used for this preview and the admin test. Tests go to all active admins in your church and respect their notification settings.</p>
       </div>
-      <button type="button" onClick={onTest} disabled={testing} className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.08] px-4 py-2.5 text-xs font-black text-emerald-700 transition hover:bg-emerald-500/[0.14] disabled:opacity-60 dark:text-emerald-300">
-        {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Send test to Admin Dev
+      <button type="button" onClick={() => onTest({ ...rule, template_title: previewTitle, template_body: previewBody })} disabled={testing} className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.08] px-4 py-2.5 text-xs font-black text-emerald-700 transition hover:bg-emerald-500/[0.14] disabled:opacity-60 dark:text-emerald-300">
+        {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} {testing ? 'Queuing test…' : 'Send test to all admins'}
       </button>
     </div>
   );

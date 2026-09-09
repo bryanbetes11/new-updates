@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { isApprovedLeaveOnDate, parseAvailabilityDate } from '../lib/memberAvailability';
 import { format, parseISO, startOfToday, isBefore } from 'date-fns';
 import { AlertTriangle, UserX, ChevronRight, Trash2, Calendar, Users } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -13,6 +15,8 @@ import type { Profile, UserAvailability } from '../types';
 type TeamMemberSummary = Pick<Profile, 'id' | 'first_name' | 'last_name' | 'avatar_url'>;
 
 export function UnavailableMembers() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedDate = parseAvailabilityDate(searchParams.get('date'));
   const { user, isProductionDirector } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -30,6 +34,7 @@ export function UnavailableMembers() {
         .from('user_availability')
         .select('*, profiles!user_availability_user_id_fkey(first_name, last_name, nickname, avatar_url)')
         .eq('status', 'approved')
+        .eq('request_type', 'leave')
         .order('created_at', { ascending: true }),
       supabase
         .from('profiles')
@@ -89,11 +94,12 @@ export function UnavailableMembers() {
     return '—';
   };
   const upcoming = unavailableMembers.filter(ua => {
-    const d = getRepresentativeDate(ua);
+    if (selectedDate) return isApprovedLeaveOnDate(ua, selectedDate);
+    const d = ua.leave_type === 'range' ? ua.end_date : ua.unavailable_date;
     return d ? !isBefore(parseISO(d), today) : false;
   });
   const past = unavailableMembers.filter(ua => {
-    const d = getRepresentativeDate(ua);
+    const d = ua.leave_type === 'range' ? ua.end_date : ua.unavailable_date;
     return d ? isBefore(parseISO(d), today) : false;
   });
   const uniqueUpcomingCount = new Set(upcoming.map(u => u.user_id)).size;
@@ -164,14 +170,20 @@ export function UnavailableMembers() {
           <h1
             className="text-[2rem] font-black text-gray-900 dark:text-white leading-[1.05]"
           >
-            Unavailable Members
+            {selectedDate ? 'Out on this day' : 'Unavailable Members'}
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5">
-            Approved leave requests from your team
+            {selectedDate ? format(parseISO(selectedDate), 'EEEE, MMMM d, yyyy') : 'Approved leave requests from your team'}
           </p>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <label className="text-sm font-semibold">View date
+              <input type="date" value={selectedDate || ''} onChange={event => setSearchParams(event.target.value ? { date: event.target.value } : {})} className="input ml-2 w-auto" />
+            </label>
+            {selectedDate && <button type="button" onClick={() => setSearchParams({})} className="btn-secondary">View all dates</button>}
+          </div>
         </div>
 
-        <div className="card overflow-hidden animate-slide-up" style={{ animationFillMode: 'both' }}>
+        {!selectedDate && <div className="card overflow-hidden animate-slide-up" style={{ animationFillMode: 'both' }}>
           <div className="flex items-center gap-2.5 border-b border-black/[0.04] px-4 py-3.5 dark:border-white/[0.05] sm:px-5">
             <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-500/15">
               <Users className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
@@ -198,7 +210,7 @@ export function UnavailableMembers() {
               );
             })}
           </div>
-        </div>
+        </div>}
 
         <div
           className="card overflow-hidden animate-slide-up"
@@ -209,7 +221,7 @@ export function UnavailableMembers() {
               <UserX className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />
             </div>
             <span className="text-[13px] font-bold text-gray-900 dark:text-white flex-1">
-              Upcoming
+              {selectedDate ? 'Out this day' : 'Current & upcoming'}
             </span>
             <span className="badge-orange">
               {uniqueUpcomingCount} member{uniqueUpcomingCount !== 1 ? 's' : ''}
@@ -234,7 +246,7 @@ export function UnavailableMembers() {
               <div className="flex items-center justify-center h-14 w-14 rounded-2xl bg-gray-100 dark:bg-white/[0.06] mb-3">
                 <UserX className="h-6 w-6 text-gray-400 dark:text-gray-500" />
               </div>
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No upcoming unavailabilities</p>
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{selectedDate ? 'No approved leave for this date' : 'No current or upcoming unavailabilities'}</p>
             </div>
           ) : (
             <div className="divide-y divide-black/[0.04] dark:divide-white/[0.05]">
@@ -243,7 +255,7 @@ export function UnavailableMembers() {
           )}
         </div>
 
-        {!loadError && past.length > 0 && (
+        {!selectedDate && !loadError && past.length > 0 && (
           <div
             className="card overflow-hidden animate-slide-up"
             style={{ animationDelay: '120ms', animationFillMode: 'both' }}

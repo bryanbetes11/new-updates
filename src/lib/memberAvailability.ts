@@ -8,6 +8,12 @@ export interface MemberAvailabilityWindow {
   end_date?: string | null;
 }
 
+export function parseAvailabilityDate(value: string | null): string | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value ? value : null;
+}
+
 export function isApprovedLeaveOnDate(availability: MemberAvailabilityWindow, eventDate?: string | null) {
   if (!eventDate || availability.status !== 'approved') return false;
   if (availability.request_type && availability.request_type !== 'leave') return false;

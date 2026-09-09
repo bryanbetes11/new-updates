@@ -1,0 +1,15 @@
+# Event wording and Out Today
+
+Deployment prerequisite: apply `20260909055525_event_type_wording_and_out_today.sql` through the normal Supabase migration workflow, then deploy the frontend. The migration activates the hourly `servesync-out-today` job; it does not directly invoke the producer. Until applied, the preview clearly labels event-type wording as preview-only and preserves existing controls.
+
+- Admin Settings → Notifications → Notification Controls → open an event-related alert → **Wording for**. Choose an event type, edit its title/message, then save the category. Each field inherits the default when reset. Existing default templates are preserved.
+- Event context supports `[event]` (type and title without exact duplicates), `[event type]`, `[event title]`, `[event date]`, and `[start time]`. Notifications with event context append the type when the message does not already contain it. Unknown placeholders fall back to the producer's resolved copy.
+- Out Today appears under **People & roles**. The job checks hourly at :05, starting after 6 AM in each church's configured notification timezone. It sends a single digest per recipient/day when approved active members are out and an event is scheduled for that day. Later approvals can trigger a first digest if none was sent; they do not resend an already-delivered digest.
+- All active, onboarded members of that church are eligible, regardless of leadership or assignment role. Existing per-member preferences and organization push settings apply. The digest includes event labels and the count of assigned members affected, but no reasons/private review notes.
+- The link opens `/unavailable-members?date=YYYY-MM-DD`. The page uses the existing authenticated, same-organization access policy for leave reasons. No RLS policy or reason-sharing permission is broadened.
+
+Verification: `pnpm test:notification-db` runs the migration against an isolated PostgreSQL engine with synthetic records and a non-running cron stub. It covers timezone boundaries, date ranges, deduplication, audience/tenant isolation, preference handling, wording overrides/fallbacks and private function permissions. It never contacts Supabase or sends push notifications. `tests/fixtures/notificationCopy.html` is a local Vite UI fixture; its Send action is intentionally disabled.
+
+## Admin test button
+
+`20260909061440_notification_template_tests_all_admins.sql` adds the replacement test API. **Send test to all admins** targets active, onboarded members in the caller's church who have the organization-admin flag or the Admin role. Only authorized notification managers can invoke it. No recipient is selected by email. Results distinguish queued notifications, push requests and recipients skipped by settings; a queue result is not a guarantee of device delivery. Apply this migration before deploying the updated test button. The frontend reports a missing migration explicitly instead of claiming a test was sent. Verification uses synthetic admins only.

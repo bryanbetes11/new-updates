@@ -4,6 +4,10 @@ export interface NotificationCopy {
 }
 
 const copy: Record<string, NotificationCopy> = {
+  out_today: {
+    title: 'Out Today',
+    body: '[count] member(s) are out on [date]. Open to see who is unavailable and their reasons.',
+  },
   assignment: {
     title: 'New Assignment',
     body: 'You have been assigned as [role] for [event] on [event date].',

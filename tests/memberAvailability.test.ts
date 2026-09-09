@@ -1,5 +1,11 @@
 import assert from 'node:assert/strict';
-import { getOutMemberIdsForDate, isApprovedLeaveOnDate } from '../src/lib/memberAvailability';
+import { getOutMemberIdsForDate, isApprovedLeaveOnDate, parseAvailabilityDate } from '../src/lib/memberAvailability';
+
+assert.equal(parseAvailabilityDate('2026-09-09'), '2026-09-09');
+assert.equal(parseAvailabilityDate('2026-02-30'), null);
+assert.equal(parseAvailabilityDate('2026-2-03'), null);
+assert.equal(parseAvailabilityDate(null), null);
+assert.equal(parseAvailabilityDate('javascript:alert(1)'), null);
 
 const singleLeave = {
   user_id: 'member-single',

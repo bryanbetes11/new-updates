@@ -6,7 +6,6 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import type { Notification } from '../types';
-import { PushNotificationSetting } from './PushNotificationSetting';
 import { Modal } from './Modal';
 import {
   getInteractionSoundsVolume,
@@ -302,10 +301,8 @@ export function NotificationBell() {
                 <p className="mt-0.5 text-[11px] font-semibold text-white/45">
                   {count > 0 ? `${count} unread` : 'You’re all caught up'}
                 </p>
-                <p className="mt-1 max-w-56 text-[10px] leading-4 text-white/45">Your church admins can see when you open new alerts.</p>
               </div>
               <div className="ml-auto flex items-center gap-1.5">
-                <PushNotificationSetting surface="compact" />
                 <button
                   type="button"
                   onClick={() => {

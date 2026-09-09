@@ -27,7 +27,7 @@ function urlBase64ToUint8Array(base64String: string) {
 export function PushNotificationSetting({ surface = 'profile', onEnabled }: PushNotificationSettingProps) {
   const { user, profile } = useAuth();
   const { toast } = useToast();
-  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushEnabled, setPushEnabled] = useState<boolean | null>(null);
   const [pushLoading, setPushLoading] = useState(false);
 
   const savePushSubscription = useCallback(async (subscription: PushSubscription) => {
@@ -65,17 +65,20 @@ export function PushNotificationSetting({ surface = 'profile', onEnabled }: Push
       }
 
       try {
-        const [reg, preferenceResult] = await Promise.all([
-          navigator.serviceWorker.ready,
-          supabase
-            .from('notification_preferences')
-            .select('push_enabled')
-            .eq('user_id', user.id)
-            .maybeSingle(),
-        ]);
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (!reg) {
+          setPushEnabled(false);
+          return;
+        }
+        const { data: preference } = await supabase
+          .from('notification_preferences')
+          .select('push_enabled')
+          .eq('user_id', user.id)
+          .maybeSingle();
         const sub = await reg.pushManager.getSubscription();
-        const preferenceEnabled = preferenceResult.data?.push_enabled ?? true;
-        setPushEnabled(!!sub && Notification.permission === 'granted' && preferenceEnabled);
+        const preferenceEnabled = preference?.push_enabled ?? true;
+        const enabled = !!sub && Notification.permission === 'granted' && preferenceEnabled;
+        setPushEnabled(enabled);
       } catch {
         setPushEnabled(false);
       }
@@ -185,6 +188,8 @@ export function PushNotificationSetting({ surface = 'profile', onEnabled }: Push
 
   const statusText = pushEnabled
     ? 'Enabled for this device'
+    : pushEnabled === null
+      ? 'Checking this device…'
     : typeof window !== 'undefined' && !('PushManager' in window) && isIosDevice() && !isStandalonePwa()
       ? 'Add to Home Screen to enable'
       : 'Allow alerts for assignments and messages';
@@ -194,7 +199,7 @@ export function PushNotificationSetting({ surface = 'profile', onEnabled }: Push
       <button
         type="button"
         onClick={pushEnabled ? undefined : togglePush}
-        disabled={pushLoading || pushEnabled}
+        disabled={pushLoading || pushEnabled === null || pushEnabled}
         className={`relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors disabled:cursor-default ${
           pushEnabled
             ? 'bg-[#22c55e]/15 text-[#4ade80]'
@@ -203,7 +208,7 @@ export function PushNotificationSetting({ surface = 'profile', onEnabled }: Push
         aria-label={pushEnabled ? 'Push notifications enabled' : 'Enable push notifications'}
         title={pushEnabled ? 'Notifications enabled' : 'Enable notifications'}
       >
-        {pushLoading ? (
+        {pushLoading || pushEnabled === null ? (
           <Loader2 className="h-4 w-4 animate-spin" />
         ) : (
           <>
@@ -256,7 +261,7 @@ export function PushNotificationSetting({ surface = 'profile', onEnabled }: Push
         <button
           type="button"
           onClick={togglePush}
-          disabled={pushLoading}
+          disabled={pushLoading || pushEnabled === null}
           className={`inline-flex h-9 shrink-0 items-center justify-center rounded-full px-3.5 text-[12px] font-black transition-all active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60 ${
             pushEnabled
               ? isDrawer
@@ -266,7 +271,7 @@ export function PushNotificationSetting({ surface = 'profile', onEnabled }: Push
           }`}
           style={!pushEnabled ? { background: 'linear-gradient(135deg, #16a34a, #15803d)', boxShadow: '0 4px 14px rgba(22,163,74,0.35)' } : undefined}
         >
-          {pushLoading ? 'Working...' : pushEnabled ? 'Disable' : 'Enable'}
+          {pushLoading || pushEnabled === null ? 'Checking...' : pushEnabled ? 'Disable' : 'Enable'}
         </button>
       </div>
     </div>

@@ -7,7 +7,7 @@ import {
   Music, Upload, CheckCircle, AlertTriangle, Calendar, Search,
   ChevronDown, Trash2, Square, CheckSquare, X,
   Clock, Music2, ArrowUpDown,
-  ExternalLink, Globe2, ClipboardPaste, Pencil, FileText,
+  ExternalLink, Globe2, ClipboardPaste, Pencil, FileText, Plus,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -1938,75 +1938,34 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
         <input ref={chartFileRef} type="file" accept=".cho,.sbp" multiple className="hidden" onChange={e => handleChartUpload(e.target.files)} />
       )}
 
-      {canManageSongLibrary && (
-        <details className="rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.08] px-4">
-          <summary className="min-h-11 cursor-pointer py-3 text-sm font-bold text-emerald-200">Import SongBookPro charts</summary>
-          <div className="flex flex-col gap-3 pb-4 sm:flex-row sm:items-center">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/20">
-            <FileText className="h-5 w-5" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-black text-white">Import SongBookPro charts</p>
-            <p className="mt-1 text-xs leading-5 text-white/45">Choose .cho charts or SongBookPro .sbp files, review duplicates and existing matches, then import only the versions you approve.</p>
-            <p className="mt-1 text-xs leading-5 text-white/45">Charts only, up to 500 songs / 20 MB. Setlists and display transpositions are not imported; charts keep their stored keys.</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => chartFileRef.current?.click()}
-            disabled={chartImportPreparing || chartImportSaving}
-            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-4 text-sm font-black text-black transition hover:bg-emerald-400 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Upload className="h-4 w-4" />
-            {chartImportPreparing ? 'Reading charts…' : 'Choose chart files'}
-          </button>
-          </div>
-        </details>
-      )}
-
       {/* ── Filter pills ── */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-        className="grid grid-cols-2 gap-2 sm:flex"
-        role="group"
-        aria-label="Song availability filters"
+        className="flex items-start gap-2 sm:items-center"
       >
-        {[
-          { id: 'all' as const, label: 'All', count: songUsages.length },
-          { id: 'safe' as const, label: 'Safe', count: safeCount },
-          { id: 'not_ready' as const, label: 'Not Ready', count: notReadyCount },
-          { id: 'never_used' as const, label: 'Never Used', count: neverUsed },
-        ].map(filter => {
-          const active = activeFilter === filter.id;
-          return (
-            <button
-              key={filter.id}
-              type="button"
-              onClick={() => setActiveFilter(prev => (prev === filter.id && filter.id !== 'all' ? 'all' : filter.id))}
-              aria-pressed={active}
-              className={`inline-flex h-11 w-full items-center justify-center gap-2 rounded-full px-4 text-[12px] font-black transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 sm:w-auto sm:shrink-0 ${
-                active
-                  ? 'bg-[#22c55e] text-black'
-                  : 'bg-white/[0.10] text-white hover:bg-white/[0.16]'
-              }`}
-            >
-              {filter.label}
-              <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${active ? 'bg-black/12 text-black' : 'bg-white/[0.10] text-white/68'}`}>
-                {filter.count}
-              </span>
+        <div className="-mb-1 flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="group" aria-label="Song availability filters">
+          {[
+            { id: 'all' as const, label: 'All', count: songUsages.length },
+            { id: 'safe' as const, label: 'Safe', count: safeCount },
+            { id: 'not_ready' as const, label: 'Not Ready', count: notReadyCount },
+            { id: 'never_used' as const, label: 'Never Used', count: neverUsed },
+          ].map(filter => {
+            const active = activeFilter === filter.id;
+            return <button key={filter.id} type="button" onClick={() => setActiveFilter(prev => (prev === filter.id && filter.id !== 'all' ? 'all' : filter.id))} aria-pressed={active} className={`inline-flex h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full px-4 text-[12px] font-black transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 ${active ? 'bg-[#22c55e] text-black' : 'bg-white/[0.10] text-white hover:bg-white/[0.16]'}`}>
+              {filter.label}<span className={`rounded-full px-1.5 py-0.5 text-[10px] ${active ? 'bg-black/12 text-black' : 'bg-white/[0.10] text-white/68'}`}>{filter.count}</span>
+            </button>;
+          })}
+          {canManageSongLibrary && duplicateSongGroups.length > 0 && (
+            <button type="button" onClick={openDuplicateReview} className="inline-flex h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full border border-amber-300/25 bg-amber-400/[0.10] px-4 text-[12px] font-black text-amber-200 transition-colors hover:bg-amber-400/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/70">
+              <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" /> Duplicates <span className="rounded-full bg-amber-300/15 px-1.5 py-0.5 text-[10px]">{duplicateSongGroups.length}</span>
             </button>
-          );
-        })}
-        {canManageSongLibrary && duplicateSongGroups.length > 0 && (
-          <button
-            type="button"
-            onClick={openDuplicateReview}
-            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full border border-amber-300/25 bg-amber-400/[0.10] px-4 text-[12px] font-black text-amber-200 transition-colors hover:bg-amber-400/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/70 sm:w-auto sm:shrink-0"
-          >
-            <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
-            Duplicates
-            <span className="rounded-full bg-amber-300/15 px-1.5 py-0.5 text-[10px]">{duplicateSongGroups.length}</span>
+          )}
+        </div>
+        {canManageSongLibrary && (
+          <button type="button" onClick={() => chartFileRef.current?.click()} disabled={chartImportPreparing || chartImportSaving} aria-label={chartImportPreparing ? 'Reading chart files' : 'Import SongBookPro charts'} title="Import SongBookPro charts" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-black transition hover:bg-emerald-400 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 disabled:cursor-not-allowed disabled:opacity-60">
+            <Plus className="h-5 w-5" aria-hidden="true" />
           </button>
         )}
       </motion.div>

@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
-import {
-  Bell, Check, CheckCheck, Trash2,
-  Music, Megaphone, MessageCircle, PlayCircle, Users,
-  CalendarClock, ClipboardCheck, AlertTriangle, Clock, ArrowLeftRight, CalendarX, UserCog, ShieldAlert, Cake
-} from 'lucide-react';
+import { Bell, CheckCheck, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -13,108 +9,6 @@ import { NotificationsSkeleton } from '../components/LoadingSpinner';
 import { withRequestTimeout } from '../lib/requestTimeout';
 import type { Notification } from '../types';
 import { recordNotificationOpen } from '../lib/notificationOpenTracking';
-
-const typeIcons: Record<string, typeof Bell> = {
-  assignment: Users,
-  assignment_response: CheckCheck,
-  assignment_removed: Users,
-  event_updated: CalendarClock,
-  event_created: CalendarClock,
-  featured_event_created: CalendarClock,
-  event_cancelled: CalendarX,
-  setlist_approved: Music,
-  setlist_revision: Music,
-  setlist_revision_comment: MessageCircle,
-  setlist_submitted: Music,
-  announcement: Megaphone,
-  comment: MessageCircle,
-  mention: MessageCircle,
-  video: PlayCircle,
-  video_comment: MessageCircle,
-  event_reminder: CalendarClock,
-  event_today_reminder: Clock,
-  post_event_observation_reminder: ClipboardCheck,
-  post_event_observation_added: ClipboardCheck,
-  post_event_observation_status_changed: ClipboardCheck,
-  post_event_observation_assigned: ClipboardCheck,
-  post_event_observation_due: CalendarClock,
-  assignment_confirmation_reminder: Clock,
-  attendance_open: ClipboardCheck,
-  attendance_reminder: ClipboardCheck,
-  attendance_five_min_reminder: Clock,
-  attendance_grace_final_reminder: AlertTriangle,
-  attendance_scan_incomplete: ClipboardCheck,
-  attendance_qr_recorded: CheckCheck,
-  attendance_missed_evening_reminder: ClipboardCheck,
-  attendance_missed_final_reminder: AlertTriangle,
-  attendance_alert: AlertTriangle,
-  attendance_auto_absent: AlertTriangle,
-  proposal_reminder: CalendarClock,
-  proposal_overdue_alert: AlertTriangle,
-  leadership_member_action_reminder: AlertTriangle,
-  swap_request: ArrowLeftRight,
-  swap_approved: ArrowLeftRight,
-  swap_declined: ArrowLeftRight,
-  sub_request: ArrowLeftRight,
-  sub_approved: ArrowLeftRight,
-  sub_declined: ArrowLeftRight,
-  role_changed: UserCog,
-  member_joined: Users,
-  birthday: Cake,
-  discipline_created: ShieldAlert,
-  discipline_updated: ShieldAlert,
-};
-
-const typeTones: Record<string, string> = {
-  assignment: 'from-emerald-500/85 via-green-900 to-black',
-  assignment_response: 'from-emerald-400 via-green-800 to-black',
-  assignment_removed: 'from-red-500/85 via-rose-900 to-black',
-  event_updated: 'from-sky-500/85 via-blue-900 to-black',
-  event_created: 'from-emerald-500/85 via-green-900 to-black',
-  featured_event_created: 'from-orange-500/85 via-rose-900 to-black',
-  event_cancelled: 'from-red-500/85 via-rose-900 to-black',
-  setlist_approved: 'from-emerald-500/85 via-teal-900 to-black',
-  setlist_revision: 'from-amber-500/85 via-yellow-900 to-black',
-  setlist_revision_comment: 'from-amber-400/85 via-orange-900 to-black',
-  setlist_submitted: 'from-emerald-500/85 via-teal-900 to-black',
-  announcement: 'from-amber-500/85 via-zinc-800 to-black',
-  comment: 'from-sky-500/85 via-blue-900 to-black',
-  mention: 'from-emerald-400 via-green-800 to-black',
-  video: 'from-rose-500/85 via-pink-900 to-black',
-  video_comment: 'from-violet-500/85 via-indigo-900 to-black',
-  event_reminder: 'from-sky-500/85 via-blue-900 to-black',
-  event_today_reminder: 'from-sky-400 via-cyan-900 to-black',
-  post_event_observation_reminder: 'from-emerald-500/85 via-teal-900 to-black',
-  post_event_observation_added: 'from-cyan-500/85 via-teal-900 to-black',
-  post_event_observation_status_changed: 'from-violet-500/85 via-indigo-900 to-black',
-  post_event_observation_assigned: 'from-blue-500/85 via-indigo-900 to-black',
-  post_event_observation_due: 'from-orange-500/85 via-red-900 to-black',
-  assignment_confirmation_reminder: 'from-violet-500/85 via-indigo-900 to-black',
-  attendance_open: 'from-emerald-500/85 via-green-900 to-black',
-  attendance_reminder: 'from-orange-500/85 via-amber-900 to-black',
-  attendance_five_min_reminder: 'from-orange-500/85 via-amber-900 to-black',
-  attendance_grace_final_reminder: 'from-red-500/85 via-rose-900 to-black',
-  attendance_scan_incomplete: 'from-amber-500/85 via-orange-900 to-black',
-  attendance_qr_recorded: 'from-emerald-500/85 via-teal-900 to-black',
-  attendance_missed_evening_reminder: 'from-amber-500/85 via-yellow-900 to-black',
-  attendance_missed_final_reminder: 'from-red-500/85 via-rose-900 to-black',
-  attendance_alert: 'from-red-500/85 via-rose-900 to-black',
-  attendance_auto_absent: 'from-red-500/85 via-rose-950 to-black',
-  proposal_reminder: 'from-amber-500/85 via-yellow-900 to-black',
-  proposal_overdue_alert: 'from-red-500/85 via-rose-900 to-black',
-  leadership_member_action_reminder: 'from-fuchsia-500/80 via-slate-800 to-black',
-  swap_request: 'from-cyan-500/85 via-blue-900 to-black',
-  swap_approved: 'from-emerald-500/85 via-green-900 to-black',
-  swap_declined: 'from-red-500/85 via-rose-900 to-black',
-  sub_request: 'from-violet-500/85 via-indigo-900 to-black',
-  sub_approved: 'from-emerald-500/85 via-green-900 to-black',
-  sub_declined: 'from-red-500/85 via-rose-900 to-black',
-  role_changed: 'from-violet-500/85 via-indigo-900 to-black',
-  member_joined: 'from-emerald-500/85 via-green-900 to-black',
-  birthday: 'from-pink-500/85 via-rose-900 to-black',
-  discipline_created: 'from-red-500/85 via-rose-950 to-black',
-  discipline_updated: 'from-amber-500/85 via-orange-900 to-black',
-};
 
 function emptyListResponse() {
   return { data: [], error: null, count: null, status: 200, statusText: 'OK' };
@@ -229,7 +123,6 @@ export function Notifications() {
               <p className="mt-2 text-[13px] font-semibold text-white/45">
                 {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up'}
               </p>
-              <p className="mt-2 text-xs text-white/50">Your church admins can see when you open new notifications. Marking them read does not count as an open.</p>
             </div>
           {notifications.length > 0 && (
             <div className="flex shrink-0 items-center gap-2">
@@ -265,53 +158,16 @@ export function Notifications() {
           </div>
         ) : (
           <div className="overflow-hidden border-y border-white/[0.08]">
-            {notifications.map((n, i) => {
-              const Icon = typeIcons[n.type] || Bell;
-              const tone = typeTones[n.type] || 'from-zinc-300/75 via-zinc-700 to-black';
-              return (
-                <div
-                  key={n.id}
-                  style={{ animationDelay: `${i * 20}ms` }}
-                  className={`group flex w-full items-stretch border-b border-white/[0.075] transition-colors last:border-b-0 hover:bg-white/[0.035] animate-notif-slide ${
-                    !n.is_read ? 'bg-[#22c55e]/[0.035]' : ''
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => handleClick(n)}
-                    className="flex min-w-0 flex-1 items-start gap-3 px-0 py-3.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-400"
-                    aria-label={`${n.is_read ? '' : 'Unread: '}${n.title}`}
-                  >
-                    <div className={`relative ml-0.5 flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[0.6rem] bg-gradient-to-br ${tone} shadow-[inset_0_1px_0_rgba(255,255,255,0.16)]`}>
-                      <span className="absolute inset-0 bg-[radial-gradient(circle_at_28%_22%,rgba(255,255,255,0.34),transparent_32%)]" />
-                      <Icon className="relative h-5 w-5 text-white/90" strokeWidth={2.3} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start gap-2">
-                        <p className="min-w-0 flex-1 text-[14px] font-black leading-snug text-white">
-                          {n.title}
-                        </p>
-                        {!n.is_read && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#22c55e] shadow-[0_0_12px_rgba(34,197,94,0.8)]" aria-hidden="true" />}
-                      </div>
-                      <p className="mt-1 line-clamp-2 text-[13px] font-semibold leading-5 text-white/45">{n.body}</p>
-                      <p className="mt-1.5 font-mono text-[11px] text-white/28">
-                        {format(parseISO(n.created_at), 'MMM d, yyyy · h:mm a')}
-                      </p>
-                    </div>
-                  </button>
-                  {!n.is_read && (
-                    <button
-                      type="button"
-                      onClick={() => markRead(n.id)}
-                      className="mr-0.5 mt-2.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/35 transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
-                      aria-label={`Mark ${n.title} as read`}
-                    >
-                      <Check className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-              );
-            })}
+            {notifications.map((n, i) => (
+              <button key={n.id} type="button" onClick={() => handleClick(n)} style={{ animationDelay: `${i * 20}ms` }} className={`flex w-full items-start gap-3 border-b border-white/[0.075] px-4 py-3.5 text-left transition-colors last:border-b-0 hover:bg-white/[0.035] animate-notif-slide ${!n.is_read ? 'bg-[#22c55e]/[0.035]' : ''}`} aria-label={`${n.is_read ? '' : 'Unread: '}${n.title}`}>
+                <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.is_read ? 'bg-white/15' : 'bg-[#22c55e] shadow-[0_0_10px_rgba(34,197,94,0.7)]'}`} aria-hidden="true" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[14px] font-black leading-snug text-white">{n.title}</span>
+                  <span className="mt-1 block line-clamp-2 text-[13px] font-semibold leading-5 text-white/45">{n.body}</span>
+                  <span className="mt-1.5 block font-mono text-[11px] text-white/28">{format(parseISO(n.created_at), 'MMM d, yyyy · h:mm a')}</span>
+                </span>
+              </button>
+            ))}
           </div>
         )}
       </div>

@@ -21,6 +21,7 @@ import { EventArtwork } from '../components/EventArtwork';
 import { Modal } from '../components/Modal';
 import { MentionTextarea } from '../components/MentionTextarea';
 import { ReactionFlightAnimation, type ReactionFlightPath } from '../components/ReactionFlightAnimation';
+import { PushReadinessBanner } from '../components/PushReadinessBanner';
 import { playInteractionSound, primeInteractionSounds } from '../lib/interactionSounds';
 import {
   createChatEventReference,
@@ -5482,6 +5483,9 @@ export function Messages() {
 
         {/* Conversations */}
         <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain bg-white px-2 space-y-0.5 dark:bg-[#111013]" style={{ paddingBottom: 'calc(64px + env(safe-area-inset-bottom) + 1rem)' }}>
+          <div className="lg:hidden">
+            <PushReadinessBanner variant="chat" />
+          </div>
           {convsLoading && (
             <div className="flex justify-center py-8" role="status" aria-label="Loading conversations">
               <span className="h-5 w-5 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />

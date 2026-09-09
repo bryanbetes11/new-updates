@@ -28,6 +28,7 @@ import { loadSyncedPreference, saveSyncedPreference } from '../lib/syncedPrefere
 import { calculatePolicyProposalDueDate, DEFAULT_EVENT_TEMPLATE_POLICIES, eventTemplateFor, normalizeEventTemplatePolicies, type EventTemplatePolicies } from '../lib/eventPolicy';
 import { compareEventSchedule, eventScheduleKey } from '../lib/eventChronology';
 import { getOutMemberIdsForDate, type MemberAvailabilityWindow } from '../lib/memberAvailability';
+import { isParticipantRole } from '../lib/eventAssignmentRoles';
 
 interface AssignmentRow { user_id: string; role_id: string; }
 const ALL_MEMBERS_USER_ID = '__all_active_members__';
@@ -1157,11 +1158,10 @@ export function Events() {
     setAssignmentRows(prev => prev.map((row, i) => {
       if (i !== index) return row;
       if (field === 'role_id') {
-        const selectedRole = roles.find(role => role.id === value);
         return {
           ...row,
           role_id: value,
-          user_id: selectedRole?.name === 'All Members' ? ALL_MEMBERS_USER_ID : '',
+          user_id: '',
         };
       }
       return { ...row, [field]: value };
@@ -1170,6 +1170,8 @@ export function Events() {
 
   const getMembersForRole = (roleId: string) => {
     if (!roleId) return members;
+    const role = roles.find(candidate => candidate.id === roleId);
+    if (isParticipantRole(role?.name)) return members;
     const userIds = memberRoles.filter(ur => ur.role_id === roleId).map(ur => ur.user_id);
     return members.filter(m => userIds.includes(m.id));
   };
@@ -1642,12 +1644,12 @@ export function Events() {
                       className="grid grid-cols-[minmax(0,1fr)_3rem] gap-2 rounded-2xl border border-gray-200/80 bg-white/70 p-2.5 dark:border-white/[0.08] dark:bg-white/[0.03]"
                     >
                       <div className="min-w-0 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <Select value={row.role_id} onChange={v => updateAssignmentRow(i, 'role_id', v)} options={roles.filter(r => !r.is_leadership).map(r => ({ value: r.id, label: r.name }))} placeholder="Select role" />
+                        <Select value={row.role_id} onChange={v => updateAssignmentRow(i, 'role_id', v)} options={roles.filter(r => !r.is_leadership).map(r => ({ value: r.id, label: isParticipantRole(r.name) ? 'Participant' : r.name }))} placeholder="Select role" />
                         <Select
                           value={row.user_id}
                           onChange={v => updateAssignmentRow(i, 'user_id', v)}
                           options={isAllMembersRole
-                            ? [{ value: ALL_MEMBERS_USER_ID, label: `All active members (${members.length})` }]
+                            ? [{ value: ALL_MEMBERS_USER_ID, label: `All active members (${members.length})` }, ...members.map(m => ({ value: m.id, label: `${m.first_name} ${m.last_name}${outMemberIdsForFormDate.has(m.id) ? ' — OUT' : ''}` }))]
                             : getMembersForRole(row.role_id).map(m => ({ value: m.id, label: `${m.first_name} ${m.last_name}${outMemberIdsForFormDate.has(m.id) ? ' — OUT' : ''}` }))}
                           placeholder={row.role_id ? 'Select member' : 'Pick role first'}
                         />

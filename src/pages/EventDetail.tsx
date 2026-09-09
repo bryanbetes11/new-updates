@@ -51,6 +51,7 @@ import { watchSharedTechMessages } from '../lib/sharedTechMessages';
 import { DEFAULT_STAGE_REQUEST_MESSAGES, DEFAULT_TECH_MODE_MESSAGES, loadStageRequestMessages, loadTechModeMessages, type TechModeMessages } from '../lib/techModeMessages';
 import { TechModeMessageSettings } from '../components/TechModeMessageSettings';
 import { getOutMemberIdsForDate, type MemberAvailabilityWindow } from '../lib/memberAvailability';
+import { canAssignMemberToEventRole, isNonServingEventAssignmentRole, isParticipantRole } from '../lib/eventAssignmentRoles';
 
 import type { Event, EventAssignment, Setlist, SetlistSong, Song, ServiceFormat, SetlistCheckReport, PostEventObservation, PostEventObservationCategory, PostEventObservationStatus, PostEventObservationView } from '../types';
 import { inferServiceFormat, SERVICE_FORMAT_LABELS } from '../lib/setlistCheckerEngine';
@@ -578,7 +579,11 @@ export function EventDetail() {
     setEventArtworkUrls((current) => current.join('|') === urls.join('|') ? current : urls);
   }, []);
   const [assignments, setAssignments] = useState<EventAssignment[]>([]);
-  const liveAssignments = assignments.filter(a => a.user_id === user?.id && a.status === 'confirmed' && a.roles?.name.toLowerCase() !== 'all members');
+  const liveAssignments = assignments.filter(a => (
+    a.user_id === user?.id
+    && a.status === 'confirmed'
+    && !isNonServingEventAssignmentRole(a.roles?.name)
+  ));
   const canUseServiceModePilot = canPreviewLiveMode || liveAssignments.length > 0;
   const assignedLiveAudience = liveAssignments.some(a => TECH_BOOTH_ROLE_NAMES.has(a.roles?.name.toLowerCase() || '')) ? 'tech' : 'stage';
   const [members, setMembers] = useState<{ id: string; first_name: string; last_name: string; ministry_status: string }[]>([]);
@@ -620,6 +625,7 @@ export function EventDetail() {
   const [multiMemberSelections, setMultiMemberSelections] = useState<Record<string, string[]>>({});
   const [assigningBatch, setAssigningBatch] = useState(false);
   const [teamTemplates, setTeamTemplates] = useState<EventTeamTemplate[]>([]);
+  const [assignmentMode, setAssignmentMode] = useState<'manual' | 'template'>('manual');
   const [selectedTeamTemplateId, setSelectedTeamTemplateId] = useState('');
   const [teamTemplateName, setTeamTemplateName] = useState('');
   const [savingTeamTemplate, setSavingTeamTemplate] = useState(false);
@@ -1743,6 +1749,7 @@ export function EventDetail() {
 
   const openAssignModal = () => {
     shouldRevealNewAssignmentRef.current = false;
+    setAssignmentMode('manual');
     setAssignmentDrafts([createAssignmentDraftRow()]);
     setMultiMemberSelections({});
     setSelectedTeamTemplateId('');
@@ -1753,6 +1760,7 @@ export function EventDetail() {
   const closeAssignModal = () => {
     if (assigningBatch) return;
     shouldRevealNewAssignmentRef.current = false;
+    setAssignmentMode('manual');
     setShowAssign(false);
     setAssignmentDrafts([createAssignmentDraftRow()]);
     setMultiMemberSelections({});
@@ -1776,9 +1784,7 @@ export function EventDetail() {
         return {
           ...row,
           role_id: value,
-          user_id: selectedRole?.name === 'All Members'
-            ? ALL_MEMBERS_USER_ID
-            : selectedRole?.name === 'Backup Vocals'
+          user_id: selectedRole?.name === 'Backup Vocals'
               ? MULTIPLE_MEMBERS_USER_ID
               : '',
         };
@@ -1892,6 +1898,7 @@ export function EventDetail() {
 
   const getEligibleAssignmentMembers = (roleId: string, rowId: string) => {
     if (!roleId) return [];
+    const role = roles.find(candidate => candidate.id === roleId);
 
     const unavailableKeys = new Set([
       ...assignments.map(assignment => getEventAssignmentKey(assignment)),
@@ -1901,7 +1908,10 @@ export function EventDetail() {
     ]);
 
     return members.filter(member => (
-      memberRoles.some(memberRole => memberRole.user_id === member.id && memberRole.role_id === roleId) &&
+      canAssignMemberToEventRole(
+        role?.name,
+        memberRoles.some(memberRole => memberRole.user_id === member.id && memberRole.role_id === roleId),
+      ) &&
       !unavailableKeys.has(getEventAssignmentKey({ user_id: member.id, role_id: roleId }))
     ));
   };
@@ -1915,7 +1925,8 @@ export function EventDetail() {
     ]);
 
     return roles.filter(role => (
-      !role.is_leadership && (role.id === currentRoleId || !unavailableRoleIds.has(role.id))
+      !role.is_leadership
+      && (role.id === currentRoleId || isParticipantRole(role.name) || !unavailableRoleIds.has(role.id))
     ));
   };
 
@@ -6801,6 +6812,29 @@ const openLyricsModal = (ss: SetlistSong) => {
         >
           <div className="space-y-4">
             {canManageTeamTemplates && (
+              <div className="grid grid-cols-2 rounded-xl border border-gray-200/75 bg-gray-100/80 p-1 dark:border-white/[0.08] dark:bg-white/[0.04]" role="tablist" aria-label="Assignment method">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={assignmentMode === 'manual'}
+                  onClick={() => setAssignmentMode('manual')}
+                  className={`min-h-10 rounded-lg px-3 text-sm font-bold transition-colors ${assignmentMode === 'manual' ? 'bg-white text-gray-900 shadow-sm dark:bg-white/[0.12] dark:text-white' : 'text-gray-500 hover:text-gray-800 dark:text-white/45 dark:hover:text-white/75'}`}
+                >
+                  Manual
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={assignmentMode === 'template'}
+                  onClick={() => setAssignmentMode('template')}
+                  className={`min-h-10 rounded-lg px-3 text-sm font-bold transition-colors ${assignmentMode === 'template' ? 'bg-white text-gray-900 shadow-sm dark:bg-white/[0.12] dark:text-white' : 'text-gray-500 hover:text-gray-800 dark:text-white/45 dark:hover:text-white/75'}`}
+                >
+                  Template
+                </button>
+              </div>
+            )}
+
+            {canManageTeamTemplates && assignmentMode === 'template' && (
               <section className="space-y-2.5 rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.055] p-3 sm:space-y-3 sm:p-3.5">
                 <p className="text-sm font-black text-gray-900 dark:text-white">Team template</p>
                 <div className="grid grid-cols-2 gap-2">
@@ -6854,7 +6888,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                 const eligibleMembers = getEligibleAssignmentMembers(row.role_id, row.id);
                 const isAllMembersRole = roles.find(role => role.id === row.role_id)?.name === 'All Members';
                 const isBackupVocalsRole = roles.find(role => role.id === row.role_id)?.name === 'Backup Vocals';
-                const rowHasOutMember = isAllMembersRole
+                const rowHasOutMember = isAllMembersRole && row.user_id === ALL_MEMBERS_USER_ID
                   ? members.some(member => outMemberIds.has(member.id))
                   : isBackupVocalsRole
                     ? (multiMemberSelections[row.id] || []).some(userId => outMemberIds.has(userId))
@@ -6895,7 +6929,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                         <Select
                           value={row.role_id}
                           onChange={value => updateAssignmentDraft(row.id, 'role_id', value)}
-                          options={getAvailableAssignmentRoles(row.id, row.role_id).map(role => ({ value: role.id, label: role.name }))}
+                          options={getAvailableAssignmentRoles(row.id, row.role_id).map(role => ({ value: role.id, label: isParticipantRole(role.name) ? 'Participant' : role.name }))}
                           placeholder="Select role"
                         />
                       </div>
@@ -6921,7 +6955,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                             value={row.user_id}
                             onChange={value => updateAssignmentDraft(row.id, 'user_id', value)}
                             options={isAllMembersRole
-                              ? [{ value: ALL_MEMBERS_USER_ID, label: `All active members (${expandedEventAssignments.length})` }]
+                              ? [{ value: ALL_MEMBERS_USER_ID, label: 'All remaining active members' }, ...eligibleMembers.map(member => ({ value: member.id, label: `${member.first_name} ${member.last_name}${outMemberIds.has(member.id) ? ' — OUT' : ''}` }))]
                               : eligibleMembers.map(member => ({ value: member.id, label: `${member.first_name} ${member.last_name}${outMemberIds.has(member.id) ? ' — OUT' : ''}` }))}
                             placeholder={row.role_id ? 'Select member' : 'Pick role first'}
                           />

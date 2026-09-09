@@ -9,6 +9,11 @@ assert.match(layout, /collapsed \? 72 : 220/, 'the compact layout should reserve
 assert.match(navigation, /sidebarWidth = collapsed \? 72 : 220/, 'the rendered compact sidebar should match the 72px shell offset');
 assert.match(navigation, /mx-auto flex h-11 w-11/, 'collapsed navigation highlights should be centered squares rather than full-width rows');
 assert.match(navigation, /h-9 w-9 items-center justify-center overflow-visible/, 'collapsed badge anchors should remain visible outside the icon artwork');
+assert.match(
+  navigation,
+  /flex-1 min-h-0[\s\S]*?overflow-y-auto overscroll-y-contain touch-action-pan-y \[-webkit-overflow-scrolling:touch\][\s\S]*?no-scrollbar/,
+  'the expanded desktop sidebar must retain native vertical scrolling on touch devices while its scrollbar stays hidden',
+);
 
 assert.match(
   layout,

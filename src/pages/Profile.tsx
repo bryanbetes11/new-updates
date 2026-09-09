@@ -18,6 +18,7 @@ import { NotificationPreferencesSetting } from '../components/NotificationPrefer
 import { RoleBadge, sortRolesLeadershipFirst } from '../components/RoleBadge';
 import { mergeUntouchedFields } from '../lib/draftRecovery';
 import { phoneHref } from '../lib/phone';
+import { PARTICIPANT_ROLE_NAME } from '../lib/eventAssignmentRoles';
 import { APP_BUILD_ID, APP_UPDATE_PUBLISHED_AT, APP_VERSION_LABEL } from '../lib/appUpdate';
 import { checkForAppUpdate } from '../lib/serviceWorkerUpdate';
 import type { DisciplineRecord } from '../types';
@@ -612,7 +613,7 @@ export function Profile() {
           <PremiumCard className="p-5 sm:p-6">
             {editingRoles ? (
               <div className="flex flex-wrap gap-2">
-                {sortRolesLeadershipFirst(roles).map(role => {
+                {sortRolesLeadershipFirst(roles).filter(role => role.name !== PARTICIPANT_ROLE_NAME).map(role => {
                   const selected = selectedRoleIds.includes(role.id);
                   return (
                     <button

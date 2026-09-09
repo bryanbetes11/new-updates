@@ -2296,7 +2296,7 @@ export function Navigation({
           className={`flex h-full flex-col bg-[#050505] ${collapsed ? "overflow-visible" : "overflow-hidden"}`}
         >
           <div
-            className={`flex-1 ${collapsed ? "overflow-visible px-2 pb-2 pt-5" : "overflow-y-auto px-4 pb-3 pt-5 scrollbar-thin"}`}
+            className={`flex-1 ${collapsed ? "overflow-visible px-2 pb-2 pt-5" : "overflow-y-auto px-4 pb-3 pt-5 no-scrollbar"}`}
           >
             <div
               className={`flex items-center pb-2 pt-1 ${collapsed ? "justify-center" : "justify-between px-2.5"}`}

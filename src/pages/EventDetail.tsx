@@ -6617,6 +6617,7 @@ const openLyricsModal = (ss: SetlistSong) => {
           title="Discussion seen by"
           size="sm"
           mobileView="dialog"
+          instantOpen
         >
           <div className="space-y-3">
             {loadingRevisionDiscussionViewers ? (

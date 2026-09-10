@@ -1486,7 +1486,8 @@ export function EventDetail() {
 
   useEffect(() => {
     const activeSetlistIds = [setlist?.id, linkedSetlist?.id].filter((value): value is string => Boolean(value));
-    if (!id || activeSetlistIds.length === 0) return;
+    if (!id || !user?.id || activeSetlistIds.length === 0) return;
+    let cancelled = false;
 
     const mergeSetlistSongUpdate = (updated: Partial<SetlistSong> & { id?: string }) => (song: SetlistSong): SetlistSong => {
       if (!updated.id || song.id !== updated.id) return song;
@@ -1551,12 +1552,25 @@ export function EventDetail() {
       }
     );
 
-    channel.subscribe();
+    // Explicitly authenticate before joining; an anonymous subscription can report
+    // SUBSCRIBED while RLS prevents it from receiving any church data.
+    void (async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        if (cancelled || !session || session.user.id !== user.id) return;
+        await supabase.realtime.setAuth(session.access_token);
+        if (!cancelled) channel.subscribe();
+      } catch (error) {
+        console.error('Failed to connect live setlist updates:', error);
+      }
+    })();
 
     return () => {
+      cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [id, linkedSetlist?.id, setlist?.id]);
+  }, [id, linkedSetlist?.id, setlist?.id, user?.id]);
 
   useEffect(() => {
     if (!chartModalStorageKey || loading || chartModalSong) return;

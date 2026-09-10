@@ -14,6 +14,7 @@ import { usePrivateSongNotes } from '../hooks/usePrivateSongNotes';
 import { AlignedChartLine } from './AlignedChartLine';
 import { useAuth } from '../contexts/AuthContext';
 import { loadSyncedPreference, saveSyncedPreference } from '../lib/syncedPreferences';
+import { usePersonalChartKey } from '../hooks/usePersonalChartKey';
 import { ChordProLine, detectChordProKey, formatChordProForPlainEditor, getKeyTransposeOffset, parseChordPro, parseChordProMetadata, plainEditorSectionsToChordPro, plainEditorToChordPro, transposeChordPro, transposeKey } from '../lib/chordPro';
 
 const SECTION_TONES = [
@@ -579,8 +580,8 @@ export function SongChartViewer({
   const initialMetadata = parseChordProMetadata(chordproText ?? '');
   const initialDetectedKey = detectChordProKey(chordproText ?? '', initialMetadata.key || songKey || '');
   const initialSourceChartKey = initialMetadata.key || songKey || initialDetectedKey || '';
-  const initialDisplayTargetKey = performedKey || songKey || initialSourceChartKey;
-  const [transpose, setTranspose] = useState(() => getKeyTransposeOffset(initialSourceChartKey, initialDisplayTargetKey));
+  const personalKeyPreference = usePersonalChartKey(profile?.org_id, user?.id, songId);
+  const personalKey = personalKeyPreference.key;
   const [isEditing, setIsEditing] = useState(initialEditorState.isEditing);
   const [draft, setDraft] = useState(initialEditorState.draft);
   const [draftSections, setDraftSections] = useState<EditableChartSection[]>(initialEditorState.draftSections);
@@ -642,10 +643,10 @@ export function SongChartViewer({
   const metadata = useMemo(() => parseChordProMetadata(previewChordProText), [previewChordProText]);
   const detectedKey = useMemo(() => detectChordProKey(previewChordProText, metadata.key || ''), [metadata.key, previewChordProText]);
   const sourceChartKey = previewBaseKey || metadata.key || songKey || detectedKey || '';
-  const assignedTranspose = useMemo(
-    () => getKeyTransposeOffset(sourceChartKey, performedKey || songKey || ''),
-    [performedKey, songKey, sourceChartKey]
-  );
+  const transpose = getKeyTransposeOffset(sourceChartKey, personalKey || performedKey || songKey || sourceChartKey);
+  const selectPersonalKey = (key: string | null) => {
+    void personalKeyPreference.save(key);
+  };
   const draftChordProText = useMemo(
     () => sectionEditorEnabled
       ? plainEditorSectionsToChordPro(draftSections, chordproText || '')
@@ -699,7 +700,6 @@ export function SongChartViewer({
         start: nextEditorState.selectionStart,
         end: nextEditorState.selectionEnd,
       };
-      setTranspose(assignedTranspose);
       return;
     }
 
@@ -714,7 +714,7 @@ export function SongChartViewer({
       setAssignedSongKey(songKey || detectedKey || '');
       setChartSaveError(null);
     }
-  }, [assignedTranspose, chordproText, detectedKey, draftStorageId, hasDraftChanges, isEditing, savedPlainDraft, savedPlainDraftFromProps, setAutoScrollEnabled, songId, songKey]);
+  }, [chordproText, detectedKey, draftStorageId, hasDraftChanges, isEditing, savedPlainDraft, savedPlainDraftFromProps, setAutoScrollEnabled, songId, songKey]);
 
   useLayoutEffect(() => {
     if (!isEditing || sectionEditorEnabled) return;
@@ -1120,7 +1120,6 @@ export function SongChartViewer({
       setSavedPlainDraft(activeDraft);
       setSavedPreviewChordPro(nextChordPro);
       setPreviewBaseKey(nextSourceKey);
-      setTranspose(getKeyTransposeOffset(nextSourceKey, performedKey || nextAssignedSongKey || nextSourceKey));
       setChartSaveMessage(nextAssignedSongKey ? `Saved in key ${nextAssignedSongKey}` : 'Chord chart saved');
       setIsEditing(false);
       if (draftStorageKey) localStorage.removeItem(draftStorageKey);
@@ -1502,16 +1501,15 @@ export function SongChartViewer({
               transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
             >
               <div className="grid grid-cols-4 gap-2 p-3 sm:grid-cols-6">
+                <p className="col-span-full text-xs text-emerald-800 dark:text-emerald-100">Your chord key · saved to your account for this song across rehearsal, Live Mode, and your devices. Everyone else keeps their own key.</p>
                 {keyOptions.map(keyOption => {
                   const selected = keyOption === displayKey;
                   return (
                     <button
                       key={keyOption}
                       type="button"
-                      onClick={() => {
-                        setTranspose(getKeyTransposeOffset(sourceChartKey, keyOption));
-                        setKeyPickerOpen(false);
-                      }}
+                      onClick={() => selectPersonalKey(keyOption)}
+                      disabled={personalKeyPreference.saving || !personalKeyPreference.canSave}
                       className={`h-10 rounded-2xl text-sm font-black transition active:scale-[0.96] ${
                         selected
                           ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20'
@@ -1523,6 +1521,9 @@ export function SongChartViewer({
                   );
                 })}
               </div>
+              <button type="button" disabled={personalKeyPreference.saving || !personalKeyPreference.canSave} onClick={() => selectPersonalKey(null)} className="mx-3 mb-3 min-h-11 rounded-xl border border-emerald-400/40 px-3 text-sm font-semibold text-emerald-800 dark:text-emerald-100">Use setlist key ({performedKey || songKey || sourceChartKey})</button>
+              <p role="status" className="px-3 pb-3 text-xs text-emerald-800 dark:text-emerald-100">{personalKeyPreference.canSave ? personalKeyPreference.message : 'Sign in to save your personal key.'}</p>
+              {personalKeyPreference.dirty && !personalKeyPreference.saving && <button type="button" onClick={() => selectPersonalKey(personalKey)} className="mx-3 mb-3 min-h-11 rounded-xl border px-3 text-sm font-semibold">Retry account save</button>}
             </motion.div>
           )}
         </AnimatePresence>

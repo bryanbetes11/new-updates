@@ -1295,10 +1295,14 @@ export function Events() {
   };
 
   const handleEventDateChange = async (eventId: string, newDate: string) => {
-    const { error } = await supabase.from('events').update({ event_date: newDate }).eq('id', eventId);
+    const movingEvent = events.find(event => event.id === eventId);
+    if (!movingEvent || movingEvent.event_date === newDate) return;
+    if (!window.confirm(`Reschedule ${movingEvent.title} to ${format(parseISO(newDate), 'MMM d, yyyy')}? Assigned members will be notified and must confirm their availability again.`)) return;
+    const { data, error } = await supabase.from('events').update({ event_date: newDate, proposal_due_date: calculateProposalDueDate(newDate, movingEvent.event_type) }).eq('id', eventId).eq('event_date', movingEvent.event_date).select('id');
     if (error) { toast('error', 'Failed to move event'); return; }
+    if (!data?.length) { toast('error', 'The event changed or you no longer have permission. Refresh and try again.'); return; }
     setEvents(prev => prev.map(e => e.id === eventId ? { ...e, event_date: newDate } : e));
-    toast('success', 'Event moved');
+    toast('success', 'Event rescheduled. Members must confirm again.');
   };
 
   const handleEventLifecycleChange = (updatedEvent: Event) => {

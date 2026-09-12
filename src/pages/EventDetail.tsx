@@ -16,6 +16,8 @@ import { useScreenAwake } from '../hooks/useScreenAwake';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { Modal } from '../components/Modal';
+import { RescheduleEventModal } from '../components/RescheduleEventModal';
+import { MESSENGER_ENABLED } from '../lib/features';
 import { Select } from '../components/Select';
 import { PageLoader } from '../components/LoadingSpinner';
 import { RoleBadge } from '../components/RoleBadge';
@@ -548,6 +550,8 @@ function getEventReturnRoute(state: unknown) {
   return returnTo;
 }
 
+const eventChatEnabled = MESSENGER_ENABLED;
+
 export function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -685,6 +689,7 @@ export function EventDetail() {
   const [selectedSongProposals, setSelectedSongProposals] = useState<{ songTitle: string; conflict: SongProposalConflict } | null>(null);
   const [selectedSongReservationDetails, setSelectedSongReservationDetails] = useState<{ songTitle: string; reservation: SongProposalReservation } | null>(null);
   const [showEditEvent, setShowEditEvent] = useState(false);
+  const [showRescheduleEvent, setShowRescheduleEvent] = useState(false);
   const [editForm, setEditForm] = useState({ title: '', description: '', event_type: '', event_date: '', start_time: '', end_time: '', song_leader_id: '', linked_event_id: '' });
   const [savingEventEdit, setSavingEventEdit] = useState(false);
   const [eventTemplates, setEventTemplates] = useState<EventTemplatePolicies | null>(null);
@@ -1245,7 +1250,7 @@ export function EventDetail() {
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   useEffect(() => {
-    if (!id) {
+    if (!eventChatEnabled || !id) {
       setEventConversationId(null);
       return;
     }
@@ -4658,7 +4663,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                           <ArrowLeftRight className="h-4 w-4" /><span className="text-xs font-bold">{myAssignment?.roles?.name === 'Song Leader' ? 'Swap' : 'Sub'}</span>
                         </button>
                       )}
-                      {eventConversationId === undefined ? (
+                      {eventChatEnabled && (eventConversationId === undefined ? (
                         <button
                           disabled
                           className="inline-flex h-11 w-11 cursor-wait items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md"
@@ -4690,7 +4695,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                             <MessageCircle className="h-4 w-4" /><span className="text-xs font-bold">Chat</span>
                           </button>
                         )
-                      )}
+                      ))}
                       {(isLeader || canEditEvent || isPlatformOwner) && (
                         <div className="relative shrink-0">
                           <button
@@ -4724,6 +4729,15 @@ const openLyricsModal = (ss: SetlistSong) => {
                                   >
                                     <Edit className="h-3.5 w-3.5" />
                                     Edit event
+                                  </button>
+                                )}
+                                {canEditEvent && !heroIsPast && (
+                                  <button
+                                    onClick={() => { setShowEventActionsMenu(false); setShowRescheduleEvent(true); }}
+                                    className="flex min-h-11 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[13px] font-semibold text-white/80 hover:bg-white/[0.08] hover:text-white"
+                                    role="menuitem"
+                                  >
+                                    <Calendar className="h-3.5 w-3.5" /> Reschedule event
                                   </button>
                                 )}
                                 {isPlatformOwner && (heroIsPast || heroScheduleEnded) && (
@@ -8325,7 +8339,7 @@ const openLyricsModal = (ss: SetlistSong) => {
         </Modal>
 
         <Modal
-          open={showCreateChatModal}
+          open={eventChatEnabled && showCreateChatModal}
           onClose={() => {
             setShowCreateChatModal(false);
             setAdminOnlyChatTest(false);
@@ -8927,8 +8941,16 @@ const openLyricsModal = (ss: SetlistSong) => {
           </div>
         </Modal>
 
+        {showRescheduleEvent && <RescheduleEventModal
+          event={event}
+          memberCount={new Set(assignments.map(assignment => assignment.user_id)).size}
+          onClose={() => setShowRescheduleEvent(false)}
+          onSaved={() => { void fetchAll(); }}
+          proposalDueDate={date => calculateProposalDueDate(date, event.event_type)}
+        />}
         <Modal open={showEditEvent} onClose={() => setShowEditEvent(false)} title="Edit Event" size="lg">
           <form onSubmit={e => { e.preventDefault(); handleEditEvent(); }} className="space-y-4">
+              <p className="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">Changing the date or time will notify assigned members and ask them to confirm their availability again.</p>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Event Type</label>
                 <Select

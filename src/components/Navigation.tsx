@@ -154,7 +154,9 @@ const globalSearchTypeMeta: Record<
   page: { label: "Page", icon: Layers3, tone: "text-white/70 bg-white/[0.08]" },
 };
 
-const mobileNavItems: NavItem[] = [
+import { MESSENGER_ENABLED } from '../lib/features';
+
+const mobileNavItems: NavItem[] = ([
   { path: "/dashboard", label: "Home", icon: HomeIcon, exact: true },
   {
     path: "/events",
@@ -179,9 +181,9 @@ const mobileNavItems: NavItem[] = [
     badgeColor: "blue",
   },
   { path: "/library", label: "Library", icon: LibraryNavIcon },
-];
+] satisfies NavItem[]).filter(item => MESSENGER_ENABLED || item.path !== '/messages');
 
-const sidebarMainItems: NavItem[] = [
+const sidebarMainItems: NavItem[] = ([
   {
     path: "/dashboard",
     label: "Home",
@@ -213,7 +215,7 @@ const sidebarMainItems: NavItem[] = [
     badgeColor: "red",
     tone: "from-violet-500/45 to-violet-950/55",
   },
-];
+] satisfies NavItem[]).filter(item => MESSENGER_ENABLED || item.path !== '/messages');
 
 function MobileBadge({
   count,
@@ -1667,7 +1669,7 @@ export function Navigation({
 
         <div className="ml-auto flex items-center gap-3">
           <NotificationBell />
-          <button
+          {MESSENGER_ENABLED && <button
             onClick={() => handleNav("/messages")}
             className="relative flex h-11 w-11 items-center justify-center rounded-full text-white transition-colors hover:bg-white/[0.08]"
             aria-label="Chat"
@@ -1676,7 +1678,7 @@ export function Navigation({
             {unread.messages > 0 && (
               <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-[#22c55e]" />
             )}
-          </button>
+          </button>}
           <button
             onClick={() => {
               setGlobalSearchOpen(false);

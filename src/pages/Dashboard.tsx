@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { MESSENGER_ENABLED } from '../lib/features';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { format, formatDistanceToNow, parseISO } from 'date-fns';
@@ -1242,7 +1243,7 @@ export function Dashboard() {
       { title: 'Setlists', subtitle: 'Shared plans', tone: 'from-indigo-400 via-violet-500 to-emerald-300', path: '/sets', icon: ListChecks },
     ],
   };
-  const quickTiles = quickTileGroups[activeHubFilter];
+  const quickTiles = quickTileGroups[activeHubFilter].filter(tile => MESSENGER_ENABLED || tile.path !== '/messages');
 
   return (
     <div className="dark page-container page-bottom-pad relative overflow-hidden bg-[#050505] text-white">

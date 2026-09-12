@@ -1,6 +1,11 @@
 import { ChartNavigation } from './ChartNavigation';
+import { Modal } from './Modal';
 import { useCallback, useLayoutEffect, useRef } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import type { Dispatch, ReactNode, SetStateAction } from 'react';
+import { equalRecord } from '../lib/equalRecord';
+import { createBufferedDraftWriter } from '../lib/bufferedDraftWriter';
+import { cachedSongNotes, loadSongNotes, subscribeSongNotes, updateCachedSongNote } from '../lib/songNoteCache';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowDown, ArrowUp, Bold, Captions, Check, ChevronLeft, Copy, Edit3, FileText, Gauge, Italic, ListOrdered, Lock, Minus, Music2, Pause, Play, Plus, RotateCcw, Save, Settings2, StickyNote, Trash2, Users, X } from 'lucide-react';
@@ -290,6 +295,8 @@ function getSectionTone(section?: string) {
 }
 
 interface SongChartViewerProps {
+  active?: boolean;
+  automaticNoteRefresh?: boolean;
   songId?: string;
   preferenceScopeId?: string;
   draftStorageId?: string;
@@ -304,12 +311,18 @@ interface SongChartViewerProps {
   saving?: boolean;
   hideTitleHeader?: boolean;
   controlsVisible?: boolean;
+  toolbarTarget?: HTMLElement | null;
+  settingsOpen?: boolean;
+  onSettingsOpenChange?: Dispatch<SetStateAction<boolean>>;
+  keyPickerOpen?: boolean;
+  onKeyPickerOpenChange?: Dispatch<SetStateAction<boolean>>;
   arrangementOpen?: boolean;
   onArrangementOpenChange?: (open: boolean) => void;
   autoScrollEnabled?: boolean;
   onAutoScrollEnabledChange?: (enabled: boolean) => void;
   onClose?: () => void;
   onSave?: (text: string, assignedSongKey?: string) => Promise<void> | void;
+  onSaveTeamKey?: (key: string) => Promise<void>;
   onSaveSectionOrder?: (order: string[] | null) => Promise<void> | void;
   onEditingChange?: (isEditing: boolean) => void;
   onColumnControlsReady?: (control: { mode: 'auto' | 'single'; toggle: () => void }) => void;
@@ -546,7 +559,13 @@ function AutoSizeSectionTextarea({ value, onChange, placeholder, flat = false }:
   );
 }
 
+function ChartToolbarSlot({ target, children }: { target?: HTMLElement; children: ReactNode }) {
+  return target ? createPortal(children, target) : children;
+}
+
 export function SongChartViewer({
+  active = true,
+  automaticNoteRefresh = true,
   songId,
   preferenceScopeId,
   draftStorageId,
@@ -561,12 +580,18 @@ export function SongChartViewer({
   saving = false,
   hideTitleHeader = false,
   controlsVisible = true,
+  toolbarTarget,
+  settingsOpen: controlledSettingsOpen,
+  onSettingsOpenChange,
+  keyPickerOpen: controlledKeyPickerOpen,
+  onKeyPickerOpenChange,
   arrangementOpen: controlledArrangementOpen,
   onArrangementOpenChange,
   autoScrollEnabled: controlledAutoScrollEnabled,
   onAutoScrollEnabledChange,
   onClose,
   onSave,
+  onSaveTeamKey,
   onSaveSectionOrder,
   onEditingChange,
   onDisplayKeyChange,
@@ -577,8 +602,8 @@ export function SongChartViewer({
   const { user, profile } = useAuth();
   const displaySettingsStorageKey = `${CHART_SETTINGS_STORAGE_KEY}:${user?.id || 'anonymous'}:${preferenceScopeId || 'all-songs'}`;
   const initialEditorState = useMemo(() => getInitialEditorState(draftStorageId || songId, songId, chordproText), []); // eslint-disable-line react-hooks/exhaustive-deps
-  const initialMetadata = parseChordProMetadata(chordproText ?? '');
-  const initialDetectedKey = detectChordProKey(chordproText ?? '', initialMetadata.key || songKey || '');
+  const initialMetadata = useMemo(() => parseChordProMetadata(chordproText ?? ''), [chordproText]);
+  const initialDetectedKey = useMemo(() => detectChordProKey(chordproText ?? '', initialMetadata.key || songKey || ''), [chordproText, initialMetadata.key, songKey]);
   const initialSourceChartKey = initialMetadata.key || songKey || initialDetectedKey || '';
   const personalKeyPreference = usePersonalChartKey(profile?.org_id, user?.id, songId);
   const personalKey = personalKeyPreference.key;
@@ -587,9 +612,9 @@ export function SongChartViewer({
   const [draftSections, setDraftSections] = useState<EditableChartSection[]>(initialEditorState.draftSections);
   const [sectionEditorEnabled, setSectionEditorEnabled] = useState(initialEditorState.sectionEditorEnabled);
   const [savedPlainDraft, setSavedPlainDraft] = useState(() => formatChordProForPlainEditor(chordproText || ''));
-  const privateNotes = usePrivateSongNotes(songId, user?.id, profile?.org_id);
+  const privateNotes = usePrivateSongNotes(songId, user?.id, profile?.org_id, active, automaticNoteRefresh);
   const selfNotes = privateNotes.notes;
-  const [teamNotes, setTeamNotes] = useState<Record<string, TeamSectionNote>>({});
+  const [teamNotes, setTeamNotes] = useState<Record<string, TeamSectionNote>>(() => Object.fromEntries((cachedSongNotes('team', profile?.org_id || '', user?.id || '', songId || '') || []).map(row => [row.section_key, row as TeamSectionNote])));
   const [noteRecovery, setNoteRecovery, noteRecoveryStatus] = useRecoverableDraft<NoteRecovery>(
     draftRecoveryKey(`chart-notes:${draftStorageId || songId}`,profile?.org_id,user?.id), EMPTY_NOTE_RECOVERY, isNoteRecovery);
   const editingNote = noteRecovery.active;
@@ -606,8 +631,16 @@ export function SongChartViewer({
   const [notesLoading, setNotesLoading] = useState(false);
   const [notesSaving, setNotesSaving] = useState(false);
   const [noteError, setNoteError] = useState<string | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [keyPickerOpen, setKeyPickerOpen] = useState(false);
+  const [internalSettingsOpen, setInternalSettingsOpen] = useState(false);
+  const settingsOpen = controlledSettingsOpen ?? internalSettingsOpen;
+  const setSettingsOpen = onSettingsOpenChange ?? setInternalSettingsOpen;
+  const [internalKeyPickerOpen, setInternalKeyPickerOpen] = useState(false);
+  const keyPickerOpen = controlledKeyPickerOpen ?? internalKeyPickerOpen;
+  const setKeyPickerOpen = onKeyPickerOpenChange ?? setInternalKeyPickerOpen;
+  const [pendingKey, setPendingKey] = useState<string | null | undefined>(undefined);
+  const [teamKeySaving, setTeamKeySaving] = useState(false);
+  const [keyScopeMessage, setKeyScopeMessage] = useState('');
+  const [keyScopeError, setKeyScopeError] = useState('');
   const [editKeyPickerOpen, setEditKeyPickerOpen] = useState(false);
   const [assignedSongKey, setAssignedSongKey] = useState(() => songKey || '');
   const [internalArrangementOpen, setInternalArrangementOpen] = useState(false);
@@ -635,6 +668,21 @@ export function SongChartViewer({
   const previousChartAnimationIdentityRef = useRef(chartAnimationIdentity);
   const savedPlainDraftFromProps = useMemo(() => formatChordProForPlainEditor(chordproText || ''), [chordproText]);
   const draftStorageKey = useMemo(() => chartEditorDraftStorageKey(draftStorageId || songId), [draftStorageId, songId]);
+  const draftWriter = useMemo(() => draftStorageKey ? createBufferedDraftWriter(draftStorageKey) : null, [draftStorageKey]);
+  useEffect(() => {
+    if (!draftWriter) return;
+    const flush = () => draftWriter.flush();
+    const onVisibility = () => { if (document.visibilityState === 'hidden') flush(); };
+    window.addEventListener('pagehide', flush);
+    window.addEventListener('beforeunload', flush);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      flush();
+      window.removeEventListener('pagehide', flush);
+      window.removeEventListener('beforeunload', flush);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [draftWriter]);
   const sectionDraft = useMemo(() => editableSectionsToPlainEditor(draftSections), [draftSections]);
   const activeDraft = sectionEditorEnabled ? sectionDraft : draft;
   const hasDraftChanges = activeDraft !== savedPlainDraft;
@@ -647,11 +695,13 @@ export function SongChartViewer({
   const selectPersonalKey = (key: string | null) => {
     void personalKeyPreference.save(key);
   };
+  const deferredDraft = useDeferredValue(draft);
+  const deferredDraftSections = useDeferredValue(draftSections);
   const draftChordProText = useMemo(
     () => sectionEditorEnabled
-      ? plainEditorSectionsToChordPro(draftSections, chordproText || '')
-      : plainEditorToChordPro(draft, chordproText || ''),
-    [chordproText, draft, draftSections, sectionEditorEnabled]
+      ? plainEditorSectionsToChordPro(deferredDraftSections, chordproText || '')
+      : plainEditorToChordPro(deferredDraft, chordproText || ''),
+    [chordproText, deferredDraft, deferredDraftSections, sectionEditorEnabled]
   );
   const draftMetadata = useMemo(() => parseChordProMetadata(draftChordProText || ''), [draftChordProText]);
   const draftDetectedKey = useMemo(() => detectChordProKey(draftChordProText || '', draftMetadata.key || ''), [draftChordProText, draftMetadata.key]);
@@ -733,7 +783,7 @@ export function SongChartViewer({
     if (!draftStorageKey || !editable) return;
 
     if (!isEditing && !hasDraftChanges && !hasAssignedKeyChange) {
-      localStorage.removeItem(draftStorageKey);
+      draftWriter?.schedule(null);
       return;
     }
 
@@ -750,12 +800,9 @@ export function SongChartViewer({
       updatedAt: new Date().toISOString(),
     };
 
-    try {
-      localStorage.setItem(draftStorageKey, JSON.stringify(payload));
-    } catch {
-      // Local drafts are a safety net; saving to the database still works without them.
-    }
-  }, [assignedSongKey, draft, draftSections, draftStorageKey, editable, hasAssignedKeyChange, hasDraftChanges, isEditing, savedPlainDraft, sectionEditorEnabled, songId]);
+    draftWriter?.schedule(payload);
+    if (!isEditing) draftWriter?.flush();
+  }, [assignedSongKey, draft, draftSections, draftStorageKey, draftWriter, editable, hasAssignedKeyChange, hasDraftChanges, isEditing, savedPlainDraft, sectionEditorEnabled, songId]);
 
   useEffect(() => {
     if (!hasDraftChanges && !hasAssignedKeyChange) return;
@@ -767,16 +814,16 @@ export function SongChartViewer({
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasAssignedKeyChange, hasDraftChanges]);
 
-  const pinchingText = useChartTextGestures(chartScrollRef, fullBleed && !isEditing, lyricFontSize, size => {
+  const { pinching: pinchingText, restoreAnchor: restoreZoomAnchor } = useChartTextGestures(chartScrollRef, active && fullBleed && !isEditing, lyricFontSize, size => {
     setDisplaySettings(settings => ({ ...settings, lyricFontSize: size, chordFontSize: size, noteFontSize: size }));
     setAutoScrollEnabled(false);
   });
-  const editingChartOrNote = isEditing || editingNote !== null || pinchingText;
+  const editingChartOrNote = isEditing || editingNote !== null || pinchingText || pendingKey !== undefined;
   useEffect(() => {
     onEditingChange?.(editingChartOrNote);
     if (isEditing) setSettingsOpen(false);
     if (isEditing) setAutoScrollEnabled(false);
-  }, [editingChartOrNote, isEditing, onEditingChange, setAutoScrollEnabled]);
+  }, [editingChartOrNote, isEditing, onEditingChange, setAutoScrollEnabled, setSettingsOpen]);
 
   useEffect(() => {
     if (!isEditing) {
@@ -851,7 +898,7 @@ export function SongChartViewer({
   }, [preferenceScopeId, user?.id]);
 
   useEffect(() => {
-    if (!displaySettingsSyncReady || !user?.id || !preferenceScopeId) return;
+    if (!active || !displaySettingsSyncReady || !user?.id || !preferenceScopeId) return;
     const timeoutId = window.setTimeout(() => {
       void saveSyncedPreference(user.id, LIVE_MODE_CHART_SETTINGS_PREFERENCE_KEY, {
         ...displaySettings,
@@ -859,7 +906,7 @@ export function SongChartViewer({
       });
     }, 350);
     return () => window.clearTimeout(timeoutId);
-  }, [displaySettings, displaySettingsSyncReady, preferenceScopeId, user?.id]);
+  }, [active, displaySettings, displaySettingsSyncReady, preferenceScopeId, user?.id]);
 
   const renderedText = useMemo(() => transposeChordPro(previewChordProText, transpose), [previewChordProText, transpose]);
   const chartLines = useMemo(() => parseChordPro(renderedText), [renderedText]);
@@ -946,75 +993,76 @@ export function SongChartViewer({
   }, [autoScrollEnabled, autoScrollSpeed, isEditing, renderedText, setAutoScrollEnabled]);
 
   useEffect(() => {
-    if (!controlsVisible) {
+    if (active && !controlsVisible) {
       setSettingsOpen(false);
       setKeyPickerOpen(false);
       setEditKeyPickerOpen(false);
     }
-  }, [controlsVisible]);
+  }, [active, controlsVisible, setSettingsOpen, setKeyPickerOpen]);
 
   useEffect(() => {
-    if (!isEditing) return;
+    if (!active || !isEditing) return;
     setKeyPickerOpen(false);
     setArrangementOpen(false);
     setSettingsOpen(false);
-  }, [isEditing, setArrangementOpen]);
+  }, [active, isEditing, setArrangementOpen, setSettingsOpen, setKeyPickerOpen]);
 
   useEffect(() => {
     previousChartAnimationIdentityRef.current = chartAnimationIdentity;
   }, [chartAnimationIdentity]);
 
+  const teamNotesActive = useRef(active);
+  teamNotesActive.current = active;
   useEffect(() => {
     let cancelled = false;
+    let loading = false;
+    const unsubscribe = songId && profile?.org_id && user?.id ? subscribeSongNotes('team', profile.org_id, user.id, songId, rows => {
+      const notes = Object.fromEntries(rows.map(row => [row.section_key, row as TeamSectionNote]));
+      setTeamNotes(current => equalRecord(current, notes, (a, b) => a.id === b.id && a.section_label === b.section_label && a.note === b.note) ? current : notes);
+    }) : () => {};
 
-    async function loadTeamNotes(showLoading = false) {
-      if (!songId) {
+    async function loadTeamNotes(showLoading = false, force = true) {
+      if (loading || cancelled) return;
+      if (!songId || !profile?.org_id || !user?.id) {
         setTeamNotes({});
         return;
       }
 
-      if (showLoading) setNotesLoading(true);
-      const { data, error } = await supabase
-        .from('song_section_notes')
-        .select('id, section_key, section_label, note')
-        .eq('song_id', songId)
-        .eq('scope', 'team');
-
+      if (showLoading && !cachedSongNotes('team', profile.org_id, user.id, songId)) setNotesLoading(true);
+      loading = true;
+      try {
+      const data = await loadSongNotes('team', profile.org_id, user.id, songId, force);
       if (cancelled) return;
-
-      if (error) {
-        console.error('Failed to load song section notes', error);
-        if (showLoading) {
-          setNoteError('Could not load team notes yet.');
-          setTeamNotes({});
-        }
-      } else {
         const nextNotes = (data || []).reduce<Record<string, TeamSectionNote>>((acc, note) => {
           acc[note.section_key] = note as TeamSectionNote;
           return acc;
         }, {});
-        setTeamNotes(nextNotes);
+        setTeamNotes(current => equalRecord(current, nextNotes, (a, b) => a.id === b.id && a.section_label === b.section_label && a.note === b.note) ? current : nextNotes);
+      } catch {
+        if (!cancelled && showLoading) setNoteError('Could not load team notes yet.');
+      } finally {
+        loading = false;
+        if (!cancelled && showLoading) setNotesLoading(false);
       }
-
-      if (showLoading) setNotesLoading(false);
     }
 
-    void loadTeamNotes(true);
-    const refreshId = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void loadTeamNotes();
-    }, 4000);
+    void loadTeamNotes(true, false);
+    const refreshId = automaticNoteRefresh ? window.setInterval(() => {
+      if (teamNotesActive.current && document.visibilityState === 'visible') void loadTeamNotes();
+    }, 4000) : undefined;
     const refreshVisibleNotes = () => {
-      if (document.visibilityState === 'visible') void loadTeamNotes();
+      if (automaticNoteRefresh && teamNotesActive.current && document.visibilityState === 'visible') void loadTeamNotes();
     };
     window.addEventListener('focus', refreshVisibleNotes);
     document.addEventListener('visibilitychange', refreshVisibleNotes);
     return () => {
       cancelled = true;
+      unsubscribe();
       window.clearInterval(refreshId);
       window.removeEventListener('focus', refreshVisibleNotes);
       document.removeEventListener('visibilitychange', refreshVisibleNotes);
     };
-  }, [songId]);
+  }, [songId, profile?.org_id, user?.id, automaticNoteRefresh]);
 
   const openSectionNote = (sectionKey: string, sectionLabel: string, scope: NoteScope) => {
     if (!displaySettings.notesEnabled && !(scope === 'self' ? selfNotes[sectionKey] : teamNotes[sectionKey]?.note)) return;
@@ -1061,6 +1109,7 @@ export function SongChartViewer({
         console.error('Failed to delete song section note', error);
         setNoteError('Could not delete the team note.');
       } else {
+        updateCachedSongNote('team', profile?.org_id || '', user?.id || '', songId, editingNote.sectionKey, null);
         setTeamNotes(prev => {
           const nextNotes = { ...prev };
           delete nextNotes[editingNote.sectionKey];
@@ -1091,6 +1140,7 @@ export function SongChartViewer({
       console.error('Failed to save song section note', error);
       setNoteError('Could not save the team note.');
     } else if (data) {
+      updateCachedSongNote('team', profile?.org_id || '', user?.id || '', songId, editingNote.sectionKey, { ...data, song_id: songId });
       setTeamNotes(prev => ({ ...prev, [editingNote.sectionKey]: data as TeamSectionNote }));
       clearSavedNote();
     }
@@ -1113,7 +1163,7 @@ export function SongChartViewer({
       const rawNextChordPro = sectionEditorEnabled
         ? plainEditorSectionsToChordPro(draftSections, chordproText || '')
         : plainEditorToChordPro(activeDraft, chordproText || '');
-      const nextAssignedSongKey = assignedSongKey.trim() || draftDetectedKey || detectedKey || '';
+      const nextAssignedSongKey = assignedSongKey.trim() || detectChordProKey(rawNextChordPro, parseChordProMetadata(rawNextChordPro).key || '') || detectedKey || '';
       const nextChordPro = upsertChordProKeyDirective(rawNextChordPro, nextAssignedSongKey);
       await onSave(nextChordPro, nextAssignedSongKey);
       const nextSourceKey = resolveChartSourceKey(nextChordPro, nextAssignedSongKey);
@@ -1122,7 +1172,7 @@ export function SongChartViewer({
       setPreviewBaseKey(nextSourceKey);
       setChartSaveMessage(nextAssignedSongKey ? `Saved in key ${nextAssignedSongKey}` : 'Chord chart saved');
       setIsEditing(false);
-      if (draftStorageKey) localStorage.removeItem(draftStorageKey);
+      draftWriter?.schedule(null);
     } catch (error) {
       console.error('Failed to save chart draft:', error);
       const message = error && typeof error === 'object' && 'message' in error && typeof error.message === 'string'
@@ -1228,8 +1278,10 @@ export function SongChartViewer({
   useLayoutEffect(() => {
     const scroll = chartScrollRef.current;
     const columns = chartColumnsRef.current;
-    if (!fullBleed || !scroll || !columns || isEditing) return;
+    if (!fullBleed || !scroll || !columns || isEditing || pinchingText) return;
     const layout = () => {
+      const previousScrollTop = scroll.scrollTop;
+      try {
       columns.style.height = '';
       columns.style.transform = '';
       columns.style.maxWidth = '';
@@ -1251,19 +1303,24 @@ export function SongChartViewer({
         if (Math.ceil(columns.getBoundingClientRect().height) <= availableHeight) {
           columns.style.height = `${availableHeight}px`;
           columns.style.columnFill = 'auto';
-          scroll.scrollTop = 0;
           return;
         }
       }
       columns.style.columnCount = '1';
       columns.style.maxWidth = '56rem';
       columns.style.marginInline = 'auto';
+      } finally {
+        // Trial column counts can temporarily shorten the document and clamp scroll.
+        scroll.scrollTop = previousScrollTop;
+      }
     };
     layout();
     const observer = new ResizeObserver(layout);
     observer.observe(scroll);
     return () => observer.disconnect();
-  }, [fullBleed, isEditing, lyricFontSize, displaySettings, arrangedChartSections, selfNotes, teamNotes, noteRecovery, notesLoading, noteError, privateNotes.error, privateNotes.legacyCount]);
+  }, [fullBleed, isEditing, pinchingText, lyricFontSize, displaySettings.columns, displaySettings.lyricsOnly, displaySettings.notesEnabled, displaySettings.lyricBold, displaySettings.lyricItalic, displaySettings.chordBold, displaySettings.chordItalic, sectionBadgeFontSize, arrangedChartSections, selfNotes, teamNotes, notesLoading, noteError, privateNotes.error, privateNotes.legacyCount]);
+
+  useLayoutEffect(() => { if (!pinchingText) restoreZoomAnchor(); }, [pinchingText, lyricFontSize, restoreZoomAnchor]);
 
   const chartFooter = footerNavigation && <ChartNavigation {...footerNavigation} />;
 
@@ -1275,8 +1332,9 @@ export function SongChartViewer({
           : 'min-h-[70vh] rounded-[28px] shadow-2xl ring-1 ring-black/10 dark:ring-white/10'
       }`}
     >
-      {showTopBar && (
-        <div className={`shrink-0 border-b border-black/[0.06] bg-gradient-to-r from-emerald-50 via-white to-white px-5 dark:border-white/[0.08] dark:from-emerald-500/10 dark:via-white/[0.03] dark:to-transparent ${hideTitleHeader ? 'py-3' : 'py-4'}`}>
+      {showTopBar && toolbarTarget !== null && (
+        <ChartToolbarSlot target={toolbarTarget}>
+        <div onPointerDown={toolbarTarget ? event => event.stopPropagation() : undefined} className={`shrink-0 border-b border-black/[0.06] bg-gradient-to-r from-emerald-50 via-white to-white px-5 dark:border-white/[0.08] dark:from-emerald-500/10 dark:via-white/[0.03] dark:to-transparent ${hideTitleHeader ? 'py-3' : 'py-4'}`}>
           {!hideTitleHeader && (
             <div className="flex items-start gap-3">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-500/25">
@@ -1299,7 +1357,7 @@ export function SongChartViewer({
           {showControls && (
             <motion.div
               className={`flex flex-nowrap items-center gap-1.5 overflow-visible py-1 ${hideTitleHeader ? '-my-1' : 'mt-3 -mb-1'}`}
-              initial={{ height: 0, opacity: 0, y: -10, filter: 'blur(8px)' }}
+              initial={toolbarTarget ? false : { height: 0, opacity: 0, y: -10, filter: 'blur(8px)' }}
               animate={{ height: 'auto', opacity: 1, y: 0, filter: 'blur(0px)' }}
               exit={{ height: 0, opacity: 0, y: -8, filter: 'blur(8px)' }}
               transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
@@ -1508,8 +1566,8 @@ export function SongChartViewer({
                     <button
                       key={keyOption}
                       type="button"
-                      onClick={() => selectPersonalKey(keyOption)}
-                      disabled={personalKeyPreference.saving || !personalKeyPreference.canSave}
+                      onClick={() => { setKeyScopeError(''); setPendingKey(keyOption); }}
+                      disabled={!personalKeyPreference.canSave}
                       className={`h-10 rounded-2xl text-sm font-black transition active:scale-[0.96] ${
                         selected
                           ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20'
@@ -1521,8 +1579,9 @@ export function SongChartViewer({
                   );
                 })}
               </div>
-              <button type="button" disabled={personalKeyPreference.saving || !personalKeyPreference.canSave} onClick={() => selectPersonalKey(null)} className="mx-3 mb-3 min-h-11 rounded-xl border border-emerald-400/40 px-3 text-sm font-semibold text-emerald-800 dark:text-emerald-100">Use setlist key ({performedKey || songKey || sourceChartKey})</button>
+              <button type="button" disabled={!personalKeyPreference.canSave} onClick={() => { setKeyScopeError(''); setPendingKey(null); }} className="mx-3 mb-3 min-h-11 rounded-xl border border-emerald-400/40 px-3 text-sm font-semibold text-emerald-800 dark:text-emerald-100">Use setlist key ({performedKey || songKey || sourceChartKey})</button>
               <p role="status" className="px-3 pb-3 text-xs text-emerald-800 dark:text-emerald-100">{personalKeyPreference.canSave ? personalKeyPreference.message : 'Sign in to save your personal key.'}</p>
+              {keyScopeMessage && <p role="status" className="px-3 pb-3 text-xs text-emerald-800 dark:text-emerald-100">{keyScopeMessage}</p>}
               {personalKeyPreference.dirty && !personalKeyPreference.saving && <button type="button" onClick={() => selectPersonalKey(personalKey)} className="mx-3 mb-3 min-h-11 rounded-xl border px-3 text-sm font-semibold">Retry account save</button>}
             </motion.div>
           )}
@@ -1803,6 +1862,7 @@ export function SongChartViewer({
           )}
         </AnimatePresence>
         </div>
+        </ChartToolbarSlot>
       )}
 
       {isEditing && sectionEditorEnabled ? (
@@ -1950,6 +2010,7 @@ export function SongChartViewer({
               return (
                 <section
                   key={`${section.key}-${arrangementIndex}`}
+                  data-chart-section={section.key}
                   className={
                     fullBleed
                       ? 'group/section border-t border-black/[0.06] px-0.5 py-5 md:py-3 first:border-t-0 dark:border-white/[0.08]'
@@ -2089,6 +2150,30 @@ export function SongChartViewer({
         {fullBleed && !externalDesktopNavigation && <div className="hidden shrink-0 border-t border-black/[0.06] bg-white px-4 py-2 dark:border-white/[0.08] dark:bg-[#111412] md:block" style={{paddingBottom:'max(8px, env(safe-area-inset-bottom))'}}>{chartFooter}</div>}
         </>
       )}
+        <Modal open={pendingKey !== undefined} onClose={() => { if (!teamKeySaving) setPendingKey(undefined); }} title={pendingKey === null ? 'Use the setlist key?' : `Change key to ${pendingKey || ''}?`} size="sm" mobileView="dialog" instantOpen>
+          <p className="text-sm text-gray-600 dark:text-white/70">Choose who this key change is for.</p>
+          <div className="mt-4 grid gap-3">
+            <button type="button" disabled={teamKeySaving} className="min-h-11 rounded-xl bg-emerald-600 px-4 py-3 text-left text-white disabled:opacity-50" onClick={() => {
+              if (pendingKey === undefined) return;
+              selectPersonalKey(pendingKey);
+              setKeyScopeMessage('');
+              setPendingKey(undefined);
+            }}><span className="block font-bold">Only me</span><span className="text-xs">Save to my account. Everyone else keeps their own view.</span></button>
+            {pendingKey !== null && <button type="button" disabled={teamKeySaving || !onSaveTeamKey} className="min-h-11 rounded-xl border border-gray-200 px-4 py-3 text-left dark:border-white/15 disabled:opacity-50" onClick={async () => {
+              if (!pendingKey || !onSaveTeamKey || teamKeySaving) return;
+              setTeamKeySaving(true);
+              setKeyScopeError('');
+              try {
+                await onSaveTeamKey(pendingKey);
+                setKeyScopeMessage(`Team key saved as ${pendingKey}.${personalKey ? ` Your personal key remains ${personalKey}.` : ''}`);
+                setPendingKey(undefined);
+              } catch { setKeyScopeError('Could not confirm the team key save. Please retry or refresh to check the saved key.'); }
+              finally { setTeamKeySaving(false); }
+            }}><span className="block font-bold">{teamKeySaving ? 'Saving team key…' : 'For the team'}</span><span className="text-xs">{onSaveTeamKey ? 'Update this song in the current setlist. Personal key overrides stay unchanged.' : 'Only setlist editors can change the team key here.'}</span></button>}
+            <button type="button" disabled={teamKeySaving} className="min-h-11 rounded-xl px-4 font-semibold" onClick={() => setPendingKey(undefined)}>Cancel</button>
+          </div>
+          {keyScopeError && <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-300">{keyScopeError}</p>}
+        </Modal>
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
           {clearArrangementConfirmOpen && (

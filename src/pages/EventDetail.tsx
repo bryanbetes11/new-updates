@@ -28,6 +28,9 @@ import { formatTime12Hour } from '../lib/timeFormat';
 import { Avatar } from '../components/Avatar';
 import { dispatchBadgeCountsRefresh } from '../lib/realtimeSignals';
 import { SongChartViewer } from '../components/SongChartViewer';
+import { preloadSongNotes, refreshSetSongNotes } from '../lib/songNoteCache';
+import { RefreshCw } from 'lucide-react';
+import { useLiveChartUpdates } from '../hooks/useLiveChartUpdates';
 import { SongArtwork } from '../components/SongArtwork';
 import { EventArtwork } from '../components/EventArtwork';
 import { FormattedText } from '../components/FormattedText';
@@ -148,7 +151,7 @@ const blurUp = (delay = 0) => ({
   transition: { duration: 0.85, delay, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] },
 });
 
-const serviceSongPanelTransition = { type: 'spring' as const, stiffness: 380, damping: 36, mass: 0.88 };
+const serviceSongPanelTransition = { type: 'tween' as const, duration: 0.24, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] };
 const serviceSwipeOffsets = [-1, 0, 1] as const;
 const EVENT_CHART_OPEN_STORAGE_PREFIX = 'servesync:event-chart:open-song-id';
 const ALL_MEMBERS_USER_ID = '__all_active_members__';
@@ -733,12 +736,18 @@ export function EventDetail() {
   const [lyricsModalSong, setLyricsModalSong] = useState<SetlistSong | null>(null);
   const [chartModalSong, setChartModalSong] = useState<SetlistSong | null>(null);
   const [serviceModeIndex, setServiceModeIndex] = useState<number | null>(null);
+  const [serviceRefreshing, setServiceRefreshing] = useState(false);
+  const serviceRefreshInFlight = useRef(false);
+  const serviceRefreshScope = useRef('');
+  const serviceNotifyUpdate = useRef(() => {});
   const servicePinchBlockUntil = useRef(0);
   const [serviceColumnControl, setServiceColumnControl] = useState<{ mode: 'auto' | 'single'; toggle: () => void } | null>(null);
   const [serviceChartEditing, setServiceChartEditing] = useState(false);
   const [serviceModeEntering, setServiceModeEntering] = useState(false);
   const [serviceModeDisplayKey, setServiceModeDisplayKey] = useState('');
   const [serviceChartControlsVisible, setServiceChartControlsVisible] = useState(false);
+  const [serviceDisplaySettingsOpen, setServiceDisplaySettingsOpen] = useState(false);
+  const [serviceKeyPickerOpen, setServiceKeyPickerOpen] = useState(false);
   const [serviceArrangementOpen, setServiceArrangementOpen] = useState(false);
   const [serviceAutoScrollEnabled, setServiceAutoScrollEnabled] = useState(false);
   const [serviceSongPickerOpen, setServiceSongPickerOpen] = useState(false);
@@ -824,13 +833,31 @@ export function EventDetail() {
   const postEventObservationViewsRef = useRef<PostEventObservationView[]>([]);
   const pendingObservationViewsRef = useRef(new Set<string>());
   const serviceSongStageRef = useRef<HTMLDivElement | null>(null);
+  const [serviceToolbarTarget, setServiceToolbarTarget] = useState<HTMLDivElement | null>(null);
 	const serviceModeOverlayRef = useRef<HTMLDivElement | null>(null);
   const serviceModeCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const serviceModeOpenerRef = useRef<HTMLElement | null>(null);
   const serviceSwipeAnimating = useRef(false);
+  const serviceQueuedDirection = useRef<-1 | 1 | null>(null);
+  const serviceNavigate = useRef<(direction: -1 | 1) => void>(() => {});
   const serviceTrackAnimation = useRef<{ stop: () => void } | null>(null);
   const serviceModeClosing = useRef(false);
   const serviceTrackX = useMotionValue(0);
+  const serviceModeActive = serviceModeIndex !== null;
+  const serviceModeActiveRef = useRef(serviceModeActive);
+  serviceModeActiveRef.current = serviceModeActive;
+  useLayoutEffect(() => {
+    if (!serviceSwipeAnimating.current) return;
+    // Recenter only after React positions the new active panel, before paint.
+    serviceTrackX.set(0);
+    serviceSwipeAnimating.current = false;
+    const direction = serviceQueuedDirection.current;
+    serviceQueuedDirection.current = null;
+    if (direction !== null && serviceModeActive) {
+      const frame = requestAnimationFrame(() => serviceNavigate.current(direction));
+      return () => cancelAnimationFrame(frame);
+    }
+  }, [serviceModeIndex, serviceModeActive, serviceTrackX]);
 
   useEffect(() => {
     postEventObservationViewsRef.current = postEventObservationViews;
@@ -884,7 +911,7 @@ export function EventDetail() {
   }, [loading, id, resetEventDetailScroll]);
 
   useEffect(() => {
-    if (serviceModeIndex === null) return;
+    if (!serviceModeActive) return;
     const root = document.documentElement;
     const previousOverflow = document.body.style.overflow;
     const previousOverscroll = document.body.style.overscrollBehavior;
@@ -943,11 +970,13 @@ export function EventDetail() {
       window.visualViewport?.removeEventListener('scroll', updateServiceViewportHeight);
       window.removeEventListener('focusin', updateServiceViewportHeight);
       window.removeEventListener('focusout', updateServiceViewportHeight);
+      serviceTrackAnimation.current?.stop();
+      serviceQueuedDirection.current = null;
     };
-  }, [serviceModeIndex]);
+  }, [serviceModeActive]);
 
   useLayoutEffect(() => {
-    if (serviceModeIndex === null) return;
+    if (!serviceModeActive) return;
 
     const updateStageWidth = () => {
       const stage = serviceSongStageRef.current;
@@ -967,13 +996,15 @@ export function EventDetail() {
       window.removeEventListener('resize', updateStageWidth);
       observer?.disconnect();
     };
-  }, [serviceModeIndex]);
+  }, [serviceModeActive]);
 
   useEffect(() => {
     if (serviceModeIndex === null) {
       setServiceChartEditing(false);
       setServiceModeEntering(false);
       setServiceChartControlsVisible(false);
+      setServiceDisplaySettingsOpen(false);
+      setServiceKeyPickerOpen(false);
       setServiceArrangementOpen(false);
       setServiceAutoScrollEnabled(false);
       setServiceSongPickerOpen(false);
@@ -1023,12 +1054,18 @@ export function EventDetail() {
     setServiceAutoScrollEnabled(false);
     setServiceModeEntering(false);
 	setStageCommsView(canPreviewLiveMode ? (params.get('audience') === 'tech' || (!params.has('audience') && savedMode?.audience === 'tech') ? 'tech' : 'stage') : assignedLiveAudience);
+    preloadSongNotes(profile?.org_id, user?.id, availableSongs.map(song => song.song_id));
     setServiceModeIndex(restoredIndex);
   }, [authLoading, canUseServiceModePilot, canPreviewLiveMode, assignedLiveAudience, event?.event_type, id, linkedSetlistSongs, loading, location.pathname, location.search, navigate, serviceModeIndex, setlist?.status, setlistSongs, profile?.org_id, user?.id]);
 
   const linkedReferenceSongs = useMemo(() => linkedSetlistSongs.filter((song):song is SetlistSong => !!song && typeof song === 'object').slice().sort((a,b)=>(a.position||0)-(b.position||0)),[linkedSetlistSongs]);
   const orderedSetlistSongs = useMemo(() => setlistSongs.filter((song):song is SetlistSong => !!song && typeof song === 'object').slice().sort((a,b)=>(a.position||0)-(b.position||0)),[setlistSongs]);
   const serviceModeSongs = event?.event_type === 'Rehearsals' && linkedReferenceSongs.length > 0 ? linkedReferenceSongs : orderedSetlistSongs.length > 0 ? orderedSetlistSongs : linkedReferenceSongs;
+  const serviceUsesLinkedSetlist = serviceModeSongs === linkedReferenceSongs;
+  const serviceSourceSetlist = serviceUsesLinkedSetlist ? linkedSetlist : setlist;
+  serviceRefreshScope.current = `${id}:${serviceSourceSetlist?.id}`;
+  const chartUpdates = useLiveChartUpdates(serviceSourceSetlist?.id, serviceModeSongs.map(song => song.song_id), serviceModeActive, `${profile?.org_id}:${user?.id}`);
+  serviceNotifyUpdate.current = chartUpdates.notify;
 
   useEffect(() => {
     if (serviceChartEditing) {
@@ -1305,6 +1342,8 @@ export function EventDetail() {
     if (serviceModeIndex === null) return;
     serviceModeCloseButtonRef.current?.focus();
     const handleKeyDown = (keyboardEvent: KeyboardEvent) => {
+      const focusedDialog = (document.activeElement as HTMLElement | null)?.closest('[role="dialog"]');
+      if (keyboardEvent.defaultPrevented || (focusedDialog && focusedDialog !== serviceModeOverlayRef.current)) return;
 	  if (keyboardEvent.key === 'Tab') {
 		const overlay = serviceModeOverlayRef.current;
 		const focusable = overlay ? Array.from(overlay.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')).filter(element => !element.closest('[aria-hidden="true"]')) : [];
@@ -1530,6 +1569,7 @@ export function EventDetail() {
         },
         payload => {
           const updated = payload.new as Partial<SetlistSong> & { id?: string };
+          if (serviceModeActiveRef.current) { serviceNotifyUpdate.current(); return; }
           setSetlistSongs(prev => prev.map(mergeSetlistSongUpdate(updated)));
           setLinkedSetlistSongs(prev => prev.map(mergeSetlistSongUpdate(updated)));
           setChartModalSong(prev => {
@@ -1549,6 +1589,7 @@ export function EventDetail() {
       },
       payload => {
         const updated = payload.new as Partial<Song> & { id?: string };
+        if (serviceModeActiveRef.current) { serviceNotifyUpdate.current(); return; }
         if (!updated.id) return;
         setSongs(prev => prev.map(song => song.id === updated.id ? { ...song, ...updated } : song));
         setSetlistSongs(prev => prev.map(mergeSongUpdate(updated)));
@@ -4258,6 +4299,7 @@ const openLyricsModal = (ss: SetlistSong) => {
     // The event and its charts are already loaded here, so reveal the selected
     // chart immediately instead of blocking it behind an artificial intro.
     setServiceModeEntering(false);
+    preloadSongNotes(profile?.org_id, user?.id, serviceModeSongs.map(song => song.song_id));
     setServiceModeIndex(nextIndex);
   };
   const openServiceMode = (index = 0) => {
@@ -4280,6 +4322,7 @@ const openLyricsModal = (ss: SetlistSong) => {
     serviceTrackAnimation.current?.stop();
     serviceTrackX.set(0);
     serviceSwipeAnimating.current = false;
+    serviceQueuedDirection.current = null;
     setServiceChartEditing(false);
     setServiceChartControlsVisible(false);
     setServiceArrangementOpen(false);
@@ -4305,7 +4348,8 @@ const openLyricsModal = (ss: SetlistSong) => {
     setServiceCloseConfirmOpen(true);
   };
   const goToServiceSong = (direction: -1 | 1) => {
-    if (Date.now() < servicePinchBlockUntil.current || serviceSwipeAnimating.current || serviceModeIndex === null) return;
+    if (Date.now() < servicePinchBlockUntil.current || serviceChartEditing || serviceModeEntering || serviceRefreshInFlight.current || serviceModeIndex === null) return;
+    if (serviceSwipeAnimating.current) { serviceQueuedDirection.current = direction; return; }
     const currentIndex = serviceModeIndex;
     const targetIndex = Math.min(serviceModeSongs.length - 1, Math.max(0, currentIndex + direction));
 
@@ -4316,23 +4360,60 @@ const openLyricsModal = (ss: SetlistSong) => {
     }
 
     setServiceChartEditing(false);
-    setServiceArrangementOpen(false);
     setServiceAutoScrollEnabled(false);
     setServiceSongPickerOpen(false);
     serviceSwipeAnimating.current = true;
     serviceTrackAnimation.current?.stop();
     serviceTrackAnimation.current = animate(serviceTrackX, direction === 1 ? -serviceSwipeWidth : serviceSwipeWidth, {
       ...serviceSongPanelTransition,
+      ...(prefersReducedMotion ? { duration: 0, type: 'tween' as const } : {}),
       onComplete: () => {
-        serviceTrackX.set(0);
         setServiceModeIndex(targetIndex);
         setServiceModeDisplayKey('');
-        serviceSwipeAnimating.current = false;
       },
     });
   };
+  serviceNavigate.current = goToServiceSong;
+  const saveServiceTeamKey = async (setlistSongId: string, key: string) => {
+    if (!(canEditSetlistSongDetails || isOrgAdmin || isAdmin || isPlatformOwner) || !serviceSourceSetlist?.id) throw new Error('You cannot change the team key.');
+    const { data, error } = await withSaveTimeout(supabase.from('setlist_songs').update({ performed_key: key }).eq('id', setlistSongId).eq('setlist_id', serviceSourceSetlist.id).select('id,performed_key').maybeSingle());
+    if (error || !data || data.performed_key !== key) throw error || new Error('Team key save was not confirmed.');
+    const update = (songs: SetlistSong[]) => songs.map(song => song.id === setlistSongId ? { ...song, performed_key: data.performed_key } : song);
+    setSetlistSongs(update);
+    setLinkedSetlistSongs(update);
+  };
+  const refreshServiceCharts = async () => {
+    if (serviceRefreshInFlight.current || serviceSwipeAnimating.current || serviceChartEditing || !serviceSourceSetlist?.id || !profile?.org_id || !user?.id) return;
+    const scope = serviceRefreshScope.current;
+    const selectedId = serviceModeSongs[serviceModeIndex ?? 0]?.id;
+    serviceRefreshInFlight.current = true;
+    setServiceRefreshing(true);
+    try {
+      const updateSnapshot = await chartUpdates.capture();
+      const { data, error } = await withSaveTimeout(supabase.from('setlist_songs').select('*, songs(*)').eq('setlist_id', serviceSourceSetlist.id).order('position'));
+      if (error) throw error;
+      const songs = (data || []).filter(song => song.songs) as SetlistSong[];
+      if (!songs.length) throw new Error('The setlist is empty. Your current charts remain open.');
+      await refreshSetSongNotes(profile.org_id, user.id, songs.map(song => song.song_id));
+      if (scope !== serviceRefreshScope.current || !serviceModeActiveRef.current) return;
+      if (serviceUsesLinkedSetlist) setLinkedSetlistSongs(songs);
+      else setSetlistSongs(songs);
+      setServiceModeIndex(current => {
+        if (current === null) return null;
+        const next = songs.findIndex(song => song.id === selectedId);
+        return next >= 0 ? next : Math.min(current, songs.length - 1);
+      });
+      chartUpdates.acknowledge(updateSnapshot);
+      toast('success', 'Charts and notes are up to date.');
+    } catch (error) {
+      if (scope === serviceRefreshScope.current && serviceModeActiveRef.current) toast('error', getErrorMessage(error, 'Could not refresh. Your current charts and notes are still available.'));
+    } finally {
+      serviceRefreshInFlight.current = false;
+      setServiceRefreshing(false);
+    }
+  };
   const selectServiceSong = (index: number) => {
-    if (serviceSwipeAnimating.current || serviceModeEntering || serviceModeIndex === null) return;
+    if (serviceSwipeAnimating.current || serviceRefreshInFlight.current || serviceModeEntering || serviceModeIndex === null) return;
     const targetIndex = Math.min(serviceModeSongs.length - 1, Math.max(0, index));
 
     setServiceSongPickerOpen(false);
@@ -7758,6 +7839,14 @@ const openLyricsModal = (ss: SetlistSong) => {
               <motion.div
 				ref={serviceModeOverlayRef}
                 key="service-mode-overlay"
+                onKeyDown={event => {
+                  if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.repeat) return;
+                  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+                  if (stageCommsView !== 'stage' || serviceChartEditing || serviceSongPickerOpen || serviceCloseConfirmOpen || stageCommsOpen) return;
+                  if ((event.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"], [role="slider"], [role="listbox"], [role="menu"]')) return;
+                  event.preventDefault();
+                  goToServiceSong(event.key === 'ArrowLeft' ? -1 : 1);
+                }}
 				role="dialog"
 				aria-modal="true"
 				aria-label={serviceModeLabel}
@@ -8044,6 +8133,16 @@ const openLyricsModal = (ss: SetlistSong) => {
                           <ListOrdered className="h-4.5 w-4.5" />
                         </button>
                         <button
+                          type="button"
+                          onClick={() => void refreshServiceCharts()}
+                          disabled={serviceRefreshing || serviceChartEditing || serviceModeEntering}
+                          aria-label={serviceRefreshing ? 'Refreshing charts and notes' : 'Refresh charts and notes'}
+                          title="Refresh charts and notes for the whole setlist"
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-black/[0.06] bg-white/90 text-gray-600 shadow-sm transition hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-45 dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/70"
+                        >
+                          <RefreshCw className={`h-4.5 w-4.5 ${serviceRefreshing ? 'animate-spin motion-reduce:animate-none' : ''}`} />
+                        </button>
+                        <button
                           onClick={() => setServiceAutoScrollEnabled(value => !value)}
                           disabled={serviceChartEditing || serviceModeEntering}
                           className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100 ${
@@ -8111,6 +8210,13 @@ const openLyricsModal = (ss: SetlistSong) => {
                         aria-hidden={stageCommsView === 'tech'}
                         {...(stageCommsView === 'tech' ? { inert: '' } : {})}
                       >
+                        {chartUpdates.available && <div role="status" className="absolute bottom-24 right-3 z-30 sm:bottom-4 sm:right-4">
+                          <button type="button" onClick={() => void refreshServiceCharts()} disabled={serviceRefreshing || serviceChartEditing} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-emerald-300/40 bg-emerald-700 px-4 py-2 text-xs font-bold text-white shadow-lg disabled:opacity-60">
+                            <RefreshCw className={`h-4 w-4 ${serviceRefreshing ? 'animate-spin motion-reduce:animate-none' : ''}`} />
+                            {serviceRefreshing ? 'Refreshing…' : 'New updates available'}
+                          </button>
+                        </div>}
+                        <div ref={setServiceToolbarTarget} className="service-mode-chart-toolbar relative z-20 shrink-0" />
                         <div ref={serviceSongStageRef} className="service-mode-song-stage !relative flex-1"
                           onTouchStartCapture={event => {
                             if (event.touches.length >= 2) {
@@ -8127,7 +8233,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                           <motion.div
                             className="service-mode-song-track"
                             style={{ x: serviceTrackX }}
-                            drag={!serviceChartEditing && !serviceModeEntering && serviceModeSongs.length > 1 ? 'x' : false}
+                            drag={!serviceChartEditing && !serviceModeEntering && !serviceRefreshing && serviceModeSongs.length > 1 ? 'x' : false}
                             dragConstraints={{
                               left: isLastServiceSong ? 0 : -serviceSwipeWidth,
                               right: isFirstServiceSong ? 0 : serviceSwipeWidth,
@@ -8148,6 +8254,8 @@ const openLyricsModal = (ss: SetlistSong) => {
                                 style={{ transform: `translate3d(${offset * 100}%, 0, 0)` }}
                               >
                                 <SongChartViewer
+                                  active={offset === 0 && stageCommsView === 'stage'}
+                                  automaticNoteRefresh={false}
                                   songId={song.song_id}
                                   preferenceScopeId="live-mode"
                                   draftStorageId={`setlist-song:${song.id}`}
@@ -8157,11 +8265,16 @@ const openLyricsModal = (ss: SetlistSong) => {
                                   songKey={song.songs.song_key}
                                   performedKey={song.performed_key}
                                   chordproText={getSetlistSongChartText(song)}
-								  editable={offset === 0 && (canEditSetlistSongDetails || isOrgAdmin || isAdmin || isPlatformOwner)}
+								  editable={offset === 0 && !serviceRefreshing && (canEditSetlistSongDetails || isOrgAdmin || isAdmin || isPlatformOwner)}
                                   fullBleed
                                   saving={offset === 0 ? chartSaving : false}
                                   hideTitleHeader
                                   controlsVisible={offset === 0 ? serviceChartControlsVisible : false}
+                                  toolbarTarget={offset === 0 ? serviceToolbarTarget : null}
+                                  settingsOpen={serviceDisplaySettingsOpen}
+                                  onSettingsOpenChange={offset === 0 ? setServiceDisplaySettingsOpen : undefined}
+                                  keyPickerOpen={serviceKeyPickerOpen}
+                                  onKeyPickerOpenChange={offset === 0 ? setServiceKeyPickerOpen : undefined}
                                   arrangementOpen={offset === 0 ? serviceArrangementOpen : false}
                                   onArrangementOpenChange={offset === 0 ? setServiceArrangementOpen : undefined}
                                   autoScrollEnabled={offset === 0 ? serviceAutoScrollEnabled : false}
@@ -8170,6 +8283,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                   onColumnControlsReady={offset === 0 ? setServiceColumnControl : undefined}
                                   onDisplayKeyChange={offset === 0 ? setServiceModeDisplayKey : undefined}
                                   onSave={offset === 0 ? (text, assignedSongKey) => handleSaveChart(song.song_id, text, assignedSongKey) : undefined}
+                                  onSaveTeamKey={offset === 0 && (canEditSetlistSongDetails || isOrgAdmin || isAdmin || isPlatformOwner) ? key => saveServiceTeamKey(song.id, key) : undefined}
                                   onSaveSectionOrder={offset === 0 ? (order) => handleSaveSetlistSongSectionOrder(song.id, order) : undefined}
                                   externalDesktopNavigation
                                   footerNavigation={offset === 0 ? {

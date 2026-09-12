@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { personalChartKeyStorageId, readPersonalChartKey, writePersonalChartKey } from '../lib/personalChartKey';
+import { enqueueLatestSave } from '../lib/latestSaveQueue';
 
 type KeyState = { identity: string | null; key: string | null; saving: boolean; message: string; dirty: boolean };
 
@@ -56,23 +57,28 @@ export function usePersonalChartKey(orgId?: string | null, userId?: string, song
   }, [identity, preferenceKey, userId]);
 
   async function save(key: string | null) {
-    if (!identity || !userId || (current.current.identity === identity && current.current.saving)) return;
+    if (!identity || !userId) return;
     const version = ++revision.current;
     const next = { identity, key, saving: true, dirty: true, message: 'Saving your account key…' };
     current.current = next;
     setState(next);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 12000);
     try {
-      const { data, error } = await supabase.from('user_ui_preferences')
-        .upsert({ user_id: userId, preference_key: preferenceKey, preference_value: key }, { onConflict: 'user_id,preference_key' })
-        .select('preference_value').abortSignal(controller.signal).single();
-      if (error || !data || data.preference_value !== key) throw error || new Error('Save not confirmed');
-      writePersonalChartKey(identity, key);
+      const saved = await enqueueLatestSave(identity, async () => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 12000);
+        try {
+          const { data, error } = await supabase.from('user_ui_preferences')
+            .upsert({ user_id: userId, preference_key: preferenceKey, preference_value: key }, { onConflict: 'user_id,preference_key' })
+            .select('preference_value').abortSignal(controller.signal).single();
+          if (error || !data || data.preference_value !== key) throw error || new Error('Save not confirmed');
+          writePersonalChartKey(identity, key);
+        } finally { clearTimeout(timeout); }
+      });
+      if (!saved) return;
       if (active.current === identity && revision.current === version) setState({ identity, key, saving: false, dirty: false, message: key ? `Key ${key} saved to your account for rehearsal and Live Mode.` : 'Your account now uses the assigned setlist key.' });
     } catch {
       if (active.current === identity && revision.current === version) setState({ identity, key, saving: false, dirty: true, message: 'Your view changed, but the account save failed. Retry before switching devices.' });
-    } finally { clearTimeout(timeout); }
+    }
   }
 
   const visible = state.identity === identity ? state : { identity, key: readPersonalChartKey(identity), saving: false, message: '', dirty: false };

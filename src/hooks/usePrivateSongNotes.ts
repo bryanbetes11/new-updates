@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { equalRecord } from '../lib/equalRecord';
+import { cachedSongNotes, loadSongNotes, subscribeSongNotes, updateCachedSongNote } from '../lib/songNoteCache';
 
 export function readPrivateNoteMap(raw: string | null): Record<string, string> {
   try {
@@ -9,12 +11,12 @@ export function readPrivateNoteMap(raw: string | null): Record<string, string> {
   } catch { return {}; }
 }
 
-export function usePrivateSongNotes(songId?: string, userId?: string, orgId?: string | null) {
+export function usePrivateSongNotes(songId?: string, userId?: string, orgId?: string | null, active = true, automaticRefresh = true) {
   const identity = songId && userId && orgId ? `${orgId}:${userId}:${songId}` : '';
   const activeIdentity = useRef(identity);
   activeIdentity.current = identity;
   const mutation = useRef(0);
-  const [state, setState] = useState<{ identity: string; notes: Record<string, string> }>({ identity: '', notes: {} });
+  const [state, setState] = useState<{ identity: string; notes: Record<string, string> }>(() => ({ identity, notes: Object.fromEntries((cachedSongNotes('private', orgId || '', userId || '', songId || '') || []).map(row => [row.section_key, row.note])) }));
   const [error, setError] = useState<string | null>(null);
   const [legacy, setLegacy] = useState<Record<string, string>>({});
   const [importing, setImporting] = useState(false);
@@ -22,6 +24,8 @@ export function usePrivateSongNotes(songId?: string, userId?: string, orgId?: st
   const legacyKey = `servesync:song-section-notes:${songId}`;
   const importKey = `${cacheKey}:legacy-imported`;
   const refresh = useRef<() => Promise<void>>(async () => {});
+  const isActive = useRef(active);
+  isActive.current = active;
 
   useEffect(() => {
     let cancelled = false;
@@ -31,46 +35,48 @@ export function usePrivateSongNotes(songId?: string, userId?: string, orgId?: st
     setLegacy({});
     if (!identity) { setState({ identity, notes: {} }); return; }
     try {
-      setState({ identity, notes: readPrivateNoteMap(localStorage.getItem(cacheKey)) });
+      const cached = cachedSongNotes('private', orgId!, userId!, songId!);
+      setState({ identity, notes: cached ? Object.fromEntries(cached.map(row => [row.section_key, row.note])) : readPrivateNoteMap(localStorage.getItem(cacheKey)) });
       // Old notes were not account-scoped. Keep them local until explicitly claimed.
       if (!localStorage.getItem(importKey)) setLegacy(readPrivateNoteMap(localStorage.getItem(legacyKey)));
     } catch { setState({ identity, notes: {} }); }
 
-    const load = async () => {
+    const load = async (force = true) => {
       if (running || cancelled) return;
       running = true;
       const version = mutation.current;
       const id = ++request;
-      const abort = new AbortController();
-      const timeout = setTimeout(() => abort.abort(), 12000);
       try {
-        const { data, error: failure } = await supabase.from('private_song_notes')
-          .select('section_key,note').eq('user_id', userId!).eq('song_id', songId!).abortSignal(abort.signal);
+        const data = await loadSongNotes('private', orgId!, userId!, songId!, force);
         if (cancelled || version !== mutation.current || id !== request) return;
-        if (failure) throw failure;
         const notes = Object.fromEntries((data || []).map(row => [row.section_key, row.note]));
-        setState({ identity, notes });
+        setState(previous => previous.identity === identity && equalRecord(previous.notes, notes) ? previous : { identity, notes });
         setError(null);
         try { localStorage.setItem(cacheKey, JSON.stringify(notes)); } catch { /* Online saves still work. */ }
       } catch {
         if (!cancelled && version === mutation.current) setError('Private notes could not sync. Saved copies and drafts remain available; reconnect to retry.');
-      } finally { clearTimeout(timeout); running = false; }
+      } finally { running = false; }
     };
     refresh.current = load;
-    void load();
-    const onFocus = () => { if (document.visibilityState === 'visible') void load(); };
-    const timer = setInterval(onFocus, 4000);
+    const unsubscribe = subscribeSongNotes('private', orgId!, userId!, songId!, rows => {
+      const notes = Object.fromEntries(rows.map(row => [row.section_key, row.note]));
+      setState(previous => previous.identity === identity && equalRecord(previous.notes, notes) ? previous : { identity, notes });
+    });
+    void load(false);
+    const onFocus = () => { if (automaticRefresh && isActive.current && document.visibilityState === 'visible') void load(); };
+    const timer = automaticRefresh ? setInterval(onFocus, 4000) : undefined;
     window.addEventListener('focus', onFocus);
     window.addEventListener('online', onFocus);
     document.addEventListener('visibilitychange', onFocus);
     return () => {
       cancelled = true;
+      unsubscribe();
       clearInterval(timer);
       window.removeEventListener('focus', onFocus);
       window.removeEventListener('online', onFocus);
       document.removeEventListener('visibilitychange', onFocus);
     };
-  }, [identity, songId, userId, cacheKey, importKey, legacyKey]);
+  }, [identity, orgId, songId, userId, cacheKey, importKey, legacyKey, automaticRefresh]);
 
   const save = async (sectionKey: string, note: string) => {
     if (!identity) throw new Error('Sign in to save private notes.');
@@ -82,6 +88,7 @@ export function usePrivateSongNotes(songId?: string, userId?: string, orgId?: st
         .upsert({ user_id: userId!, song_id: songId!, section_key: sectionKey, note }, { onConflict: 'user_id,song_id,section_key' })
         .select('section_key,note').abortSignal(abort.signal).single();
       if (failure || !data) throw failure || new Error('Save was not confirmed.');
+      updateCachedSongNote('private', orgId!, userId!, songId!, sectionKey, { ...data, song_id: songId! });
       if (activeIdentity.current !== identity) return;
       setState(current => ({ identity, notes: { ...(current.identity === identity ? current.notes : {}), [sectionKey]: data.note } }));
       setError(null);

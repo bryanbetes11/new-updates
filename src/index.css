@@ -961,6 +961,7 @@ html[data-touch-feedback="apple"] :is(nav, aside) .touch-feedback-strong {
   }
 
   .service-mode-chart-scroll {
+    overflow-anchor: none;
     margin-bottom: 0;
     padding-bottom: calc(var(--service-mode-bottom-bleed) + 5rem);
     overscroll-behavior-y: contain;

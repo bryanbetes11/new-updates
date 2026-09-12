@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { SetlistRequiredToggle } from '../components/SetlistRequiredToggle';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { format, parseISO, startOfDay, differenceInDays, eachDayOfInterval } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
@@ -79,6 +80,7 @@ interface LinkedAssignmentRow {
   } | null;
 }
 interface EventFormState {
+  setlist_required: boolean;
   title: string;
   event_date: string;
   start_time: string;
@@ -691,6 +693,7 @@ function BirthdayCard({ name, date, artworkClassName = 'h-16 w-16' }: { name: st
 const itemAnim = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] as [number,number,number,number] } } };
 
 const createEmptyEventForm = (eventDate = ''): EventFormState => ({
+  setlist_required: true,
   title: '',
   event_date: eventDate,
   start_time: '',
@@ -1250,7 +1253,8 @@ export function Events() {
       const { data: newEvent, error } = await supabase.from('events').insert({
         title, event_date: draft.event_date, start_time: draft.start_time || null, end_time: draft.end_time || null,
         event_type: draft.event_type, description: draft.description || null, created_by: user.id,
-        proposal_due_date: calculateProposalDueDate(draft.event_date, draft.event_type),
+        setlist_required: draft.setlist_required,
+        proposal_due_date: draft.setlist_required ? calculateProposalDueDate(draft.event_date, draft.event_type) : null,
         song_leader_id: draft.song_leader_id || null, linked_event_id: draft.linked_event_id || null,
       }).select('*').maybeSingle();
       if (error || !newEvent) { toast('error', 'Failed to create event'); setCreating(false); return; }
@@ -1614,7 +1618,8 @@ export function Events() {
                 )}
               </div>
 
-              {form.event_date && ['Sunday Service', 'LGTF (Midweek)', 'Prayer Meeting', 'Youth Recharge'].includes(form.event_type) && (
+              <SetlistRequiredToggle checked={form.setlist_required} onChange={setlist_required => setForm(previous => ({ ...previous, setlist_required }))} />
+              {form.setlist_required && form.event_date && ['Sunday Service', 'LGTF (Midweek)', 'Prayer Meeting', 'Youth Recharge'].includes(form.event_type) && (
                 <div className="rounded-2xl px-3.5 py-3 bg-sky-50 dark:bg-sky-500/[0.12] ring-1 ring-sky-200/80 dark:ring-sky-400/20">
                   <p className="text-[12px] font-medium text-sky-700 dark:text-sky-200">
                     <span className="font-black">Proposal Due:</span> {formatInTimeZone(parseISO(calculateProposalDueDate(form.event_date, form.event_type) || ''), 'Asia/Manila', "MMMM d, yyyy 'at' h:mm a")}

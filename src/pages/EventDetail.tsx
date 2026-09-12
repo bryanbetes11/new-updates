@@ -17,6 +17,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { Modal } from '../components/Modal';
 import { RescheduleEventModal } from '../components/RescheduleEventModal';
+import { EventRescheduleNotice } from '../components/EventRescheduleNotice';
+import { SetlistRequiredToggle } from '../components/SetlistRequiredToggle';
 import { MESSENGER_ENABLED } from '../lib/features';
 import { Select } from '../components/Select';
 import { PageLoader } from '../components/LoadingSpinner';
@@ -690,7 +692,7 @@ export function EventDetail() {
   const [selectedSongReservationDetails, setSelectedSongReservationDetails] = useState<{ songTitle: string; reservation: SongProposalReservation } | null>(null);
   const [showEditEvent, setShowEditEvent] = useState(false);
   const [showRescheduleEvent, setShowRescheduleEvent] = useState(false);
-  const [editForm, setEditForm] = useState({ title: '', description: '', event_type: '', event_date: '', start_time: '', end_time: '', song_leader_id: '', linked_event_id: '' });
+  const [editForm, setEditForm] = useState({ title: '', description: '', event_type: '', event_date: '', start_time: '', end_time: '', song_leader_id: '', linked_event_id: '', setlist_required: true });
   const [savingEventEdit, setSavingEventEdit] = useState(false);
   const [eventTemplates, setEventTemplates] = useState<EventTemplatePolicies | null>(null);
   const [setlistSubmissionMode, setSetlistSubmissionMode] = useState<SetlistSubmissionMode>('block_rejected');
@@ -3509,6 +3511,7 @@ const openLyricsModal = (ss: SetlistSong) => {
     if (!event) return;
     const assignedSongLeaderId = assignments.find(assignment => assignment.roles?.name === 'Song Leader')?.user_id;
     setEditForm({
+      setlist_required: event.setlist_required !== false,
       title: event.title,
       description: event.description || '',
       event_type: event.event_type,
@@ -3595,7 +3598,7 @@ const openLyricsModal = (ss: SetlistSong) => {
     setSavingEventEdit(true);
     try {
       const title = await generateEventTitle(editForm.song_leader_id, editForm.event_type);
-      const proposalDueDate = calculateProposalDueDate(editForm.event_date, editForm.event_type);
+      const proposalDueDate = editForm.setlist_required ? calculateProposalDueDate(editForm.event_date, editForm.event_type) : null;
 
       const { error } = await supabase.from('events').update({
         title,
@@ -3607,6 +3610,7 @@ const openLyricsModal = (ss: SetlistSong) => {
         song_leader_id: editForm.song_leader_id || null,
         linked_event_id: editForm.linked_event_id || null,
         proposal_due_date: proposalDueDate,
+        setlist_required: editForm.setlist_required,
       }).eq('id', id);
       if (error) {
         toast('error', getErrorMessage(error, 'Failed to update event'));
@@ -4807,6 +4811,7 @@ const openLyricsModal = (ss: SetlistSong) => {
         )}
 
         {/* ── Pending Assignment Banner ────────────────── */}
+        <EventRescheduleNotice event={event} />
         {!assignmentDetailsBlocked && postEventFeedbackOpen && (
           <button
             type="button"
@@ -4983,7 +4988,7 @@ const openLyricsModal = (ss: SetlistSong) => {
           );
         })()}
 
-        {setlist && user && (canParticipateRevisionDiscussion || revisionComments.length > 0 || !!setlist.review_note || !!setlist.approval_notes) && setlist.status !== 'rejected' && (setlist.status === 'revision_requested' || revisionComments.length > 0 || !!setlist.review_note || !!setlist.approval_notes) && (
+        {event.setlist_required !== false && setlist && user && (canParticipateRevisionDiscussion || revisionComments.length > 0 || !!setlist.review_note || !!setlist.approval_notes) && setlist.status !== 'rejected' && (setlist.status === 'revision_requested' || revisionComments.length > 0 || !!setlist.review_note || !!setlist.approval_notes) && (
           <div className="card overflow-hidden animate-slide-up">
             <div className={`flex min-h-12 items-center gap-3 px-3.5 py-2.5 transition-colors hover:bg-black/[0.025] dark:hover:bg-white/[0.035] sm:px-4 ${showRevisionDiscussion ? 'border-b border-gray-200/70 dark:border-white/[0.08]' : ''}`}>
               <button
@@ -5305,7 +5310,7 @@ const openLyricsModal = (ss: SetlistSong) => {
           </div>
         )}
 
-        {setlist && setlist.status === 'rejected' && (
+        {event.setlist_required !== false && setlist && setlist.status === 'rejected' && (
           <div className="card p-4 bg-red-50 dark:bg-red-900/20 ring-red-200 dark:ring-red-800 animate-slide-up" style={{ animationDelay: '100ms' }}>
             <div className="flex items-start gap-3">
               <div className="flex items-center justify-center h-9 w-9 rounded-full bg-red-100 dark:bg-red-900/40 shrink-0">
@@ -5320,7 +5325,9 @@ const openLyricsModal = (ss: SetlistSong) => {
           </div>
         )}
 
-        {!setlist ? (
+        {event.setlist_required === false ? (
+          <p className="rounded-xl border border-white/10 p-4 text-sm text-white/55">No setlist needed for this event.</p>
+        ) : !setlist ? (
           showLinkedSetlistReference ? (
             <div className="overflow-hidden animate-slide-up border-t border-gray-200/70 pt-4 dark:border-white/[0.08]" style={{ animationDelay: '125ms' }}>
               <div className="flex flex-col gap-3 pb-4 sm:flex-row sm:items-start sm:justify-between">
@@ -9016,7 +9023,8 @@ const openLyricsModal = (ss: SetlistSong) => {
                 </div>
               )}
 
-              {editForm.event_date && ['Sunday Service', 'LGTF (Midweek)', 'Prayer Meeting', 'Youth Recharge'].includes(editForm.event_type) && (
+              <SetlistRequiredToggle checked={editForm.setlist_required} onChange={setlist_required => setEditForm(previous => ({ ...previous, setlist_required }))} />
+              {editForm.setlist_required && editForm.event_date && ['Sunday Service', 'LGTF (Midweek)', 'Prayer Meeting', 'Youth Recharge'].includes(editForm.event_type) && (
                 <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
                   <p className="text-xs text-blue-700 dark:text-blue-300">
                     <strong>Proposal Due Date:</strong> {formatInTimeZone(parseISO(calculateProposalDueDate(editForm.event_date, editForm.event_type) || ''), 'Asia/Manila', "MMMM d, yyyy 'at' h:mm a")}

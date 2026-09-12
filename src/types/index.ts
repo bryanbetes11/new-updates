@@ -236,11 +236,16 @@ export interface Event {
   created_by: string;
   confirmation_deadline: string | null;
   proposal_due_date?: string | null;
+  setlist_required?: boolean;
   linked_event_id?: string | null;
   song_leader_id?: string | null;
   lifecycle_override?: 'upcoming' | 'completed' | null;
   lifecycle_override_by?: string | null;
   lifecycle_override_at?: string | null;
+  rescheduled_from_date?: string | null;
+  rescheduled_from_start_time?: string | null;
+  rescheduled_from_end_time?: string | null;
+  rescheduled_at?: string | null;
   created_at: string;
   profiles?: Profile;
 }

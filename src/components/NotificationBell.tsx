@@ -171,12 +171,15 @@ export function NotificationBell() {
     navigate(path);
   };
 
-  const handleNotification = async (notification: Notification) => {
+  const handleNotification = (notification: Notification) => {
     recordNotificationOpen(user?.id, notification.id, 'bell');
     if (!notification.is_read) {
-      await supabase.from('notifications').update({ is_read: true }).eq('id', notification.id);
       setCount((current) => Math.max(0, current - 1));
-      window.dispatchEvent(new Event('notifications-updated'));
+      setNotifications(current => current.map(item => item.id === notification.id ? { ...item, is_read: true } : item));
+      void supabase.from('notifications').update({ is_read: true }).eq('id', notification.id).then(({ error }) => {
+        if (error) void fetchNotifications();
+        else window.dispatchEvent(new Event('notifications-updated'));
+      }, () => { void fetchNotifications(); });
     }
     goTo(notificationDestination(notification));
   };
@@ -282,7 +285,7 @@ export function NotificationBell() {
             role="dialog"
             aria-modal="true"
             aria-label="Recent notifications"
-            className="absolute w-[min(26rem,calc(100vw-1.5rem))] origin-top-right animate-scale-in rounded-2xl border border-white/[0.1] text-white shadow-[0_24px_70px_-20px_rgba(0,0,0,0.9)]"
+            className="absolute w-[min(26rem,calc(100vw-1.5rem))] origin-top-right rounded-2xl border border-white/[0.1] text-white shadow-[0_24px_70px_-20px_rgba(0,0,0,0.9)]"
             style={{
               top: panelPosition.top,
               right: panelPosition.right,

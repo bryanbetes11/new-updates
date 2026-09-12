@@ -195,7 +195,7 @@ export function Modal({
   footerClassName = '',
   onBack,
   backLabel = 'Back',
-  instantOpen = false,
+  instantOpen = true,
 }: ModalProps) {
   const [visible, setVisible] = useState(false);
   const [closing, setClosing] = useState(false);

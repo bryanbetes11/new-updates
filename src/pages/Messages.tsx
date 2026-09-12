@@ -287,7 +287,7 @@ function MessageActionOverlay({
           role="dialog"
           aria-modal="true"
           aria-label="Message options"
-          initial={{ opacity: 0, scale: 0.82, y: placement?.opensAbove ? 12 : -12 }}
+          initial={false}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           transition={{ type: 'spring', stiffness: 470, damping: 30, mass: 0.72 }}
           className="relative overflow-hidden rounded-[1.35rem] border border-white/[0.07] bg-[#222326]/95 text-white shadow-[0_28px_80px_-24px_rgba(0,0,0,0.95)] ring-1 ring-white/[0.015] backdrop-blur-xl"
@@ -3220,7 +3220,7 @@ function ReactionDetailsSheet({
         role="dialog"
         aria-modal="true"
         aria-labelledby="message-reactions-title"
-        initial={{ y: 12, opacity: 0, scale: 0.96 }}
+        initial={false}
         animate={{ y: 0, opacity: 1, scale: 1 }}
         exit={{ y: 8, opacity: 0, scale: 0.97 }}
         transition={mobilePanelTransition}

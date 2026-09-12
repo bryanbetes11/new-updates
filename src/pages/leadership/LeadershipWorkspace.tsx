@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Shield, LayoutDashboard, Users, CalendarCheck, AlertTriangle, ListMusic, Building2, CreditCard, ArrowLeftRight, BellRing } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUnreadCounts } from '../../hooks/useUnreadCounts';
@@ -185,14 +185,7 @@ export function LeadershipWorkspace() {
         </motion.div>
 
         {/* ── Tab Content ──────────────────────────────── */}
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
-          >
+          <div key={activeTab}>
             {activeTab === 'overview' && <OverviewWrapper />}
             {activeTab === 'team' && <TeamWrapper />}
             {activeTab === 'leave' && <LeaveWrapper />}
@@ -202,8 +195,7 @@ export function LeadershipWorkspace() {
             {activeTab === 'notifications' && <NotificationSettings />}
             {activeTab === 'church' && <OrganizationSettings />}
             {activeTab === 'billing' && <OrganizationBilling />}
-          </motion.div>
-        </AnimatePresence>
+          </div>
 
       </div>
     </div>

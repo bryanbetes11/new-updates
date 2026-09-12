@@ -8,6 +8,8 @@ import { Modal } from './Modal';
 import { DatePicker } from './DatePicker';
 import { useRecoverableDraft } from '../hooks/useRecoverableDraft';
 import { draftRecoveryKey } from '../lib/draftRecovery';
+import { getFollowingSunday, summarizeTeamLeave } from '../lib/leavePlanning';
+import { LeaveRequestGuidance } from './LeaveRequestGuidance';
 
 const emptyLeaveDraft = { leaveType: 'single' as 'single' | 'range', formDate: '', formStartDate: '', formEndDate: '', formReason: '' };
 function isLeaveDraft(value: unknown): value is typeof emptyLeaveDraft {
@@ -64,6 +66,8 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
   const setFormStartDate = (formStartDate: string) => setDraft(current => ({ ...current, formStartDate }));
   const setFormEndDate = (formEndDate: string) => setDraft(current => ({ ...current, formEndDate }));
   const setFormReason = (formReason: string) => setDraft(current => ({ ...current, formReason }));
+  const [remindersAcknowledged, setRemindersAcknowledged] = useState(false);
+  const [historyReady, setHistoryReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const [teamLeaveOverlaps, setTeamLeaveOverlaps] = useState<TeamLeaveOverlap[]>([]);
@@ -94,6 +98,7 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
 
   const selectedStartDate = leaveType === 'single' ? formDate : formStartDate;
   const selectedEndDate = leaveType === 'single' ? formDate : formEndDate;
+  const teamSummary = summarizeTeamLeave(teamLeaveOverlaps);
   const hasCompleteDateSelection = Boolean(selectedStartDate && selectedEndDate);
   const hasInvalidDateRange = Boolean(
     leaveType === 'range'
@@ -111,16 +116,22 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
     }
 
     let active = true;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 12000);
     setTeamLeaveLoading(true);
     setTeamLeaveError(false);
 
     void supabase
       .from('user_availability')
       .select('id,user_id,leave_type,unavailable_date,start_date,end_date,status,profiles!user_availability_user_id_fkey(first_name,last_name,avatar_url)')
+      .eq('org_id', profile.org_id)
+      .or('request_type.eq.leave,request_type.is.null')
       .in('status', ['pending', 'approved'])
       .neq('user_id', userId)
       .or(`and(unavailable_date.gte.${selectedStartDate},unavailable_date.lte.${selectedEndDate}),and(start_date.lte.${selectedEndDate},end_date.gte.${selectedStartDate})`)
+      .abortSignal(controller.signal)
       .then(({ data, error }) => {
+        window.clearTimeout(timeout);
         if (!active) return;
         if (error) {
           setTeamLeaveOverlaps([]);
@@ -134,9 +145,15 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
           }));
         }
         setTeamLeaveLoading(false);
+      }, () => {
+        window.clearTimeout(timeout);
+        if (!active) return;
+        setTeamLeaveOverlaps([]);
+        setTeamLeaveError(true);
+        setTeamLeaveLoading(false);
       });
 
-    return () => { active = false; };
+    return () => { active = false; controller.abort(); window.clearTimeout(timeout); };
   }, [
     hasCompleteDateSelection,
     hasInvalidDateRange,
@@ -146,6 +163,10 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
     selectedStartDate,
     userId,
   ]);
+
+  useEffect(() => {
+    setRemindersAcknowledged(false);
+  }, [open, leaveType, selectedStartDate, selectedEndDate, teamLeaveOverlaps]);
 
   const resetForm = () => {
     recovery.discard();
@@ -161,7 +182,7 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
   };
 
   const handleSubmit = async () => {
-    if (!user || submittingRef.current || hasInvalidDateRange) return;
+    if (!user || submittingRef.current || hasInvalidDateRange || !remindersAcknowledged || !historyReady || teamLeaveLoading) return;
     const isValid = (!leavePolicy.reason_required || formReason.trim()) && (leaveType === 'single' ? formDate : (formStartDate && formEndDate));
     if (!isValid) return;
 
@@ -206,7 +227,7 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
     }
   };
 
-  const isSubmitDisabled = submitting || (leavePolicy.reason_required && !formReason.trim())
+  const isSubmitDisabled = submitting || !remindersAcknowledged || !historyReady || teamLeaveLoading || (leavePolicy.reason_required && !formReason.trim())
     || (leaveType === 'single' ? !formDate : (!formStartDate || !formEndDate))
     || hasInvalidDateRange;
 
@@ -287,7 +308,7 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
             </div>
             {hasCompleteDateSelection && !teamLeaveLoading && !teamLeaveError && (
               <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-white px-1.5 text-[11px] font-black text-emerald-700 shadow-sm dark:bg-white/[0.08] dark:text-emerald-300">
-                {teamLeaveOverlaps.length}
+                {teamSummary.total}
               </span>
             )}
           </div>
@@ -361,10 +382,20 @@ export function LeaveRequestModal({ open, onClose, onSuccess }: LeaveRequestModa
             Be as detailed as possible — this helps the team and leaders plan and understand your request better.
           </p>
         </div>
-
         <p className="text-xs text-gray-400 dark:text-gray-500">
           {leavePolicy.approval_required ? 'Your leave request will be sent to leaders for approval.' : 'Valid leave requests are approved automatically by your church policy.'}
         </p>
+
+        {open && <LeaveRequestGuidance
+          userId={userId}
+          orgId={profile?.org_id}
+          includesSaturday={hasCompleteDateSelection && !hasInvalidDateRange && Boolean(getFollowingSunday(selectedEndDate))}
+          teamSummary={hasCompleteDateSelection && !hasInvalidDateRange && !teamLeaveLoading && !teamLeaveError ? teamSummary : null}
+          checkingTeamLeave={teamLeaveLoading}
+          acknowledged={remindersAcknowledged}
+          onAcknowledgedChange={setRemindersAcknowledged}
+          onReadyChange={setHistoryReady}
+        />}
 
         {/* Actions */}
         <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-2">

@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Check, X, Shield, MessageSquare, RefreshCw, ClipboardCheck, CalendarDays, AlertTriangle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatTime12Hour } from '../lib/timeFormat';
+import { getFollowingSunday, getLeavePlanningEvents } from '../lib/leavePlanning';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { PageLoader } from '../components/LoadingSpinner';
@@ -70,8 +71,7 @@ function formatLeaveDate(request: UnavailabilityRequest) {
 function getEventsDuringLeave(request: UnavailabilityRequest, events: LeaveEvent[]) {
   const start = getLeaveStart(request);
   const end = getLeaveEnd(request);
-  if (!start || !end) return [];
-  return events.filter(event => event.event_date >= start && event.event_date <= end);
+  return getLeavePlanningEvents(events, start, end);
 }
 
 function getApprovedLeaveConflicts(target: UnavailabilityRequest, approvedLeaves: UnavailabilityRequest[]) {
@@ -208,12 +208,14 @@ function EventScheduleDuringLeave({
 }) {
   const scheduledEvents = getEventsDuringLeave(request, events);
   const showEventDate = getLeaveStart(request) !== getLeaveEnd(request);
+  const followingSunday = getFollowingSunday(getLeaveEnd(request));
+  const hasRelatedSunday = scheduledEvents.some(event => event.event_date === followingSunday);
 
   return (
     <section className={`${separated ? 'border-t border-black/[0.06] dark:border-white/[0.07]' : ''} px-4 py-3`}>
       <div className="flex items-center gap-2">
         <CalendarDays className="h-3.5 w-3.5 shrink-0 text-sky-600 dark:text-sky-400" />
-        <p className="flex-1 text-[10px] font-black uppercase tracking-[0.12em] text-sky-800 dark:text-sky-200">Events during this leave</p>
+        <p className="flex-1 text-[10px] font-black uppercase tracking-[0.12em] text-sky-800 dark:text-sky-200">{hasRelatedSunday ? 'Events & Sunday coverage' : 'Events during this leave'}</p>
         {!loadError && scheduledEvents.length > 0 && (
           <span className="text-[10px] font-black text-sky-700 dark:text-sky-300">
             {scheduledEvents.length}
@@ -230,6 +232,7 @@ function EventScheduleDuringLeave({
           <div className="divide-y divide-black/[0.05] dark:divide-white/[0.06]">
             {scheduledEvents.map(event => {
               const time = event.start_time ? formatTime12Hour(event.start_time) : '';
+              const isRelatedSunday = event.event_date === followingSunday;
               return (
                 <div key={event.id} className="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-100 dark:bg-sky-500/15">
@@ -240,9 +243,10 @@ function EventScheduleDuringLeave({
                     <div className="min-w-0">
                       <p className="truncate text-xs font-bold text-gray-900 dark:text-white">{event.title}</p>
                       <p className="mt-0.5 text-[10px] font-semibold text-gray-500 dark:text-white/40">{event.event_type}</p>
+                      {isRelatedSunday && <p className="mt-1 text-[10px] font-semibold text-amber-700 dark:text-amber-300">Following Sunday · potentially affected</p>}
                     </div>
                     <div className="shrink-0 text-right">
-                      {showEventDate && (
+                      {(showEventDate || isRelatedSunday) && (
                         <p className="text-[10px] font-bold text-sky-700 dark:text-sky-300">{format(parseISO(event.event_date), 'EEE, MMM d')}</p>
                       )}
                       <p className={`${showEventDate ? 'mt-1' : 'mt-0.5'} text-[10px] font-semibold text-gray-500 dark:text-white/45`}>{time || 'Time TBA'}</p>
@@ -254,6 +258,7 @@ function EventScheduleDuringLeave({
             })}
           </div>
         )}
+        {!loadError && hasRelatedSunday && <p className="mt-3 text-[11px] leading-relaxed text-sky-800/75 dark:text-sky-200/65">Confirm Sunday preparation and service coverage. Sunday is outside the requested leave dates; do not assume the member is unavailable.</p>}
       </div>
     </section>
   );
@@ -278,11 +283,13 @@ export function Requests({ embedded }: RequestsProps = {}) {
         .from('user_availability')
         .select('*, profiles!user_availability_user_id_fkey(*)')
         .eq('status', 'pending')
+        .or('request_type.eq.leave,request_type.is.null')
         .order('created_at', { ascending: true }),
       supabase
         .from('user_availability')
         .select('*, profiles!user_availability_user_id_fkey(*)')
         .eq('status', 'approved')
+        .or('request_type.eq.leave,request_type.is.null')
         .or(`unavailable_date.gte.${today},end_date.gte.${today}`),
       supabase
         .from('events')

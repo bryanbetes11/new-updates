@@ -28,6 +28,8 @@ import { formatTime12Hour } from '../lib/timeFormat';
 import { Avatar } from '../components/Avatar';
 import { dispatchBadgeCountsRefresh } from '../lib/realtimeSignals';
 import { SongChartViewer } from '../components/SongChartViewer';
+import { EventSetlistReminder } from '../components/EventSetlistReminder';
+import { getSetlistReminderState } from '../lib/setlistReminder';
 import { preloadSongNotes, refreshSetSongNotes } from '../lib/songNoteCache';
 import { RefreshCw } from 'lucide-react';
 import { useLiveChartUpdates } from '../hooks/useLiveChartUpdates';
@@ -4102,8 +4104,9 @@ const openLyricsModal = (ss: SetlistSong) => {
   const heroProposalDue = event.proposal_due_date ? parseISO(event.proposal_due_date) : null;
   const heroDaysUntilDue = heroProposalDue ? differenceInDays(heroProposalDue, new Date()) : null;
   const heroHasApprovedSetlist = setlist?.status === 'approved';
-  const heroIsOverdue = heroDaysUntilDue !== null && heroDaysUntilDue < 0 && !heroHasApprovedSetlist && !postEventFeedbackOpen;
-  const heroIsDueSoon = heroDaysUntilDue !== null && heroDaysUntilDue >= 0 && heroDaysUntilDue <= 3 && !heroHasApprovedSetlist && !postEventFeedbackOpen;
+  const heroDeadlineState = getSetlistReminderState(event, [setlist?.status || null]);
+  const heroIsOverdue = heroDeadlineState === 'overdue';
+  const heroIsDueSoon = heroDeadlineState === 'due_soon';
   const isApprovedSetlist = setlist?.status === 'approved';
   const showSetlistEditControls = !isApprovedSetlist || setlistEditMode;
   const canEditSetlistSongDetails = showSetlistEditControls && (canManageSetlist || canEditSetlist);
@@ -4694,7 +4697,7 @@ const openLyricsModal = (ss: SetlistSong) => {
 
               <div className="mt-6 min-w-0 lg:mt-0 lg:flex-1 lg:pb-5">
                 <p className={`mb-1 text-[10px] font-mono font-medium uppercase tracking-[0.22em] ${heroEyebrow}`}>
-                  {heroIsPast ? 'Past event' : heroIsOverdue ? 'Setlist overdue' : heroIsDueSoon ? `Due in ${heroDaysUntilDue}d` : heroHasApprovedSetlist ? 'Setlist approved' : 'Schedule'}
+                  {heroIsPast ? 'Past event' : heroIsOverdue ? 'Setlist overdue' : heroIsDueSoon ? (heroDaysUntilDue === 0 ? 'Due within 24h' : `Due in ${heroDaysUntilDue}d`) : heroHasApprovedSetlist ? 'Setlist approved' : 'Schedule'}
                 </p>
                 <div className="flex flex-col items-start gap-3 sm:flex-row">
                   <h1 className="min-w-0 flex-1 text-[1.75rem] font-black leading-[1.04] text-white sm:text-[2.5rem] lg:text-[4.5rem] xl:text-[5.5rem]" style={{ letterSpacing: '-0.04em' }}>
@@ -4797,7 +4800,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                           <AnimatePresence>
                             {showEventActionsMenu && (
                               <motion.div
-                                initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                                initial={false}
                                 animate={{ opacity: 1, y: 0, scale: 1 }}
                                 exit={{ opacity: 0, y: -4, scale: 0.98 }}
                                 transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
@@ -5408,6 +5411,9 @@ const openLyricsModal = (ss: SetlistSong) => {
           </div>
         )}
 
+        <EventSetlistReminder key={event.id} event={event} status={setlist?.status}
+          recipientId={songLeaderAssignment ? (songLeaderAssignment.status === 'declined' ? null : songLeaderAssignment.user_id) : event.song_leader_id}
+          recipientName={directSongLeaderName} />
         {event.setlist_required === false ? (
           <p className="rounded-xl border border-white/10 p-4 text-sm text-white/55">No setlist needed for this event.</p>
         ) : !setlist ? (
@@ -9071,7 +9077,7 @@ const openLyricsModal = (ss: SetlistSong) => {
           onSaved={() => { void fetchAll(); }}
           proposalDueDate={date => calculateProposalDueDate(date, event.event_type)}
         />}
-        <Modal open={showEditEvent} onClose={() => setShowEditEvent(false)} title="Edit Event" size="lg">
+        <Modal open={showEditEvent} onClose={() => setShowEditEvent(false)} title="Edit Event" size="lg" instantOpen>
           <form onSubmit={e => { e.preventDefault(); handleEditEvent(); }} className="space-y-4">
               <p className="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">Changing the date or time will notify assigned members and ask them to confirm their availability again.</p>
               <div>

@@ -1031,11 +1031,9 @@ export function Navigation({
     onMobileOpenChange(false);
     setDesktopProfileOpen(false);
     toast("success", "Account switched");
-    window.setTimeout(() => {
-      setSwitchingAccountId(null);
-      setSwitchingAccountMeta(null);
-      navigate("/dashboard");
-    }, 1500);
+    setSwitchingAccountId(null);
+    setSwitchingAccountMeta(null);
+    navigate("/dashboard");
   };
 
   const handleForgetSavedAccount = (accountUserId: string) => {
@@ -1715,7 +1713,7 @@ export function Navigation({
               onClick={() => setDesktopProfileOpen(false)}
             />
             <motion.div
-              initial={{ opacity: 0, y: -8, scale: 0.985 }}
+              initial={false}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -6, scale: 0.985 }}
               transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
@@ -1924,7 +1922,7 @@ export function Navigation({
             />
             <motion.div
               ref={globalSearchDialogRef}
-              initial={{ opacity: 0, y: -8, scale: 0.985 }}
+              initial={false}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 0, scale: 1, transition: { duration: 0 } }}
               transition={{ duration: 0.1, ease: [0.22, 1, 0.36, 1] }}

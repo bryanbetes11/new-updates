@@ -1357,7 +1357,7 @@ export function SongChartViewer({
           {showControls && (
             <motion.div
               className={`flex flex-nowrap items-center gap-1.5 overflow-visible py-1 ${hideTitleHeader ? '-my-1' : 'mt-3 -mb-1'}`}
-              initial={toolbarTarget ? false : { height: 0, opacity: 0, y: -10, filter: 'blur(8px)' }}
+              initial={false}
               animate={{ height: 'auto', opacity: 1, y: 0, filter: 'blur(0px)' }}
               exit={{ height: 0, opacity: 0, y: -8, filter: 'blur(8px)' }}
               transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
@@ -1477,7 +1477,7 @@ export function SongChartViewer({
           {showControls && editKeyPickerOpen && isEditing && (
             <motion.div
               className="mt-3 overflow-hidden rounded-3xl border border-amber-200 bg-amber-50/90 shadow-sm shadow-amber-500/10 backdrop-blur-xl dark:border-amber-400/20 dark:bg-amber-500/10"
-              initial={{ height: 0, opacity: 0, y: -10, scale: 0.98, filter: 'blur(10px)' }}
+              initial={false}
               animate={{ height: 'auto', opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
               exit={{ height: 0, opacity: 0, y: -8, scale: 0.98, filter: 'blur(10px)' }}
               transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
@@ -1553,7 +1553,7 @@ export function SongChartViewer({
           {showControls && keyPickerOpen && !isEditing && (
             <motion.div
               className="mt-3 overflow-hidden rounded-3xl border border-emerald-200 bg-emerald-50/90 shadow-sm shadow-emerald-500/10 backdrop-blur-xl dark:border-emerald-500/20 dark:bg-emerald-500/10"
-              initial={{ height: 0, opacity: 0, y: -10, scale: 0.98, filter: 'blur(10px)' }}
+              initial={false}
               animate={{ height: 'auto', opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
               exit={{ height: 0, opacity: 0, y: -8, scale: 0.98, filter: 'blur(10px)' }}
               transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
@@ -1591,7 +1591,7 @@ export function SongChartViewer({
           {showControls && settingsOpen && (
             <motion.div
               className="mt-3 overflow-hidden rounded-3xl border border-black/[0.06] bg-white/85 shadow-sm backdrop-blur-xl dark:border-white/[0.08] dark:bg-black/20"
-              initial={{ height: 0, opacity: 0, y: -10, scale: 0.98, filter: 'blur(10px)' }}
+              initial={false}
               animate={{ height: 'auto', opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
               exit={{ height: 0, opacity: 0, y: -8, scale: 0.98, filter: 'blur(10px)' }}
               transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
@@ -1761,7 +1761,7 @@ export function SongChartViewer({
           {arrangementOpen && onSaveSectionOrder && !isEditing && (
             <motion.div
               className="mt-3 overflow-hidden rounded-3xl border border-amber-200/80 bg-amber-50/90 shadow-sm shadow-amber-500/10 backdrop-blur-xl dark:border-amber-400/20 dark:bg-amber-500/10"
-              initial={{ height: 0, opacity: 0, y: -10, scale: 0.98, filter: 'blur(10px)' }}
+              initial={false}
               animate={{ height: 'auto', opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
               exit={{ height: 0, opacity: 0, y: -8, scale: 0.98, filter: 'blur(10px)' }}
               transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}

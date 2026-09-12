@@ -103,6 +103,9 @@ export function SurveyManagement() {
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
   const [testModalOpen, setTestModalOpen] = useState(false);
   const [testMembers, setTestMembers] = useState<TestMember[]>([]);
+  const [testMembersLoading, setTestMembersLoading] = useState(false);
+  const [testMembersError, setTestMembersError] = useState('');
+  const [testMembersRetry, setTestMembersRetry] = useState(0);
   const [testMemberId, setTestMemberId] = useState("");
   const [testAssignment, setTestAssignment] = useState<TestAssignment | null>(null);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
@@ -225,34 +228,50 @@ export function SurveyManagement() {
     void loadTestAssignment();
   }, [loadTestAssignment]);
 
-  const openTestModal = async () => {
+  const openTestModal = () => {
     if (!selected) return;
-    setWorking(true);
-    const [{ data, error }, { data: inclusionRows }] = await Promise.all([
-      supabase.from("profiles").select("id,first_name,last_name,nickname,email").eq("org_id", selected.org_id).eq("is_onboarded", true).eq("ministry_status", "active").order("first_name"),
-      supabase.from('organization_member_settings').select('user_id, include_in_surveys').eq('org_id', selected.org_id),
-    ]);
-    setWorking(false);
-    if (error) {
-      toast("error", error.message);
-      return;
-    }
-    const excluded = new Set((inclusionRows || []).filter(row => !row.include_in_surveys).map(row => row.user_id));
-    const available = (data || []).filter(profile => !excluded.has(profile.id)).map((profile) => {
-      const fullName = `${profile.first_name || ""} ${profile.last_name || ""}`.trim();
-      return {
-        id: profile.id,
-        name: profile.nickname || fullName || profile.email || "Member",
-        email: profile.email || "",
-      };
-    });
-    setTestMembers(available);
-    setTestMemberId(testAssignment?.user_id || available[0]?.id || "");
+    setTestMembersLoading(true);
+    setTestMembersError('');
+    setTestMemberId('');
     setTestModalOpen(true);
   };
 
+  useEffect(() => {
+    if (!testModalOpen || !selected?.org_id) return;
+    let cancelled = false;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+    setTestMembersLoading(true);
+    setTestMembersError('');
+    setTestMemberId('');
+    void (async () => {
+      try {
+        const [{ data, error }, { data: inclusionRows, error: inclusionError }] = await Promise.all([
+          supabase.from('profiles').select('id,first_name,last_name,nickname,email').eq('org_id', selected.org_id).eq('is_onboarded', true).eq('ministry_status', 'active').order('first_name').abortSignal(controller.signal),
+          supabase.from('organization_member_settings').select('user_id, include_in_surveys').eq('org_id', selected.org_id).abortSignal(controller.signal),
+        ]);
+        if (error || inclusionError) throw error || inclusionError;
+        if (cancelled) return;
+        const excluded = new Set((inclusionRows || []).filter(row => !row.include_in_surveys).map(row => row.user_id));
+        const available = (data || []).filter(profile => !excluded.has(profile.id)).map(profile => ({
+          id: profile.id,
+          name: profile.nickname || `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.email || 'Member',
+          email: profile.email || '',
+        }));
+        setTestMembers(available);
+        setTestMemberId(testAssignment?.user_id ? (available.some(member => member.id === testAssignment.user_id) ? testAssignment.user_id : '') : available[0]?.id || '');
+      } catch {
+        if (!cancelled) setTestMembersError('Members could not load. Please try again.');
+      } finally {
+        clearTimeout(timeout);
+        if (!cancelled) setTestMembersLoading(false);
+      }
+    })();
+    return () => { cancelled = true; controller.abort(); clearTimeout(timeout); };
+  }, [testModalOpen, selected?.id, selected?.org_id, testAssignment?.user_id, testMembersRetry]);
+
   const startTest = async () => {
-    if (!selected || !testMemberId) return;
+    if (!selected || !testMemberId || testMembersLoading || testMembersError) return;
     setWorking(true);
     const { error } = await supabase.rpc("start_ministry_reflection_test", {
       p_campaign_id: selected.id,
@@ -976,17 +995,17 @@ export function SurveyManagement() {
             <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4 text-sm leading-6 text-violet-900 dark:border-violet-400/15 dark:bg-violet-400/[0.06] dark:text-violet-100/75">
               Only this member receives the test assignment and notification. Starting or resetting clears this member’s earlier test answers. Official campaign results are unaffected.
             </div>
-            <label className="block">
+            {testMembersLoading ? <p role="status" className="text-sm text-gray-500 dark:text-white/60">Loading members…</p> : testMembersError ? <div><p role="alert" className="text-sm text-red-600 dark:text-red-300">{testMembersError}</p><button type="button" className="btn-secondary mt-2 min-h-11" onClick={() => setTestMembersRetry(value => value + 1)}>Try again</button></div> : <label className="block">
               <span className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-white/40">Test member</span>
               <select value={testMemberId} onChange={(event) => setTestMemberId(event.target.value)} disabled={Boolean(testAssignment)} className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-bold text-gray-950 dark:border-white/10 dark:bg-[#111] dark:text-white">
                 {testMembers.map((member) => (
                   <option key={member.id} value={member.id}>{member.name}{member.email ? ` · ${member.email}` : ""}</option>
                 ))}
               </select>
-            </label>
+            </label>}
             <div className="grid grid-cols-2 gap-3">
               <button onClick={() => setTestModalOpen(false)} disabled={working} className="rounded-xl border border-gray-200 px-4 py-3 text-sm font-black text-gray-700 dark:border-white/10 dark:text-white">Cancel</button>
-              <button onClick={() => void startTest()} disabled={working || !testMemberId} className="rounded-xl bg-violet-600 px-4 py-3 text-sm font-black text-white disabled:opacity-50">
+              <button onClick={() => void startTest()} disabled={working || testMembersLoading || !!testMembersError || !testMemberId} className="rounded-xl bg-violet-600 px-4 py-3 text-sm font-black text-white disabled:opacity-50">
                 {working ? "Preparing…" : testAssignment ? "Reset test" : "Send test"}
               </button>
             </div>

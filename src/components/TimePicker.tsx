@@ -134,7 +134,7 @@ export function TimePicker({ value, onChange, placeholder = 'Select time', requi
       {open && createPortal(
         <div
           ref={panelRef}
-          className="fixed w-56 rounded-xl bg-white dark:bg-gray-800 shadow-xl ring-1 ring-gray-200 dark:ring-gray-700 p-3 animate-scale-in"
+          className="fixed w-56 rounded-xl bg-white dark:bg-gray-800 shadow-xl ring-1 ring-gray-200 dark:ring-gray-700 p-3"
           style={{ top: pos.top, left: pos.left, zIndex: FLOATING_LAYER_Z_INDEX }}
         >
           <div className="flex items-center justify-center gap-1 mb-3">

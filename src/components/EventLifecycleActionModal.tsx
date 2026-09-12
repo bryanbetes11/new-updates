@@ -158,7 +158,7 @@ export function EventLifecycleActionModal({
         role="dialog"
         aria-modal="true"
         aria-label={mode === 'options' ? `Options for ${eventName}` : lifecycleLabel}
-        className="pointer-events-auto fixed overflow-hidden rounded-[1.35rem] border border-white/[0.10] bg-[#121512]/98 text-white shadow-[0_28px_80px_-24px_rgba(0,0,0,0.95)] ring-1 ring-emerald-400/[0.08] animate-scale-in"
+        className="pointer-events-auto fixed overflow-hidden rounded-[1.35rem] border border-white/[0.10] bg-[#121512]/98 text-white shadow-[0_28px_80px_-24px_rgba(0,0,0,0.95)] ring-1 ring-emerald-400/[0.08]"
         style={placement ? {
           left: placement.left,
           top: placement.top,

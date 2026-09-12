@@ -92,6 +92,9 @@ export function SetlistChecker({ setlistId, setlistStatus, initialSongs = [], se
   const [saving, setSaving] = useState(false);
   const [savedSessions, setSavedSessions] = useState<SetlistCheckerSession[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
+  const [historyRetry, setHistoryRetry] = useState(0);
 
   const searchSongs = useCallback(async (q: string) => {
     if (q.length < 2) { setSongResults([]); return; }
@@ -165,7 +168,6 @@ export function SetlistChecker({ setlistId, setlistStatus, initialSongs = [], se
   const runAnalysis = async () => {
     if (songs.length === 0) { toast('error', 'Add songs before running analysis'); return; }
     setAnalyzing(true);
-    await new Promise(r => setTimeout(r, 900));
 
     const checkerSongs = songs.map(toCheckerSong);
     const guidance = runLiveGuidance(checkerSongs, serviceFormat, language);
@@ -253,16 +255,35 @@ export function SetlistChecker({ setlistId, setlistStatus, initialSongs = [], se
     setSaving(false);
   };
 
-  const loadHistory = async () => {
+  const loadHistory = () => {
     if (!user) return;
-    const { data } = await supabase.from('setlist_checker_sessions')
-      .select('*')
-      .eq('created_by', user.id)
-      .order('created_at', { ascending: false })
-      .limit(10);
-    setSavedSessions((data || []) as SetlistCheckerSession[]);
+    setHistoryLoading(true);
+    setHistoryError('');
     setShowHistory(true);
   };
+
+  useEffect(() => {
+    if (!showHistory || !user?.id) return;
+    let cancelled = false;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+    setHistoryLoading(true);
+    setHistoryError('');
+    void (async () => {
+      try {
+        const { data, error } = await supabase.from('setlist_checker_sessions').select('*')
+          .eq('created_by', user.id).order('created_at', { ascending: false }).limit(10).abortSignal(controller.signal);
+        if (error) throw error;
+        if (!cancelled) setSavedSessions((data || []) as SetlistCheckerSession[]);
+      } catch {
+        if (!cancelled) setHistoryError('Saved sessions could not load. Please try again.');
+      } finally {
+        clearTimeout(timeout);
+        if (!cancelled) setHistoryLoading(false);
+      }
+    })();
+    return () => { cancelled = true; controller.abort(); clearTimeout(timeout); };
+  }, [showHistory, user?.id, historyRetry]);
 
   const loadSession = (session: SetlistCheckerSession) => {
     setSongs(session.songs_json);
@@ -754,7 +775,7 @@ export function SetlistChecker({ setlistId, setlistStatus, initialSongs = [], se
 
       {showHistory && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="w-full max-w-md card p-0 overflow-hidden">
+          <div role="dialog" aria-modal="true" aria-label="Saved Sessions" className="w-full max-w-md card p-0 overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
               <p className="text-base font-semibold text-gray-900 dark:text-white">Saved Sessions</p>
               <button onClick={() => setShowHistory(false)} className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
@@ -762,7 +783,9 @@ export function SetlistChecker({ setlistId, setlistStatus, initialSongs = [], se
               </button>
             </div>
             <div className="max-h-80 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
-              {savedSessions.length === 0 ? (
+              {historyLoading ? <p role="status" className="px-5 py-6 text-sm text-center text-gray-500">Loading saved sessions…</p> : historyError ? (
+                <div className="px-5 py-6 text-center"><p role="alert" className="text-sm text-red-600 dark:text-red-300">{historyError}</p><button type="button" className="btn-secondary mt-3 min-h-11" onClick={() => setHistoryRetry(value => value + 1)}>Try again</button></div>
+              ) : savedSessions.length === 0 ? (
                 <p className="px-5 py-6 text-sm text-center text-gray-400">No saved sessions yet</p>
               ) : savedSessions.map(s => (
                 <button key={s.id} onClick={() => loadSession(s)} className="w-full px-5 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">

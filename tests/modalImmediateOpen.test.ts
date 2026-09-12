@@ -4,6 +4,8 @@ import { resolve } from 'node:path';
 
 const source = readFileSync(resolve(process.cwd(), 'src/components/Modal.tsx'), 'utf8');
 
+assert.match(source, /instantOpen = true/, 'standard dialogs must open immediately without requiring each caller to opt in');
+
 assert.match(
   source,
   /const shouldRender = open \|\| visible;/,

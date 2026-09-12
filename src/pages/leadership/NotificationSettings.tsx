@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { loadSyncedPreference, saveSyncedPreference } from '../../lib/syncedPreferences';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
+import { eventReminderWording, unsupportedReminderValues } from '../../lib/eventReminderWording';
 import { getBuiltInNotificationCopy } from '../../lib/notificationCopy';
 import { AdminPageBackLink } from '../../components/AdminPageBackLink';
 import { DEFAULT_EVENT_TEMPLATE_POLICIES, normalizeEventTemplatePolicies } from '../../lib/eventPolicy';
@@ -70,7 +71,8 @@ const notificationPreviewValues: Record<string, string> = {
 };
 
 function renderNotificationPreview(value: string, eventType = 'Sunday Service') {
-  return Object.entries({ ...notificationPreviewValues, 'event type': eventType, event: `${eventType} · Sunday Gathering` }).reduce((result, [key, sample]) => {
+  const eventTitle = eventType === 'Sunday Service' ? 'Sunday Gathering' : eventType;
+  return Object.entries({ ...notificationPreviewValues, 'event type': eventType, 'event title': eventTitle, event: eventType === eventTitle ? eventTitle : `${eventType} · ${eventTitle}` }).reduce((result, [key, sample]) => {
     const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return result
       .replace(new RegExp(`\\[${escaped}\\]`, 'gi'), sample)
@@ -96,6 +98,8 @@ export function NotificationSettings() {
   const [testingMemberId, setTestingMemberId] = useState<string | null>(null);
   const [remindingMemberId, setRemindingMemberId] = useState<string | null>(null);
   const [testingRuleId, setTestingRuleId] = useState<string | null>(null);
+  const [reminderEventType, setReminderEventType] = useState('Revamp Session');
+  const [wordingFocus, setWordingFocus] = useState<{ type: string; eventType: string; revision: number } | null>(null);
   const [activeTab, setActiveTab] = useState<'status' | 'controls'>('status');
   const [memberView, setMemberView] = useState<'list' | 'grid'>(() => localStorage.getItem('notificationMemberView') === 'grid' ? 'grid' : 'list');
 
@@ -174,6 +178,20 @@ export function NotificationSettings() {
       setDirtyCategories(categories => new Set(categories).add(rule.category));
       return { ...rule, ...patch };
     }));
+  };
+
+  const openReminderSettings = (type: string) => {
+    setActiveTab('controls');
+    setWordingFocus(current => ({ type, eventType: reminderEventType, revision: (current?.revision || 0) + 1 }));
+    requestAnimationFrame(() => {
+      const details = document.getElementById('notification-rule-' + type) as HTMLDetailsElement | null;
+      if (!details) return;
+      const category = details.parentElement?.closest('details');
+      if (category) category.open = true;
+      details.open = true;
+      details.scrollIntoView({ block: 'start', behavior: 'auto' });
+      details.querySelector('summary')?.focus({ preventScroll: true });
+    });
   };
 
   const saveSettings = async () => {
@@ -300,6 +318,14 @@ export function NotificationSettings() {
         </button>
       </div>
 
+      <section aria-label="Event reminder settings" className="rounded-2xl border border-sky-200 bg-sky-50/60 p-4 dark:border-sky-400/15 dark:bg-sky-400/[0.04] sm:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div><h2 className="flex items-center gap-2 text-sm font-bold text-gray-900 dark:text-white"><BellRing className="h-4 w-4 text-sky-600 dark:text-sky-300" />Event invitations & reminders</h2><p className="mt-1 text-xs text-gray-500 dark:text-white/50">Choose an event type, then open the message you want to change.</p></div>
+          <label className="text-[11px] font-semibold text-gray-600 dark:text-white/60">Event type<select aria-label="Reminder event type" value={reminderEventType} onChange={event => setReminderEventType(event.target.value)} className="input mt-1 min-h-11 w-full sm:w-48">{Array.from(new Set(['Revamp Session', ...eventTypes])).map(type => <option key={type} value={type}>{type}</option>)}</select></label>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">{Object.entries(eventReminderWording).map(([type, wording]) => <button key={type} type="button" disabled={!rules.some(rule => rule.type === type)} onClick={() => openReminderSettings(type)} className="min-h-11 rounded-xl border border-sky-200 bg-white px-3 py-2 text-left text-xs font-semibold text-sky-900 transition-colors hover:bg-sky-100 disabled:opacity-40 dark:border-sky-300/15 dark:bg-white/[0.04] dark:text-sky-100 dark:hover:bg-sky-300/10">{wording.label}</button>)}</div>
+      </section>
+
       {activeTab === 'status' && (
         <PushReadinessPanel
           members={pushReadiness}
@@ -361,7 +387,7 @@ export function NotificationSettings() {
           </summary>
           <div className="divide-y divide-gray-100 border-t border-gray-100 dark:divide-white/[0.05] dark:border-white/[0.06]">
             {categoryRules.map(rule => (
-              <details key={rule.id} className="group px-5 py-4">
+              <details key={rule.id} id={`notification-rule-${rule.type}`} className="group scroll-mt-24 px-5 py-4">
                 <summary className="flex cursor-pointer list-none items-center gap-3">
                   <span className={`h-2.5 w-2.5 rounded-full ${rule.enabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-white/20'}`} />
                   <span className="min-w-0 flex-1">
@@ -384,7 +410,7 @@ export function NotificationSettings() {
                       </select>
                     </label>
                   </div>
-                  <NotificationCopyEditor rule={rule} eventTypes={eventTypes} organizationName={organization?.name || 'MCJC Church'} patchRule={patchRule} testing={testingRuleId === rule.id} onTest={sendRuleTest} />
+                  <NotificationCopyEditor key={wordingFocus?.type === rule.type ? wordingFocus.revision : 'default'} initialEventType={wordingFocus?.type === rule.type ? wordingFocus.eventType : ''} rule={rule} eventTypes={eventTypes} organizationName={organization?.name || 'MCJC Church'} patchRule={patchRule} testing={testingRuleId === rule.id} onTest={sendRuleTest} />
                 </div>
               </details>
             ))}
@@ -511,6 +537,7 @@ function PushReadinessPanel({
 }
 
 export function NotificationCopyEditor({
+  initialEventType = '',
   rule: savedRule,
   eventTypes,
   organizationName,
@@ -518,6 +545,7 @@ export function NotificationCopyEditor({
   testing,
   onTest,
 }: {
+  initialEventType?: string;
   rule: Rule;
   eventTypes: string[];
   organizationName: string;
@@ -525,7 +553,7 @@ export function NotificationCopyEditor({
   testing: boolean;
   onTest: (rule: Rule) => void;
 }) {
-  const [eventType, setEventType] = useState('');
+  const [eventType, setEventType] = useState(initialEventType);
   const supportsEventTypes = ['events', 'assignments', 'attendance', 'setlists', 'deadlines'].includes(savedRule.category)
     && savedRule.type !== 'out_today';
   const override = savedRule.event_type_templates?.[eventType];
@@ -542,6 +570,7 @@ export function NotificationCopyEditor({
   const hasCustomTitle = eventType ? override?.title != null : rule.template_title != null;
   const hasCustomBody = eventType ? override?.body != null : rule.template_body != null;
   const availableValues = Array.from(new Set((`${builtIn.title} ${builtIn.body}${supportsEventTypes ? ' [event type] [event title] [event date]' : ''}`).match(/\[[^\]]+\]/g) || []));
+  const unsupportedValues = unsupportedReminderValues(rule.type, (rule.template_title ?? builtIn.title) + " " + (rule.template_body ?? builtIn.body));
   const previewTitle = renderNotificationPreview(rule.template_title ?? builtIn.title, eventType || undefined);
   const renderedBody = renderNotificationPreview(rule.template_body ?? builtIn.body, eventType || undefined);
   const previewBody = supportsEventTypes && !renderedBody.toLowerCase().includes((eventType || 'Sunday Service').toLowerCase()) ? `${renderedBody} · ${eventType || 'Sunday Service'}` : renderedBody;
@@ -556,6 +585,8 @@ export function NotificationCopyEditor({
         </select>
         <span className="mt-1 block font-normal">{eventType ? `Only ${eventType} uses these overrides. Reset a field to inherit the default.` : 'Choose an event type for separate wording, including Revamp Session.'}</span>
       </label>}
+      {eventReminderWording[rule.type] && <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 dark:border-sky-400/15 dark:bg-sky-400/[0.06]"><p className="text-xs text-sky-900 dark:text-sky-100">Prefer a direct reminder without mentioning organizers?</p><button type="button" onClick={() => patchRule(rule.id, { template_body: eventReminderWording[rule.type].body })} className="mt-2 min-h-11 rounded-lg bg-sky-700 px-3 text-xs font-bold text-white hover:bg-sky-600">Use simple wording</button><p className="mt-1.5 text-[11px] text-sky-800/70 dark:text-sky-200/60">Applies to {eventType || 'all event types'} after you save this category’s changes.</p></div>}
+      {unsupportedValues.length > 0 && <p role="alert" className="rounded-xl bg-amber-50 p-3 text-xs leading-relaxed text-amber-800 dark:bg-amber-400/10 dark:text-amber-200">This reminder does not provide {unsupportedValues.join(', ')}. Those values may cause the original message to be sent instead. Use simple wording or remove them before saving.</p>}
       <label className="block text-xs font-bold uppercase tracking-wide text-gray-400 dark:text-white/35">
         <span className="flex items-center justify-between gap-3">
           <span>{hasCustomTitle ? 'Custom title' : 'Current built-in title'}</span>

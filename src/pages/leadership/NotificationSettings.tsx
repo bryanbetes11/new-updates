@@ -55,6 +55,7 @@ const categoryLabels: Record<string, string> = {
 };
 
 const notificationPreviewValues: Record<string, string> = {
+  reaction: '❤️', 'reaction label': 'Love',
   previous_event_date: 'August 9, 2026', event_date: 'August 16, 2026',
   role_name: 'Song Leader', due_date: 'August 18, 2026',
   role: 'Song Leader', event: 'Sunday Service · Sunday Gathering', 'event title': 'Sunday Gathering', 'event type': 'Sunday Service', 'event date': 'August 16, 2026', date: 'August 16, 2026',

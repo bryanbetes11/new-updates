@@ -4,6 +4,7 @@
   "version": "1.3.0",
   "type": "module",
   "scripts": {
+    "test:announcement-reactions": "node tests/announcementReactionNotifications.mjs",
     "test:notification-db": "node tests/notificationDatabase.mjs",
     "test:notification-activity": "node tests/notificationActivityDatabase.mjs && node tests/notificationPushHandoff.mjs && node tests/notificationOpenQueue.mjs",
     "dev": "vite",

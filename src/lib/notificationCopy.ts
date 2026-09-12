@@ -170,6 +170,10 @@ const copy: Record<string, NotificationCopy> = {
     title: 'New Announcement: [announcement title]',
     body: '[Announcement content]',
   },
+  announcement_reaction: {
+    title: 'New reaction [reaction]',
+    body: '[Member] reacted [reaction] ([reaction label]) to “[announcement title]”.',
+  },
   comment: {
     title: 'New Comment',
     body: '[Member] commented on “[announcement title]”.',

@@ -1,0 +1,45 @@
+// Run with agent-browser eval --stdin against this isolated fixture only.
+(async () => {
+  if (!location.href.includes('127.0.0.1:5179')) throw Error('Use the isolated reactions fixture');
+  const f=window.reactionFixture, results=[], wait=ms=>new Promise(r=>setTimeout(r,ms));
+  const check=(ok,label)=>{if(!ok)throw Error(label);results.push(label);};
+  const region=()=>document.querySelector('[aria-label="Announcement reactions"]');
+  const trigger=()=>region().querySelector('[aria-label="React to announcement"]');
+  const badge=label=>region().querySelector(`[aria-label^="${label}:"]`);
+  const open=async()=>{if(trigger().getAttribute('aria-expanded')!=='true')trigger().click();await wait(30);};
+  const pick=label=>region().querySelector(`[aria-label="React with ${label}"]`);
+  await open();
+  check(region().querySelectorAll('[role="menuitem"]').length===7,'All seven reaction choices available');
+  check(document.activeElement===pick('Like'),'Picker receives keyboard focus');
+  document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));await wait(20);
+  check(trigger().getAttribute('aria-expanded')==='false'&&document.activeElement===trigger(),'Escape dismisses picker and restores focus');
+  await open();document.body.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));await wait(20);
+  check(trigger().getAttribute('aria-expanded')==='false','Outside tap dismisses picker');
+  f.delay=180;await open();const love=pick('Love');love.click();love.click();await wait(30);
+  check(badge('Love')?.getAttribute('aria-pressed')==='true','Reaction appears optimistically before response');
+  check(trigger().disabled,'Duplicate clicks blocked while saving');
+  await wait(240);check(f.rows.length===1&&f.writes.filter(w=>w==='insert').length===1,'Exactly one saved reaction');
+  window.dispatchEvent(new Event('focus'));await wait(70);
+  check(badge('Love')?.textContent.includes('1'),'Saved reaction survives refresh');
+  badge('Love').click();await wait(250);
+  check(!badge('Love')&&f.rows.length===0,'Tapping your reaction removes it');
+  f.fail=true;await open();pick('Wow').click();await wait(250);
+  check(!badge('Wow')&&region().textContent.includes('could not be saved'),'Failed save rolls back and explains retry');
+  f.fail=false;await open();pick('Wow').click();await wait(250);
+  check(badge('Wow')?.getAttribute('aria-pressed')==='true'&&!region().textContent.includes('could not be saved'),'Retry saves successfully');
+  f.rows.push({id:'other-love',announcement_id:'fixture-announcement',user_id:'other-user',emoji:'❤️',created_at:new Date().toISOString()});
+  f.listeners.forEach(fn=>fn());await wait(70);
+  check(badge('Love')?.getAttribute('aria-pressed')==='false','Another member reaction refreshes without becoming yours');
+  badge('Love').click();await wait(250);
+  check(badge('Love')?.textContent.includes('2')&&badge('Love').getAttribute('aria-pressed')==='true','Counts combine multiple members');
+  f.failReads=true;window.dispatchEvent(new Event('focus'));await wait(70);
+  check(region().textContent.includes('could not load')&&trigger().disabled,'Failed reads preserve counts and block uncertain mutations');
+  f.failReads=false;[...region().querySelectorAll('button')].find(b=>b.textContent==='Retry').click();await wait(70);
+  check(!trigger().disabled&&!region().textContent.includes('could not load'),'Read retry restores controls');
+  f.readDelay=180;f.delay=340;window.dispatchEvent(new Event('focus'));await wait(20);await open();pick('Like').click();await wait(200);
+  check(badge('Like')?.getAttribute('aria-pressed')==='true','Stale read cannot overwrite a pending optimistic reaction');
+  await wait(400);f.readDelay=20;f.delay=40;
+  check(document.documentElement.scrollWidth<=innerWidth,'Page fits mobile viewport');
+  check([...region().querySelectorAll('button')].every(b=>b.getBoundingClientRect().height>=44),'Reaction controls meet 44px tap height');
+  return {passed:results.length,results};
+})()

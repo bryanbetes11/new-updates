@@ -17,6 +17,7 @@ import { Avatar } from '../components/Avatar';
 import { FormattedText } from '../components/FormattedText';
 import { MentionTextarea } from '../components/MentionTextarea';
 import { EmojiReactionPicker, type ReactionEmoji } from '../components/EmojiReactionPicker';
+import { AnnouncementReactions } from '../components/AnnouncementReactions';
 import { ReactionFlightAnimation, type ReactionFlightPath } from '../components/ReactionFlightAnimation';
 import { useSmartBack } from '../lib/navigationHistory';
 import { groupEmojiReactions } from '../lib/reactions';
@@ -1046,6 +1047,7 @@ export function AnnouncementDetail() {
               </motion.div>
             )}
           </div>
+          {user && <AnnouncementReactions key={`${announcement.id}:${user.id}`} announcementId={announcement.id} userId={user.id} />}
         </motion.div>
 
         {/* ── Comments Card ────────────────────────────── */}

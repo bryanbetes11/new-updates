@@ -1,4 +1,5 @@
 import { SetlistBuilderPage } from '../components/SetlistBuilderPage';
+import { EventUpdateViewTracker } from '../components/EventUpdateViewTracker';
 import { SONG_ROLE_GUIDE } from '../lib/songRoleGuide';
 import { ChartNavigation } from '../components/ChartNavigation';
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo, type ReactNode } from 'react';
@@ -2823,8 +2824,8 @@ export function EventDetail() {
     const { data: existingMentions = [] } = await supabase
       .from('notifications')
       .select('user_id')
-      .eq('type', 'mention')
-      .eq('event_id', event.id)
+      .in('type', ['mention', 'setlist_revision_mention'])
+      .eq('data->>event_id', event.id)
       .in('user_id', recipientIds)
       .eq('data->>setlist_id', relatedSetlistId)
       .eq('data->>revision_discussion', 'true')
@@ -4812,6 +4813,7 @@ const openLyricsModal = (ss: SetlistSong) => {
 
         {/* ── Pending Assignment Banner ────────────────── */}
         <EventRescheduleNotice event={event} />
+        <EventUpdateViewTracker key={user?.id} eventId={event.id} rescheduledAt={event.rescheduled_at || null} />
         {!assignmentDetailsBlocked && postEventFeedbackOpen && (
           <button
             type="button"

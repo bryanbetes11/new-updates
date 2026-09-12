@@ -4,6 +4,28 @@ export interface NotificationCopy {
 }
 
 const copy: Record<string, NotificationCopy> = {
+  event_invitation: { title: 'Event invitation', body: 'You are invited to [Event] on [date]. Please confirm whether you can attend.' },
+  event_invitation_reminder: { title: 'Event invitation reminder', body: 'Please confirm whether you can attend [Event] on [date].' },
+  assignment_confirmed: { title: 'Assignment confirmed', body: '[member] confirmed their assignment for [Event].' },
+  assignment_declined: { title: 'Assignment declined', body: '[member] declined their assignment for [Event].' },
+  event_invitation_accepted: { title: 'Event invitation accepted', body: '[member] is attending [Event].' },
+  event_invitation_declined: { title: 'Event invitation declined', body: '[member] cannot attend [Event].' },
+  leave_approved: { title: 'Unavailable day approved', body: 'Your unavailable day request for [date] was approved.' },
+  leave_declined: { title: 'Unavailable day declined', body: 'Your unavailable day request for [date] was declined.' },
+  role_added: { title: 'Ministry role added', body: '[role_name] was added to your profile.' },
+  role_removed: { title: 'Ministry role removed', body: '[role_name] was removed from your profile.' },
+  announcement_mention: { title: 'Mention in announcement', body: 'You were mentioned in an announcement.' },
+  announcement_comment_mention: { title: 'Mention in announcement comment', body: 'You were mentioned in an announcement comment.' },
+  chat_mention: { title: 'Mention in chat', body: 'You were mentioned in a chat.' },
+  setlist_revision_mention: { title: 'Mention in setlist discussion', body: 'You were mentioned in the setlist discussion for [Event].' },
+  revamp_event_created: { title: 'Revamp scheduled', body: '[Event] was scheduled for [date].' },
+  youth_event_created: { title: 'Youth Recharge scheduled', body: '[Event] was scheduled for [date].' },
+  observation_due_tomorrow: { title: 'Observation due tomorrow', body: 'Your observation for [Event] is due tomorrow.' },
+  observation_due_today: { title: 'Observation due today', body: 'Your observation for [Event] is due today.' },
+  observation_overdue: { title: 'Observation overdue', body: 'Your observation for [Event] was due on [due_date].' },
+  observation_resolved: { title: 'Observation resolved', body: 'An observation for [Event] was resolved.' },
+  observation_monitoring: { title: 'Observation being monitored', body: 'An observation for [Event] is being monitored.' },
+  observation_open: { title: 'Observation opened again', body: 'An observation for [Event] is open again.' },
   out_today: {
     title: 'Out Today',
     body: '[count] member(s) are out on [date]. Open to see who is unavailable and their reasons.',
@@ -63,6 +85,10 @@ const copy: Record<string, NotificationCopy> = {
   attendance_grace_final_reminder: {
     title: 'Present Grace Period Ending',
     body: '[Event] already started. Scan the church QR and tap Check In now; later check-ins are recorded as Late.',
+  },
+  event_rescheduled: {
+    title: 'Event rescheduled — confirm availability',
+    body: '[Event] has been rescheduled from [previous_event_date] to [event_date]. Please confirm your availability again.',
   },
   attendance_scan_incomplete: {
     title: 'Finish Your Attendance Check-In',

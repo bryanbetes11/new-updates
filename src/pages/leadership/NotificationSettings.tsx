@@ -54,6 +54,8 @@ const categoryLabels: Record<string, string> = {
 };
 
 const notificationPreviewValues: Record<string, string> = {
+  previous_event_date: 'August 9, 2026', event_date: 'August 16, 2026',
+  role_name: 'Song Leader', due_date: 'August 18, 2026',
   role: 'Song Leader', event: 'Sunday Service · Sunday Gathering', 'event title': 'Sunday Gathering', 'event type': 'Sunday Service', 'event date': 'August 16, 2026', date: 'August 16, 2026',
   'start time': '7:30 AM', member: 'Bro. Bryan Betes', 'song leader': 'Bro. Bryan Betes', count: '3',
   'offense level': '2nd Offense', quarter: 'Q3 2026', 'next action': 'Leadership follow-up',

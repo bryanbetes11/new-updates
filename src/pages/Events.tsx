@@ -239,8 +239,8 @@ function EmptyEventArtwork({ className = 'h-16 w-16' }: { className?: string }) 
 
 function PendingSetlistRibbon({ pendingDays, compact = false }: { pendingDays: number; compact?: boolean }) {
   return (
-    <span className={`pointer-events-none absolute z-10 inline-flex items-center justify-center gap-0.5 bg-amber-400 font-black text-black shadow-[0_3px_10px_rgba(0,0,0,0.35)] ${compact ? 'left-[-1.2rem] top-[0.65rem] w-[4.2rem] -rotate-45 py-0.5 text-[7px] tracking-[-0.02em]' : 'left-[-2.15rem] top-[1.05rem] w-[7.5rem] -rotate-45 py-1 text-[9px] tracking-[0.01em]'}`}>
-      <Timer className={compact ? 'h-2 w-2' : 'h-2.5 w-2.5'} />
+    <span className={`pointer-events-none absolute z-10 inline-flex items-center justify-center gap-0.5 bg-amber-400 font-black text-black shadow-[0_3px_10px_rgba(0,0,0,0.35)] ${compact ? 'left-[-1rem] top-[1.125rem] w-[5.5rem] -rotate-45 py-[3px] text-[9px] tracking-[-0.02em]' : 'left-[-2.15rem] top-[1.05rem] w-[7.5rem] -rotate-45 py-1 text-[9px] tracking-[0.01em]'}`}>
+      <Timer className="h-2.5 w-2.5" />
       Pending {pendingDays}d
     </span>
   );
@@ -431,7 +431,7 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
           </div>
         </>
       ) : <>
-      <div className={`relative shrink-0 ${artworkClassName}`}>
+      <div className={`relative shrink-0 overflow-hidden rounded-[0.35rem] ${artworkClassName}`}>
         {setlistInfo?.songCount ? (
           <EventArtwork
             eventType={event.event_type}

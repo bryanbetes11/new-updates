@@ -9,8 +9,8 @@ for (const changed of [{ android: false }, { standalone: false }, { native: true
 assert.ok(ANDROID_TEST_RELEASE.url.startsWith('https://github.com/bryanbetes11/new-updates/releases/download/'));
 assert.ok(ANDROID_TEST_RELEASE.url.endsWith('/' + ANDROID_TEST_RELEASE.filename));
 assert.equal(ANDROID_TEST_RELEASE.filename, 'ServeSync-1.4.0.apk');
-assert.equal(ANDROID_TEST_RELEASE.build, 18);
-assert.ok(ANDROID_TEST_RELEASE.url.includes('/android-v1.4.0-build18/'));
+assert.equal(ANDROID_TEST_RELEASE.build, 19);
+assert.ok(ANDROID_TEST_RELEASE.url.includes('/android-v1.4.0-build19/'));
 const now = 2 * APK_OFFER_INTERVAL;
 assert.equal(isAndroidOfferDue(null, now, false), true);
 assert.equal(isAndroidOfferDue(now - APK_OFFER_INTERVAL + 1, now, false), false);

@@ -1,10 +1,10 @@
 {
-  "headline": "ServeSync updates inside the Android app and shows who added each song.",
+  "headline": "Pending setlists are easier to spot and review on mobile.",
   "highlights": [
+    "Pending setlists appear on every church member's dashboard, with decisions limited to authorized reviewers.",
+    "Setlists show their submission date and pending age in the dashboard card.",
+    "The mobile dashboard has four priority shortcuts and more room beneath the bottom navigation.",
     "On Android, Home, Events, and Library use saved content inside their normal layouts when offline.",
-    "Approved charts for nearby events are prepared while connected, so Live Mode can open them without internet.",
-    "Offline and cache readiness banners no longer cover the app or interrupt event details.",
-    "Android now downloads a verified update inside ServeSync and offers a separate Install update action.",
-    "Song details show when a song was added and which member added it."
+    "Android downloads verified updates inside ServeSync and offers a separate Install update action."
   ]
 }

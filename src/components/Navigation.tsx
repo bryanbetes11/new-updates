@@ -2513,7 +2513,7 @@ export function Navigation({
               className={`pointer-events-auto relative flex ${useDockedMobileNav ? "w-full items-start overflow-visible px-2 pt-2" : "w-full max-w-[480px] items-center overflow-hidden bg-[#080808]/92 p-1.5 rounded-full"}`}
               style={{
                 height: useDockedMobileNav
-                  ? "calc(64px + env(safe-area-inset-bottom))"
+                  ? "calc(72px + env(safe-area-inset-bottom))"
                   : undefined,
                 background: useDockedMobileNav
                   ? "transparent"

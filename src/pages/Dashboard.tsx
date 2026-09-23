@@ -1354,11 +1354,11 @@ function AccountDashboard() {
             </div>
 
             <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-3 2xl:grid-cols-6">
-            {quickTiles.map(tile => (
+            {quickTiles.map((tile, index) => (
               <button
                 key={tile.title}
                 onClick={() => navigate(tile.path)}
-                className="group flex h-[68px] min-w-0 items-center overflow-hidden rounded-[0.5rem] border border-white/[0.08] bg-[#2a2a2a] text-left shadow-[0_18px_46px_-34px_rgba(0,0,0,0.9)] transition-all hover:-translate-y-0.5 hover:bg-[#343434] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] lg:h-[88px]"
+                className={`group h-[68px] min-w-0 items-center overflow-hidden rounded-[0.5rem] border border-white/[0.08] bg-[#2a2a2a] text-left shadow-[0_18px_46px_-34px_rgba(0,0,0,0.9)] transition-all hover:-translate-y-0.5 hover:bg-[#343434] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] lg:h-[88px] ${index < 4 ? 'flex' : 'hidden md:flex'}`}
               >
                 <div className={`relative flex h-full w-[68px] shrink-0 items-center justify-center bg-gradient-to-br ${tile.tone} lg:w-[72px]`}>
                   <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_25%,rgba(255,255,255,0.24),transparent_28%)]" />

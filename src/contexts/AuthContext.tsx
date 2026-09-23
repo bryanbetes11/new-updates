@@ -755,6 +755,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const retryOnlineRef = useRef(retryOnline);
+  retryOnlineRef.current = retryOnline;
+  useEffect(() => {
+    if (!offlineMode) return;
+    const reconnect = () => {
+      if (navigator.onLine) void retryOnlineRef.current();
+    };
+    window.addEventListener('online', reconnect);
+    const initialRetry = navigator.onLine ? window.setTimeout(reconnect, 1000) : null;
+    return () => {
+      window.removeEventListener('online', reconnect);
+      if (initialRetry !== null) window.clearTimeout(initialRetry);
+    };
+  }, [offlineMode]);
+
   return (
     <AuthContext.Provider
       value={{

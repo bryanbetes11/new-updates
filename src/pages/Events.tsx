@@ -8,6 +8,7 @@ import { Calendar, Plus, Search, Users, Trash2, CalendarOff, AlertCircle, Clock,
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { deviceCacheScope, readDeviceSnapshot, writeDeviceSnapshot, invalidateDeviceSnapshots } from '../lib/deviceCache';
+import { prefetchEventDetails } from '../lib/prefetchEventDetails';
 import { useToast } from '../contexts/ToastContext';
 import { Modal } from '../components/Modal';
 import { Select } from '../components/Select';
@@ -933,7 +934,7 @@ function EventDesktopCardGroups({ events, calendarEntries, songLeaderMap, setlis
 }
 
 export function Events() {
-  const { user, isLeader, roles, profile, loading: authLoading } = useAuth();
+  const { user, isLeader, roles, profile, loading: authLoading, offlineMode } = useAuth();
   const viewScope = !authLoading && user?.id && profile?.id === user.id && profile.org_id ? JSON.stringify([user.id, profile.org_id]) : null;
   const cacheScope = viewScope ? deviceCacheScope(user?.id, profile?.org_id) : null;
   const activeScopeRef = useRef(viewScope);
@@ -1011,6 +1012,7 @@ export function Events() {
       networkAppliedRef.current = true;
       networkFailedRef.current = false;
       void writeDeviceSnapshot(cacheScope, 'events:list', eventsRes.data || []);
+      void prefetchEventDetails(cacheScope, user?.id, eventsRes.data || []).catch(() => undefined);
       setMembers(membersRes.data || []);
       setMemberRoles(userRolesRes.data || []);
       setSundayServices(sundayServicesRes.data || []);
@@ -1119,7 +1121,7 @@ export function Events() {
     } finally {
       if (activeScopeRef.current === requestedScope && sequence === fetchSequenceRef.current) setLoading(false);
     }
-  }, [cacheScope, viewScope]);
+  }, [cacheScope, viewScope, user?.id]);
 
   useEffect(() => {
     networkAppliedRef.current = false;
@@ -1131,15 +1133,23 @@ export function Events() {
     if (!viewScope) return;
     let active = true;
     void readDeviceSnapshot<Event[]>(cacheScope, 'events:list').then(snapshot => {
-      if (!active || !snapshot || networkAppliedRef.current || activeScopeRef.current !== viewScope) return;
+      if (!active || networkAppliedRef.current || activeScopeRef.current !== viewScope) return;
+      if (!snapshot) {
+        if (offlineMode) {
+          setVisibleScope(viewScope);
+          setCacheState('offline');
+          setLoading(false);
+        }
+        return;
+      }
       setEvents(snapshot.value);
       setVisibleScope(viewScope);
       setCacheState(networkFailedRef.current ? 'offline' : 'saved');
       setLoading(false);
     });
-    void fetchEvents();
+    if (!offlineMode) void fetchEvents();
     return () => { active = false; fetchSequenceRef.current += 1; };
-  }, [cacheScope, viewScope, fetchEvents]);
+  }, [cacheScope, viewScope, fetchEvents, offlineMode]);
   const openCreateEvent = useCallback((eventDate = '') => {
     if (cacheState !== 'fresh') return;
     setForm(createEmptyEventForm(eventDate));
@@ -1387,7 +1397,6 @@ export function Events() {
   return (
     <div className="page-container page-bottom-pad relative overflow-hidden bg-[#050505] text-white">
       <div className="relative mx-auto max-w-2xl space-y-5 px-4 pb-6 pt-4 sm:space-y-6 sm:px-6 sm:pt-5 md:max-w-[860px] md:px-8 lg:max-w-6xl xl:max-w-[1560px]">
-        {(cacheState === 'saved' || cacheState === 'offline') && <p role="status" className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-2 text-xs text-amber-100">{cacheState === 'saved' ? 'Showing saved events while refreshing…' : 'Showing saved events. Connect to refresh.'} Changes are unavailable until the latest events load.</p>}
 
         {/* ── Toolbar ── */}
         <motion.div

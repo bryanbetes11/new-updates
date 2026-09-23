@@ -10,6 +10,12 @@ function release(build: number, version = '1.3.1') {
 assert.equal(newestAndroidRelease([release(6), release(9), release(8)], 7)?.build, 9, 'choose highest Android build, not list order or patch version');
 assert.equal(newestAndroidRelease([release(7), release(6)], 7), null, 'never offer current or older build');
 assert.equal(newestAndroidRelease([release(8)], 7)?.version, '1.3.1', 'same marketing version can have a newer build');
+const cleanTag = 'android-v1.4.0-build14';
+const cleanName = 'ServeSync-1.4.0.apk';
+const cleanUrl = `https://github.com/bryanbetes11/new-updates/releases/download/${cleanTag}/${cleanName}`;
+assert.equal(newestAndroidRelease([{ tag_name: cleanTag, draft: false, published_at: '2026-09-24T00:00:00Z', assets: [{ name: cleanName, state: 'uploaded', size: 123456, browser_download_url: cleanUrl }] }], 13)?.url, cleanUrl);
+assert.equal(isTrustedAndroidDownload(cleanUrl), true);
+assert.equal(isTrustedAndroidDownload(cleanUrl.replace('1.4.0.apk', '1.4.1.apk')), false, 'asset version must match the release tag');
 assert.equal(newestAndroidRelease([{ ...release(9), draft: true }], 7), null);
 assert.equal(newestAndroidRelease([{ ...release(9), published_at: null }], 7), null);
 assert.equal(newestAndroidRelease([{ ...release(9), assets: [] }], 7), null);

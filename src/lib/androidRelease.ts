@@ -9,7 +9,8 @@ export const ANDROID_RELEASES_API = 'https://api.github.com/repos/bryanbetes11/n
 const downloadRoot = 'https://github.com/bryanbetes11/new-updates/releases/download/';
 
 export function isTrustedAndroidDownload(url: string) {
-  return /^https:\/\/github\.com\/bryanbetes11\/new-updates\/releases\/download\/android-(?:test-)?v\d+\.\d+\.\d+-build[1-9]\d*\/ServeSync-\d+\.\d+\.\d+-android-(?:test|release)-build[1-9]\d*\.apk$/.test(url);
+  const match = /^https:\/\/github\.com\/bryanbetes11\/new-updates\/releases\/download\/android-(?:test-)?v(\d+\.\d+\.\d+)-build([1-9]\d*)\/ServeSync-(\d+\.\d+\.\d+)(?:-android-(?:test|release)-build([1-9]\d*))?\.apk$/.exec(url);
+  return !!match && match[1] === match[3] && (!match[4] || match[2] === match[4]);
 }
 
 export function newestAndroidRelease(data: unknown, installedBuild: number): AndroidRelease | null {
@@ -28,7 +29,8 @@ export function newestAndroidRelease(data: unknown, installedBuild: number): And
     const asset = item.assets.find((entry: Record<string, unknown>) => {
       if (!entry || typeof entry !== 'object') return false;
       const name = entry.name;
-      return (name === `ServeSync-${version}-android-test-build${build}.apk`
+      return (name === `ServeSync-${version}.apk`
+        || name === `ServeSync-${version}-android-test-build${build}.apk`
         || name === `ServeSync-${version}-android-release-build${build}.apk`)
         && entry.state === 'uploaded' && typeof entry.size === 'number' && entry.size > 0
         && entry.browser_download_url === `${downloadRoot}${item.tag_name}/${name}`;

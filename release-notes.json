@@ -1,10 +1,9 @@
 {
-  "headline": "Clearer setlists, richer songs, and more expressive conversations.",
+  "headline": "ServeSync 1.4.0 keeps familiar screens available when your connection drops.",
   "highlights": [
-    "Messages, announcements, and revision discussions now share polished reactions with smoother mobile motion.",
-    "Quoted replies, mentions, and comment controls are clearer and easier to use across phones and desktops.",
-    "Setlist reviews now flag duplicate song proposals and make earlier proposals easier to inspect.",
-    "Song selection can preview saved lyrics or chord-chart text without stretching the setup modal.",
-    "Song title edits, admin chart imports, and responsive review dialogs are more reliable."
+    "On Android, Home, Events, and Library use saved content inside their normal layouts when offline.",
+    "Approved charts for nearby events are prepared while connected, so Live Mode can open them without internet.",
+    "Offline and cache readiness banners no longer cover the app or interrupt event details.",
+    "The Android download is now named ServeSync-1.4.0.apk and can be discovered by the in-app updater."
   ]
 }

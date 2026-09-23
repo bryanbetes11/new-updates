@@ -17,8 +17,7 @@ import { isOpenLiveRequest } from '../lib/liveMode';
 import { useScreenAwake } from '../hooks/useScreenAwake';
 import { useAuth } from '../contexts/AuthContext';
 import { deviceCacheScope, invalidateDeviceSnapshots } from '../lib/deviceCache';
-import { readSavedEventDetail, writeVerifiedSavedEventDetail, getSavedEventChartCount, getSavedEventSongs, type SavedEventDetail } from '../lib/offlineEvent';
-import { OfflineEventDetail } from '../components/OfflineEventDetail';
+import { readSavedEventDetail, writeVerifiedSavedEventDetail, getSavedEventSongs, type SavedEventDetail } from '../lib/offlineEvent';
 import { useToast } from '../contexts/ToastContext';
 import { Modal } from '../components/Modal';
 import { RescheduleEventModal } from '../components/RescheduleEventModal';
@@ -573,7 +572,7 @@ export function EventDetail() {
   const eventReturnRoute = returnRouteRef.current;
   const eventBackLabel = eventReturnRoute.startsWith('/my-assignments') ? 'Back to assignments' : 'Back to events';
 
-  const { user, profile, roles, userRoles, organization, loading: authLoading, isLeader, isOrgAdmin, isAdmin, isAdminCoordinator, isProductionDirector, isMusicDirector, isSetlistCoordinator, isPlatformOwner, canPreviewMemberView, isViewingAsMember, isViewingAsSongLeader, setViewingAsSongLeader } = useAuth();
+  const { user, profile, roles, userRoles, organization, loading: authLoading, offlineMode, isLeader, isOrgAdmin, isAdmin, isAdminCoordinator, isProductionDirector, isMusicDirector, isSetlistCoordinator, isPlatformOwner, canPreviewMemberView, isViewingAsMember, isViewingAsSongLeader, setViewingAsSongLeader } = useAuth();
   const viewScope = !authLoading && user?.id && profile?.id === user.id && profile.org_id ? JSON.stringify([user.id, profile.org_id]) : null;
   const cacheScope = viewScope ? deviceCacheScope(user?.id, profile?.org_id) : null;
   const detailCacheKey = id ? `events:detail:${id}` : null;
@@ -588,13 +587,6 @@ export function EventDetail() {
   const [visibleDetailIdentity, setVisibleDetailIdentity] = useState<string | null>(null);
   const [cacheState, setCacheState] = useState<'loading' | 'saved' | 'fresh' | 'offline'>('loading');
   const [savedDetail, setSavedDetail] = useState<{ value: SavedEventDetail; savedAt: number } | null>(null);
-  const [offlineReaderPinned, setOfflineReaderPinned] = useState(false);
-  const offlineReaderPinnedRef = useRef(false);
-  const handleOfflineLiveModeChange = useCallback((open: boolean) => {
-    offlineReaderPinnedRef.current = open;
-    setOfflineReaderPinned(open);
-  }, []);
-  const [offlineSaveStatus, setOfflineSaveStatus] = useState<'unknown' | 'ready' | 'unavailable'>('unknown');
   const { toast } = useToast();
   const prefersReducedMotion = useReducedMotion();
   const canPreviewLiveMode = isOrgAdmin || isAdmin || isPlatformOwner;
@@ -622,7 +614,8 @@ export function EventDetail() {
     && a.status === 'confirmed'
     && !isNonServingEventAssignmentRole(a.roles?.name)
   ));
-  const canUseServiceModePilot = canPreviewLiveMode || liveAssignments.length > 0;
+  const canUseServiceModePilot = canPreviewLiveMode || liveAssignments.length > 0
+    || (offlineMode && visibleDetailIdentity === activeDetailIdentity && !!savedDetail && getSavedEventSongs(savedDetail.value).length > 0);
   const assignedLiveAudience = liveAssignments.some(a => TECH_BOOTH_ROLE_NAMES.has(a.roles?.name.toLowerCase() || '')) ? 'tech' : 'stage';
   const [members, setMembers] = useState<{ id: string; first_name: string; last_name: string; ministry_status: string }[]>([]);
   const [memberRoles, setMemberRoles] = useState<{ user_id: string; role_id: string }[]>([]);
@@ -787,7 +780,7 @@ export function EventDetail() {
   const [techModeMessages, setTechModeMessages] = useState<TechModeMessages>(DEFAULT_TECH_MODE_MESSAGES);
   const [stageRequestMessages, setStageRequestMessages] = useState<TechModeMessages>(DEFAULT_STAGE_REQUEST_MESSAGES);
   const [showRehearsalSummary, setShowRehearsalSummary] = useState(false);
-  const liveSession = useLiveModeSession(id, profile?.org_id, user?.id, serviceModeIndex !== null && canUseServiceModePilot, stageCommsView);
+  const liveSession = useLiveModeSession(id, profile?.org_id, user?.id, !offlineMode && serviceModeIndex !== null && canUseServiceModePilot, stageCommsView);
   useScreenAwake(serviceModeIndex !== null);
   const incomingInstructionIds = liveSession.messages.filter(m => m.kind === 'tech_instruction' && m.recipient_id === user?.id && m.status !== 'seen').map(m=>m.id).join(',');
   useEffect(()=>{ if(incomingInstructionIds && stageCommsView === 'stage') setStageCommsOpen(true); },[incomingInstructionIds,stageCommsView]);
@@ -1092,7 +1085,7 @@ export function EventDetail() {
   const serviceUsesLinkedSetlist = serviceModeSongs === linkedReferenceSongs;
   const serviceSourceSetlist = serviceUsesLinkedSetlist ? linkedSetlist : setlist;
   serviceRefreshScope.current = `${id}:${serviceSourceSetlist?.id}`;
-  const chartUpdates = useLiveChartUpdates(serviceSourceSetlist?.id, serviceModeSongs.map(song => song.song_id), serviceModeActive, `${profile?.org_id}:${user?.id}`);
+  const chartUpdates = useLiveChartUpdates(serviceSourceSetlist?.id, serviceModeSongs.map(song => song.song_id), serviceModeActive && !offlineMode, `${profile?.org_id}:${user?.id}`);
   serviceNotifyUpdate.current = chartUpdates.notify;
 
   useEffect(() => {
@@ -1334,7 +1327,6 @@ export function EventDetail() {
       networkFailedRef.current = false;
       setVisibleDetailIdentity(requestedIdentity);
       setCacheState('fresh');
-      setOfflineSaveStatus('unknown');
       const savedDetail: SavedEventDetail = {
         event: eventRes.data as Event | null,
         approvedSetlist,
@@ -1343,14 +1335,19 @@ export function EventDetail() {
         linkedApprovedSongs,
         linkedServiceTitle,
       };
-      lastSavedDetailRef.current = JSON.stringify(savedDetail);
-      void writeVerifiedSavedEventDetail(cacheScope, id, savedDetail).then(saved => {
-        if (activeDetailRef.current !== requestedIdentity || sequence !== fetchSequenceRef.current) return;
-        setOfflineSaveStatus(saved ? 'ready' : 'unavailable');
-        if (saved && !offlineReaderPinnedRef.current) setSavedDetail(saved);
-      }).catch(() => {
-        if (activeDetailRef.current === requestedIdentity && sequence === fetchSequenceRef.current) setOfflineSaveStatus('unavailable');
-      });
+      if (shouldBlockEventDetails((assignRes.data || []) as EventAssignment[], user?.id, isLeader || isOrgAdmin || isPlatformOwner)) {
+        lastSavedDetailRef.current = null;
+        setSavedDetail(null);
+        void invalidateDeviceSnapshots(cacheScope, [detailCacheKey]);
+      } else {
+        lastSavedDetailRef.current = JSON.stringify(savedDetail);
+        void writeVerifiedSavedEventDetail(cacheScope, id, savedDetail).then(saved => {
+          if (activeDetailRef.current !== requestedIdentity || sequence !== fetchSequenceRef.current) return;
+          if (saved) setSavedDetail(saved);
+        }).catch(() => {
+          // The current event remains usable even if local storage is unavailable.
+        });
+      }
     } catch (error) {
       console.error('Failed to load event detail', error);
       if (activeDetailRef.current === requestedIdentity && sequence === fetchSequenceRef.current) {
@@ -1362,7 +1359,7 @@ export function EventDetail() {
       if (fetchingDetailSequenceRef.current === sequence) fetchingDetailSequenceRef.current = 0;
       if (activeDetailRef.current === requestedIdentity && sequence === fetchSequenceRef.current) setLoading(false);
     }
-  }, [id, viewScope, cacheScope, detailCacheKey, activeDetailIdentity, isMissingSetlistSubmissionTableError]);
+  }, [id, viewScope, cacheScope, detailCacheKey, activeDetailIdentity, isMissingSetlistSubmissionTableError, user?.id, isLeader, isOrgAdmin, isPlatformOwner]);
 
   useEffect(() => {
     networkAppliedRef.current = false;
@@ -1371,9 +1368,6 @@ export function EventDetail() {
     setLoading(true);
     setCacheState('loading');
     setSavedDetail(null);
-    setOfflineReaderPinned(false);
-    offlineReaderPinnedRef.current = false;
-    setOfflineSaveStatus('unknown');
     setVisibleDetailIdentity(null);
     setEvent(null);
     setSetlist(null);
@@ -1382,19 +1376,28 @@ export function EventDetail() {
     if (!viewScope || !detailCacheKey || !activeDetailIdentity) return;
     let active = true;
     void readSavedEventDetail(cacheScope, id!).then(snapshot => {
-      if (!active || !snapshot || networkAppliedRef.current || activeDetailRef.current !== activeDetailIdentity) return;
+      if (!active || networkAppliedRef.current || activeDetailRef.current !== activeDetailIdentity) return;
+      if (!snapshot) {
+        if (offlineMode) {
+          setVisibleDetailIdentity(activeDetailIdentity);
+          setCacheState('offline');
+          setLoading(false);
+        }
+        return;
+      }
       setSavedDetail(snapshot);
-      setOfflineSaveStatus('ready');
       setEvent(snapshot.value.event);
       setSetlist(snapshot.value.approvedSetlist);
       setSetlistSongs(snapshot.value.approvedSongs);
+      setLinkedSetlist(snapshot.value.linkedApprovedSetlist || null);
+      setLinkedSetlistSongs(snapshot.value.linkedApprovedSongs || []);
       setVisibleDetailIdentity(activeDetailIdentity);
-      setCacheState(networkFailedRef.current ? 'offline' : 'saved');
+      setCacheState(networkFailedRef.current || offlineMode ? 'offline' : 'saved');
       setLoading(false);
     });
-    void fetchAll();
+    if (!offlineMode) void fetchAll();
     return () => { active = false; fetchSequenceRef.current += 1; };
-  }, [fetchAll, viewScope, cacheScope, detailCacheKey, activeDetailIdentity, id]);
+  }, [fetchAll, viewScope, cacheScope, detailCacheKey, activeDetailIdentity, id, offlineMode]);
 
   useEffect(() => {
     if (cacheState !== 'fresh' || visibleDetailIdentity !== activeDetailIdentity || fetchingDetailSequenceRef.current !== 0 || !lastSavedDetailRef.current || !event || !id) return;
@@ -1413,10 +1416,9 @@ export function EventDetail() {
     lastSavedDetailRef.current = current;
     void writeVerifiedSavedEventDetail(cacheScope, id, snapshot).then(saved => {
       if (activeDetailRef.current !== activeDetailIdentity) return;
-      setOfflineSaveStatus(saved ? 'ready' : 'unavailable');
-      if (saved && !offlineReaderPinnedRef.current) setSavedDetail(saved);
+      if (saved) setSavedDetail(saved);
     }).catch(() => {
-      if (activeDetailRef.current === activeDetailIdentity) setOfflineSaveStatus('unavailable');
+      // A failed cache write does not invalidate the current server response.
     });
   }, [cacheState, visibleDetailIdentity, activeDetailIdentity, event, setlist, setlistSongs, linkedSetlist, linkedSetlistSongs, linkedServiceEvent, cacheScope, id]);
 
@@ -4062,16 +4064,6 @@ const openLyricsModal = (ss: SetlistSong) => {
   }, [event, lifecycleNow, location.pathname, location.search, navigate]);
 
   if (loading || visibleDetailIdentity !== activeDetailIdentity) return <PageLoader />;
-  if (((cacheState === 'saved' || cacheState === 'offline') || offlineReaderPinned) && savedDetail) return (
-    <OfflineEventDetail
-      snapshot={savedDetail.value}
-      savedAt={savedDetail.savedAt}
-      onBack={() => navigate(eventReturnRoute)}
-      backLabel={eventBackLabel}
-      refreshing={cacheState === 'saved'}
-      onLiveModeChange={handleOfflineLiveModeChange}
-    />
-  );
   if (!event) return (
     <div className="page-container page-bottom-pad flex min-h-[60vh] items-center justify-center bg-[#050505] px-5 text-center text-white">
       <div className="max-w-sm">
@@ -4761,9 +4753,6 @@ const openLyricsModal = (ss: SetlistSong) => {
   const newSongTitleMatch = newSong.title.trim()
     ? songs.find(song => normalizeSongTitle(song.title) === normalizeSongTitle(newSong.title)) || null
     : null;
-  const offlineSongCount = savedDetail ? getSavedEventSongs(savedDetail.value).length : 0;
-  const offlineChartCount = savedDetail ? getSavedEventChartCount(savedDetail.value) : 0;
-  const offlineChartsComplete = offlineSongCount > 0 && offlineChartCount === offlineSongCount;
 
   return (
     <div className="page-container page-bottom-pad relative isolate overflow-x-clip bg-[#050505]">
@@ -4776,17 +4765,6 @@ const openLyricsModal = (ss: SetlistSong) => {
       >
         {fullScreenAssignmentGate}
 
-        {!assignmentDetailsBlocked && cacheScope && offlineSaveStatus !== 'unknown' && (offlineSaveStatus !== 'ready' || savedDetail) && (
-          <p role="status" className={`rounded-xl border px-3 py-2 text-xs font-semibold ${offlineSaveStatus === 'ready' && offlineChartsComplete ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200' : 'border-amber-400/20 bg-amber-400/10 text-amber-200'}`}>
-            {offlineSaveStatus === 'ready'
-              ? offlineChartCount > 0
-                ? offlineChartsComplete
-                  ? `Ready for offline reading · ${offlineChartCount} approved charts saved on this device`
-                  : `Saved locally · ${offlineChartCount} of ${offlineSongCount} approved songs have charts`
-                : 'Event details saved on this device · No approved charts available for offline Live Mode'
-              : 'Offline save unavailable on this device. Reopen this event online before relying on it at church.'}
-          </p>
-        )}
 
         {/* ── Event Summary ────────────────────────────── */}
         {!assignmentDetailsBlocked && (
@@ -8204,9 +8182,9 @@ const openLyricsModal = (ss: SetlistSong) => {
                             <span className="min-w-0 flex-1">
 							  <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700 dark:text-emerald-300">
 								{stageCommsView === 'tech' ? 'Tech Team · Live Mode' : serviceModeLabel}
-								<span className={`inline-flex items-center gap-1 tracking-normal ${liveSession.connection === 'Live' ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-600 dark:text-red-300'}`} title={liveSession.connection}>
-								  {liveSession.connection === 'Live' ? <Wifi className="h-3 w-3" aria-hidden="true" /> : <WifiOff className="h-3 w-3" aria-hidden="true" />}
-								  <span className="hidden sm:inline text-[9px] normal-case tracking-normal">{liveSession.connection}</span>
+								<span className={`inline-flex items-center gap-1 tracking-normal ${!offlineMode && liveSession.connection === 'Live' ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-600 dark:text-red-300'}`} title={offlineMode ? 'Offline' : liveSession.connection}>
+								  {!offlineMode && liveSession.connection === 'Live' ? <Wifi className="h-3 w-3" aria-hidden="true" /> : <WifiOff className="h-3 w-3" aria-hidden="true" />}
+								  <span className="hidden sm:inline text-[9px] normal-case tracking-normal">{offlineMode ? 'Offline' : liveSession.connection}</span>
 								</span>
 							  </span>
                               <span className="flex min-w-0 items-center gap-1.5">
@@ -8312,7 +8290,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                         <button
                           type="button"
                           onClick={() => void refreshServiceCharts()}
-                          disabled={serviceRefreshing || serviceChartEditing || serviceModeEntering}
+                          disabled={offlineMode || serviceRefreshing || serviceChartEditing || serviceModeEntering}
                           aria-label={serviceRefreshing ? 'Refreshing charts and notes' : 'Refresh charts and notes'}
                           title="Refresh charts and notes for the whole setlist"
                           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-black/[0.06] bg-white/90 text-gray-600 shadow-sm transition hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-45 dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/70"
@@ -8357,7 +8335,8 @@ const openLyricsModal = (ss: SetlistSong) => {
                         <button
                           type="button"
                           onClick={() => setStageCommsOpen(value => !value)}
-                          className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 transition active:scale-95 ${
+                          disabled={offlineMode}
+                          className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-45 ${
                             stageCommsOpen
                               ? 'border-emerald-400 bg-emerald-500 text-black shadow-lg shadow-emerald-500/30'
                               : 'border-black/[0.06] bg-white/90 text-gray-600 shadow-sm hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/70 dark:hover:border-emerald-500/30 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300'
@@ -8433,7 +8412,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                 <SongChartViewer
                                   active={offset === 0 && stageCommsView === 'stage'}
                                   automaticNoteRefresh={false}
-                                  songId={song.song_id}
+                                  songId={offlineMode ? undefined : song.song_id}
                                   preferenceScopeId="live-mode"
                                   draftStorageId={`setlist-song:${song.id}`}
                                   sectionOrder={song.arrangement_section_order}

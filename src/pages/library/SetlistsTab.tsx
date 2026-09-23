@@ -167,7 +167,7 @@ interface SetlistsTabProps {
 }
 
 export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTabProps) {
-  const { user, profile, loading: authLoading, isOrgAdmin, isAdmin, isPlatformOwner } = useAuth();
+  const { user, profile, loading: authLoading, offlineMode, isOrgAdmin, isAdmin, isPlatformOwner } = useAuth();
   const viewScope = !authLoading && user?.id && profile?.id === user.id && profile.org_id ? JSON.stringify([user.id, profile.org_id]) : null;
   const cacheScope = viewScope ? deviceCacheScope(user?.id, profile?.org_id) : null;
   const activeScopeRef = useRef(viewScope);
@@ -330,13 +330,21 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
     if (!viewScope) return;
     let active = true;
     void readDeviceSnapshot<{ setlists: SetlistWithEvent[]; songUsages: SongUsage[]; songLeaderMap: Record<string, string>; songLeaderAvatarMap: Record<string, { avatarUrl: string | null; firstName: string; lastName: string }>; songLeaderUserByEvent: Record<string, string> }>(cacheScope, 'library:songs-sets').then(snapshot => {
-      if (!active || !snapshot || networkAppliedRef.current || activeScopeRef.current !== viewScope) return;
+      if (!active || networkAppliedRef.current || activeScopeRef.current !== viewScope) return;
+      if (!snapshot) {
+        if (offlineMode) {
+          setVisibleScope(viewScope);
+          setCacheState('offline');
+          setLoading(false);
+        }
+        return;
+      }
       applyLibrarySnapshot(snapshot.value);
       setCacheState(networkFailedRef.current ? 'offline' : 'saved');
     });
-    void fetchData();
+    if (!offlineMode) void fetchData();
     return () => { active = false; fetchSequenceRef.current += 1; };
-  }, [viewScope, cacheScope, fetchData, applyLibrarySnapshot]);
+  }, [viewScope, cacheScope, fetchData, applyLibrarySnapshot, offlineMode]);
 
   useEffect(() => {
     if (!fixedView) return;
@@ -1541,7 +1549,6 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   if (!showSongsView) {
     return (
       <div className="space-y-5 pb-2">
-        {(cacheState === 'saved' || cacheState === 'offline') && <p role="status" className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-800 dark:text-amber-200">{cacheState === 'saved' ? 'Showing saved sets while refreshing…' : 'Showing saved sets. Connect to refresh.'} Changes are unavailable until the latest data loads.</p>}
 
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" disabled={cacheState !== 'fresh'} onChange={e => handleFileUpload(e.target.files)} />
 
@@ -1990,7 +1997,6 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   /* ────────────────────────── Song Results View ────────────────────────── */
   return (
     <div className="space-y-5 pb-2">
-      {(cacheState === 'saved' || cacheState === 'offline') && <p role="status" className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-800 dark:text-amber-200">{cacheState === 'saved' ? 'Showing saved songs while refreshing…' : 'Showing saved songs. Connect to refresh.'} Changes are unavailable until the latest data loads.</p>}
 
       {canManageSongLibrary && (
         <input ref={chartFileRef} type="file" accept=".cho,.sbp" multiple className="hidden" onChange={e => handleChartUpload(e.target.files)} />

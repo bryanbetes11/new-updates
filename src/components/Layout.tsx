@@ -12,7 +12,6 @@ import { useAuth } from "../contexts/AuthContext";
 import { BillingStatusBanner } from "./BillingStatusBanner";
 import { PushReadinessBanner } from "./PushReadinessBanner";
 import { SurveyAccessBanner } from "./SurveyAccessBanner";
-import { ConnectionStatus } from "./ConnectionStatus";
 import { NativeAppUpdateCard } from './NativeAppUpdate';
 import { nativeBackHandlers } from '../lib/nativeBack';
 import { buildAppRoute, rememberRoute } from "../lib/navigationHistory";
@@ -409,7 +408,6 @@ export function Layout() {
 
   return (
     <div className="min-h-screen bg-[#050505]">
-      <ConnectionStatus />
       {user && !staticHideNav && (
       <Navigation
           hideMobile={hideNavMobile}

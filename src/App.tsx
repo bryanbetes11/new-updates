@@ -228,7 +228,6 @@ const AuthConfirm = lazy(() =>
   })),
 );
 
-const OfflineWorkspace = lazy(() => import('./pages/OfflineWorkspace').then(({ OfflineWorkspace }) => ({ default: OfflineWorkspace })));
 
 function OnlineSessionEffects() {
   const { offlineMode, loading } = useAuth();
@@ -236,10 +235,6 @@ function OnlineSessionEffects() {
   return <><NotificationOpenTracker /><NativePushBridge /><MemberAppAccessTracker /></>;
 }
 
-function OfflineRouteGate({ children }: { children: ReactNode }) {
-  const { offlineMode, user, profile } = useAuth();
-  return offlineMode ? <Suspense fallback={<PageLoader />}><OfflineWorkspace key={String(user?.id) + ':' + String(profile?.org_id)} /></Suspense> : children;
-}
 
 function RouteLoadingBoundary() {
   return (
@@ -520,7 +515,6 @@ export default function App() {
                 }}
                 applying={applyingUpdate}
               />
-              <OfflineRouteGate>
               <Routes>
               <Route path="/" element={<RootRedirect />} />
               <Route path="/download/android" element={<AndroidDownload />} />
@@ -677,7 +671,6 @@ export default function App() {
                 </Route>
               </Route>
               </Routes>
-              </OfflineRouteGate>
               </AndroidAppOfferProvider>
             </ToastProvider>
           </StartupGate>

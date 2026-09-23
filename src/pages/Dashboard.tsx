@@ -18,6 +18,7 @@ import { SongArtwork } from '../components/SongArtwork';
 import { Avatar } from '../components/Avatar';
 import { HomeAppUpdateCard } from '../components/HomeAppUpdateCard';
 import { hasArtworkArtist } from '../lib/songArtworkEligibility';
+import { deviceCacheScope, readDeviceSnapshot, writeDeviceSnapshot } from '../lib/deviceCache';
 import { getEventPreparationHighlight, type EventPreparationHighlight, type EventPreparationInput } from '../lib/eventPreparation';
 import { isSetlistMeaningfullyCreated } from '../lib/setlistPersistence';
 import type { Event, EventAssignment, Setlist, Announcement, UserAvailability, SwapRequest } from '../types';
@@ -138,12 +139,12 @@ function readDismissedSwapIds(storageKey: string | null) {
   }
 }
 
-function getDashboardSnapshot(userId?: string) {
-  if (!userId) return null;
-  const snapshot = dashboardSnapshotCache.get(userId);
+function getDashboardSnapshot(cacheKey: string | null) {
+  if (!cacheKey) return null;
+  const snapshot = dashboardSnapshotCache.get(cacheKey);
   if (!snapshot) return null;
   if (Date.now() - snapshot.cachedAt > DASHBOARD_CACHE_TTL_MS) {
-    dashboardSnapshotCache.delete(userId);
+    dashboardSnapshotCache.delete(cacheKey);
     return null;
   }
   return snapshot;
@@ -458,11 +459,18 @@ async function getSongArtworkUrls(setlistSongs?: DashboardSongArtwork[] | null) 
 }
 
 export function Dashboard() {
+  const { user, profile } = useAuth();
+  return <AccountDashboard key={`${user?.id || ''}:${profile?.org_id || ''}`} />;
+}
+
+function AccountDashboard() {
   const androidAppAvailable = useAndroidAppOfferAvailable();
-  const { user, profile, isLeader, isOrgAdmin, isProductionDirector } = useAuth();
+  const { user, profile, offlineMode, isLeader, isOrgAdmin, isProductionDirector } = useAuth();
+  const cacheScope = deviceCacheScope(user?.id, profile?.org_id);
+  const dashboardKey = user?.id && profile?.org_id ? `${user.id}:${profile.org_id}` : null;
   const { toast } = useToast();
   const navigate = useNavigate();
-  const cachedDashboard = getDashboardSnapshot(user?.id);
+  const cachedDashboard = getDashboardSnapshot(dashboardKey);
   const hadCachedDashboardRef = useRef(Boolean(cachedDashboard));
   const [loading, setLoading] = useState(!cachedDashboard);
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>(() => cachedDashboard?.upcomingEvents || []);
@@ -491,6 +499,30 @@ export function Dashboard() {
   const [isRefreshingApp, setIsRefreshingApp] = useState(false);
   const [activeHubFilter, setActiveHubFilter] = useState<DashboardHubFilter>('all');
   const [dashboardLoadIssues, setDashboardLoadIssues] = useState<Set<DashboardDataSection>>(() => new Set());
+
+  useEffect(() => {
+    if (!offlineMode || !cacheScope) return;
+    let active = true;
+    void readDeviceSnapshot<DashboardSnapshot>(cacheScope, 'dashboard:home').then(saved => {
+      if (!active) return;
+      if (saved) {
+        const value = saved.value;
+        setUpcomingEvents(value.upcomingEvents);
+        setEventLeaderMap(value.eventLeaderMap);
+        setEventArtworkMap(value.eventArtworkMap);
+        setEventArtworkSongsMap(value.eventArtworkSongsMap);
+        setEventPreparationSourceMap(value.eventPreparationSourceMap);
+        setMyAssignments(value.myAssignments);
+        setPendingSetlists(value.pendingSetlists);
+        setRecentAnnouncements(value.recentAnnouncements);
+        setUnavailableMembers(value.unavailableMembers);
+        setPendingLeaveCount(value.pendingLeaveCount);
+        setStats(value.stats);
+      }
+      setLoading(false);
+    });
+    return () => { active = false; };
+  }, [cacheScope, offlineMode]);
   const pullRefreshDistanceRef = useRef(0);
   const refreshInFlightRef = useRef(false);
 
@@ -679,8 +711,8 @@ export function Dashboard() {
 
       // Artwork is optional enrichment. Show the useful dashboard immediately,
       // then let thumbnails resolve without holding the whole page skeleton open.
-      const previousSnapshot = dashboardSnapshotCache.get(user.id);
-      dashboardSnapshotCache.set(user.id, {
+      const previousSnapshot = dashboardKey ? dashboardSnapshotCache.get(dashboardKey) : null;
+      const snapshot: DashboardSnapshot = {
         cachedAt: Date.now(),
         upcomingEvents: events,
         eventLeaderMap: leaderMap,
@@ -697,7 +729,9 @@ export function Dashboard() {
           confirmed: upcomingAssignments.filter(a => a.status === 'confirmed').length,
           pending: upcomingAssignments.filter(a => a.status === 'pending').length,
         },
-      });
+      };
+      if (dashboardKey) dashboardSnapshotCache.set(dashboardKey, snapshot);
+      if (loadIssues.size === 0) void writeDeviceSnapshot(cacheScope, 'dashboard:home', snapshot);
       if (!silent) setLoading(false);
 
       const artworkEventIds = Array.from(new Set(
@@ -812,7 +846,7 @@ export function Dashboard() {
       setEventArtworkMap(artworkByEventId);
       setEventArtworkSongsMap(artworkSongsByEventId);
 
-      dashboardSnapshotCache.set(user.id, {
+      const completeSnapshot: DashboardSnapshot = {
         cachedAt: Date.now(),
         upcomingEvents: events,
         eventLeaderMap: leaderMap,
@@ -829,15 +863,17 @@ export function Dashboard() {
           confirmed: upcomingAssignments.filter(a => a.status === 'confirmed').length,
           pending: upcomingAssignments.filter(a => a.status === 'pending').length,
         },
-      });
+      };
+      if (dashboardKey) dashboardSnapshotCache.set(dashboardKey, completeSnapshot);
+      if (loadIssues.size === 0) void writeDeviceSnapshot(cacheScope, 'dashboard:home', completeSnapshot);
 
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [isLeader, user]);
+  }, [cacheScope, dashboardKey, isLeader, user]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || offlineMode) return;
     
     // Initial fetch
     fetchIncomingSwaps();
@@ -857,12 +893,12 @@ export function Dashboard() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, fetchIncomingSwaps]);
+  }, [user, offlineMode, fetchIncomingSwaps]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || offlineMode) return;
     loadDashboardData({ silent: hadCachedDashboardRef.current });
-  }, [loadDashboardData, user]);
+  }, [loadDashboardData, offlineMode, user]);
 
   useEffect(() => {
     let startY = 0;

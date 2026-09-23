@@ -6,11 +6,15 @@ import { DeviceCacheSetting } from '../components/DeviceCacheSetting';
 import { APP_VERSION_LABEL } from '../lib/appUpdate';
 import { checkForAppUpdate } from '../lib/serviceWorkerUpdate';
 import { androidUpdates, isAndroidApp } from '../lib/nativeAppUpdates';
+import { useAuth } from '../contexts/AuthContext';
 
 export function AppSettings() {
+  const { offlineMode, retryOnline } = useAuth();
   const [checking, setChecking] = useState(false);
   const [message, setMessage] = useState('');
+  const [connectionMessage, setConnectionMessage] = useState('');
   const [installed, setInstalled] = useState<{ version: string; build: string } | null>(null);
+  const [reconnecting, setReconnecting] = useState(false);
   useEffect(() => {
     if (!isAndroidApp()) return;
     let active = true;
@@ -47,6 +51,20 @@ export function AppSettings() {
           <h1 className="text-2xl font-black tracking-tight text-gray-950 dark:text-white">App settings</h1>
           <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Manage updates and content saved on this device.</p>
         </header>
+        {offlineMode && (
+          <section className="rounded-3xl border border-gray-200/80 bg-white p-5 dark:border-white/[0.07] dark:bg-white/[0.025] sm:p-6">
+            <h2 className="text-base font-bold text-gray-950 dark:text-white">Connection</h2>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Your saved content remains available. Reconnect to refresh it and use team actions.</p>
+            <button type="button" disabled={reconnecting} onClick={() => {
+              setReconnecting(true);
+              setConnectionMessage('');
+              void retryOnline().then(result => setConnectionMessage(result.error?.message || '')).catch(() => setConnectionMessage('Could not reconnect. Try again when internet is available.')).finally(() => setReconnecting(false));
+            }} className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white disabled:opacity-50">
+              <RefreshCw className={`h-4 w-4 ${reconnecting ? 'animate-spin' : ''}`} />{reconnecting ? 'Connecting…' : 'Reconnect'}
+            </button>
+            {connectionMessage && <p role="status" className="mt-2 text-sm text-gray-600 dark:text-gray-300">{connectionMessage}</p>}
+          </section>
+        )}
         <section aria-labelledby="app-updates-title" className="space-y-4 rounded-3xl border border-gray-200/80 bg-white p-5 dark:border-white/[0.07] dark:bg-white/[0.025] sm:p-6">
           <div>
             <h2 id="app-updates-title" className="text-base font-bold text-gray-950 dark:text-white">App updates</h2>

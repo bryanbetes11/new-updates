@@ -165,7 +165,7 @@ async function fetchYouTubeMetadata(url: string): Promise<YouTubeMetadata> {
 export function VideosTab() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, organization, isProductionDirector } = useAuth();
+  const { user, organization, offlineMode, isProductionDirector } = useAuth();
   const cacheScope = deviceCacheScope(user?.id, organization?.id);
   const listIdentity = JSON.stringify([user?.id ?? null, organization?.id ?? null]);
   const { toast } = useToast();
@@ -255,6 +255,11 @@ export function VideosTab() {
       if (isCurrent()) { setLoading(false); setCacheStatus('none'); }
       return;
     }
+    if (offlineMode) {
+      await savedRead;
+      if (isCurrent()) { setLoading(false); setCacheStatus('offline'); }
+      return;
+    }
     const { data, error } = await supabase
       .from('videos')
       .select('*')
@@ -317,7 +322,7 @@ export function VideosTab() {
     return () => { requestGeneration.current += 1; };
     // The identity captures both account and organization; a new one starts a fresh read.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listIdentity]);
+  }, [listIdentity, offlineMode]);
 
   useEffect(() => {
     setVisibleCount(VIDEOS_PER_PAGE);
@@ -682,16 +687,7 @@ export function VideosTab() {
         </div>
       </motion.div>
 
-      {cacheScope && cacheStatus !== 'none' && (
-        <p role="status" className="text-xs text-white/50">
-          {cacheStatus === 'saved' ? 'Saved videos · refreshing…'
-            : cacheStatus === 'refreshing' ? 'Refreshing videos…'
-            : cacheStatus === 'offline' ? 'Saved videos · offline'
-              : cacheStatus === 'updated' ? 'Videos up to date' : 'Saved videos'}
-        </p>
-      )}
-
-      {loadError && (
+      {loadError && cacheStatus !== 'offline' && (
         <div className="flex items-center justify-between gap-3 rounded-2xl border border-amber-400/20 bg-amber-400/[0.08] px-4 py-3 text-sm text-amber-200">
           <span>{loadError}</span>
           <button type="button" onClick={() => void fetchVideos()} className="shrink-0 rounded-full bg-white/10 px-3 py-1.5 text-xs font-black hover:bg-white/15">Retry</button>

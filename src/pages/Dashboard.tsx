@@ -1,7 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { MESSENGER_ENABLED } from '../lib/features';
-import { useAndroidAppOfferAvailable } from '../contexts/androidAppOfferContext';
-import { Smartphone } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { format, formatDistanceToNow, parseISO } from 'date-fns';
@@ -465,7 +463,6 @@ export function Dashboard() {
 }
 
 function AccountDashboard() {
-  const androidAppAvailable = useAndroidAppOfferAvailable();
   const { user, profile, offlineMode, isLeader, isOrgAdmin, isPlatformOwner, isProductionDirector, capabilities } = useAuth();
   const cacheScope = deviceCacheScope(user?.id, profile?.org_id);
   const dashboardKey = user?.id && profile?.org_id ? `${user.id}:${profile.org_id}` : null;
@@ -1219,13 +1216,6 @@ function AccountDashboard() {
       detail: 'Final leadership approval is needed',
       path: '/leadership/swaps',
       icon: ArrowLeftRight,
-    }] : []),
-    ...(androidAppAvailable ? [{
-      id: 'android-app',
-      title: 'Get the Android app',
-      detail: 'Optional · Download and installation guide',
-      path: '/download/android',
-      icon: Smartphone,
     }] : []),
   ];
   const getPreparationForEvent = (event: DashboardEventCard) => {

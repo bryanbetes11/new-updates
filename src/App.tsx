@@ -18,7 +18,6 @@ import { AndroidAppOfferProvider } from './components/AndroidAppOfferProvider';
 import { NativeTapFeedback } from './components/NativeTapFeedback';
 import { NativeAppUpdateWatcher } from './components/NativeAppUpdate';
 import { NativeNavigation } from './components/NativeNavigation';
-import { AndroidAppPromotion } from './components/AndroidAppPromotion';
 import { AndroidDownload } from './pages/AndroidDownload';
 import { ToastProvider } from "./contexts/ToastContext";
 import { Layout } from "./components/Layout";
@@ -503,7 +502,6 @@ export default function App() {
             <ResumeSyncIndicator />
             <ToastProvider>
               <AndroidAppOfferProvider>
-              <AndroidAppPromotion />
               <BackgroundAppUpdateWatcher />
               <AppUpdateModal
                 open={showAppUpdate}

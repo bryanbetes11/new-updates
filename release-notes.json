@@ -1,10 +1,8 @@
 {
-  "headline": "Pending-setlist ribbons now fit compact event thumbnails.",
+  "headline": "Android app prompts are clearer and easier to find.",
   "highlights": [
-    "The Events list now keeps the Pending ribbon and its full label inside compact thumbnails, matching the featured cards.",
-    "The Android app removes its own downloaded APK after that build is installed, while keeping an uninstalled update available to retry.",
-    "The pending-setlist card keeps its full title on one line and removes the See Events or Review Queue header button; each set still opens its event details.",
-    "Pending setlists appear on every church member's dashboard, with decisions limited to authorized reviewers.",
-    "Setlists show their submission date and pending age in the dashboard card."
+    "A compact Android app reminder alternates with the notification reminder on eligible installed Android PWAs.",
+    "The notification reminder is shorter, and the rotating banner scrolls naturally with the page.",
+    "App Settings and the download page show the version number without the internal Android build number."
   ]
 }

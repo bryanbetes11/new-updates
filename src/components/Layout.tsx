@@ -11,6 +11,7 @@ import { InteractionSoundSetupModal } from "./InteractionSoundSetupModal";
 import { useAuth } from "../contexts/AuthContext";
 import { BillingStatusBanner } from "./BillingStatusBanner";
 import { PushReadinessBanner } from "./PushReadinessBanner";
+import { DashboardPromptCarousel } from "./DashboardPromptCarousel";
 import { SurveyAccessBanner } from "./SurveyAccessBanner";
 import { NativeAppUpdateCard } from './NativeAppUpdate';
 import { nativeBackHandlers } from '../lib/nativeBack';
@@ -461,7 +462,7 @@ export function Layout() {
                   : "px-4 sm:px-6 lg:px-8 mobile-layout-padding"
             }
           >
-            {!staticHideNav && <PushReadinessBanner />}
+            {!staticHideNav && (isDashboardPage ? <DashboardPromptCarousel /> : <PushReadinessBanner />)}
             {!staticHideNav && isDashboardPage && <NativeAppUpdateCard />}
             {!staticHideNav && <SurveyAccessBanner />}
             {!staticHideNav && !isWideShellPage && (

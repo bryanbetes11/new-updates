@@ -99,7 +99,7 @@ export function NativeAppUpdateCard({ alwaysVisible = false }: { alwaysVisible?:
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-bold">ServeSync {release.version} is available</h2>
-          <p className="mt-1 text-xs text-emerald-100/80">Android build {release.build} · {(release.size / 1024 / 1024).toFixed(1)} MB</p>
+          <p className="mt-1 text-xs text-emerald-100/80">{(release.size / 1024 / 1024).toFixed(1)} MB</p>
         </div>
         {!alwaysVisible && <button type="button" aria-label="Dismiss update notice" className="-mr-2 -mt-2 grid h-11 w-11 shrink-0 place-items-center rounded-full hover:bg-white/10" onClick={() => setDismissed(release.build)}><X className="h-4 w-4" /></button>}
       </div>

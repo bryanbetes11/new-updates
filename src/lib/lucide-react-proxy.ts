@@ -63,6 +63,7 @@ export { default as FileText } from 'lucide-react/dist/esm/icons/file-text.js';
 export { default as Film } from 'lucide-react/dist/esm/icons/film.js';
 export { default as Filter } from 'lucide-react/dist/esm/icons/filter.js';
 export { default as Flag } from 'lucide-react/dist/esm/icons/flag.js';
+export { default as Frown } from 'lucide-react/dist/esm/icons/frown.js';
 export { default as FlaskConical } from 'lucide-react/dist/esm/icons/flask-conical.js';
 export { default as Gauge } from 'lucide-react/dist/esm/icons/gauge.js';
 export { default as Globe2 } from 'lucide-react/dist/esm/icons/globe-2.js';

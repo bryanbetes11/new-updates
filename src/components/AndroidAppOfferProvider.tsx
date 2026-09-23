@@ -11,7 +11,7 @@ export function AndroidAppOfferProvider({ children }: { children: ReactNode }) {
   const { user, profile, loading } = useAuth();
   const { pathname } = useLocation();
   const [availableFor, setAvailableFor] = useState<string | null>(null);
-  const eligible = shouldOfferAndroidApp({ android: isAndroidDevice(), standalone: isStandalonePwa(), native: isNativeApp(), signedIn: Boolean(user) && !loading, dashboard: pathname === '/dashboard', dismissed: false });
+  const eligible = shouldOfferAndroidApp({ android: isAndroidDevice(), standalone: isStandalonePwa(), native: isNativeApp(), signedIn: Boolean(user) && !loading, dashboard: pathname === '/dashboard' });
   const owner = user?.id && profile?.org_id ? `${user.id}:${profile.org_id}` : null;
   useEffect(() => {
     setAvailableFor(null);
@@ -41,8 +41,5 @@ export function AndroidAppOfferProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('online', check);
     };
   }, [eligible, owner]);
-  return <AndroidAppOfferContext.Provider value={{
-    attention: eligible && owner !== null,
-    popup: eligible && owner !== null && availableFor === owner,
-  }}>{children}</AndroidAppOfferContext.Provider>;
+  return <AndroidAppOfferContext.Provider value={eligible && owner !== null && availableFor === owner}>{children}</AndroidAppOfferContext.Provider>;
 }

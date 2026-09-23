@@ -22,7 +22,7 @@ export function AndroidDownload() {
           <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-5xl">Your team. One Android app.</h1>
           <p className="mt-4 max-w-xl text-base leading-7 text-white/65">Take ServeSync’s schedules, songs, Chat, and notifications with you. Your existing account and church data work in the Android app.</p>
           <a href={ANDROID_TEST_RELEASE.url} className="mt-7 inline-flex min-h-12 items-center justify-center rounded-2xl bg-emerald-400 px-6 font-bold text-[#062318] hover:bg-emerald-300">Download Android app</a>
-          <p className="mt-3 text-sm text-white/55">Version {ANDROID_TEST_RELEASE.version} · Build {ANDROID_TEST_RELEASE.build} · Android with Google Play services</p>
+          <p className="mt-3 text-sm text-white/55">Version {ANDROID_TEST_RELEASE.version} · Android with Google Play services</p>
           <p className="mt-2 break-all text-xs text-white/40">{ANDROID_TEST_RELEASE.filename}</p>
           <p className="mt-4 text-sm leading-6 text-white/55">This is a development testing build, not a Google Play release. iPhones cannot install APK files; you can keep using the PWA.</p>
         </header>

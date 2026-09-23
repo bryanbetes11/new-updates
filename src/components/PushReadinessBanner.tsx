@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Frown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { isIosDevice, isStandalonePwa } from '../lib/device';
@@ -9,9 +9,10 @@ import { nativePushChanged, nativePushReadiness, openNativePushSettingsIfBlocked
 
 type PushReadinessBannerProps = {
   variant?: 'default' | 'chat';
+  onVisibilityChange?: (visible: boolean) => void;
 };
 
-export function PushReadinessBanner({ variant = 'default' }: PushReadinessBannerProps) {
+export function PushReadinessBanner({ variant = 'default', onVisibilityChange }: PushReadinessBannerProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [ready, setReady] = useState<boolean | null>(null);
@@ -70,6 +71,10 @@ export function PushReadinessBanner({ variant = 'default' }: PushReadinessBanner
     };
   }, [checkReadiness]);
 
+  useEffect(() => {
+    onVisibilityChange?.(Boolean(user && ready === false));
+  }, [onVisibilityChange, ready, user]);
+
   if (!user || ready !== false) return null;
 
   const setup = async () => {
@@ -79,9 +84,8 @@ export function PushReadinessBanner({ variant = 'default' }: PushReadinessBanner
   };
 
   const message = !isNativeApp() && isIosDevice() && !isStandalonePwa()
-    ? 'Add ServeSync to your Home Screen, then enable notifications so reminders reach you on time.'
-    : 'You won’t receive lock-screen alerts for messages, assignments, or reminders while notifications are off. You can still view updates inside ServeSync.';
-  const reminderNote = 'Enable notifications to receive alerts on this device.';
+    ? 'Add ServeSync to your Home Screen to turn on alerts.'
+    : 'Get alerts for messages and reminders.';
 
   if (variant === 'chat') {
     return (
@@ -100,25 +104,20 @@ export function PushReadinessBanner({ variant = 'default' }: PushReadinessBanner
   }
 
   return (
-    <>
-      <div aria-hidden="true" className="h-[224px] lg:hidden" />
-      <div className="pointer-events-none fixed inset-x-0 top-[calc(3.5rem+env(safe-area-inset-top))] z-50 bg-[#25090d] p-4 text-white shadow-lg shadow-black/25 lg:static lg:mx-[30px] lg:flex lg:max-w-none lg:items-center lg:gap-3 lg:rounded-2xl lg:px-4 lg:py-3 lg:shadow-lg">
-        <div className="lg:min-w-0 lg:flex-1">
-          <div className="min-w-0 flex-1">
-            <p className="text-[15px] font-black lg:text-sm">Notifications are off</p>
-            <p className="mt-1 text-[13px] leading-5 text-white/60 lg:mt-0.5 lg:text-xs">{message} {reminderNote}</p>
-          </div>
+      <div className="relative flex items-center gap-3 bg-[#25090d] px-4 py-3 text-white shadow-lg shadow-black/25 lg:mx-[30px] lg:rounded-2xl">
+        <Frown aria-hidden="true" className="h-6 w-6 shrink-0 text-red-300" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[14px] font-black">Notifications are off</p>
+          <p className="mt-0.5 text-[12px] leading-4 text-white/65">{message}</p>
         </div>
         <button
           type="button"
           onClick={setup}
-          className="pointer-events-auto mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-red-500 px-4 text-[13px] font-black text-white transition hover:bg-red-400 active:scale-[0.98] lg:mt-0 lg:h-auto lg:w-auto lg:shrink-0 lg:rounded-full lg:px-3 lg:py-2 lg:text-xs"
+          className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1 rounded-xl bg-red-500 px-3 text-[12px] font-black text-white transition hover:bg-red-400 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white lg:rounded-full"
         >
-          <span className="lg:hidden">Allow My Notifications</span>
-          <span className="hidden lg:inline">Set up</span>
-          <ArrowRight className="h-3.5 w-3.5" />
+          <span>Set up</span>
+          <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
         </button>
       </div>
-    </>
   );
 }

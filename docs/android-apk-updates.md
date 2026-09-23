@@ -6,7 +6,7 @@ This is an in-app check, not a background notification while Android has closed 
 
 ## Publishing a discoverable APK
 
-1. Increase `android/app/build.gradle`'s `versionCode` for every distributed APK. `package.json` controls the visible version; multiple Android builds can use the same visible version.
+1. Increase the visible patch version in `package.json` for each distributed APK (for example, 1.4.0 to 1.4.1) and increase `android/app/build.gradle`'s internal `versionCode`. Android requires a higher code for in-place installation, but the app UI and APK filename show only the visible version.
 2. Build using `npm.cmd run mobile:apk -- --push`, then verify the APK's package, version code and signing certificate. Use the same signing identity for in-place updates; do not uninstall the app to work around a mismatch.
 3. With explicit publication authorization, publish a GitHub release tagged `android-vVERSION-buildNUMBER`, with uploaded asset `ServeSync-VERSION.apk`. The updater also accepts the older test and release filenames for existing published builds. Never reuse a build number for different distributed APK contents.
 4. Verify an older installed build detects the new release, download opens correctly, Android accepts the in-place update, and the installed build number advances. Draft releases, missing/incomplete assets, older/equal build numbers and unrelated URLs are ignored. Failed checks are never reported as up to date.
@@ -22,6 +22,8 @@ Build 17 removes the extra See Events / Review Queue action from the pending-set
 Build 18 cleans ServeSync's private update folder on app launch. After a successful install, it removes updater-downloaded APKs for the installed build and earlier builds, plus abandoned partial downloads. A newer downloaded APK stays available if the installer was cancelled, and each completed download keeps only that update. Cleanup is limited to ServeSync-managed files inside the app's private `updates` folder; it does not touch browser Downloads or APKs saved elsewhere. This native change requires installing build 18 or later.
 
 Build 19 keeps the pending-setlist ribbon within compact event artwork on the Events list and increases its label to match the featured-card ribbon. The label and icon remain inside the thumbnail; the strip itself is clipped at the rounded artwork edge. The build keeps version 1.4.0, the package ID and the same signing certificate for in-place updates.
+
+Version 1.4.1 (internal Android code 20) moves the Android install reminder out of Needs Your Attention into one rotating dashboard banner shared with the shorter notification reminder. The banner scrolls with the page and includes manual selection and pause controls; when only one reminder applies, it stays visible. The app reminder appears only in signed-in installed Android PWAs, not iOS PWAs, browser tabs or the native APK. The old daily popup is removed. App Settings, update notices and the website download page show the visible version without the internal code. Release tags still include the code because installed updaters use it to find newer releases.
 
 Users on APKs without the checker need to install the first checker-enabled APK once. Future published releases can then be discovered inside that app. Merely building or copying a local APK does not publish an update to everyone. The website download link remains tied to the last published APK until separately updated for an authorized release.
 

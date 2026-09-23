@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { MESSENGER_ENABLED } from '../lib/features';
+import { useAndroidAppOfferAvailable } from '../contexts/androidAppOfferContext';
+import { Smartphone } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { format, formatDistanceToNow, parseISO } from 'date-fns';
@@ -242,7 +244,7 @@ function DashboardEmptyState({
   );
 }
 
-function DashboardAttentionPanel({
+export function DashboardAttentionPanel({
   items,
   onNavigate,
   className = '',
@@ -261,7 +263,7 @@ function DashboardAttentionPanel({
           </span>
           <div className="min-w-0">
             <h2 className="text-[15px] font-black text-white">Needs Your Attention</h2>
-            <p className="mt-0.5 text-[11px] font-semibold leading-4 text-white/50">Only actions that still need a response</p>
+            <p className="mt-0.5 text-[11px] font-semibold leading-4 text-white/50">Pending responses and helpful next steps</p>
           </div>
         </div>
       </div>
@@ -456,6 +458,7 @@ async function getSongArtworkUrls(setlistSongs?: DashboardSongArtwork[] | null) 
 }
 
 export function Dashboard() {
+  const androidAppAvailable = useAndroidAppOfferAvailable();
   const { user, profile, isLeader, isOrgAdmin, isProductionDirector } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -1179,7 +1182,14 @@ export function Dashboard() {
       path: '/leadership/swaps',
       icon: ArrowLeftRight,
     }] : []),
-  ].slice(0, 4);
+    ...(androidAppAvailable ? [{
+      id: 'android-app',
+      title: 'Get the Android app',
+      detail: 'Optional · Download and installation guide',
+      path: '/download/android',
+      icon: Smartphone,
+    }] : []),
+  ];
   const getPreparationForEvent = (event: DashboardEventCard) => {
     const source = eventPreparationSourceMap[event.id];
     if (!source || dashboardLoadIssues.has('assignments') || dashboardLoadIssues.has('setlists')) return null;

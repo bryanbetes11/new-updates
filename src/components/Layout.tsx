@@ -20,6 +20,7 @@ import {
   getInteractionTarget,
   shouldUseAppleTouchFeedback,
   triggerHaptic,
+  usesNativeTapFeedback,
 } from "../lib/haptics";
 import {
   initializeInteractionSounds,
@@ -129,6 +130,7 @@ export function Layout() {
     };
 
     const handleTouchInteraction = (event: PointerEvent) => {
+      if (usesNativeTapFeedback()) return; // Native clicks are handled once at the app root.
       if (event.pointerType !== "touch") return;
       const strength = getInteractionHapticStrength(event.target);
       if (strength) triggerHaptic(strength);

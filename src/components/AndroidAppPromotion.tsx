@@ -1,30 +1,53 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { isAndroidDevice, isStandalonePwa } from '../lib/device';
-import { isNativeApp } from '../lib/nativePlatform';
-import { ANDROID_TEST_RELEASE, shouldOfferAndroidApp } from '../lib/androidDownload';
+import { ANDROID_TEST_RELEASE, isAndroidOfferDue } from '../lib/androidDownload';
+import { useAndroidAppOfferAvailable } from '../contexts/androidAppOfferContext';
 import { Modal } from './Modal';
 
-const dismissalKey = `servesync:android-app-offer:${ANDROID_TEST_RELEASE.build}`;
-
 export function AndroidAppPromotion() {
-  const { user, loading } = useAuth();
+  const { user } = useAuth();
   const { pathname, search } = useLocation();
   // Local preview uses the real dialog without changing device detection or saved preferences.
   const preview = import.meta.env.DEV && pathname === '/download/android' && new URLSearchParams(search).get('preview') === 'app-offer';
   const [previewDismissed, setPreviewDismissed] = useState(false);
-  const [dismissed, setDismissed] = useState(() => {
-    try { return localStorage.getItem(dismissalKey) === 'dismissed'; } catch { return false; }
-  });
+  const [open, setOpen] = useState(false);
+  const sessionShown = useRef(new Map<string, number>());
+  const eligible = useAndroidAppOfferAvailable();
+  useEffect(() => {
+    setOpen(false);
+    if (!eligible || !user?.id) return;
+    const key = `servesync:android-app-offer:last-shown:${user.id}`;
+    const check = () => {
+      if (document.visibilityState !== 'visible' || !navigator.onLine) return;
+      let lastShown = sessionShown.current.get(key) ?? null;
+      try {
+        const saved = localStorage.getItem(key);
+        if (saved !== null) lastShown = Math.max(lastShown ?? 0, Number(saved));
+      } catch { /* In-memory cooldown still prevents repeat prompts this session. */ }
+      if (!isAndroidOfferDue(lastShown, Date.now(), false)) return;
+      const shownAt = Date.now();
+      sessionShown.current.set(key, shownAt);
+      try { localStorage.setItem(key, String(shownAt)); } catch { /* Session cooldown remains. */ }
+      setOpen(true);
+    };
+    const refresh = () => { void check(); };
+    refresh();
+    const interval = window.setInterval(refresh, 60_000);
+    window.addEventListener('online', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('online', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [eligible, user?.id]);
   const dismiss = () => {
     if (preview) { setPreviewDismissed(true); return; }
-    setDismissed(true);
-    try { localStorage.setItem(dismissalKey, 'dismissed'); } catch { /* Session dismissal still works. */ }
+    setOpen(false);
   };
-  const show = shouldOfferAndroidApp({ android: isAndroidDevice(), standalone: isStandalonePwa(), native: isNativeApp(), signedIn: Boolean(user) && !loading, dashboard: pathname === '/dashboard', dismissed });
   return (
-    <Modal open={preview ? !previewDismissed : show} onClose={dismiss} title="ServeSync for Android" size="sm" mobileView="dialog">
+    <Modal open={preview ? !previewDismissed : eligible && open} onClose={dismiss} title="ServeSync for Android" size="sm" mobileView="dialog">
       <div className="space-y-5 pb-2">
         <img src="/pwa-icon-192.png" alt="" className="h-16 w-16 rounded-2xl" />
         <div>
@@ -33,7 +56,7 @@ export function AndroidAppPromotion() {
           <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Version {ANDROID_TEST_RELEASE.version} · Build {ANDROID_TEST_RELEASE.build} · Manual installation</p>
         </div>
         <Link to="/download/android" onClick={dismiss} className="flex min-h-12 items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white">Download &amp; installation guide</Link>
-        <button type="button" onClick={dismiss} className="min-h-11 w-full rounded-xl text-sm font-semibold text-gray-600 dark:text-gray-300">Keep using the PWA</button>
+        <button type="button" onClick={dismiss} className="min-h-11 w-full rounded-xl text-sm font-semibold text-gray-600 dark:text-gray-300">Remind me tomorrow</button>
       </div>
     </Modal>
   );

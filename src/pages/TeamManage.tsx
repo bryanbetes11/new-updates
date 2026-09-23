@@ -14,6 +14,8 @@ import { RoleBadge, sortRolesLeadershipFirst } from '../components/RoleBadge';
 import { Avatar } from '../components/Avatar';
 import { LeadershipHeroCard } from '../components/LeadershipHeroCard';
 import { phoneHref } from '../lib/phone';
+import { MemberAppAccessBadges, MemberAppAccessDetails } from '../components/MemberAppAccessBadges';
+import type { MemberAppAccess } from '../lib/memberAppAccess';
 import type { Profile, UserRole } from '../types';
 
 interface MemberWithRoles extends Profile {
@@ -116,6 +118,33 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
   const [removingMember, setRemovingMember] = useState(false);
 
   const canManageChurchMembers = canManageMembers || isOrgAdmin;
+  const [appAccess, setAppAccess] = useState<Record<string, MemberAppAccess[]>>({});
+  const [appAccessStatus, setAppAccessStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [appAccessRefresh, setAppAccessRefresh] = useState(0);
+  useEffect(() => {
+    setAppAccess({});
+    if (!isOrgAdmin || !profile?.org_id) return;
+    const controller = new AbortController();
+    const orgId = profile.org_id;
+    setAppAccessStatus('loading');
+    void (async () => {
+      const grouped: Record<string, MemberAppAccess[]> = {};
+      try {
+        for (let offset = 0; ; offset += 1000) {
+          const { data, error } = await supabase.from('member_app_access')
+            .select('user_id,app_kind,platform,last_seen_at').eq('org_id', orgId)
+            .order('user_id').order('app_kind').order('platform').range(offset, offset + 999).abortSignal(controller.signal);
+          if (controller.signal.aborted) return;
+          if (error) throw error;
+          for (const row of (data ?? []) as MemberAppAccess[]) (grouped[row.user_id] ??= []).push(row);
+          if (!data || data.length < 1000) break;
+        }
+        setAppAccess(grouped);
+        setAppAccessStatus('ready');
+      } catch { if (!controller.signal.aborted) setAppAccessStatus('error'); }
+    })();
+    return () => controller.abort();
+  }, [isOrgAdmin, profile?.org_id, appAccessRefresh]);
 
   const fetchMembers = useCallback(async () => {
     const { data } = await supabase
@@ -394,6 +423,10 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
             )}
           </motion.div>
 
+          {isOrgAdmin && <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500 dark:text-white/50">
+            <p role="status">{appAccessStatus === 'loading' ? 'Loading app access…' : appAccessStatus === 'error' ? 'App access is unavailable. Member details are still available.' : 'App access shows observed usage. Expand a member for last-seen details.'}</p>
+            <button type="button" disabled={appAccessStatus === 'loading'} onClick={() => setAppAccessRefresh(value => value + 1)} className="min-h-11 rounded-xl px-3 font-semibold text-emerald-700 disabled:opacity-50 dark:text-emerald-300">Refresh app access</button>
+          </div>}
           <div className="space-y-2.5">
             {filtered.length === 0 && (
               <div className="rounded-3xl bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] p-12 text-center" style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -12px rgba(15,23,42,0.10)' }}>
@@ -459,12 +492,15 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                         {memberRoles.length === 0 && <span className="text-[11px] text-gray-400">No roles</span>}
                         {memberRoles.length > 3 && <span className="text-[11px] text-gray-400">+{memberRoles.length - 3} more</span>}
                       </div>
+                      {isOrgAdmin && appAccessStatus === 'ready' && <MemberAppAccessBadges rows={appAccess[member.id] ?? []} />}
                     </div>
                     {isExpanded
                       ? <ChevronUp className="h-4 w-4 text-gray-400 shrink-0" />
                       : <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" />
                     }
                   </button>
+
+                  {isExpanded && isOrgAdmin && appAccessStatus === 'ready' && <MemberAppAccessDetails rows={appAccess[member.id] ?? []} />}
 
                   {isExpanded && (
                     <div className="border-t border-black/[0.04] dark:border-white/[0.05] px-4 py-4">

@@ -13,6 +13,9 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { NotificationOpenTracker } from './components/NotificationOpenTracker';
 import { NativePushBridge } from './components/NativePushBridge';
+import { MemberAppAccessTracker } from './components/MemberAppAccessTracker';
+import { AndroidAppOfferProvider } from './components/AndroidAppOfferProvider';
+import { NativeTapFeedback } from './components/NativeTapFeedback';
 import { AndroidAppPromotion } from './components/AndroidAppPromotion';
 import { AndroidDownload } from './pages/AndroidDownload';
 import { ToastProvider } from "./contexts/ToastContext";
@@ -474,16 +477,19 @@ export default function App() {
   return (
     <BrowserRouter>
       <InteractiveLabelCase />
+      <NativeTapFeedback />
       <PasswordRecoveryRedirect />
       <ThemeProvider>
         <AuthProvider>
           <NotificationOpenTracker />
           <NativePushBridge />
+          <MemberAppAccessTracker />
           <StartupGate>
             <ServiceModeResumeRedirect />
             <LastRouteTracker />
             <ResumeSyncIndicator />
             <ToastProvider>
+              <AndroidAppOfferProvider>
               <AndroidAppPromotion />
               <BackgroundAppUpdateWatcher />
               <AppUpdateModal
@@ -651,6 +657,7 @@ export default function App() {
                 </Route>
               </Route>
               </Routes>
+              </AndroidAppOfferProvider>
             </ToastProvider>
           </StartupGate>
         </AuthProvider>

@@ -26,7 +26,7 @@ import java.util.concurrent.Executors;
 @CapacitorPlugin(name = "NativeImageCache")
 public class NativeImageCachePlugin extends Plugin {
     private static final long MAX_FILE_BYTES = 5L * 1024L * 1024L;
-    private static final long MAX_CACHE_BYTES = 50L * 1024L * 1024L;
+    private static final long MAX_CACHE_BYTES = 480L * 1024L * 1024L;
     private static final long MAX_AGE_MS = 7L * 24L * 60L * 60L * 1000L;
     private final ExecutorService io = Executors.newFixedThreadPool(3);
     private final ExecutorService scopeIo = Executors.newSingleThreadExecutor();

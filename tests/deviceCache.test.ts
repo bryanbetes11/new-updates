@@ -61,16 +61,28 @@ await cache.write('alice:church-a', 'songs', ['before clear']);
 await cache.clear('alice:church-a');
 assert.equal(await cache.read('alice:church-a', 'songs'), null);
 assert.ok(rows.some(row => row.scope === 'bob:church-b'), 'clearing one account preserves another');
-for (let index = 0; index < 85; index += 1) {
+for (let index = 0; index < 517; index += 1) {
   time += 1;
   await cache.write('alice:church-a', `event-${index}`, { title: `Event ${index}` });
 }
-assert.equal(rows.length, 80, 'entry count stays bounded');
+assert.equal(rows.length, 512, 'entry count stays bounded');
 assert.equal(await cache.read('alice:church-a', 'event-0'), null, 'oldest snapshots evicted first');
-await cache.write('alice:church-a', 'oversized', 'x'.repeat(2 * 1024 * 1024));
+await cache.write('alice:church-a', 'oversized', 'x'.repeat(8 * 1024 * 1024));
 assert.equal(await cache.read('alice:church-a', 'oversized'), null);
 await cache.activate(null);
-assert.equal(rows.length, 80, 'sign-out preserves persisted data within the global budget');
-assert.equal(await cache.read('alice:church-a', 'event-84'), null);
+assert.equal(rows.length, 512, 'sign-out preserves persisted data within the global budget');
+assert.equal(await cache.read('alice:church-a', 'event-516'), null);
 await cache.activate('alice:church-a');
-assert.ok(await cache.read('alice:church-a', 'event-84'), 'sign-in restores the matching account cache');
+assert.ok(await cache.read('alice:church-a', 'event-516'), 'sign-in restores the matching account cache');
+
+// A larger library must survive above the old 8 MiB total/2 MiB record limits,
+// while the global budget still evicts the oldest saved content.
+await cache.clear('alice:church-a');
+for (let index = 0; index < 6; index += 1) {
+  time += 1;
+  await cache.write('alice:church-a', `large-library-${index}`, 'x'.repeat(6 * 1024 * 1024));
+}
+assert.ok(rows.reduce((total, row) => total + row.bytes, 0) <= 32 * 1024 * 1024);
+assert.equal(await cache.read('alice:church-a', 'large-library-0'), null);
+assert.ok(await cache.read('alice:church-a', 'large-library-1'), 'retains more than the old total budget');
+assert.ok(await cache.read('alice:church-a', 'large-library-5'), 'latest large snapshot survives eviction');

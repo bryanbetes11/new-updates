@@ -13,9 +13,9 @@ export interface DeviceSnapshotStorage {
 }
 
 export const DEVICE_SNAPSHOT_TTL = 7 * 24 * 60 * 60 * 1000;
-export const DEVICE_SNAPSHOT_MAX_BYTES = 8 * 1024 * 1024;
-const MAX_ENTRY_BYTES = 2 * 1024 * 1024;
-const MAX_ENTRIES = 80;
+export const DEVICE_SNAPSHOT_MAX_BYTES = 32 * 1024 * 1024;
+const MAX_ENTRY_BYTES = 8 * 1024 * 1024;
+const MAX_ENTRIES = 512;
 
 /** Account namespaces persist across sign-out; a synchronous epoch revokes in-flight access. */
 export function createDeviceSnapshotCache(storage: DeviceSnapshotStorage, now = Date.now) {

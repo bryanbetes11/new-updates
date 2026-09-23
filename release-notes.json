@@ -1,8 +1,8 @@
 {
-  "headline": "Dashboard reminders explain the next step at a glance.",
+  "headline": "The notification action keeps its intended title case.",
   "highlights": [
-    "The notification reminder says Turn on notifications and explains which alerts it enables.",
-    "The Android reminder invites users to try the app before its official release; phone banners use larger icons and balanced two-line descriptions.",
-    "The Android app and website use version 1.4.3."
+    "The notification button visibly reads Turn On, including in browsers that recase button text.",
+    "The two mobile reminders retain their larger icons, spacing and balanced description lines.",
+    "The Android app and website use version 1.4.4."
   ]
 }

@@ -113,7 +113,7 @@ export function PushReadinessBanner({ variant = 'default', onVisibilityChange }:
         <button
           type="button"
           onClick={setup}
-          className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1 rounded-xl bg-red-500 px-3 text-[12px] font-black text-white transition hover:bg-red-400 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white lg:rounded-full"
+          className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1 rounded-xl bg-red-500 px-3 text-[12px] font-black capitalize text-white transition hover:bg-red-400 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white lg:rounded-full"
         >
           <span>Turn On</span>
         </button>

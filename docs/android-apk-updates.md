@@ -29,6 +29,8 @@ Version 1.4.2 (internal Android code 21) keeps that single reminder below the he
 
 Version 1.4.3 (internal Android code 22) revises the two reminder messages: the notification banner invites users to turn on alerts for messages and reminders, while the Android banner invites them to try the app before its official release. On phones, each description uses a deliberate two-line break and a larger icon with extra space before the text. The Android banner title is "Android App Available" and its button says "Get App"; both reminder buttons omit arrow icons. The single rotating slot and fixed placement remain unchanged.
 
+Version 1.4.4 (internal Android code 23) ensures the notification button visibly reads "Turn On" when a browser changes the rendered button text to sentence case. Reminder wording, layout and behavior otherwise stay the same.
+
 Users on APKs without the checker need to install the first checker-enabled APK once. Future published releases can then be discovered inside that app. Merely building or copying a local APK does not publish an update to everyone. The website download link remains tied to the last published APK until separately updated for an authorized release.
 
 ## Device checks for the Android improvement batch

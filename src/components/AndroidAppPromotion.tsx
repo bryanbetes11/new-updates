@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { ANDROID_TEST_RELEASE, isAndroidOfferDue } from '../lib/androidDownload';
-import { useAndroidAppOfferAvailable } from '../contexts/androidAppOfferContext';
+import { useAndroidAppPopupAvailable } from '../contexts/androidAppOfferContext';
 import { Modal } from './Modal';
 
 export function AndroidAppPromotion() {
@@ -13,7 +13,7 @@ export function AndroidAppPromotion() {
   const [previewDismissed, setPreviewDismissed] = useState(false);
   const [open, setOpen] = useState(false);
   const sessionShown = useRef(new Map<string, number>());
-  const eligible = useAndroidAppOfferAvailable();
+  const eligible = useAndroidAppPopupAvailable();
   useEffect(() => {
     setOpen(false);
     if (!eligible || !user?.id) return;

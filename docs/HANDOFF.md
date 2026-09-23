@@ -1,5 +1,12 @@
 # ServeSync handoff — 2026-09-05
 
+## 2026-09-23 Android PWA reminders after uninstall
+
+- User approved keeping the Android installation attention link available in an eligible Android PWA, independently of recorded APK activity, and explicitly requested push to main once complete.
+- Daily popup now pauses only for observed Android app activity within the last seven days in the caller's current church. Legacy push registrations no longer suppress it. The 24-hour per-account/browser popup cooldown remains. A failed activity check suppresses the popup but leaves the attention link available.
+- Applied migration 20260923053629_android_app_recent_activity.sql; live execute grants verified (authenticated allowed, anon denied). No records deleted: last-seen history is not treated as installation proof. Existing build 6 reports activity; no APK rebuild needed for this PWA-only behavior.
+- Verified: 75 test files, TypeScript, isolated DB tests (recent, expired, exact seven-day boundary, other member/church, legacy registration), lint (zero errors/four existing warnings), production build and diff checks passed. Publication follows these checks.
+
 ## 2026-09-23 App access, daily Android offer and native haptics
 
 - Manage Team (/leadership/team) now shows organization-admin-only app-access badges and expanded last-seen details. Records represent observed use, not proof an app remains installed; browser use cannot prove no installed app. Empty and unavailable states remain distinct. Multiple modes per member are preserved.
@@ -7,7 +14,7 @@
 - Android installed-PWA users get both a daily popup (24-hour local per-account cooldown from display) and a persistent optional Needs Your Attention entry. Both stop when a caller-only RPC detects Android app use or an existing native push registration. Popup dismissal does not remove the attention entry. No offer when detection fails; existing four approval items remain visible.
 - Native Android click haptics use a small View.performHapticFeedback bridge respecting system touch settings, with no new permission/dependency. Root click listener covers public and signed-in routes, excludes typing/disabled/opt-out controls, handles SVG icons, and avoids duplicating Layout's browser pointer feedback.
 - Checks: 75 test files, TypeScript, isolated database grants/RLS/tenant/moved-user/throttle/legacy-APK suppression tests passed. Lint zero errors/four existing warnings. Sample-data mobile badge/expanded/unknown UI inspected; actual attention component with all five items and guide navigation verified. DOM target checks passed for SVG, disabled, typing and opt-out controls. Final configured web + Android build passed.
-- Prepared APK: output/mobile/ServeSync-1.3.0-android-test-build6.apk. Physical haptic feel and new access reporting on a phone remain unverified. User approved activation, source push and build 6 publication. Migration applied successfully to the live project; release publication and deployment verification follow. APK SHA-256 C2BFA97CAB99DA22B2F9B910D411780337042C1AEF2161A99C1B72054A47A282. Rollback is additive: remove tracker/provider mounts and retain the unused RLS-protected table; no existing data modified by migration.
+- Prepared APK: output/mobile/ServeSync-1.3.0-android-test-build6.apk. Physical haptic feel and new access reporting on a phone remain unverified. User approved activation, source push and build 6 publication. Migration applied successfully to the live project; RLS/grants verified. Source pushed as a274800 and origin/main synchronized. GitHub build 6 prerelease published; anonymous APK download checksum matches. Vercel deployment 63bforydR8Ud6TPJPg3jg1bBvoxq succeeded for this commit. Manage Team verified against live records: Browser observed badge and expanded last-seen timestamp. Post-release status saved locally. APK SHA-256 C2BFA97CAB99DA22B2F9B910D411780337042C1AEF2161A99C1B72054A47A282. Rollback is additive: remove tracker/provider mounts and retain the unused RLS-protected table; no existing data modified by migration.
 
 ## 2026-09-23 Native permission onboarding and Android download page
 

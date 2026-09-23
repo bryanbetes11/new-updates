@@ -18,16 +18,14 @@ export function AndroidAppOfferProvider({ children }: { children: ReactNode }) {
     if (!eligible || !owner) return;
     const controller = new AbortController();
     let pending = false;
-    let installed = false;
     const refresh = async () => {
-      if (pending || installed || controller.signal.aborted || document.visibilityState !== 'visible' || !navigator.onLine) return;
+      if (pending || controller.signal.aborted || document.visibilityState !== 'visible' || !navigator.onLine) return;
       pending = true;
       try {
-        const { data, error } = await supabase.rpc('has_used_android_app').abortSignal(controller.signal);
+        const { data, error } = await supabase.rpc('has_recent_android_app_activity').abortSignal(controller.signal);
         if (controller.signal.aborted) return;
         if (error || typeof data !== 'boolean') { setAvailableFor(null); return; }
-        installed = data;
-        setAvailableFor(installed ? null : owner);
+        setAvailableFor(data ? null : owner);
       } catch { if (!controller.signal.aborted) setAvailableFor(null); }
       finally { pending = false; }
     };
@@ -43,5 +41,8 @@ export function AndroidAppOfferProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('online', check);
     };
   }, [eligible, owner]);
-  return <AndroidAppOfferContext.Provider value={eligible && owner !== null && availableFor === owner}>{children}</AndroidAppOfferContext.Provider>;
+  return <AndroidAppOfferContext.Provider value={{
+    attention: eligible && owner !== null,
+    popup: eligible && owner !== null && availableFor === owner,
+  }}>{children}</AndroidAppOfferContext.Provider>;
 }

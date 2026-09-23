@@ -23,6 +23,7 @@ try {
   const helpers = await readFile(new URL('../supabase/migrations/20260502000500_add_org_auth_helpers.sql', import.meta.url), 'utf8');
   await db.exec(helpers.slice(0, helpers.indexOf('create or replace function public.auth_is_org_leader')));
   await db.exec(await readFile(new URL('../supabase/migrations/20260923051442_member_app_access.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260923053629_android_app_recent_activity.sql', import.meta.url), 'utf8'));
   const as = async (role, user = '') => db.exec(`reset role; set role ${role}; set test.uid = '${user}';`);
   const record = (kind = 'browser', platform = 'other') => db.query('select record_member_app_access($1,$2)', [kind,platform]);
   const read = () => db.query('select * from member_app_access');
@@ -30,6 +31,7 @@ try {
   await assert.rejects(record(), /permission denied/);
   await assert.rejects(read(), /permission denied/);
   await assert.rejects(db.query('select has_used_android_app()'), /permission denied/);
+  await assert.rejects(db.query('select has_recent_android_app_activity()'), /permission denied/);
   await as('authenticated');
   await assert.rejects(record(), /Sign in/);
   await as('authenticated', noOrg);
@@ -72,5 +74,20 @@ try {
   await db.exec(`reset role; insert into native_push_devices values ('${otherAdmin}','${orgB}');`);
   await as('authenticated', otherAdmin);
   assert.equal((await db.query('select has_used_android_app() as used')).rows[0].used, true, 'existing push-enabled APK suppresses reminder too');
+  const recent = async () => (await db.query('select has_recent_android_app_activity() as recent')).rows[0].recent;
+  assert.equal(await recent(), false, 'old push registration alone must not pause reminders');
+  await as('authenticated', member);
+  assert.equal(await recent(), false, 'old church activity must not pause current church reminder');
+  await record('android_app','android');
+  assert.equal(await recent(), true, 'recent APK use pauses popup');
+  await as('authenticated', otherAdmin);
+  assert.equal(await recent(), false, 'another member activity must not pause caller reminder');
+  await db.exec(`reset role; update member_app_access set last_seen_at=now()-interval '8 days' where user_id='${member}' and app_kind='android_app';`);
+  await as('authenticated', member);
+  assert.equal(await recent(), false, 'popup returns after seven days without use');
+  await db.exec(`reset role; begin; update member_app_access set last_seen_at=now()-interval '7 days' where user_id='${member}' and app_kind='android_app';`);
+  await as('authenticated', member);
+  assert.equal(await recent(), false, 'exact seven-day boundary is expired');
+  await db.exec('rollback');
   console.log('PASS app access DB: own recording, admin scope, tenant isolation, moved members, validation, throttling and denied direct writes');
 } finally { await db.close(); }

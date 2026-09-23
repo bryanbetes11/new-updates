@@ -176,7 +176,8 @@ function EditDueDatePopover({ event, onSave, onClose, saving }: EditDueDatePopov
 }
 
 export function SetlistDeadlines() {
-  const { user } = useAuth();
+  const { user, isLeader, isOrgAdmin, isPlatformOwner } = useAuth();
+  const canManageDeadlines = isLeader || isOrgAdmin || isPlatformOwner;
   const { toast } = useToast();
   const navigate = useNavigate();
   const [events, setEvents] = useState<DeadlineEvent[]>([]);
@@ -567,7 +568,7 @@ export function SetlistDeadlines() {
                     </div>
                   )}
 
-                  <button
+                  {canManageDeadlines && <button
                     type="button"
                     onClick={() => setEditingId(isEditOpen ? null : event.id)}
                     className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/[0.06] dark:hover:text-gray-200"
@@ -575,9 +576,9 @@ export function SetlistDeadlines() {
                     aria-label={`Override due date for ${event.title}`}
                   >
                     <Pencil className="h-3.5 w-3.5" />
-                  </button>
+                  </button>}
 
-                  {canSendReminder && (
+                  {canManageDeadlines && canSendReminder && (
                     <button
                       type="button"
                       onClick={() => handleSendReminder(event)}
@@ -598,7 +599,7 @@ export function SetlistDeadlines() {
                     </button>
                   )}
 
-                  {isEditOpen && (
+                  {canManageDeadlines && isEditOpen && (
                     <div>
                       <EditDueDatePopover
                         event={event}

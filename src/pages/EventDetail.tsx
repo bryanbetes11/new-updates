@@ -572,7 +572,7 @@ export function EventDetail() {
   const eventReturnRoute = returnRouteRef.current;
   const eventBackLabel = eventReturnRoute.startsWith('/my-assignments') ? 'Back to assignments' : 'Back to events';
 
-  const { user, profile, roles, userRoles, organization, loading: authLoading, offlineMode, isLeader, isOrgAdmin, isAdmin, isAdminCoordinator, isProductionDirector, isMusicDirector, isSetlistCoordinator, isPlatformOwner, canPreviewMemberView, isViewingAsMember, isViewingAsSongLeader, setViewingAsSongLeader } = useAuth();
+  const { user, profile, roles, userRoles, organization, loading: authLoading, offlineMode, isLeader, isOrgAdmin, isAdmin, isAdminCoordinator, isProductionDirector, isMusicDirector, isSetlistCoordinator, isPlatformOwner, capabilities, canPreviewMemberView, isViewingAsMember, isViewingAsSongLeader, setViewingAsSongLeader } = useAuth();
   const viewScope = !authLoading && user?.id && profile?.id === user.id && profile.org_id ? JSON.stringify([user.id, profile.org_id]) : null;
   const cacheScope = viewScope ? deviceCacheScope(user?.id, profile?.org_id) : null;
   const detailCacheKey = id ? `events:detail:${id}` : null;
@@ -4198,7 +4198,7 @@ const openLyricsModal = (ss: SetlistSong) => {
 
   const isSetlistCreator = isViewingAsSongLeader || (!isRolePreviewActive && (setlist ? setlist.created_by === user?.id : false));
   const canSeeEventSongReadiness = isViewingAsSongLeader || isSetlistCreator || isSetlistCoordinator || isOrgAdmin || isAdmin || isPlatformOwner;
-  const canReviewSetlist = isLeader || isOrgAdmin || isPlatformOwner || isAdmin || isProductionDirector || isMusicDirector || isSetlistCoordinator;
+  const canReviewSetlist = !offlineMode && (isLeader || isOrgAdmin || isPlatformOwner || isAdmin || isProductionDirector || isMusicDirector || isSetlistCoordinator || capabilities.review_setlists);
   const canParticipateRevisionDiscussion = canReviewSetlist || isSongLeader;
   const canSubmitSetlist = isSetlistCreator || canManageSetlist;
   const pendingReviewAge = setlist?.status === 'pending_review'

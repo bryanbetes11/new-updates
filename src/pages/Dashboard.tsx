@@ -465,7 +465,7 @@ export function Dashboard() {
 
 function AccountDashboard() {
   const androidAppAvailable = useAndroidAppOfferAvailable();
-  const { user, profile, offlineMode, isLeader, isOrgAdmin, isProductionDirector } = useAuth();
+  const { user, profile, offlineMode, isLeader, isOrgAdmin, isPlatformOwner, isProductionDirector, capabilities } = useAuth();
   const cacheScope = deviceCacheScope(user?.id, profile?.org_id);
   const dashboardKey = user?.id && profile?.org_id ? `${user.id}:${profile.org_id}` : null;
   const { toast } = useToast();
@@ -1163,6 +1163,7 @@ function AccountDashboard() {
   const filteredAssignments = filterAssignmentsForHub(myAssignments);
   const assignmentRows = filteredAssignments.slice(0, 3);
   const reviewSets = filterSetlistsForHub(pendingSetlists).slice(0, 4);
+  const canReviewSetlists = !offlineMode && (isLeader || isOrgAdmin || isPlatformOwner || capabilities.review_setlists);
   const announcementRows = (recentAnnouncements
     .filter(announcement => activeHubFilter !== 'week' || isThisWeekDate(announcement.created_at?.slice(0, 10)))
   ).slice(0, 3);
@@ -1197,7 +1198,7 @@ function AccountDashboard() {
       icon: AlertCircle,
       urgent: true,
     }] : []),
-    ...((isLeader || isOrgAdmin) && pendingSetlists.length > 0 ? [{
+    ...(canReviewSetlists && pendingSetlists.length > 0 ? [{
       id: 'pending-setlists',
       title: `Review ${pendingSetlists.length} setlist${pendingSetlists.length === 1 ? '' : 's'}`,
       detail: 'Submitted and waiting for approval',
@@ -1767,13 +1768,18 @@ function AccountDashboard() {
                 </div>
               </section>
 
-              <section className={`${reviewSets.length === 0 ? 'hidden lg:block' : ''} w-full min-w-0 max-w-full overflow-hidden rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-3 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)] sm:p-4`}>
-                <div className="mb-3 flex items-center justify-between">
-                  <h2 className="min-w-0 truncate text-[18px] font-black text-white">Setlists Awaiting Approval</h2>
-                  <button onClick={() => navigate(isLeader ? '/leadership/setlists' : '/events')} className="-mr-2 ml-1 inline-flex min-h-11 shrink-0 items-center px-2 text-[12px] font-bold text-[#22c55e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] sm:ml-3">
-                    {isLeader ? 'Review queue' : 'See events'}
+              <section aria-label="Setlists awaiting approval" className={`${reviewSets.length === 0 ? 'hidden lg:block' : ''} w-full min-w-0 max-w-full overflow-hidden rounded-[0.75rem] border p-3 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)] sm:p-4 ${reviewSets.length > 0 && canReviewSetlists ? 'border-amber-400/50 bg-gradient-to-br from-[#322411] via-[#201c17] to-[#181818] shadow-[0_18px_42px_-30px_rgba(245,158,11,0.45)]' : reviewSets.length > 0 ? 'border-sky-400/25 bg-gradient-to-br from-[#17232a] to-[#181818]' : 'border-white/[0.08] bg-[#181818]'}`}>
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    {reviewSets.length > 0 && <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${canReviewSetlists ? 'bg-amber-400/20 text-amber-300' : 'bg-sky-400/15 text-sky-300'}`}><ListChecks className="h-4 w-4" /></span>}
+                    <h2 className="min-w-0 text-[18px] font-black leading-tight text-white">Setlists Awaiting Approval</h2>
+                    {reviewSets.length > 0 && <span className={`rounded-full px-2 py-0.5 text-[11px] font-black ${canReviewSetlists ? 'bg-amber-400 text-amber-950' : 'bg-sky-400/15 text-sky-200'}`}>{pendingSetlists.length}</span>}
+                  </div>
+                  <button onClick={() => navigate(canReviewSetlists ? '/leadership/setlists' : '/events')} className={`-mr-2 ml-1 inline-flex min-h-11 shrink-0 items-center px-2 text-[12px] font-bold focus-visible:outline-none focus-visible:ring-2 sm:ml-3 ${canReviewSetlists ? 'text-amber-300 focus-visible:ring-amber-300' : 'text-sky-300 focus-visible:ring-sky-300'}`}>
+                    {canReviewSetlists ? 'Review queue' : 'See events'}
                   </button>
                 </div>
+                {reviewSets.length > 0 && <p className={`mb-2 text-[11px] font-semibold ${canReviewSetlists ? 'text-amber-100/70' : 'text-sky-100/65'}`}>{canReviewSetlists ? 'Your review is needed before these sets can be used.' : 'These sets are waiting for a leadership decision.'}</p>}
                 <div className={reviewSets.length > 0 ? 'space-y-1' : 'flex min-h-[270px] flex-1 items-center justify-center rounded-[0.6rem] border border-dashed border-white/[0.14] bg-white/[0.035] px-5 py-8'}>
                   {reviewSets.length > 0 ? (
                     reviewSets.map((set) => {
@@ -1784,8 +1790,8 @@ function AccountDashboard() {
                       return (
                         <button
                           key={set.id}
-                          onClick={() => navigate(eventId ? `/events/${eventId}` : isLeader ? '/leadership/setlists' : '/events')}
-                          className="group flex min-w-0 w-full items-center gap-3 overflow-hidden rounded-[0.55rem] px-2 py-2 text-left transition-colors hover:bg-white/[0.06]"
+                          onClick={() => navigate(eventId ? `/events/${eventId}` : canReviewSetlists ? '/leadership/setlists' : '/events')}
+                          className="group flex min-w-0 w-full items-center gap-3 overflow-hidden rounded-[0.55rem] px-2 py-2 text-left transition-colors hover:bg-white/[0.08]"
                         >
                           <EventArtwork
                             eventType={set.events?.event_type}
@@ -1798,7 +1804,7 @@ function AccountDashboard() {
                             <p className="truncate text-[13px] font-black text-white">{set.events?.title || 'Submitted setlist'}</p>
                             <p className="mt-0.5 truncate text-[11px] font-semibold text-white/45">
                               {set.events?.event_date ? format(parseISO(set.events.event_date), 'MMM d, yyyy') : 'Ready for review'}
-                              {!isLeader ? ' · Awaiting leadership' : ''}
+                              {!canReviewSetlists ? ' · Awaiting leadership' : ''}
                             </p>
                           </div>
                           <span className="shrink-0 rounded-full bg-white/[0.08] px-3 py-1.5 text-[11px] font-black text-white/80">

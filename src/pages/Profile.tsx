@@ -23,6 +23,7 @@ import { APP_BUILD_ID, APP_UPDATE_PUBLISHED_AT, APP_VERSION_LABEL } from '../lib
 import { checkForAppUpdate } from '../lib/serviceWorkerUpdate';
 import { androidUpdates, isAndroidApp } from '../lib/nativeAppUpdates';
 import { NativeAppUpdateCard } from '../components/NativeAppUpdate';
+import { DeviceCacheSetting } from '../components/DeviceCacheSetting';
 import type { DisciplineRecord } from '../types';
 
 interface AccountabilitySummary {
@@ -298,6 +299,7 @@ export function Profile() {
 
       <div className="relative max-w-2xl md:max-w-4xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-10 space-y-5 sm:space-y-6">
         <NativeAppUpdateCard alwaysVisible />
+        <DeviceCacheSetting />
         {billingLocked && billingStatus === 'suspended' && (
           <div className="rounded-[26px] border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-900/10 px-4 py-4">
             <div className="flex items-start gap-3">

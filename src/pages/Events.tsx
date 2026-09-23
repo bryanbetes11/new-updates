@@ -7,6 +7,7 @@ import { motion } from 'framer-motion';
 import { Calendar, Plus, Search, Users, Trash2, CalendarOff, AlertCircle, Clock, Timer, X, PartyPopper, Heart, Sparkles, List, CheckCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { deviceCacheScope, readDeviceSnapshot, writeDeviceSnapshot, invalidateDeviceSnapshots } from '../lib/deviceCache';
 import { useToast } from '../contexts/ToastContext';
 import { Modal } from '../components/Modal';
 import { Select } from '../components/Select';
@@ -281,7 +282,7 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
     ? describeSetlistReviewAge(setlistInfo.submitted_at || setlistInfo.created_at)
     : null;
   const scheduleHasEnded = hasEventScheduleEnded(event, now);
-  const canManageLifecycle = isPlatformOwner && (isPast || scheduleHasEnded);
+  const canManageLifecycle = Boolean(onLifecycleChange) && isPlatformOwner && (isPast || scheduleHasEnded);
 
   const cancelLongPress = () => {
     if (longPressTimerRef.current !== null) {
@@ -932,7 +933,16 @@ function EventDesktopCardGroups({ events, calendarEntries, songLeaderMap, setlis
 }
 
 export function Events() {
-  const { user, isLeader, roles, profile } = useAuth();
+  const { user, isLeader, roles, profile, loading: authLoading } = useAuth();
+  const viewScope = !authLoading && user?.id && profile?.id === user.id && profile.org_id ? JSON.stringify([user.id, profile.org_id]) : null;
+  const cacheScope = viewScope ? deviceCacheScope(user?.id, profile?.org_id) : null;
+  const activeScopeRef = useRef(viewScope);
+  activeScopeRef.current = viewScope;
+  const fetchSequenceRef = useRef(0);
+  const networkAppliedRef = useRef(false);
+  const networkFailedRef = useRef(false);
+  const [visibleScope, setVisibleScope] = useState<string | null>(null);
+  const [cacheState, setCacheState] = useState<'loading' | 'saved' | 'fresh' | 'offline'>('loading');
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -969,10 +979,14 @@ export function Events() {
     return () => { active = false; };
   }, [profile?.org_id]);
 
-  const fetchEvents = useCallback(async () => {
+  const fetchEvents = useCallback(async (invalidateFirst = false) => {
+    const requestedScope = viewScope;
+    const sequence = ++fetchSequenceRef.current;
+    let primaryApplied = false;
+    if (invalidateFirst) await invalidateDeviceSnapshots(cacheScope).catch(() => {});
     try {
       const [eventsRes, membersRes, userRolesRes, birthdaysRes, leaveRes, songLeadersRes, setlistsRes, sundayServicesRes] = await Promise.all([
-        withRequestTimeout(supabase.from('events').select('*').order('event_date', { ascending: false }), emptyListResponse(), 'Events list'),
+        withRequestTimeout(supabase.from('events').select('*').order('event_date', { ascending: false }), { ...emptyListResponse(), status: 0 }, 'Events list'),
         withRequestTimeout(supabase.from('profiles').select('id, first_name, last_name, gender, birthday'), emptyListResponse(), 'Event members list'),
         withRequestTimeout(supabase.from('user_roles').select('user_id, role_id'), emptyListResponse(), 'Event member roles'),
         withRequestTimeout(supabase.from('profiles').select('first_name, last_name, birthday').not('birthday', 'is', null), emptyListResponse(), 'Birthdays list'),
@@ -987,7 +1001,16 @@ export function Events() {
         ),
         withRequestTimeout(supabase.from('events').select('*').eq('event_type', 'Sunday Service').gte('event_date', new Date().toISOString().split('T')[0]).order('event_date'), emptyListResponse(), 'Upcoming Sunday services'),
       ]);
+      if (activeScopeRef.current !== requestedScope || sequence !== fetchSequenceRef.current) return;
+      if (eventsRes.error || eventsRes.status === 0) throw eventsRes.error || new Error('Events list unavailable');
       setEvents(eventsRes.data || []);
+      primaryApplied = true;
+      setVisibleScope(requestedScope);
+      setLoading(false);
+      setCacheState('fresh');
+      networkAppliedRef.current = true;
+      networkFailedRef.current = false;
+      void writeDeviceSnapshot(cacheScope, 'events:list', eventsRes.data || []);
       setMembers(membersRes.data || []);
       setMemberRoles(userRolesRes.data || []);
       setSundayServices(sundayServicesRes.data || []);
@@ -1059,6 +1082,7 @@ export function Events() {
           setlistMap[setlist.event_id] = nextInfo;
         }
       }));
+      if (activeScopeRef.current !== requestedScope || sequence !== fetchSequenceRef.current) return;
       (eventsRes.data || []).forEach((event: Event) => {
         if (event.linked_event_id && setlistMap[event.linked_event_id] && shouldReplaceSetlistInfo(setlistMap[event.id], setlistMap[event.linked_event_id])) {
           setlistMap[event.id] = setlistMap[event.linked_event_id];
@@ -1088,14 +1112,45 @@ export function Events() {
       setCalendarEntries(entries);
     } catch (error) {
       console.error('Fetch events error:', error);
+      if (activeScopeRef.current === requestedScope && sequence === fetchSequenceRef.current) {
+        networkFailedRef.current = true;
+        setCacheState(primaryApplied ? 'fresh' : 'offline');
+      }
     } finally {
-      setLoading(false);
+      if (activeScopeRef.current === requestedScope && sequence === fetchSequenceRef.current) setLoading(false);
     }
-  }, []);
+  }, [cacheScope, viewScope]);
 
-  useEffect(() => { fetchEvents(); }, [fetchEvents]);
+  useEffect(() => {
+    networkAppliedRef.current = false;
+    networkFailedRef.current = false;
+    setLoading(true);
+    setCacheState('loading');
+    setVisibleScope(null);
+    setEvents([]);
+    if (!viewScope) return;
+    let active = true;
+    void readDeviceSnapshot<Event[]>(cacheScope, 'events:list').then(snapshot => {
+      if (!active || !snapshot || networkAppliedRef.current || activeScopeRef.current !== viewScope) return;
+      setEvents(snapshot.value);
+      setVisibleScope(viewScope);
+      setCacheState(networkFailedRef.current ? 'offline' : 'saved');
+      setLoading(false);
+    });
+    void fetchEvents();
+    return () => { active = false; fetchSequenceRef.current += 1; };
+  }, [cacheScope, viewScope, fetchEvents]);
+  const openCreateEvent = useCallback((eventDate = '') => {
+    if (cacheState !== 'fresh') return;
+    setForm(createEmptyEventForm(eventDate));
+    setAssignmentRows([]);
+    setCustomName('');
+    setShowCreate(true);
+  }, [cacheState]);
+
   useEffect(() => {
     const state = location.state as { deletedEventId?: string; refreshEventsAt?: number; openModal?: string } | null;
+    if (state?.openModal === 'schedule-event' && cacheState !== 'fresh') return;
     if (state?.openModal === 'schedule-event') openCreateEvent();
     if (!state?.deletedEventId && !state?.refreshEventsAt && !state?.openModal) return;
 
@@ -1115,9 +1170,9 @@ export function Events() {
       });
     }
 
-    fetchEvents();
+    fetchEvents(Boolean(deletedEventId || state.refreshEventsAt));
     navigate(location.pathname, { replace: true, state: null });
-  }, [fetchEvents, location.key, location.pathname, location.state, navigate]);
+  }, [cacheState, fetchEvents, location.key, location.pathname, location.state, navigate, openCreateEvent]);
   useEffect(() => { localStorage.setItem('eventsActiveTab', activeTab); }, [activeTab]);
   useEffect(() => {
     void loadSyncedPreference<'list' | 'calendar'>(user?.id, 'events.view').then(value => {
@@ -1140,13 +1195,6 @@ export function Events() {
       document.removeEventListener('visibilitychange', refreshLifecycle);
     };
   }, []);
-
-  const openCreateEvent = (eventDate = '') => {
-    setForm(createEmptyEventForm(eventDate));
-    setAssignmentRows([]);
-    setCustomName('');
-    setShowCreate(true);
-  };
 
   const closeCreateEvent = () => {
     setShowCreate(false);
@@ -1238,6 +1286,7 @@ export function Events() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (cacheState !== 'fresh') return;
     if (!user) return;
     if (!form.event_type) { toast('error', 'Please select an event type'); return; }
     if (hasCreateEventAvailabilityConflict) {
@@ -1286,12 +1335,12 @@ export function Events() {
       }
       if (validAssignments.length > 0) await supabase.from('event_assignments').insert(validAssignments.map(a => ({ event_id: newEventRecord.id, user_id: a.user_id, role_id: a.role_id })));
 
-      fetchEvents();
+      fetchEvents(true);
     } catch (error) {
       console.error('Create event error:', error);
       setCreating(false);
       if (eventWasCreated) {
-        fetchEvents();
+        fetchEvents(true);
         return;
       }
       toast('error', 'Failed to create event');
@@ -1299,6 +1348,7 @@ export function Events() {
   };
 
   const handleEventDateChange = async (eventId: string, newDate: string) => {
+    if (cacheState !== 'fresh') return;
     const movingEvent = events.find(event => event.id === eventId);
     if (!movingEvent || movingEvent.event_date === newDate) return;
     if (!window.confirm(`Reschedule ${movingEvent.title} to ${format(parseISO(newDate), 'MMM d, yyyy')}? Assigned members will be notified and must confirm their availability again.`)) return;
@@ -1306,11 +1356,13 @@ export function Events() {
     if (error) { toast('error', 'Failed to move event'); return; }
     if (!data?.length) { toast('error', 'The event changed or you no longer have permission. Refresh and try again.'); return; }
     setEvents(prev => prev.map(e => e.id === eventId ? { ...e, event_date: newDate } : e));
+    void invalidateDeviceSnapshots(cacheScope).catch(() => {});
     toast('success', 'Event rescheduled. Members must confirm again.');
   };
 
   const handleEventLifecycleChange = (updatedEvent: Event) => {
     setEvents(prev => prev.map(event => event.id === updatedEvent.id ? updatedEvent : event));
+    void invalidateDeviceSnapshots(cacheScope).catch(() => {});
     setSundayServices(prev => prev.map(event => event.id === updatedEvent.id ? updatedEvent : event));
   };
 
@@ -1330,11 +1382,12 @@ export function Events() {
   });
   const displayEvents = desktopView === 'calendar' ? calendarEvents : filtered;
 
-  if (loading) return <div className="page-container"><EventsSkeleton /></div>;
+  if (loading || visibleScope !== viewScope) return <div className="page-container"><EventsSkeleton /></div>;
 
   return (
     <div className="page-container page-bottom-pad relative overflow-hidden bg-[#050505] text-white">
       <div className="relative mx-auto max-w-2xl space-y-5 px-4 pb-6 pt-4 sm:space-y-6 sm:px-6 sm:pt-5 md:max-w-[860px] md:px-8 lg:max-w-6xl xl:max-w-[1560px]">
+        {(cacheState === 'saved' || cacheState === 'offline') && <p role="status" className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-2 text-xs text-amber-100">{cacheState === 'saved' ? 'Showing saved events while refreshing…' : 'Showing saved events. Connect to refresh.'} Changes are unavailable until the latest events load.</p>}
 
         {/* ── Toolbar ── */}
         <motion.div
@@ -1449,7 +1502,7 @@ export function Events() {
             icon={<Calendar className="h-8 w-8" />}
             title="No events found"
             description={search ? 'Try adjusting your search.' : 'Create your first event to get started.'}
-            action={isLeader ? <button onClick={() => openCreateEvent()} className="btn-primary"><Plus className="h-4 w-4" /> Create Event</button> : undefined}
+            action={isLeader && cacheState === 'fresh' ? <button onClick={() => openCreateEvent()} className="btn-primary"><Plus className="h-4 w-4" /> Create Event</button> : undefined}
           />
         ) : (
           <>
@@ -1461,8 +1514,8 @@ export function Events() {
                   songLeaderMap={songLeaderMap}
                   setlistInfoMap={setlistInfoMap}
                   onEventClick={id => navigate(`/events/${id}`)}
-                  onCreateEvent={isLeader ? openCreateEvent : undefined}
-                  onEventDateChange={isLeader ? handleEventDateChange : undefined}
+                  onCreateEvent={isLeader && cacheState === 'fresh' ? openCreateEvent : undefined}
+                  onEventDateChange={isLeader && cacheState === 'fresh' ? handleEventDateChange : undefined}
                 />
               </motion.div>
             ) : (
@@ -1473,13 +1526,13 @@ export function Events() {
                   songLeaderMap={songLeaderMap}
                   setlistInfoMap={setlistInfoMap}
                   onEventClick={id => navigate(`/events/${id}`)}
-                  onLifecycleChange={handleEventLifecycleChange}
+                  onLifecycleChange={cacheState === 'fresh' ? handleEventLifecycleChange : undefined}
                   showPast={activeTab === 'past'}
                 />
               </motion.div>
             )}
             <div className={`touch-action-pan-y ${desktopView === 'calendar' ? 'md:hidden' : 'lg:hidden'}`}>
-              <EventList events={filtered} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={id => navigate(`/events/${id}`)} onLifecycleChange={handleEventLifecycleChange} showPast={activeTab === 'past'} animateItems={false} />
+              <EventList events={filtered} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={id => navigate(`/events/${id}`)} onLifecycleChange={cacheState === 'fresh' ? handleEventLifecycleChange : undefined} showPast={activeTab === 'past'} animateItems={false} />
             </div>
           </>
         )}

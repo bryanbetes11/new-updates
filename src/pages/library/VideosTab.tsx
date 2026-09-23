@@ -11,9 +11,12 @@ import { Select } from '../../components/Select';
 import { EmptyState } from '../../components/EmptyState';
 import type { Video } from '../../types';
 import { cacheSnapshot, loadSnapshot } from '../../lib/syncedPreferences';
+import { deviceCacheScope, invalidateDeviceSnapshots, readDeviceSnapshot, writeDeviceSnapshot } from '../../lib/deviceCache';
+import { useNativeCachedImage } from '../../lib/nativeImageCache';
 
 const categories = ['General', 'Worship', 'Tutorial', 'Sermon', 'Conference', 'Other'];
 const VIDEOS_PER_PAGE = 20;
+const VIDEO_SNAPSHOT_KEY = 'library:videos';
 
 const categoryColors: Record<string, string> = {
   Worship: 'bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300',
@@ -54,6 +57,25 @@ interface VideoViewer {
 interface YouTubeMetadata {
   title: string;
   thumbnail_url: string;
+}
+
+function VideoThumbnail({ url, alt, className, loading = 'lazy', fallback = null }: {
+  url: string;
+  alt: string;
+  className: string;
+  loading?: 'lazy' | 'eager';
+  fallback?: React.ReactNode;
+}) {
+  const image = useNativeCachedImage(url, { lazy: loading === 'lazy' });
+  if (loading === 'lazy') return (
+    <div ref={image.observeRef} className="h-full w-full">
+      {image.src
+        ? <img src={image.src} alt={alt} loading={loading} className={className} onError={() => { image.retryRemoteOnError(); }} />
+        : fallback}
+    </div>
+  );
+  if (!image.src) return <>{fallback}</>;
+  return <img src={image.src} alt={alt} loading={loading} className={className} onError={() => { image.retryRemoteOnError(); }} />;
 }
 
 function timestampToSeconds(value: string) {
@@ -144,8 +166,16 @@ export function VideosTab() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, organization, isProductionDirector } = useAuth();
+  const cacheScope = deviceCacheScope(user?.id, organization?.id);
+  const listIdentity = JSON.stringify([user?.id ?? null, organization?.id ?? null]);
   const { toast } = useToast();
   const [videos, setVideos] = useState<Video[]>([]);
+  const [videosIdentity, setVideosIdentity] = useState(listIdentity);
+  const [cacheStatus, setCacheStatus] = useState<'none' | 'refreshing' | 'saved' | 'offline' | 'updated'>('none');
+  const requestGeneration = useRef(0);
+  const currentIdentity = useRef(listIdentity);
+  const hasVisibleList = useRef(false);
+  currentIdentity.current = listIdentity;
   const [viewCounts, setViewCounts] = useState<Record<string, number>>({});
   const [viewers, setViewers] = useState<VideoViewer[]>([]);
   const [viewersVideo, setViewersVideo] = useState<Video | null>(null);
@@ -187,21 +217,66 @@ export function VideosTab() {
     title: '', description: '', video_url: '', thumbnail_url: '', category: 'General',
   });
 
-  const fetchVideos = async () => {
-    setLoading(true);
+  const fetchVideos = async (reset = false) => {
+    const generation = ++requestGeneration.current;
+    const identity = listIdentity;
+    const scope = cacheScope;
+    const isCurrent = () => currentIdentity.current === identity && requestGeneration.current === generation;
+    if (reset) {
+      hasVisibleList.current = false;
+      setVideos([]);
+      setVideosIdentity(identity);
+      setViewCounts({});
+      setSelectedVideo(null);
+      setViewersVideo(null);
+      setShowPlayer(false);
+      setShowEdit(false);
+      setShowDelete(false);
+      setShowNotify(false);
+      setOpenMenuId(null);
+      setCacheStatus('none');
+    }
+    setLoading(!hasVisibleList.current);
     setLoadError('');
+    if (scope) setCacheStatus(hasVisibleList.current ? 'refreshing' : 'none');
+    let networkFinished = false;
+    const savedRead = scope
+      ? readDeviceSnapshot<Video[]>(scope, VIDEO_SNAPSHOT_KEY).then(snapshot => {
+          if (!isCurrent() || networkFinished || hasVisibleList.current || !snapshot || !Array.isArray(snapshot.value)) return;
+          hasVisibleList.current = true;
+          setVideos(snapshot.value);
+          setVideosIdentity(identity);
+          setLoading(false);
+          setCacheStatus('saved');
+        })
+      : Promise.resolve();
+    if (!user?.id || !organization?.id) {
+      await savedRead;
+      if (isCurrent()) { setLoading(false); setCacheStatus('none'); }
+      return;
+    }
     const { data, error } = await supabase
       .from('videos')
       .select('*')
       .order('created_at', { ascending: false });
+    if (!isCurrent()) return;
     if (error) {
-      const snapshot = loadSnapshot<Video[]>('videos');
-      if (snapshot) {
-        setVideos(snapshot.value);
-        setLoadError('Showing the last saved copy while the video library reconnects.');
+      await savedRead;
+      if (!isCurrent()) return;
+      if (scope) {
+        setCacheStatus(hasVisibleList.current ? 'offline' : 'none');
+        setLoadError(hasVisibleList.current ? 'Showing saved videos. Refresh when back online.' : 'The video library could not be loaded. Please try again.');
       } else {
-        setVideos([]);
-        setLoadError('The video library could not be loaded. Please try again.');
+        const snapshot = loadSnapshot<Video[]>('videos');
+        if (snapshot) {
+          hasVisibleList.current = true;
+          setVideos(snapshot.value);
+          setVideosIdentity(identity);
+          setLoadError('Showing the last saved copy while the video library reconnects.');
+        } else {
+          setVideos([]);
+          setLoadError('The video library could not be loaded. Please try again.');
+        }
       }
     } else {
       const baseVideos = (data || []) as Video[];
@@ -209,25 +284,40 @@ export function VideosTab() {
       const { data: uploaders } = uploaderIds.length
         ? await supabase.from('profiles').select('id, first_name, last_name').in('id', uploaderIds)
         : { data: [] };
+      if (!isCurrent()) return;
       const uploaderMap = new Map((uploaders || []).map(profile => [profile.id, profile]));
       const hydratedVideos = baseVideos.map(video => ({ ...video, profiles: uploaderMap.get(video.uploaded_by) } as Video));
+      networkFinished = true;
+      hasVisibleList.current = true;
       setVideos(hydratedVideos);
-      cacheSnapshot('videos', hydratedVideos);
+      setVideosIdentity(identity);
+      if (scope) {
+        setCacheStatus('updated');
+        void writeDeviceSnapshot(scope, VIDEO_SNAPSHOT_KEY, hydratedVideos);
+      } else {
+        cacheSnapshot('videos', hydratedVideos);
+      }
+      setLoading(false);
 
       // Viewer analytics are intentionally non-blocking: the library remains usable
       // even if this newer table is unavailable or its policy is still refreshing.
       const { data: viewRows, error: viewError } = await supabase.from('video_views').select('video_id');
-      if (!viewError) {
+      if (isCurrent() && !viewError) {
         setViewCounts((viewRows || []).reduce<Record<string, number>>((counts, row) => {
           counts[row.video_id] = (counts[row.video_id] || 0) + 1;
           return counts;
         }, {}));
       }
     }
-    setLoading(false);
+    if (isCurrent()) setLoading(false);
   };
 
-  useEffect(() => { void fetchVideos(); }, [organization?.id]);
+  useEffect(() => {
+    void fetchVideos(true);
+    return () => { requestGeneration.current += 1; };
+    // The identity captures both account and organization; a new one starts a fresh read.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listIdentity]);
 
   useEffect(() => {
     setVisibleCount(VIDEOS_PER_PAGE);
@@ -287,13 +377,17 @@ export function VideosTab() {
     const { error } = await supabase.from('videos').insert(rows);
     setCreating(false);
     if (error) { toast('error', error.message || 'Failed to add videos'); return; }
+    if (currentIdentity.current !== listIdentity) return;
+    requestGeneration.current += 1;
+    if (cacheScope) await invalidateDeviceSnapshots(cacheScope);
+    if (currentIdentity.current !== listIdentity) return;
     toast('success', `${rows.length} video${rows.length === 1 ? '' : 's'} added to the library`);
     setShowCreate(false);
     setCreateLinks('');
     setCreateCategory('General');
     setCreateDescription('');
     setCreateNotifyMembers(false);
-    fetchVideos();
+    void fetchVideos();
   };
 
   const fetchComments = async (videoId: string) => {
@@ -411,11 +505,21 @@ export function VideosTab() {
     const { error } = await supabase.from('videos').update(form).eq('id', selectedVideo.id);
     setUpdating(false);
     if (error) { toast('error', 'Failed to update video'); return; }
+    if (currentIdentity.current !== listIdentity) return;
+    requestGeneration.current += 1;
+    if (cacheScope) {
+      await invalidateDeviceSnapshots(cacheScope);
+      if (currentIdentity.current !== listIdentity) return;
+      const updated = videos.map(video => video.id === selectedVideo.id ? { ...video, ...form } : video);
+      hasVisibleList.current = true;
+      setVideos(updated);
+      void writeDeviceSnapshot(cacheScope, VIDEO_SNAPSHOT_KEY, updated);
+    }
     toast('success', 'Video updated');
     setShowEdit(false);
     setSelectedVideo(null);
     setForm({ title: '', description: '', video_url: '', thumbnail_url: '', category: 'General' });
-    fetchVideos();
+    void fetchVideos();
   };
 
   const handleDeleteClick = (video: Video, e: React.MouseEvent) => {
@@ -432,10 +536,20 @@ export function VideosTab() {
     const { error } = await supabase.from('videos').delete().eq('id', selectedVideo.id);
     setDeleting(false);
     if (error) { toast('error', 'Failed to delete video'); return; }
+    if (currentIdentity.current !== listIdentity) return;
+    requestGeneration.current += 1;
+    if (cacheScope) {
+      await invalidateDeviceSnapshots(cacheScope);
+      if (currentIdentity.current !== listIdentity) return;
+      const remaining = videos.filter(video => video.id !== selectedVideo.id);
+      hasVisibleList.current = true;
+      setVideos(remaining);
+      void writeDeviceSnapshot(cacheScope, VIDEO_SNAPSHOT_KEY, remaining);
+    }
     toast('success', 'Video deleted');
     setShowDelete(false);
     setSelectedVideo(null);
-    fetchVideos();
+    void fetchVideos();
   };
 
   const handleNotifyClick = (video: Video, e: React.MouseEvent) => {
@@ -460,9 +574,10 @@ export function VideosTab() {
     setSelectedVideo(null);
   };
 
-  const canManageVideo = (video: Video) => video.uploaded_by === user?.id || isProductionDirector;
+  const canManageVideo = (video: Video) => (!cacheScope || cacheStatus === 'updated') && (video.uploaded_by === user?.id || isProductionDirector);
 
-  const filtered = [...videos].sort((a, b) => {
+  const scopedVideos = videosIdentity === listIdentity ? videos : [];
+  const filtered = [...scopedVideos].sort((a, b) => {
     const dateDifference = getVideoSortDate(b) - getVideoSortDate(a);
     return dateDifference || Date.parse(b.created_at) - Date.parse(a.created_at);
   }).filter(v => {
@@ -477,7 +592,7 @@ export function VideosTab() {
     return id ? `https://img.youtube.com/vi/${id}/mqdefault.jpg` : '';
   };
 
-  if (loading) {
+  if (loading || videosIdentity !== listIdentity) {
     return (
       <div className="space-y-4 pt-1">
         <div className="flex gap-2">
@@ -509,9 +624,9 @@ export function VideosTab() {
         className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
       >
         <div className="-mx-1 flex min-w-0 gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {[{ label: 'All', value: '', count: videos.length }, ...categories
-            .filter(cat => videos.some(v => v.category === cat))
-            .map(cat => ({ label: cat, value: cat, count: videos.filter(v => v.category === cat).length }))]
+          {[{ label: 'All', value: '', count: scopedVideos.length }, ...categories
+            .filter(cat => scopedVideos.some(v => v.category === cat))
+            .map(cat => ({ label: cat, value: cat, count: scopedVideos.filter(v => v.category === cat).length }))]
             .map(filter => {
               const active = categoryFilter === filter.value;
               return (
@@ -567,6 +682,15 @@ export function VideosTab() {
         </div>
       </motion.div>
 
+      {cacheScope && cacheStatus !== 'none' && (
+        <p role="status" className="text-xs text-white/50">
+          {cacheStatus === 'saved' ? 'Saved videos · refreshing…'
+            : cacheStatus === 'refreshing' ? 'Refreshing videos…'
+            : cacheStatus === 'offline' ? 'Saved videos · offline'
+              : cacheStatus === 'updated' ? 'Videos up to date' : 'Saved videos'}
+        </p>
+      )}
+
       {loadError && (
         <div className="flex items-center justify-between gap-3 rounded-2xl border border-amber-400/20 bg-amber-400/[0.08] px-4 py-3 text-sm text-amber-200">
           <span>{loadError}</span>
@@ -609,17 +733,12 @@ export function VideosTab() {
                   >
                     <div>
                       <div className="relative aspect-video w-full overflow-hidden bg-white/[0.055]">
-                      {thumb ? (
-                        <img
-                          src={thumb}
-                          alt={video.title}
-                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
-                        />
-                      ) : (
-                        <div className="flex items-center justify-center h-full">
-                          <Film className="h-8 w-8 text-white/18" />
-                        </div>
-                      )}
+                      <VideoThumbnail
+                        url={thumb}
+                        alt={video.title}
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+                        fallback={<div className="flex h-full items-center justify-center"><Film className="h-8 w-8 text-white/18" /></div>}
+                      />
 
                         <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
                         <div className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-300 group-hover:opacity-100">
@@ -720,7 +839,7 @@ export function VideosTab() {
 
           {!categoryFilter && !search && (
             <p className="text-center text-[11px] font-mono text-gray-400 dark:text-white/30 pt-1 tracking-wide">
-              Showing {visibleVideos.length} of {videos.length} video{videos.length !== 1 ? 's' : ''}
+              Showing {visibleVideos.length} of {scopedVideos.length} video{scopedVideos.length !== 1 ? 's' : ''}
             </p>
           )}
         </>
@@ -822,9 +941,10 @@ export function VideosTab() {
               ) : (
                 <div className="relative flex h-full items-center justify-center overflow-hidden">
                   {(selectedVideo.thumbnail_url || getYouTubeThumb(selectedVideo.video_url)) && (
-                    <img
-                      src={selectedVideo.thumbnail_url || getYouTubeThumb(selectedVideo.video_url)}
+                    <VideoThumbnail
+                      url={selectedVideo.thumbnail_url || getYouTubeThumb(selectedVideo.video_url)}
                       alt=""
+                      loading="eager"
                       className="absolute inset-0 h-full w-full scale-105 object-cover opacity-35 blur-sm"
                     />
                   )}

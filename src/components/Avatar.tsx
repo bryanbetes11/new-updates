@@ -1,3 +1,6 @@
+import { useState } from 'react';
+import { useNativeCachedImage } from '../lib/nativeImageCache';
+
 interface AvatarProps {
   src?: string | null;
   firstName: string;
@@ -15,16 +18,19 @@ const sizeClasses = {
 };
 
 export function Avatar({ src, firstName, lastName, size = 'sm', className = '' }: AvatarProps) {
+  const image = useNativeCachedImage(src);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const initials = `${firstName[0]}${lastName?.[0] || ''}`;
   const baseClasses = `${sizeClasses[size]} object-cover shrink-0`;
   const roundedClass = className.includes('rounded-') ? '' : 'rounded-full';
 
-  if (src) {
+  if (image.src && image.src !== failedSrc) {
     return (
       <img
-        src={src}
+        src={image.src}
         alt={`${firstName} ${lastName || ''}`}
         className={`${baseClasses} ${roundedClass} ${className}`}
+        onError={() => { if (!image.retryRemoteOnError()) setFailedSrc(image.src); }}
       />
     );
   }

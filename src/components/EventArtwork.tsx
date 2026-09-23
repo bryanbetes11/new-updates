@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { BookOpen, CalendarDays, Heart, Lightbulb, Music2, Sparkles, Users, Video, Zap } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { hasArtworkArtist } from '../lib/songArtworkEligibility';
+import { useNativeCachedImage } from '../lib/nativeImageCache';
+import { useNativeImageCacheScope } from '../lib/nativeImageCache';
+import { readPublicArtworkUrl, writePublicArtworkUrl } from '../lib/publicArtworkCache';
 
 type EventArtworkSong = {
   title?: string | null;
@@ -162,14 +165,20 @@ async function fetchITunesArtwork(searchTerm: string, signal: AbortSignal) {
   return normalizeArtworkUrl(data.results?.[0]?.artworkUrl100 || data.results?.[0]?.artworkUrl60);
 }
 
-async function fetchPublicArtwork(song: EventArtworkSong) {
+async function fetchPublicArtwork(song: EventArtworkSong, scope: string | null) {
   const nestedSong = getNestedSong(song);
   if (!hasArtworkArtist(nestedSong.artist)) return null;
   const searchTerm = [nestedSong.title?.trim(), nestedSong.artist?.trim()].filter(Boolean).join(' ');
   if (!searchTerm) return null;
 
-  const cacheKey = searchTerm.toLowerCase();
+  const cacheKey = `${scope || 'web'}:${searchTerm.toLowerCase()}`;
   if (publicArtworkCache.has(cacheKey)) return publicArtworkCache.get(cacheKey) || null;
+
+  const savedUrl = await readPublicArtworkUrl(scope, searchTerm);
+  if (savedUrl) {
+    publicArtworkCache.set(cacheKey, savedUrl);
+    return savedUrl;
+  }
 
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 4500);
@@ -178,6 +187,7 @@ async function fetchPublicArtwork(song: EventArtworkSong) {
     const artworkUrl = await fetchDeezerArtwork(searchTerm, controller.signal)
       || await fetchITunesArtwork(searchTerm, controller.signal);
     publicArtworkCache.set(cacheKey, artworkUrl);
+    if (artworkUrl) void writePublicArtworkUrl(scope, searchTerm, artworkUrl);
     return artworkUrl;
   } catch {
     publicArtworkCache.set(cacheKey, null);
@@ -187,7 +197,25 @@ async function fetchPublicArtwork(song: EventArtworkSong) {
   }
 }
 
+function ArtworkTile({ url, onFailure }: { url: string; onFailure: (url: string) => void }) {
+  const image = useNativeCachedImage(url, { lazy: true });
+  return (
+    <div ref={image.observeRef} className="relative min-h-0 min-w-0 overflow-hidden bg-[#101010]">
+      {image.src && <img
+        src={image.src}
+        alt=""
+        loading="lazy"
+        className="h-full w-full object-cover"
+        referrerPolicy="no-referrer"
+        onError={() => { if (!image.retryRemoteOnError()) onFailure(url); }}
+      />}
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.10),rgba(0,0,0,0.30))]" />
+    </div>
+  );
+}
+
 export function EventArtwork({ eventType, title, artworkUrls = [], songs = null, className = '', onArtworkUrlsChange }: EventArtworkProps) {
+  const cacheScope = useNativeImageCacheScope();
   const meta = getEventArtworkMeta(eventType, title);
   const Icon = meta.icon;
   const [publicArtworkUrls, setPublicArtworkUrls] = useState<string[]>([]);
@@ -232,7 +260,7 @@ export function EventArtwork({ eventType, title, artworkUrls = [], songs = null,
     // render a complete four-tile collage.
     if (availableArtworkCount >= 4) return undefined;
 
-    Promise.all(firstSongs.map(fetchPublicArtwork)).then((urls) => {
+    Promise.all(firstSongs.map((song) => fetchPublicArtwork(song, cacheScope))).then((urls) => {
       if (cancelled) return;
       setPublicArtworkUrls(urls.filter((url, index, all): url is string => Boolean(url) && all.indexOf(url) === index));
     });
@@ -240,7 +268,7 @@ export function EventArtwork({ eventType, title, artworkUrls = [], songs = null,
     return () => {
       cancelled = true;
     };
-  }, [availableArtworkCount, firstSongs]);
+  }, [availableArtworkCount, cacheScope, firstSongs]);
 
   useEffect(() => {
     onArtworkUrlsChange?.(visibleArtworkUrls);
@@ -253,17 +281,11 @@ export function EventArtwork({ eventType, title, artworkUrls = [], songs = null,
           {Array.from({ length: 4 }).map((_, index) => {
             const url = visibleArtworkUrls[index] || visibleArtworkUrls[index % visibleArtworkUrls.length];
             return (
-              <div key={`${url}-${index}`} className="relative min-h-0 min-w-0 overflow-hidden bg-[#101010]">
-                <img
-                  src={url}
-                  alt=""
-                  loading="lazy"
-                  className="h-full w-full object-cover"
-                  referrerPolicy="no-referrer"
-                  onError={() => setFailedUrls((current) => new Set(current).add(url))}
-                />
-                <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.10),rgba(0,0,0,0.30))]" />
-              </div>
+              <ArtworkTile
+                key={`${url}-${index}`}
+                url={url}
+                onFailure={(failedUrl) => setFailedUrls((current) => new Set(current).add(failedUrl))}
+              />
             );
           })}
         </div>

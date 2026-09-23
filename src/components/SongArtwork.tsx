@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Music } from 'lucide-react';
 import { hasArtworkArtist } from '../lib/songArtworkEligibility';
+import { useNativeCachedImage } from '../lib/nativeImageCache';
+import { useNativeImageCacheScope } from '../lib/nativeImageCache';
+import { readPublicArtworkUrl, writePublicArtworkUrl } from '../lib/publicArtworkCache';
 
 type SongArtworkSong = {
   title?: string | null;
@@ -88,12 +91,18 @@ async function fetchITunesArtwork(searchTerm: string, signal: AbortSignal) {
   return normalizeArtworkUrl(data.results?.[0]?.artworkUrl100 || data.results?.[0]?.artworkUrl60);
 }
 
-async function fetchPublicArtwork(title?: string | null, artist?: string | null) {
+async function fetchPublicArtwork(title?: string | null, artist?: string | null, scope: string | null = null) {
   const searchTerm = [title?.trim(), artist?.trim()].filter(Boolean).join(' ');
   if (!searchTerm) return null;
 
-  const cacheKey = searchTerm.toLowerCase();
+  const cacheKey = `${scope || 'web'}:${searchTerm.toLowerCase()}`;
   if (publicArtworkCache.has(cacheKey)) return publicArtworkCache.get(cacheKey) || null;
+
+  const savedUrl = await readPublicArtworkUrl(scope, searchTerm);
+  if (savedUrl) {
+    publicArtworkCache.set(cacheKey, savedUrl);
+    return savedUrl;
+  }
 
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 1800);
@@ -102,6 +111,7 @@ async function fetchPublicArtwork(title?: string | null, artist?: string | null)
     const artworkUrl = await fetchDeezerArtwork(searchTerm, controller.signal)
       || await fetchITunesArtwork(searchTerm, controller.signal);
     publicArtworkCache.set(cacheKey, artworkUrl);
+    if (artworkUrl) void writePublicArtworkUrl(scope, searchTerm, artworkUrl);
     return artworkUrl;
   } catch {
     publicArtworkCache.set(cacheKey, null);
@@ -112,6 +122,7 @@ async function fetchPublicArtwork(title?: string | null, artist?: string | null)
 }
 
 export function SongArtwork({ song, youtubeUrl, className = 'h-10 w-10 rounded-lg' }: SongArtworkProps) {
+  const cacheScope = useNativeImageCacheScope();
   const normalizedSong = Array.isArray(song) ? song[0] || null : song;
   const [publicArtworkUrl, setPublicArtworkUrl] = useState<string | null>(null);
   const [failedUrls, setFailedUrls] = useState<Set<string>>(() => new Set());
@@ -129,6 +140,7 @@ export function SongArtwork({ song, youtubeUrl, className = 'h-10 w-10 rounded-l
   const artworkUrl = artworkEligible ? [videoArtworkUrl, publicArtworkUrl, searchArtworkUrl].find(
     (url): url is string => typeof url === 'string' && !failedUrls.has(url)
   ) || null : null;
+  const image = useNativeCachedImage(artworkUrl, { lazy: true });
 
   useEffect(() => {
     let cancelled = false;
@@ -137,25 +149,29 @@ export function SongArtwork({ song, youtubeUrl, className = 'h-10 w-10 rounded-l
 
     if (!artworkEligible || !title) return undefined;
 
-    fetchPublicArtwork(title, artist).then((url) => {
+    fetchPublicArtwork(title, artist, cacheScope).then((url) => {
       if (!cancelled) setPublicArtworkUrl(url);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [artist, artworkEligible, title, videoArtworkUrl]);
+  }, [artist, artworkEligible, cacheScope, title, videoArtworkUrl]);
 
   return (
-    <div className={`relative isolate shrink-0 overflow-hidden bg-[#101010] ${className}`}>
-      {artworkUrl ? (
+    <div ref={image.observeRef} className={`relative isolate shrink-0 overflow-hidden bg-[#101010] ${className}`}>
+      {image.src ? (
         <img
-          src={artworkUrl}
+          src={image.src}
           alt=""
           loading="lazy"
           className="h-full w-full object-cover"
           referrerPolicy="no-referrer"
-          onError={() => setFailedUrls((current) => new Set(current).add(artworkUrl))}
+          onError={() => {
+            if (!image.retryRemoteOnError() && artworkUrl) {
+              setFailedUrls((current) => new Set(current).add(artworkUrl));
+            }
+          }}
         />
       ) : (
         <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_35%_25%,rgba(34,197,94,0.42),transparent_34%),linear-gradient(135deg,rgba(255,255,255,0.14),rgba(0,0,0,0.92))]">

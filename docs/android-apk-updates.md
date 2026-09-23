@@ -17,6 +17,18 @@ Users on APKs without the checker need to install the first checker-enabled APK 
 
 ## Device checks for the Android improvement batch
 
+### Android 1.3.2 device cache
+
+The first 1.3.2 APK uses Android versionCode 9 so it can update installed build 8. The display version is 1.3.2; release tags and APK filenames continue using the monotonically increasing Android code for compatibility with the existing updater.
+
+Android keeps seven-day, account-and-church-scoped snapshots for Library songs/sets, video metadata, event lists, and event details including approved set charts. Pages display saved content while refreshing from Supabase. Event/Library edit controls requiring current data stay unavailable until a fresh read succeeds. Video/audio playback, attendance confirmations, permissions, and authentication are not supplied by these snapshots.
+
+Snapshots use IndexedDB (8 MiB total, 80 entries, 2 MiB maximum per entry). Profile pictures and song/event/video thumbnail images use app-private files (50 MiB retained total, 5 MiB per image, up to three downloads at once). Thumbnail downloads begin near the viewport. Successful public artwork lookup URLs are reused too. The limits apply across saved accounts; older content may be evicted. Clearing Android app storage or uninstalling also removes these files. This is faster repeat loading, not a complete offline application.
+
+Signing out or switching accounts revokes access and cancels old cache responses without deleting that account's saved content. Returning to the same account and church restores its cache after auth hydration. Profile's **Clear this account’s cache** removes only the current account/church snapshots and images; server content and drafts remain unchanged.
+
+Device validation: open Songs, Sets, Videos and an event online, reopen them and restart the app, check that thumbnails and saved content return quickly; switch to another account and verify it cannot see the first account's saved content; switch back and verify it is retained. Test a network interruption after login, then reconnect and verify fresh content replaces saved data. Use Profile to clear only the current account's cache. Browser fixtures simulate native bridges and do not establish physical Android filesystem or installer behavior.
+
 - Swipe Videos, Songs and Sets immediately after launch, after opening/closing the account menu, and after returning from Live Mode; verify side padding and horizontal filter access.
 - Back closes a dialog/preview/drawer before navigating. In Live Mode it opens the existing exit confirmation. At the start of app navigation it minimizes the app.
 - Save a safe sample attachment to Downloads, cancel a save, open/share a sample file, and verify a failed download reports an error. Android saving uses the system location picker; it does not require broad storage access.

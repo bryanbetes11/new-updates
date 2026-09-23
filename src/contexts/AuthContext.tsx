@@ -1,10 +1,17 @@
 /* eslint-disable react-refresh/only-export-components -- The provider and its companion hook intentionally share this context module. */
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { createTransientSupabaseClient, supabase } from '../lib/supabase';
 import { readSavedAccounts, removeSavedAccount, upsertSavedAccount, type SavedAccount } from '../lib/savedAccounts';
 import type { Organization, Profile, Role, UserRole } from '../types';
 import { disconnectNativePush } from '../lib/nativePush';
+import { deviceCacheScope, setDeviceCacheScope } from '../lib/deviceCache';
+import { setNativeImageCacheScope } from '../lib/nativeImageCache';
+
+function activateDeviceCache(scope: string | null) {
+  return Promise.all([setDeviceCacheScope(scope), setNativeImageCacheScope(scope)])
+    .catch(error => { console.warn('[Cache] Device cache unavailable:', error); });
+}
 
 interface AuthContextValue {
   session: Session | null;
@@ -114,7 +121,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [previewModeRequested, setPreviewModeRequested] = useState<'member' | 'song_leader' | null>(null);
   const activeUserIdRef = useRef<string | null>(null);
 
+  useLayoutEffect(() => {
+    // Preserve the last signed-in cache during startup until live auth establishes its owner.
+    if (loading) return;
+    const scope = profile?.id === user?.id ? deviceCacheScope(user?.id, profile?.org_id) : null;
+    void activateDeviceCache(scope);
+  }, [loading, user?.id, profile?.id, profile?.org_id]);
+
   const clearUserContext = () => {
+    void activateDeviceCache(null);
     setSession(null);
     setUser(null);
     setProfile(null);
@@ -301,6 +316,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // regains focus. Keep the current page mounted in that case.
         if (isSameUser) return;
 
+        void activateDeviceCache(null);
         setLoading(true);
         if (s?.user) {
           hydrateUserContext(s.user.id, s).finally(() => setLoading(false));
@@ -328,6 +344,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await hydrateUserContext(s.user.id, s);
         })().finally(() => setLoading(false));
       } else {
+        void activateDeviceCache(null);
         setProfile(null);
         setOrganization(null);
         setUserRoles([]);
@@ -446,6 +463,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     await disconnectNativePush();
+    await activateDeviceCache(null);
     await supabase.auth.signOut({ scope: 'local' });
     setProfile(null);
     setOrganization(null);
@@ -508,6 +526,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try { await disconnectNativePush(); }
     catch (error) { return { error: error instanceof Error ? error : new Error('Could not disconnect phone notifications.') }; }
 
+    await activateDeviceCache(null);
     setLoading(true);
 
     const { data: { session: currentSession } } = await supabase.auth.getSession();

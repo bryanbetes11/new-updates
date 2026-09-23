@@ -16,6 +16,7 @@ import { LiveModeComms } from '../components/LiveModeComms';
 import { isOpenLiveRequest } from '../lib/liveMode';
 import { useScreenAwake } from '../hooks/useScreenAwake';
 import { useAuth } from '../contexts/AuthContext';
+import { deviceCacheScope, readDeviceSnapshot, writeDeviceSnapshot, invalidateDeviceSnapshots } from '../lib/deviceCache';
 import { useToast } from '../contexts/ToastContext';
 import { Modal } from '../components/Modal';
 import { RescheduleEventModal } from '../components/RescheduleEventModal';
@@ -562,6 +563,12 @@ function getEventReturnRoute(state: unknown) {
 
 const eventChatEnabled = MESSENGER_ENABLED;
 
+interface SavedEventDetail {
+  event: Event | null;
+  approvedSetlist: Setlist | null;
+  approvedSongs: SetlistSong[];
+}
+
 export function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -571,6 +578,18 @@ export function EventDetail() {
   const eventBackLabel = eventReturnRoute.startsWith('/my-assignments') ? 'Back to assignments' : 'Back to events';
 
   const { user, profile, roles, userRoles, organization, loading: authLoading, isLeader, isOrgAdmin, isAdmin, isAdminCoordinator, isProductionDirector, isMusicDirector, isSetlistCoordinator, isPlatformOwner, canPreviewMemberView, isViewingAsMember, isViewingAsSongLeader, setViewingAsSongLeader } = useAuth();
+  const viewScope = !authLoading && user?.id && profile?.id === user.id && profile.org_id ? JSON.stringify([user.id, profile.org_id]) : null;
+  const cacheScope = viewScope ? deviceCacheScope(user?.id, profile?.org_id) : null;
+  const detailCacheKey = id ? `events:detail:${id}` : null;
+  const activeDetailIdentity = viewScope && detailCacheKey ? `${viewScope}:${detailCacheKey}` : null;
+  const activeDetailRef = useRef(activeDetailIdentity);
+  activeDetailRef.current = activeDetailIdentity;
+  const fetchSequenceRef = useRef(0);
+  const networkAppliedRef = useRef(false);
+  const networkFailedRef = useRef(false);
+  const lastSavedDetailRef = useRef<string | null>(null);
+  const [visibleDetailIdentity, setVisibleDetailIdentity] = useState<string | null>(null);
+  const [cacheState, setCacheState] = useState<'loading' | 'saved' | 'fresh' | 'offline'>('loading');
   const { toast } = useToast();
   const prefersReducedMotion = useReducedMotion();
   const canPreviewLiveMode = isOrgAdmin || isAdmin || isPlatformOwner;
@@ -1118,8 +1137,11 @@ export function EventDetail() {
     };
   }, []);
 
-  const fetchAll = useCallback(async () => {
-    if (!id) return;
+  const fetchAll = useCallback(async (invalidateFirst = false) => {
+    if (!id || !viewScope || !detailCacheKey) return;
+    const requestedIdentity = activeDetailIdentity;
+    const sequence = ++fetchSequenceRef.current;
+    if (invalidateFirst) await invalidateDeviceSnapshots(cacheScope).catch(() => {});
     try {
       const [eventRes, assignRes, membersRes, memberRolesRes, memberSettingsRes, availabilityRes, setlistRes, songsRes, allSetlistsRes, proposalSetlistsRes, sundayServicesRes, observationsRes, observationRepliesRes, observationViewsRes] = await Promise.all([
         supabase.from('events').select('*').eq('id', id).maybeSingle(),
@@ -1161,6 +1183,9 @@ export function EventDetail() {
           .eq('event_id', id)
           .order('viewed_at', { ascending: false }),
       ]);
+      if (activeDetailRef.current !== requestedIdentity || sequence !== fetchSequenceRef.current) return;
+      if (eventRes.error || setlistRes.error) throw eventRes.error || setlistRes.error;
+      networkAppliedRef.current = true;
       setEvent(eventRes.data);
       setAssignments(assignRes.data || []);
       const assignmentExcludedIds = new Set((memberSettingsRes.data || [])
@@ -1199,6 +1224,8 @@ export function EventDetail() {
           .limit(1)
           .maybeSingle();
 
+        if (activeDetailRef.current !== requestedIdentity || sequence !== fetchSequenceRef.current) return;
+
         if (latestSubmissionError) {
           if (!isMissingSetlistSubmissionTableError(latestSubmissionError.message)) {
             console.error('Failed to load last setlist check report:', latestSubmissionError);
@@ -1233,6 +1260,7 @@ export function EventDetail() {
             .eq('roles.name', 'Song Leader')
             .maybeSingle(),
         ]);
+        if (activeDetailRef.current !== requestedIdentity || sequence !== fetchSequenceRef.current) return;
         setLinkedServiceEvent(linkedEventRes.data || null);
         setLinkedSongLeaderAssignment((linkedSongLeaderRes.data as EventAssignment | null) || null);
         if (linkedSetlistRes.data) {
@@ -1242,9 +1270,11 @@ export function EventDetail() {
             .select('*, songs(*)')
             .eq('setlist_id', linkedSetlistRes.data.id)
             .order('position');
+          if (activeDetailRef.current !== requestedIdentity || sequence !== fetchSequenceRef.current) return;
           setLinkedSetlistSongs((linkedSongsData || []) as SetlistSong[]);
         }
       }
+      if (activeDetailRef.current !== requestedIdentity || sequence !== fetchSequenceRef.current) return;
       setSongs(songsRes.data || []);
       setSundayServices(sundayServicesRes.data || []);
 
@@ -1284,14 +1314,63 @@ export function EventDetail() {
       } else if (eventRes.data?.event_type) {
         setServiceFormat(inferServiceFormat(eventRes.data.event_type));
       }
+      const approvedSetlist = setlistRes.data?.status === 'approved' ? setlistRes.data as Setlist : null;
+      networkFailedRef.current = false;
+      setVisibleDetailIdentity(requestedIdentity);
+      setCacheState('fresh');
+      const savedDetail: SavedEventDetail = {
+        event: eventRes.data as Event | null,
+        approvedSetlist,
+        approvedSongs: approvedSetlist?.setlist_songs || [],
+      };
+      lastSavedDetailRef.current = JSON.stringify(savedDetail);
+      void writeDeviceSnapshot(cacheScope, detailCacheKey, savedDetail);
     } catch (error) {
       console.error('Failed to load event detail', error);
+      if (activeDetailRef.current === requestedIdentity && sequence === fetchSequenceRef.current) {
+        networkFailedRef.current = true;
+        setCacheState('offline');
+        setVisibleDetailIdentity(requestedIdentity);
+      }
     } finally {
-      setLoading(false);
+      if (activeDetailRef.current === requestedIdentity && sequence === fetchSequenceRef.current) setLoading(false);
     }
-  }, [id, isMissingSetlistSubmissionTableError]);
+  }, [id, viewScope, cacheScope, detailCacheKey, activeDetailIdentity, isMissingSetlistSubmissionTableError]);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => {
+    networkAppliedRef.current = false;
+    networkFailedRef.current = false;
+    lastSavedDetailRef.current = null;
+    setLoading(true);
+    setCacheState('loading');
+    setVisibleDetailIdentity(null);
+    setEvent(null);
+    setSetlist(null);
+    setSetlistSongs([]);
+    setAssignments([]);
+    if (!viewScope || !detailCacheKey || !activeDetailIdentity) return;
+    let active = true;
+    void readDeviceSnapshot<SavedEventDetail>(cacheScope, detailCacheKey).then(snapshot => {
+      if (!active || !snapshot || networkAppliedRef.current || activeDetailRef.current !== activeDetailIdentity) return;
+      setEvent(snapshot.value.event);
+      setSetlist(snapshot.value.approvedSetlist);
+      setSetlistSongs(snapshot.value.approvedSongs);
+      setVisibleDetailIdentity(activeDetailIdentity);
+      setCacheState(networkFailedRef.current ? 'offline' : 'saved');
+      setLoading(false);
+    });
+    void fetchAll();
+    return () => { active = false; fetchSequenceRef.current += 1; };
+  }, [fetchAll, viewScope, cacheScope, detailCacheKey, activeDetailIdentity]);
+
+  useEffect(() => {
+    if (cacheState !== 'fresh' || visibleDetailIdentity !== activeDetailIdentity || !lastSavedDetailRef.current) return;
+    const approvedSetlist = setlist?.status === 'approved' ? setlist : null;
+    const current = JSON.stringify({ event, approvedSetlist, approvedSongs: approvedSetlist ? setlistSongs : [] } satisfies SavedEventDetail);
+    if (current === lastSavedDetailRef.current) return;
+    lastSavedDetailRef.current = null;
+    void invalidateDeviceSnapshots(cacheScope).catch(() => {});
+  }, [cacheState, visibleDetailIdentity, activeDetailIdentity, event, setlist, setlistSongs, cacheScope]);
 
   useEffect(() => {
     if (!eventChatEnabled || !id) {
@@ -2057,7 +2136,7 @@ export function EventDetail() {
       setShowAssign(false);
       setAssignmentDrafts([createAssignmentDraftRow()]);
       dispatchBadgeCountsRefresh();
-      fetchAll();
+      fetchAll(true);
     } catch (error) {
       console.error('Failed to assign event team:', error);
       toast('error', getErrorMessage(error, 'Could not add these team assignments'));
@@ -2088,7 +2167,7 @@ export function EventDetail() {
 
       dispatchBadgeCountsRefresh();
       toast('success', 'Assignment confirmed');
-      await fetchAll();
+      await fetchAll(true);
 	} catch (error) {
 	  console.error('Failed to confirm assignment:', error);
 	  toast('error', getErrorMessage(error, 'Could not confirm this assignment'));
@@ -2124,7 +2203,7 @@ export function EventDetail() {
       toast('info', 'Assignment declined');
       setShowDecline(null);
       setDeclineReason('');
-      await fetchAll();
+      await fetchAll(true);
     } finally {
       setRespondingAssignmentId(null);
     }
@@ -2152,7 +2231,7 @@ export function EventDetail() {
       setAssignments(prev => prev.filter(a => a.id !== assignmentId));
       dispatchBadgeCountsRefresh();
       toast('info', 'Assignment removed');
-      fetchAll();
+      fetchAll(true);
     } catch (error) {
       console.error('Failed to remove assignment:', error);
       toast('error', getErrorMessage(error, 'Could not remove this team member'));
@@ -2379,7 +2458,7 @@ export function EventDetail() {
       toast('success', 'Song added');
     }
 
-    fetchAll();
+    fetchAll(true);
     return insertedSong;
   };
 
@@ -2510,7 +2589,7 @@ export function EventDetail() {
       }
 
       closeSetlistBuilder(true);
-      await fetchAll();
+      await fetchAll(true);
     } finally {
       setSavingSetlistBuilder(false);
     }
@@ -2579,7 +2658,7 @@ export function EventDetail() {
     if (setlist?.status === 'approved') {
       await markSetlistNeedsReapproval();
     }
-    fetchAll();
+    fetchAll(true);
   };
 
   const openEditSong = (ss: SetlistSong) => {
@@ -2667,7 +2746,7 @@ export function EventDetail() {
         toast('success', artistChanged ? 'Artist and song details updated' : isMetadataOnlyChange ? 'Song details updated' : 'Song updated');
       }
       setEditingSongId(null);
-      await fetchAll();
+      await fetchAll(true);
     } finally {
       setSavingSongEdit(false);
     }
@@ -2751,7 +2830,7 @@ export function EventDetail() {
       });
       setShowSongConfig(true);
 
-      fetchAll();
+      fetchAll(true);
     } catch (error) {
       const message = getErrorMessage(error, 'Failed to create song');
       setNewSongError(message);
@@ -2786,7 +2865,7 @@ export function EventDetail() {
       draft: 'Reverted to draft',
     };
     toast(action === 'approved' ? 'success' : action === 'rejected' ? 'error' : 'info', label[action] || 'Setlist updated');
-    fetchAll();
+    fetchAll(true);
   };
 
   const getSongGuideText = useCallback((category: string): string | null => {
@@ -3337,6 +3416,7 @@ export function EventDetail() {
       return;
     }
     setShowDeleteEvent(false);
+    await invalidateDeviceSnapshots(cacheScope).catch(() => {});
     toast('success', 'Event deleted');
     navigate('/events', {
       replace: true,
@@ -3675,7 +3755,7 @@ const openLyricsModal = (ss: SetlistSong) => {
       }
       toast('success', 'Event updated');
       setShowEditEvent(false);
-      fetchAll();
+      fetchAll(true);
     } catch (error) {
       toast('error', getErrorMessage(error, 'Failed to update event'));
     } finally {
@@ -3933,7 +4013,21 @@ const openLyricsModal = (ss: SetlistSong) => {
     }, { replace: true });
   }, [event, lifecycleNow, location.pathname, location.search, navigate]);
 
-  if (loading) return <PageLoader />;
+  if (loading || visibleDetailIdentity !== activeDetailIdentity) return <PageLoader />;
+  if ((cacheState === 'saved' || cacheState === 'offline') && event) return (
+    <div className="page-container page-bottom-pad min-h-screen bg-[#050505] px-5 py-6 text-white">
+      <div className="mx-auto max-w-3xl space-y-6">
+        <button type="button" onClick={() => navigate(eventReturnRoute)} className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-white/75"><ArrowLeft className="h-4 w-4" />{eventBackLabel}</button>
+        <p role="status" className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">{cacheState === 'saved' ? 'Showing saved event details while refreshing…' : 'Showing saved event details. Connect to refresh.'} Changes and responses are available after the latest details load.</p>
+        <div>
+          <p className="text-sm font-semibold text-emerald-300">{event.event_type} · {format(parseISO(event.event_date), 'MMM d, yyyy')}{event.start_time ? ` · ${formatTime12Hour(event.start_time)}` : ''}{event.end_time ? ` – ${formatTime12Hour(event.end_time)}` : ''}</p>
+          <h1 className="mt-2 text-3xl font-black">{event.title}</h1>
+          {event.description && <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-white/70">{event.description}</p>}
+        </div>
+        {setlist && setlistSongs.length > 0 && <section aria-label="Saved approved set" className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.04] p-5"><h2 className="text-lg font-bold">Approved set</h2><ol className="space-y-2">{setlistSongs.slice().sort((a, b) => a.position - b.position).map(song => <li key={song.id} className="rounded-xl bg-white/[0.05] px-3 py-2 text-sm"><details><summary className="cursor-pointer"><span className="mr-2 text-white/45">{song.position}.</span>{song.songs?.title || 'Song'}{song.songs?.artist ? <span className="ml-2 text-white/50">{song.songs.artist}</span> : null}</summary>{(song.arrangement_chordpro_text || song.songs?.chordpro_text || song.songs?.lyrics) && <pre className="mt-3 overflow-x-auto whitespace-pre-wrap border-t border-white/10 pt-3 font-mono text-xs leading-6 text-white/70">{song.arrangement_chordpro_text || song.songs?.chordpro_text || song.songs?.lyrics}</pre>}</details></li>)}</ol></section>}
+      </div>
+    </div>
+  );
   if (!event) return (
     <div className="page-container page-bottom-pad flex min-h-[60vh] items-center justify-center bg-[#050505] px-5 text-center text-white">
       <div className="max-w-sm">
@@ -9092,7 +9186,7 @@ const openLyricsModal = (ss: SetlistSong) => {
           event={event}
           memberCount={new Set(assignments.map(assignment => assignment.user_id)).size}
           onClose={() => setShowRescheduleEvent(false)}
-          onSaved={() => { void fetchAll(); }}
+          onSaved={() => { void fetchAll(true); }}
           proposalDueDate={date => calculateProposalDueDate(date, event.event_type)}
         />}
         <Modal open={showEditEvent} onClose={() => setShowEditEvent(false)} title="Edit Event" size="lg" instantOpen>

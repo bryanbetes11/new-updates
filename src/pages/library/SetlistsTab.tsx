@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { relativeEventDay } from '../../lib/workflowDates';
 import { format, parseISO } from 'date-fns';
@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { deviceCacheScope, readDeviceSnapshot, writeDeviceSnapshot, invalidateDeviceSnapshots } from '../../lib/deviceCache';
 import { useToast } from '../../contexts/ToastContext';
 import { Modal } from '../../components/Modal';
 import { EmptyState } from '../../components/EmptyState';
@@ -166,7 +167,16 @@ interface SetlistsTabProps {
 }
 
 export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTabProps) {
-  const { user, isOrgAdmin, isAdmin, isPlatformOwner } = useAuth();
+  const { user, profile, loading: authLoading, isOrgAdmin, isAdmin, isPlatformOwner } = useAuth();
+  const viewScope = !authLoading && user?.id && profile?.id === user.id && profile.org_id ? JSON.stringify([user.id, profile.org_id]) : null;
+  const cacheScope = viewScope ? deviceCacheScope(user?.id, profile?.org_id) : null;
+  const activeScopeRef = useRef(viewScope);
+  activeScopeRef.current = viewScope;
+  const fetchSequenceRef = useRef(0);
+  const networkAppliedRef = useRef(false);
+  const networkFailedRef = useRef(false);
+  const [visibleScope, setVisibleScope] = useState<string | null>(null);
+  const [cacheState, setCacheState] = useState<'loading' | 'saved' | 'fresh' | 'offline'>('loading');
   const location = useLocation();
   const { toast } = useToast();
   const [setlists, setSetlists] = useState<SetlistWithEvent[]>([]);
@@ -226,7 +236,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   const [duplicateEditReturn, setDuplicateEditReturn] = useState<{ groupKey: string; keeperId: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const chartFileRef = useRef<HTMLInputElement>(null);
-  const canManageSongLibrary = isOrgAdmin || isAdmin || isPlatformOwner;
+  const canManageSongLibrary = cacheState === 'fresh' && (isOrgAdmin || isAdmin || isPlatformOwner);
   const openChartStorageKey = user?.id ? `${SONG_CHART_OPEN_STORAGE_PREFIX}:${user.id}` : '';
   const ownerFilter = new URLSearchParams(location.search).get('owner');
   const showMySongLeaderSets = !isSongsOnly && ownerFilter === 'me';
@@ -238,7 +248,20 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
     if (state?.openModal) window.history.replaceState({}, document.title, location.pathname + location.search);
   }, [isSongsOnly, location.pathname, location.search, location.state]);
 
-  const fetchData = async () => {
+  const applyLibrarySnapshot = useCallback((snapshot: { setlists: SetlistWithEvent[]; songUsages: SongUsage[]; songLeaderMap: Record<string, string>; songLeaderAvatarMap: Record<string, { avatarUrl: string | null; firstName: string; lastName: string }>; songLeaderUserByEvent: Record<string, string> }) => {
+    setSetlists(snapshot.setlists);
+    setSongUsages(snapshot.songUsages);
+    setSongLeaderMap(snapshot.songLeaderMap);
+    setSongLeaderAvatarMap(snapshot.songLeaderAvatarMap);
+    setSongLeaderUserByEvent(snapshot.songLeaderUserByEvent);
+    setVisibleScope(viewScope);
+    setLoading(false);
+  }, [viewScope]);
+
+  const fetchData = useCallback(async (invalidateFirst = false) => {
+    const requestedScope = viewScope;
+    const sequence = ++fetchSequenceRef.current;
+    if (invalidateFirst) await invalidateDeviceSnapshots(cacheScope).catch(() => {});
     const [setlistRes, songsRes, songLeadersRes] = await Promise.all([
       supabase
         .from('setlists')
@@ -249,8 +272,17 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
       supabase.from('event_assignments').select('event_id, user_id, profiles(first_name, last_name, nickname, gender, avatar_url), roles!inner(name)').eq('roles.name', 'Song Leader'),
     ]);
 
+    if (activeScopeRef.current !== requestedScope || sequence !== fetchSequenceRef.current) return [];
+    if (setlistRes.error || songsRes.error || songLeadersRes.error) {
+      networkFailedRef.current = true;
+      console.error('Failed to refresh song library', setlistRes.error || songsRes.error || songLeadersRes.error);
+      setCacheState('offline');
+      setVisibleScope(requestedScope);
+      setLoading(false);
+      return [];
+    }
+
     const approvedSetlists = (setlistRes.data || []) as unknown as SetlistWithEvent[];
-    setSetlists(approvedSetlists);
 
     const slMap: Record<string, string> = {};
     const slAvatarMap: Record<string, { avatarUrl: string | null; firstName: string; lastName: string }> = {};
@@ -268,9 +300,6 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
         };
       }
     });
-    setSongLeaderMap(slMap);
-    setSongLeaderAvatarMap(slAvatarMap);
-    setSongLeaderUserByEvent(slUserMap);
 
     const songs = songsRes.data || [];
     const usages = buildSongUsages({
@@ -282,12 +311,32 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
 
     usages.sort(compareLibrarySongs);
 
-    setSongUsages(usages);
-    setLoading(false);
+    networkAppliedRef.current = true;
+    networkFailedRef.current = false;
+    applyLibrarySnapshot({ setlists: approvedSetlists, songUsages: usages, songLeaderMap: slMap, songLeaderAvatarMap: slAvatarMap, songLeaderUserByEvent: slUserMap });
+    setCacheState('fresh');
+    void writeDeviceSnapshot(cacheScope, 'library:songs-sets', { setlists: approvedSetlists, songUsages: usages, songLeaderMap: slMap, songLeaderAvatarMap: slAvatarMap, songLeaderUserByEvent: slUserMap });
     return usages;
-  };
+  }, [viewScope, cacheScope, applyLibrarySnapshot]);
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    networkAppliedRef.current = false;
+    networkFailedRef.current = false;
+    setLoading(true);
+    setCacheState('loading');
+    setVisibleScope(null);
+    setSetlists([]);
+    setSongUsages([]);
+    if (!viewScope) return;
+    let active = true;
+    void readDeviceSnapshot<{ setlists: SetlistWithEvent[]; songUsages: SongUsage[]; songLeaderMap: Record<string, string>; songLeaderAvatarMap: Record<string, { avatarUrl: string | null; firstName: string; lastName: string }>; songLeaderUserByEvent: Record<string, string> }>(cacheScope, 'library:songs-sets').then(snapshot => {
+      if (!active || !snapshot || networkAppliedRef.current || activeScopeRef.current !== viewScope) return;
+      applyLibrarySnapshot(snapshot.value);
+      setCacheState(networkFailedRef.current ? 'offline' : 'saved');
+    });
+    void fetchData();
+    return () => { active = false; fetchSequenceRef.current += 1; };
+  }, [viewScope, cacheScope, fetchData, applyLibrarySnapshot]);
 
   useEffect(() => {
     if (!fixedView) return;
@@ -356,6 +405,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   };
 
   const openEditLibrarySong = (song: SongUsage, returnToDuplicateReview: { groupKey: string; keeperId: string } | null = null) => {
+    if (cacheState !== 'fresh') return;
     setDuplicateEditReturn(returnToDuplicateReview);
     setEditingLibrarySong(song);
     setEditLibrarySongForm({
@@ -376,6 +426,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   };
 
   const handleSaveLibrarySongDetails = async () => {
+    if (cacheState !== 'fresh') return;
     if (!editingLibrarySong || songDetailsSaving) return;
 
     const title = sanitizeSongTitle(editLibrarySongForm.title.trim());
@@ -441,7 +492,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
       setSongUsages(current => current.map(song => song.id === updatedSong.id ? updatedSong : song));
       if (selectedChartSong?.id === updatedSong.id) setSelectedChartSong(updatedSong);
       const returnContext = duplicateEditReturn;
-      const refreshedUsages = await fetchData();
+      const refreshedUsages = await fetchData(true);
       setEditingLibrarySong(null);
       setDuplicateEditReturn(null);
 
@@ -586,7 +637,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
 
       setShowWebImport(false);
       setWebImportForm({ title: '', artist: '', song_key: '', chordpro_text: '' });
-      await fetchData();
+      await fetchData(true);
       if (savedSong) openSongViewer(savedSong, 'chart');
     } catch (error: unknown) {
       console.error('Failed to save web chart import:', error);
@@ -900,7 +951,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
       toast('success', `Imported ${selectedCandidates.length} charts (${createdCount} new, ${updatedCount} updated)`);
       setChartImportReviewOpen(false);
       setChartImportCandidates([]);
-      await fetchData();
+      await fetchData(true);
     } catch (error: unknown) {
       console.error('Failed to import song charts:', error);
       toast('error', getErrorMessage(error, `Import stopped after ${createdCount + updatedCount} charts`));
@@ -910,6 +961,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   };
 
   const handleSaveChart = async (text: string, assignedSongKey?: string) => {
+    if (cacheState !== 'fresh') throw new Error('Refresh the song library before saving changes.');
     if (!selectedChartSong) return;
     setChartSaving(true);
     try {
@@ -942,6 +994,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
         }
       }
       setSongUsages(prev => prev.map(song => song.id === selectedChartSong.id ? { ...song, chordpro_text: data.chordpro_text, song_key: data.song_key || song.song_key } : song));
+      void fetchData(true);
     } catch (error: unknown) {
       console.error('Failed to save chart:', error);
       toast('error', getErrorMessage(error, 'Failed to save chart'));
@@ -1063,7 +1116,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
       toast('success', `Imported ${totalEvents} sets with ${totalSongs} songs`);
       setShowImport(false);
       setImportData([]);
-      fetchData();
+      fetchData(true);
     } catch { toast('error', 'Import failed'); }
     setImporting(false);
   };
@@ -1102,6 +1155,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   };
 
   const handleDeleteSetlists = async () => {
+    if (cacheState !== 'fresh') return;
     if (selectedSetlists.size === 0) return;
     setDeleting(true);
     try {
@@ -1118,12 +1172,13 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
       setSelectedSetlists(new Set());
       setShowDeleteConfirm(null);
       toast('success', `Deleted ${ids.length} set${ids.length > 1 ? 's' : ''}`);
-      fetchData();
+      fetchData(true);
     } catch { toast('error', 'Failed to delete sets'); }
     setDeleting(false);
   };
 
   const handleDeleteSongs = async () => {
+    if (cacheState !== 'fresh') return;
     if (selectedSongs.size === 0) return;
     setDeleting(true);
     try {
@@ -1135,7 +1190,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
       setSelectedSongs(new Set());
       setShowDeleteConfirm(null);
       toast('success', `Deleted ${ids.length} song${ids.length > 1 ? 's' : ''}`);
-      fetchData();
+      fetchData(true);
     } catch { toast('error', 'Failed to delete songs'); }
     setDeleting(false);
   };
@@ -1238,7 +1293,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
       const { error: deleteError } = await supabase.from('songs').delete().in('id', duplicateIds);
       if (deleteError) throw deleteError;
 
-      await fetchData();
+      await fetchData(true);
       if (nextDuplicateGroup) {
         setSelectedDuplicateTitle(nextDuplicateGroup.key);
         setDuplicateKeeperId(nextDuplicateGroup.songs[0]?.id || '');
@@ -1445,11 +1500,11 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                 artist={selectedChartSong.artist}
                 songKey={selectedChartSong.song_key}
                 chordproText={selectedChartSong.chordpro_text}
-                editable
+                editable={cacheState === 'fresh'}
                 fullBleed
                 hideTitleHeader
                 saving={chartSaving}
-                onSave={handleSaveChart}
+                onSave={cacheState === 'fresh' ? handleSaveChart : undefined}
               />
             </div>
           )}
@@ -1458,7 +1513,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
     </Modal>
   );
 
-  if (loading) {
+  if (loading || visibleScope !== viewScope) {
     return (
       <div className="space-y-4 pt-1">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -1486,15 +1541,16 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   if (!showSongsView) {
     return (
       <div className="space-y-5 pb-2">
+        {(cacheState === 'saved' || cacheState === 'offline') && <p role="status" className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-800 dark:text-amber-200">{cacheState === 'saved' ? 'Showing saved sets while refreshing…' : 'Showing saved sets. Connect to refresh.'} Changes are unavailable until the latest data loads.</p>}
 
-        <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={e => handleFileUpload(e.target.files)} />
+        <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" disabled={cacheState !== 'fresh'} onChange={e => handleFileUpload(e.target.files)} />
 
         {setlists.length === 0 ? (
           <EmptyState
             icon={<Music className="h-8 w-8" />}
             title="No approved sets"
             description="Approved sets from events will appear here. You can also import past sets from Excel."
-            action={<button onClick={() => fileRef.current?.click()} className="btn-primary min-h-11"><Upload className="h-4 w-4" /> Import Excel</button>}
+            action={<button onClick={() => fileRef.current?.click()} disabled={cacheState !== 'fresh'} className="btn-primary min-h-11"><Upload className="h-4 w-4" /> Import Excel</button>}
           />
         ) : (
           <>
@@ -1537,6 +1593,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
               )}
               <button
                 onClick={() => fileRef.current?.click()}
+                disabled={cacheState !== 'fresh'}
                 className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-full bg-white/[0.095] px-5 text-[13px] font-black text-white transition-all hover:bg-[#1ed760] hover:text-black active:scale-[0.97]"
               >
                 <Upload className="h-4 w-4" />
@@ -1933,6 +1990,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   /* ────────────────────────── Song Results View ────────────────────────── */
   return (
     <div className="space-y-5 pb-2">
+      {(cacheState === 'saved' || cacheState === 'offline') && <p role="status" className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-800 dark:text-amber-200">{cacheState === 'saved' ? 'Showing saved songs while refreshing…' : 'Showing saved songs. Connect to refresh.'} Changes are unavailable until the latest data loads.</p>}
 
       {canManageSongLibrary && (
         <input ref={chartFileRef} type="file" accept=".cho,.sbp" multiple className="hidden" onChange={e => handleChartUpload(e.target.files)} />
@@ -2147,6 +2205,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                     <button
                       type="button"
                       onClick={() => openEditLibrarySong(song)}
+                      disabled={cacheState !== 'fresh'}
                       aria-label={`Edit ${song.title}`}
                       className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.035] text-white/45 transition-colors hover:border-emerald-400/40 hover:bg-emerald-500/[0.12] hover:text-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 active:scale-[0.96] sm:h-9 sm:w-9"
                     >
@@ -2155,6 +2214,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                     <button
                       type="button"
                       onClick={() => requestDeleteSong(song.id)}
+                      disabled={cacheState !== 'fresh'}
                       aria-label={`Delete ${song.title}`}
                       className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-red-500/15 bg-red-500/[0.08] text-red-300 transition-colors hover:border-red-400/45 hover:bg-red-500/[0.16] hover:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/70 active:scale-[0.96] sm:h-9 sm:w-9"
                     >

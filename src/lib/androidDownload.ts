@@ -1,8 +1,8 @@
 export const ANDROID_TEST_RELEASE = {
   version: '1.4.0',
-  build: 17,
+  build: 18,
   filename: 'ServeSync-1.4.0.apk',
-  url: 'https://github.com/bryanbetes11/new-updates/releases/download/android-v1.4.0-build17/ServeSync-1.4.0.apk',
+  url: 'https://github.com/bryanbetes11/new-updates/releases/download/android-v1.4.0-build18/ServeSync-1.4.0.apk',
 };
 
 export function shouldOfferAndroidApp(options: { android: boolean; standalone: boolean; native: boolean; signedIn: boolean; dashboard: boolean; dismissed: boolean }) {

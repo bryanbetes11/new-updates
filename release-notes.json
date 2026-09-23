@@ -1,10 +1,10 @@
 {
-  "headline": "The pending-setlist card stays focused on the sets awaiting review.",
+  "headline": "Android now clears APKs after their updates are installed.",
   "highlights": [
+    "The Android app removes its own downloaded APK after that build is installed, while keeping an uninstalled update available to retry.",
     "The pending-setlist card keeps its full title on one line and removes the See Events or Review Queue header button; each set still opens its event details.",
     "Pending setlists appear on every church member's dashboard, with decisions limited to authorized reviewers.",
     "Setlists show their submission date and pending age in the dashboard card.",
-    "The mobile dashboard has four priority shortcuts and more room beneath the bottom navigation.",
-    "Android downloads verified updates inside ServeSync and offers a separate Install update action."
+    "The mobile dashboard has four priority shortcuts and more room beneath the bottom navigation."
   ]
 }

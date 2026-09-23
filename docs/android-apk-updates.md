@@ -19,6 +19,8 @@ Build 16 bundles the pending-setlist dashboard improvements: all signed-in churc
 
 Build 17 removes the extra See Events / Review Queue action from the pending-setlist card header for both members and reviewers, leaving enough room for the full title on one line on phones. The set rows remain clickable and open their event details. The Android package ID, visible version, signing identity, and in-app update flow stay the same.
 
+Build 18 cleans ServeSync's private update folder on app launch. After a successful install, it removes updater-downloaded APKs for the installed build and earlier builds, plus abandoned partial downloads. A newer downloaded APK stays available if the installer was cancelled, and each completed download keeps only that update. Cleanup is limited to ServeSync-managed files inside the app's private `updates` folder; it does not touch browser Downloads or APKs saved elsewhere. This native change requires installing build 18 or later.
+
 Users on APKs without the checker need to install the first checker-enabled APK once. Future published releases can then be discovered inside that app. Merely building or copying a local APK does not publish an update to everyone. The website download link remains tied to the last published APK until separately updated for an authorized release.
 
 ## Device checks for the Android improvement batch

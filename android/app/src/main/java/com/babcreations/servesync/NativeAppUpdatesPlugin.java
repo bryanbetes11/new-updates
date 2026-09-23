@@ -40,6 +40,20 @@ public class NativeAppUpdatesPlugin extends Plugin {
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final AtomicBoolean downloading = new AtomicBoolean(false);
 
+    @Override
+    public void load() {
+        io.execute(() -> {
+            try {
+                PackageInfo installed = getContext().getPackageManager().getPackageInfo(getContext().getPackageName(), 0);
+                long installedBuild = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+                    ? installed.getLongVersionCode() : installed.versionCode;
+                UpdateFileCleanup.afterInstall(new File(getContext().getFilesDir(), "updates"), installedBuild);
+            } catch (PackageManager.NameNotFoundException ignored) {
+                // Leave downloaded packages alone if Android cannot confirm the installed build.
+            }
+        });
+    }
+
     @PluginMethod
     public void downloadUpdate(PluginCall call) {
         Integer build = call.getInt("build");
@@ -59,6 +73,7 @@ public class NativeAppUpdatesPlugin extends Plugin {
             try {
                 File ready = updateFile(build);
                 if (verifiedFile(ready, build, hash)) {
+                    UpdateFileCleanup.afterDownload(ready.getParentFile(), ready);
                     call.resolve();
                     return;
                 }
@@ -69,7 +84,7 @@ public class NativeAppUpdatesPlugin extends Plugin {
                 if (!partial.renameTo(ready)) throw new IOException("Unable to prepare the downloaded update.");
                 try { verifyPackage(ready, build); }
                 catch (Exception error) { ready.delete(); throw error; }
-                cleanOlderUpdates(ready);
+                UpdateFileCleanup.afterDownload(ready.getParentFile(), ready);
                 call.resolve();
             } catch (Exception error) {
                 if (partial != null) partial.delete();
@@ -268,11 +283,4 @@ public class NativeAppUpdatesPlugin extends Plugin {
         return result.toString();
     }
 
-    private void cleanOlderUpdates(File keep) {
-        File[] files = keep.getParentFile().listFiles();
-        if (files == null) return;
-        for (File file : files) {
-            if (!file.equals(keep) && file.isFile() && (file.getName().endsWith(".apk") || file.getName().endsWith(".part"))) file.delete();
-        }
-    }
 }

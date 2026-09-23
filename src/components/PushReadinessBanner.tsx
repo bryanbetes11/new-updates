@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowRight, Frown } from 'lucide-react';
+import { Frown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { isIosDevice, isStandalonePwa } from '../lib/device';
@@ -85,7 +85,7 @@ export function PushReadinessBanner({ variant = 'default', onVisibilityChange }:
 
   const message = !isNativeApp() && isIosDevice() && !isStandalonePwa()
     ? 'Add ServeSync to your Home Screen to turn on alerts.'
-    : 'Get alerts for messages and reminders.';
+    : <>Get notified when you receive{' '}<br className="sm:hidden" />new messages or reminders.</>;
 
   if (variant === 'chat') {
     return (
@@ -105,9 +105,9 @@ export function PushReadinessBanner({ variant = 'default', onVisibilityChange }:
 
   return (
       <div className="relative flex items-center gap-3 bg-[#25090d] px-4 py-3 text-white shadow-lg shadow-black/25 lg:mx-[30px] lg:rounded-2xl">
-        <Frown aria-hidden="true" className="h-6 w-6 shrink-0 text-red-300" />
+        <Frown aria-hidden="true" className="mr-1 h-12 w-12 shrink-0 text-red-300 sm:mr-0 sm:h-6 sm:w-6" />
         <div className="min-w-0 flex-1">
-          <p className="text-[14px] font-black">Notifications are off</p>
+          <p className="text-[14px] font-black">Turn On Notifications</p>
           <p className="mt-0.5 text-[12px] leading-4 text-white/65">{message}</p>
         </div>
         <button
@@ -115,8 +115,7 @@ export function PushReadinessBanner({ variant = 'default', onVisibilityChange }:
           onClick={setup}
           className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1 rounded-xl bg-red-500 px-3 text-[12px] font-black text-white transition hover:bg-red-400 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white lg:rounded-full"
         >
-          <span>Set up</span>
-          <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+          <span>Turn On</span>
         </button>
       </div>
   );

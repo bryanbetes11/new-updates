@@ -27,6 +27,8 @@ Version 1.4.1 (internal Android code 20) moves the Android install reminder out 
 
 Version 1.4.2 (internal Android code 21) keeps that single reminder below the header while the dashboard scrolls and removes its visible selection and pause controls. The Android reminder uses a robot icon and labels the APK as an early Android app test, separate from the installed PWA and not yet on Play Store. The reminder still alternates automatically when notifications are off and the Android offer applies.
 
+Version 1.4.3 (internal Android code 22) revises the two reminder messages: the notification banner invites users to turn on alerts for messages and reminders, while the Android banner invites them to try the app before its official release. On phones, each description uses a deliberate two-line break and a larger icon with extra space before the text. The Android banner title is "Android App Available" and its button says "Get App"; both reminder buttons omit arrow icons. The single rotating slot and fixed placement remain unchanged.
+
 Users on APKs without the checker need to install the first checker-enabled APK once. Future published releases can then be discovered inside that app. Merely building or copying a local APK does not publish an update to everyone. The website download link remains tied to the last published APK until separately updated for an authorized release.
 
 ## Device checks for the Android improvement batch

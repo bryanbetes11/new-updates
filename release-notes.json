@@ -1,8 +1,8 @@
 {
-  "headline": "The Android app reminder stays visible while browsing Home.",
+  "headline": "Dashboard reminders explain the next step at a glance.",
   "highlights": [
-    "The single rotating reminder stays below the header while Home scrolls, without extra carousel controls.",
-    "The Android reminder uses an Android icon and explains that this early test APK is separate from the PWA and not on Play Store yet.",
-    "The Android app and website use version 1.4.2."
+    "The notification reminder says Turn on notifications and explains which alerts it enables.",
+    "The Android reminder invites users to try the app before its official release; phone banners use larger icons and balanced two-line descriptions.",
+    "The Android app and website use version 1.4.3."
   ]
 }

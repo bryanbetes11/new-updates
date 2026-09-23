@@ -8,6 +8,9 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(NotificationSettingsPlugin.class);
         registerPlugin(InteractionHapticsPlugin.class);
+        registerPlugin(NativeAppUpdatesPlugin.class);
+        registerPlugin(NativeFilesPlugin.class);
+        registerPlugin(ScreenAwakePlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

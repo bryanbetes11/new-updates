@@ -13,6 +13,8 @@ import { BillingStatusBanner } from "./BillingStatusBanner";
 import { PushReadinessBanner } from "./PushReadinessBanner";
 import { SurveyAccessBanner } from "./SurveyAccessBanner";
 import { ConnectionStatus } from "./ConnectionStatus";
+import { NativeAppUpdateCard } from './NativeAppUpdate';
+import { nativeBackHandlers } from '../lib/nativeBack';
 import { buildAppRoute, rememberRoute } from "../lib/navigationHistory";
 import { supabase } from "../lib/supabase";
 import {
@@ -38,6 +40,11 @@ export function Layout() {
   const [soundSetupOpen, setSoundSetupOpen] = useState(false);
   const [isIpadLandscapeSidebar, setIsIpadLandscapeSidebar] = useState(false);
   const mobileChromeHidden = false;
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    return nativeBackHandlers.register(() => { setMobileOpen(false); return true; }, 50);
+  }, [mobileOpen]);
 
   useLayoutEffect(() => {
     const root = document.documentElement;
@@ -188,6 +195,7 @@ export function Layout() {
   const isMessagesPage = location.pathname.startsWith("/messages");
   const isMessagesConversation = /^\/messages\/[^/]+$/.test(location.pathname);
   const isDashboardPage = location.pathname === "/dashboard";
+  const isLibraryPage = location.pathname === "/library";
   const isEventsPage = location.pathname === "/events";
   const isAnnouncementsPage = location.pathname === "/announcements";
   const isSongsPage = location.pathname === "/songs";
@@ -205,6 +213,7 @@ export function Layout() {
   const isAdminPage = location.pathname.startsWith("/admin");
   const isWideShellPage =
     isDashboardPage ||
+    isLibraryPage ||
     isEventsPage ||
     isEventDetail ||
     isAnnouncementsPage ||
@@ -455,6 +464,7 @@ export function Layout() {
             }
           >
             {!staticHideNav && <PushReadinessBanner />}
+            {!staticHideNav && isDashboardPage && <NativeAppUpdateCard />}
             {!staticHideNav && <SurveyAccessBanner />}
             {!staticHideNav && !isWideShellPage && (
               <div className="max-w-7xl mx-auto pt-4 sm:pt-5">

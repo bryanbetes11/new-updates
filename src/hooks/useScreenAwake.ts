@@ -1,8 +1,15 @@
 import { useEffect, useState } from 'react';
+import { isNativeAndroidScreenAwake, setNativeScreenAwake } from '../lib/nativeScreenAwake';
+import { createScreenAwakeLease } from '../lib/screenAwakeLease';
 
 export function useScreenAwake(enabled: boolean) {
   const [state,setState]=useState<'active'|'requesting'|'unavailable'>('requesting');
   useEffect(()=>{
+    if (isNativeAndroidScreenAwake()) {
+      if (!enabled) return;
+      setState('requesting');
+      return createScreenAwakeLease(setNativeScreenAwake, () => setState('active'), () => setState('unavailable'));
+    }
     if(!enabled)return;
     let active=true;
     let pending=false;

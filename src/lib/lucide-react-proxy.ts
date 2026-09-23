@@ -54,6 +54,7 @@ export { default as KeyboardMusic } from 'lucide-react/dist/esm/icons/keyboard-m
 export { default as Download } from 'lucide-react/dist/esm/icons/download.js';
 export { default as Edit3 } from 'lucide-react/dist/esm/icons/edit-3.js';
 export { default as ExternalLink } from 'lucide-react/dist/esm/icons/external-link.js';
+export { default as Share2 } from 'lucide-react/dist/esm/icons/share-2.js';
 export { default as Eye } from 'lucide-react/dist/esm/icons/eye.js';
 export { default as EyeOff } from 'lucide-react/dist/esm/icons/eye-off.js';
 export { default as FileCheck } from 'lucide-react/dist/esm/icons/file-check.js';

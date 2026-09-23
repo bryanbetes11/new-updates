@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowLeft, X } from 'lucide-react';
+import { nativeBackHandlers } from '../lib/nativeBack';
 
 interface ModalProps {
   open: boolean;
@@ -236,6 +237,17 @@ export function Modal({
     if (!visible) return;
     return lockBodyScroll();
   }, [visible]);
+
+  useEffect(() => {
+    if (!visible) return;
+    return nativeBackHandlers.register(() => {
+      if (!dialogRef.current || !isTopmostModal(dialogRef.current)) return false;
+      if (closeOnEscape) {
+        if (onBack) onBack(); else requestClose();
+      }
+      return true;
+    }, 100);
+  }, [visible, closeOnEscape, onBack, requestClose]);
 
   useEffect(() => {
     if (!visible) return;

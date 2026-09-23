@@ -5,6 +5,7 @@ import { format, parseISO } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import { isFileSaveCanceled, saveBlobFile } from '../lib/nativeFiles';
 import { Select } from './Select';
 import { Avatar } from './Avatar';
 import { Modal } from './Modal';
@@ -214,7 +215,7 @@ export function AttendanceMonitoring() {
     setShowResetModal(false);
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     const headers = ['Name', 'Ministry Status', 'Finalized Schedules', 'Confirmed', 'No Response', 'Present', 'Late', 'Verified Absent', 'Excused', 'Needs Review', 'Verified Outcomes', 'Absence Incidents', 'Attendance Offense Level', 'Action Required'];
     const rows = filteredAndSorted.map(m => {
       const verifiedOutcomes = getVerifiedOutcomeCount(m);
@@ -242,13 +243,12 @@ export function AttendanceMonitoring() {
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `attendance_q${selectedQuarter}_${selectedYear}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-    toast('success', 'Attendance data exported');
+    try {
+      await saveBlobFile(blob, `attendance_q${selectedQuarter}_${selectedYear}.csv`);
+      toast('success', 'Attendance data exported');
+    } catch (error) {
+      if (!isFileSaveCanceled(error)) toast('error', 'Unable to save attendance data');
+    }
   };
 
   const filtered = stats.filter(m => {

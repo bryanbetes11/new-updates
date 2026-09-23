@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { buildAttendanceQrPayload } from '../lib/attendanceQrPilot';
 import { createAttendanceQrProjectorPng } from '../lib/attendanceQrProjector';
+import { isFileSaveCanceled, saveDataUrlFile, usesNativeAndroidFiles } from '../lib/nativeFiles';
 import { supabase } from '../lib/supabase';
 import { AdminPageBackLink } from '../components/AdminPageBackLink';
 
@@ -236,7 +237,13 @@ export function AttendanceQrPilot() {
                 <p className="mt-1 text-xs text-gray-500">This writes to official attendance. Members see only events they are scheduled for.</p>
                 {liveProjectorQrImage && <ProjectorQrPreview image={liveProjectorQrImage} mode="live" />}
                 {liveProjectorQrImage && (
-                  <a href={liveProjectorQrImage} download="servesync-live-attendance-projector-1920x1080.png" className="btn-primary mt-4 inline-flex min-h-11 w-full items-center justify-center">
+                  <a href={liveProjectorQrImage} download="servesync-live-attendance-projector-1920x1080.png" onClick={event => {
+                    if (!usesNativeAndroidFiles()) return;
+                    event.preventDefault();
+                    void saveDataUrlFile(liveProjectorQrImage, 'servesync-live-attendance-projector-1920x1080.png').catch(error => {
+                      if (!isFileSaveCanceled(error)) toast('error', 'Unable to save projector slide');
+                    });
+                  }} className="btn-primary mt-4 inline-flex min-h-11 w-full items-center justify-center">
                     <Download className="h-4 w-4" /> Download projector slide
                   </a>
                 )}
@@ -249,7 +256,13 @@ export function AttendanceQrPilot() {
                 <p className="mt-1 text-xs text-gray-500">Use this only with the test events on the left.</p>
                 {projectorQrImage && <ProjectorQrPreview image={projectorQrImage} mode="test" />}
                 {projectorQrImage && (
-                  <a href={projectorQrImage} download="servesync-attendance-test-projector-1920x1080.png" className="btn-secondary mt-4 inline-flex min-h-11 w-full items-center justify-center">
+                  <a href={projectorQrImage} download="servesync-attendance-test-projector-1920x1080.png" onClick={event => {
+                    if (!usesNativeAndroidFiles()) return;
+                    event.preventDefault();
+                    void saveDataUrlFile(projectorQrImage, 'servesync-attendance-test-projector-1920x1080.png').catch(error => {
+                      if (!isFileSaveCanceled(error)) toast('error', 'Unable to save projector slide');
+                    });
+                  }} className="btn-secondary mt-4 inline-flex min-h-11 w-full items-center justify-center">
                     <Download className="h-4 w-4" /> Download test projector slide
                   </a>
                 )}

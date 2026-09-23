@@ -6,7 +6,7 @@ import {
   ArrowLeft, Send, ImageIcon, X, Pin, CornerUpLeft, Camera,
   MessageCircle, Plus, Search, Trash2, MoreHorizontal, ChevronRight, Check,
   CalendarDays, Music2, Copy, Paperclip, FileText, Download, ExternalLink, UserPlus,
-  Calendar, Clock, LogOut, PlayCircle, RefreshCw,
+  Calendar, Clock, LogOut, PlayCircle, RefreshCw, Share2,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { draftRecoveryKey, readRecovery, writeRecovery } from '../lib/draftRecovery';
@@ -23,6 +23,8 @@ import { MentionTextarea } from '../components/MentionTextarea';
 import { ReactionFlightAnimation, type ReactionFlightPath } from '../components/ReactionFlightAnimation';
 import { PushReadinessBanner } from '../components/PushReadinessBanner';
 import { playInteractionSound, primeInteractionSounds } from '../lib/interactionSounds';
+import { isFileSaveCanceled, openRemoteFile, saveRemoteFile, shareRemoteFile, usesNativeAndroidFiles } from '../lib/nativeFiles';
+import { nativeBackHandlers } from '../lib/nativeBack';
 import {
   createChatEventReference,
   getChatCommandQuery,
@@ -34,6 +36,34 @@ import {
 } from '../lib/chatEventReferences';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+type AttachmentAction = 'open' | 'save' | 'share';
+type AttachmentToast = ReturnType<typeof useToast>['toast'];
+const inFlightAttachmentUrls = new Set<string>();
+
+async function runAttachmentAction(action: AttachmentAction, file: { url: string; name: string }, toast: AttachmentToast) {
+  if (inFlightAttachmentUrls.has(file.url)) return;
+  inFlightAttachmentUrls.add(file.url);
+  toast('info', action === 'save' ? 'Preparing file to save…' : action === 'share' ? 'Preparing file to share…' : 'Opening file…');
+  try {
+    if (action === 'open') await openRemoteFile(file);
+    if (action === 'save') {
+      await saveRemoteFile(file);
+      toast('success', 'File saved');
+    }
+    if (action === 'share') await shareRemoteFile(file);
+  } catch (error) {
+    if (isFileSaveCanceled(error)) return;
+    toast('error', error instanceof Error ? error.message : `Unable to ${action} file`);
+  } finally {
+    inFlightAttachmentUrls.delete(file.url);
+  }
+}
+
+function attachmentName(url: string) {
+  try { return decodeURIComponent(new URL(url).pathname.split('/').pop() || 'image'); }
+  catch { return 'image'; }
+}
 
 function formatConvTime(iso: string): string {
   const date = new Date(iso);
@@ -2682,10 +2712,20 @@ function ConvInfoPanel({
                         download={c.name}
                         target="_blank"
                         rel="noopener noreferrer"
+                        onClick={event => {
+                          if (!usesNativeAndroidFiles()) return;
+                          event.preventDefault();
+                          void runAttachmentAction('save', c, toast);
+                        }}
                         className="shrink-0 p-1.5 rounded-full text-gray-400 hover:text-emerald-500 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors"
                       >
                         <Download className="h-4 w-4" />
                       </a>
+                      {usesNativeAndroidFiles() && (
+                        <button type="button" title="Share" aria-label={`Share ${c.name}`} onClick={() => void runAttachmentAction('share', c, toast)} className="shrink-0 p-1.5 rounded-full text-gray-400 hover:text-emerald-500 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors">
+                          <Share2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -3758,6 +3798,14 @@ function ChatWindow({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [previewFile, setPreviewFile] = useState<{ url: string; name: string } | null>(null);
+  useEffect(() => {
+    if (!previewImageUrl && !previewFile) return;
+    return nativeBackHandlers.register(() => {
+      if (previewFile) setPreviewFile(null);
+      else setPreviewImageUrl(null);
+      return true;
+    }, 80);
+  }, [previewFile, previewImageUrl]);
   const [reactionDetailsMessageId, setReactionDetailsMessageId] = useState<string | null>(null);
   const [seenDetailsMessageId, setSeenDetailsMessageId] = useState<string | null>(null);
   const [pendingReactionReveal, setPendingReactionReveal] = useState<{ messageId: string; emoji: string } | null>(null);
@@ -4693,7 +4741,10 @@ function ChatWindow({
                           </div>
                           <div className="flex items-center gap-1 shrink-0">
                             <button
-                              onClick={() => setPreviewFile({ url: content.url, name: content.name })}
+                              onClick={() => {
+                                if (usesNativeAndroidFiles()) void runAttachmentAction('open', content, toast);
+                                else setPreviewFile({ url: content.url, name: content.name });
+                              }}
                               className="opacity-60 hover:opacity-100 transition-opacity p-0.5"
                               title="Open"
                             >
@@ -4704,11 +4755,21 @@ function ChatWindow({
                               download={content.name}
                               target="_blank"
                               rel="noopener noreferrer"
+                              onClick={event => {
+                                if (!usesNativeAndroidFiles()) return;
+                                event.preventDefault();
+                                void runAttachmentAction('save', content, toast);
+                              }}
                               className="opacity-60 hover:opacity-100 transition-opacity p-0.5"
                               title="Download"
                             >
                               <Download className="h-4 w-4" />
                             </a>
+                            {usesNativeAndroidFiles() && (
+                              <button type="button" onClick={() => void runAttachmentAction('share', content, toast)} className="opacity-60 hover:opacity-100 transition-opacity p-0.5" title="Share" aria-label={`Share ${content.name}`}>
+                                <Share2 className="h-4 w-4" />
+                              </button>
+                            )}
                           </div>
                         </div>
                       ) : content.type === 'event_reference' ? (
@@ -4996,6 +5057,12 @@ function ChatWindow({
             >
               <X className="h-6 w-6" />
             </button>
+            {usesNativeAndroidFiles() && (
+              <div className="absolute bottom-6 right-4 flex gap-2" onClick={event => event.stopPropagation()}>
+                <button type="button" onClick={() => void runAttachmentAction('save', { url: previewImageUrl, name: attachmentName(previewImageUrl) }, toast)} className="rounded-full bg-black/65 p-3 text-white" aria-label="Save image"><Download className="h-5 w-5" /></button>
+                <button type="button" onClick={() => void runAttachmentAction('share', { url: previewImageUrl, name: attachmentName(previewImageUrl) }, toast)} className="rounded-full bg-black/65 p-3 text-white" aria-label="Share image"><Share2 className="h-5 w-5" /></button>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -5017,6 +5084,11 @@ function ChatWindow({
                   download={previewFile.name}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={event => {
+                    if (!usesNativeAndroidFiles()) return;
+                    event.preventDefault();
+                    void runAttachmentAction('save', previewFile, toast);
+                  }}
                   className="text-white/70 hover:text-white transition-colors"
                   title="Download"
                 >
@@ -5217,6 +5289,8 @@ function useMessagesKeyboardInset(active: boolean) {
     window.addEventListener('resize', setInset);
     window.addEventListener('focusin', setInset);
     window.addEventListener('focusout', setInset);
+    window.addEventListener('pageshow', setInset);
+    document.addEventListener('visibilitychange', setInset);
 
     return () => {
       window.visualViewport?.removeEventListener('resize', setInset);
@@ -5224,6 +5298,8 @@ function useMessagesKeyboardInset(active: boolean) {
       window.removeEventListener('resize', setInset);
       window.removeEventListener('focusin', setInset);
       window.removeEventListener('focusout', setInset);
+      window.removeEventListener('pageshow', setInset);
+      document.removeEventListener('visibilitychange', setInset);
       document.documentElement.style.removeProperty('--messages-keyboard-inset');
       document.documentElement.style.removeProperty('--messages-viewport-height');
       document.documentElement.style.removeProperty('--messages-viewport-offset-top');

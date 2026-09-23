@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import { createBackHandlerRegistry } from '../src/lib/nativeBack';
+
+const registry = createBackHandlerRegistry();
+const actions: string[] = [];
+assert.equal(registry.handle(), false);
+registry.register(() => { actions.push('live'); return true; }, 10);
+const removeDialog = registry.register(() => { actions.push('dialog'); return true; }, 100);
+registry.register(() => { actions.push('drawer'); return true; }, 50);
+registry.handle();
+assert.deepEqual(actions, ['dialog'], 'a dialog consumes Back before its underlying drawer or live page');
+const removeTop = registry.register(() => { actions.push('top'); return true; }, 100);
+registry.handle();
+assert.equal(actions[actions.length - 1], 'top', 'newest of equal-priority surfaces wins');
+removeTop(); removeTop(); removeDialog();
+registry.handle();
+assert.equal(actions[actions.length - 1], 'drawer', 'cleanup restores the next handler');
+const declining = registry.register(() => false, 200);
+registry.handle();
+assert.equal(actions[actions.length - 1], 'drawer', 'inactive handlers can decline');
+declining();

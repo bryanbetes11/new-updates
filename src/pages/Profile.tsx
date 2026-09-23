@@ -21,6 +21,8 @@ import { phoneHref } from '../lib/phone';
 import { PARTICIPANT_ROLE_NAME } from '../lib/eventAssignmentRoles';
 import { APP_BUILD_ID, APP_UPDATE_PUBLISHED_AT, APP_VERSION_LABEL } from '../lib/appUpdate';
 import { checkForAppUpdate } from '../lib/serviceWorkerUpdate';
+import { androidUpdates, isAndroidApp } from '../lib/nativeAppUpdates';
+import { NativeAppUpdateCard } from '../components/NativeAppUpdate';
 import type { DisciplineRecord } from '../types';
 
 interface AccountabilitySummary {
@@ -219,6 +221,14 @@ export function Profile() {
 
   const handleCheckForUpdates = async () => {
     setCheckingForUpdate(true);
+    if (isAndroidApp()) {
+      const result = await androidUpdates.check(true);
+      setCheckingForUpdate(false);
+      if (result.status === 'available') toast('success', `ServeSync ${result.release?.version} is available. Use Download update on this page.`);
+      else if (result.status === 'up-to-date') toast('success', `ServeSync ${result.installedVersion} (Android build ${result.installedBuild}) is up to date.`);
+      else toast('error', 'Could not check Android releases. Check your connection and try again.');
+      return;
+    }
     const result = await checkForAppUpdate();
     setCheckingForUpdate(false);
 
@@ -287,6 +297,7 @@ export function Profile() {
       />
 
       <div className="relative max-w-2xl md:max-w-4xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-10 space-y-5 sm:space-y-6">
+        <NativeAppUpdateCard alwaysVisible />
         {billingLocked && billingStatus === 'suspended' && (
           <div className="rounded-[26px] border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-900/10 px-4 py-4">
             <div className="flex items-start gap-3">

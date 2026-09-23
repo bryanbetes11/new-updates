@@ -1,4 +1,5 @@
 import { SetlistBuilderPage } from '../components/SetlistBuilderPage';
+import { nativeBackHandlers } from '../lib/nativeBack';
 import { EventUpdateViewTracker } from '../components/EventUpdateViewTracker';
 import { SONG_ROLE_GUIDE } from '../lib/songRoleGuide';
 import { ChartNavigation } from '../components/ChartNavigation';
@@ -58,6 +59,7 @@ import { groupEmojiReactions } from '../lib/reactions';
 import { playInteractionSound } from '../lib/interactionSounds';
 import { projectSongReadiness, SONG_READINESS_RULE_DAYS } from '../lib/songReadiness';
 import { watchSharedTechMessages } from '../lib/sharedTechMessages';
+import { shareText, usesNativeAndroidFiles } from '../lib/nativeFiles';
 import { DEFAULT_STAGE_REQUEST_MESSAGES, DEFAULT_TECH_MODE_MESSAGES, loadStageRequestMessages, loadTechModeMessages, type TechModeMessages } from '../lib/techModeMessages';
 import { TechModeMessageSettings } from '../components/TechModeMessageSettings';
 import { getOutMemberIdsForDate, type MemberAvailabilityWindow } from '../lib/memberAvailability';
@@ -1374,6 +1376,17 @@ export function EventDetail() {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [serviceCloseConfirmOpen, serviceModeIndex, showRehearsalSummary]);
+
+  useEffect(() => {
+    if (serviceModeIndex === null) return;
+    return nativeBackHandlers.register(() => {
+      if (serviceCloseConfirmOpen) setServiceCloseConfirmOpen(false);
+      else if (showRehearsalSummary) setShowRehearsalSummary(false);
+      else if (serviceSongPickerOpen) setServiceSongPickerOpen(false);
+      else setServiceCloseConfirmOpen(true);
+      return true;
+    }, 10);
+  }, [serviceCloseConfirmOpen, serviceModeIndex, serviceSongPickerOpen, showRehearsalSummary]);
 
   const fetchRevisionComments = useCallback(async (setlistId: string) => {
     const { data, error } = await supabase
@@ -4210,6 +4223,11 @@ const openLyricsModal = (ss: SetlistSong) => {
         const message = getErrorMessage(error, '');
         if (!message.toLowerCase().includes('create_public_event_share')) throw error;
         publicShareUrl = createSnapshotEventShareUrl();
+      }
+
+      if (usesNativeAndroidFiles()) {
+        await shareText(publicShareUrl, title);
+        return;
       }
 
       if (typeof navigator.share === 'function') {

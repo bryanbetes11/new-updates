@@ -379,7 +379,7 @@ export function VideosTab() {
     if (error) { toast('error', error.message || 'Failed to add videos'); return; }
     if (currentIdentity.current !== listIdentity) return;
     requestGeneration.current += 1;
-    if (cacheScope) await invalidateDeviceSnapshots(cacheScope);
+    if (cacheScope) await invalidateDeviceSnapshots(cacheScope, ['library:videos']);
     if (currentIdentity.current !== listIdentity) return;
     toast('success', `${rows.length} video${rows.length === 1 ? '' : 's'} added to the library`);
     setShowCreate(false);
@@ -508,7 +508,7 @@ export function VideosTab() {
     if (currentIdentity.current !== listIdentity) return;
     requestGeneration.current += 1;
     if (cacheScope) {
-      await invalidateDeviceSnapshots(cacheScope);
+      await invalidateDeviceSnapshots(cacheScope, ['library:videos']);
       if (currentIdentity.current !== listIdentity) return;
       const updated = videos.map(video => video.id === selectedVideo.id ? { ...video, ...form } : video);
       hasVisibleList.current = true;
@@ -539,7 +539,7 @@ export function VideosTab() {
     if (currentIdentity.current !== listIdentity) return;
     requestGeneration.current += 1;
     if (cacheScope) {
-      await invalidateDeviceSnapshots(cacheScope);
+      await invalidateDeviceSnapshots(cacheScope, ['library:videos']);
       if (currentIdentity.current !== listIdentity) return;
       const remaining = videos.filter(video => video.id !== selectedVideo.id);
       hasVisibleList.current = true;

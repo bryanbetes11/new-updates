@@ -28,13 +28,13 @@ async function transaction<T>(stores: string[], mode: IDBTransactionMode, run: (
 }
 
 const cache = createDeviceSnapshotCache({
-  reset: scope => transaction<void>(['snapshots'], 'readwrite', tx => {
+  reset: (scope, keys) => transaction<void>(['snapshots'], 'readwrite', tx => {
     const store = tx.objectStore('snapshots');
     const request = store.openCursor();
     request.onsuccess = () => {
       const cursor = request.result;
       if (!cursor) return;
-      if (cursor.value.scope === scope) cursor.delete();
+      if (cursor.value.scope === scope && (!keys || keys.includes(cursor.value.key))) cursor.delete();
       cursor.continue();
     };
   }),
@@ -61,10 +61,14 @@ export function readDeviceSnapshot<T>(scope: string | null, key: string): Promis
 export function writeDeviceSnapshot<T>(scope: string | null, key: string, value: T): Promise<void> {
   return scope ? cache.write(scope, key, value) : Promise.resolve();
 }
-export function invalidateDeviceSnapshots(scope: string | null): Promise<void> {
+export function invalidateDeviceSnapshots(scope: string | null, keys?: string[]): Promise<void> {
   // Cache availability must never turn a successful server edit into a failed save.
-  return cache.clear(scope).catch(() => undefined);
+  return cache.clear(scope, keys).catch(() => undefined);
 }
 export function clearDeviceSnapshots(scope: string | null): Promise<void> {
   return cache.clear(scope);
+}
+
+export function listDeviceSnapshots<T>(scope: string | null, prefix: string): Promise<Array<{ key: string; value: T; savedAt: number }>> {
+  return scope ? cache.list<T>(scope, prefix) : Promise.resolve([]);
 }

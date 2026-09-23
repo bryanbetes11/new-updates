@@ -983,7 +983,7 @@ export function Events() {
     const requestedScope = viewScope;
     const sequence = ++fetchSequenceRef.current;
     let primaryApplied = false;
-    if (invalidateFirst) await invalidateDeviceSnapshots(cacheScope).catch(() => {});
+    if (invalidateFirst) await invalidateDeviceSnapshots(cacheScope, ['events:list']).catch(() => {});
     try {
       const [eventsRes, membersRes, userRolesRes, birthdaysRes, leaveRes, songLeadersRes, setlistsRes, sundayServicesRes] = await Promise.all([
         withRequestTimeout(supabase.from('events').select('*').order('event_date', { ascending: false }), { ...emptyListResponse(), status: 0 }, 'Events list'),
@@ -1356,13 +1356,13 @@ export function Events() {
     if (error) { toast('error', 'Failed to move event'); return; }
     if (!data?.length) { toast('error', 'The event changed or you no longer have permission. Refresh and try again.'); return; }
     setEvents(prev => prev.map(e => e.id === eventId ? { ...e, event_date: newDate } : e));
-    void invalidateDeviceSnapshots(cacheScope).catch(() => {});
+    void invalidateDeviceSnapshots(cacheScope, ['events:list']).catch(() => {});
     toast('success', 'Event rescheduled. Members must confirm again.');
   };
 
   const handleEventLifecycleChange = (updatedEvent: Event) => {
     setEvents(prev => prev.map(event => event.id === updatedEvent.id ? updatedEvent : event));
-    void invalidateDeviceSnapshots(cacheScope).catch(() => {});
+    void invalidateDeviceSnapshots(cacheScope, ['events:list']).catch(() => {});
     setSundayServices(prev => prev.map(event => event.id === updatedEvent.id ? updatedEvent : event));
   };
 

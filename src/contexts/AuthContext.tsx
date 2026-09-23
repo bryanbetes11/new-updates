@@ -1,12 +1,14 @@
 /* eslint-disable react-refresh/only-export-components -- The provider and its companion hook intentionally share this context module. */
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
+import { PushNotifications } from '@capacitor/push-notifications';
 import { createTransientSupabaseClient, supabase } from '../lib/supabase';
 import { readSavedAccounts, removeSavedAccount, upsertSavedAccount, type SavedAccount } from '../lib/savedAccounts';
 import type { Organization, Profile, Role, UserRole } from '../types';
-import { disconnectNativePush } from '../lib/nativePush';
+import { androidPushAvailable, disconnectNativePush } from '../lib/nativePush';
 import { deviceCacheScope, setDeviceCacheScope } from '../lib/deviceCache';
 import { setNativeImageCacheScope } from '../lib/nativeImageCache';
+import { isDefinitelyInvalidSession, isOfflineNetworkError, readOfflineAccount, revokeOfflineAccount, saveOfflineAccount } from '../lib/offlineAccount';
 
 function activateDeviceCache(scope: string | null) {
   return Promise.all([setDeviceCacheScope(scope), setNativeImageCacheScope(scope)])
@@ -22,6 +24,7 @@ interface AuthContextValue {
   roles: Role[];
   savedAccounts: SavedAccount[];
   loading: boolean;
+  offlineMode: boolean;
   hasOrganization: boolean;
   isOrgAdmin: boolean;
   isPlatformOwner: boolean;
@@ -48,6 +51,7 @@ interface AuthContextValue {
   switchAccount: (userId: string) => Promise<{ error: Error | null }>;
   forgetSavedAccount: (userId: string) => void;
   refreshProfile: () => Promise<void>;
+  retryOnline: () => Promise<{ error: Error | null }>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -74,6 +78,20 @@ async function withAuthTimeout<T>(
   } catch (error) {
     console.error(`[Auth] ${label} failed:`, error);
     return typedFallback;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+async function withAuthDeadline<T>(request: PromiseLike<T>, label: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Promise.resolve(request),
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(`${label} timed out`)), AUTH_CONTEXT_REQUEST_TIMEOUT_MS);
+      }),
+    ]);
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
   }
@@ -118,8 +136,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [capabilities, setCapabilities] = useState<Record<string, boolean>>({});
   const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>(() => readSavedAccounts());
   const [loading, setLoading] = useState(true);
+  const [offlineMode, setOfflineMode] = useState(false);
   const [previewModeRequested, setPreviewModeRequested] = useState<'member' | 'song_leader' | null>(null);
   const activeUserIdRef = useRef<string | null>(null);
+  const authTransitionRef = useRef(true);
+  const offlineModeRef = useRef(false);
 
   useLayoutEffect(() => {
     // Preserve the last signed-in cache during startup until live auth establishes its owner.
@@ -137,6 +158,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUserRoles([]);
     setCapabilities({});
     setPreviewModeRequested(null);
+    setOfflineMode(false);
+    offlineModeRef.current = false;
+    activeUserIdRef.current = null;
   };
 
   const fetchProfile = async (userId: string) => {
@@ -228,73 +252,136 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }));
   };
 
-  const hydrateUserContext = async (userId: string, activeSession?: Session | null) => {
+  const verifyLiveAccount = async (userId: string): Promise<{ profile: Profile | null; organization: Organization | null }> => {
+    const profileResult = await withAuthDeadline(
+      supabase.from('profiles').select('*').eq('id', userId).maybeSingle(), 'Profile revalidation');
+    if (profileResult.error) throw profileResult.error;
+    const profileData = profileResult.data as Profile | null;
+    if (!profileData?.org_id) return { profile: profileData, organization: null };
+    const organizationResult = await withAuthDeadline(
+      supabase.from('organizations').select('*').eq('id', profileData.org_id).maybeSingle(), 'Church revalidation');
+    if (organizationResult.error) throw organizationResult.error;
+    return { profile: profileData, organization: organizationResult.data as Organization | null };
+  };
+
+  const hydrateUserContext = async (
+    userId: string,
+    activeSession?: Session | null,
+    verifiedAccount?: { profile: Profile | null; organization: Organization | null },
+  ) => {
     const [profileData] = await Promise.all([
-      fetchProfile(userId),
+      verifiedAccount ? Promise.resolve(verifiedAccount.profile) : fetchProfile(userId),
       fetchUserRoles(userId),
       fetchCapabilities(userId),
       fetchRoles(),
     ]);
-    await fetchOrganization(profileData?.org_id);
+    const organizationData = verifiedAccount
+      ? verifiedAccount.organization
+      : await fetchOrganization(profileData?.org_id);
+    if (verifiedAccount) {
+      setProfile(profileData);
+      setOrganization(organizationData);
+    }
+    if (activeUserIdRef.current !== userId || offlineModeRef.current) return;
     syncSavedAccount(activeSession ?? null, profileData);
+    if (activeSession?.user) saveOfflineAccount(activeSession.user, profileData, organizationData);
   };
 
   const refreshProfile = async () => {
-    if (user) {
-      const [profileData] = await Promise.all([fetchProfile(user.id), fetchUserRoles(user.id), fetchCapabilities(user.id)]);
-      await fetchOrganization(profileData?.org_id);
-      syncSavedAccount(session, profileData);
+    if (user && !offlineMode) {
+      try {
+        const liveAccount = await verifyLiveAccount(user.id);
+        if (!liveAccount.profile?.org_id || liveAccount.organization?.id !== liveAccount.profile.org_id) revokeOfflineAccount();
+        await hydrateUserContext(user.id, session, liveAccount);
+      } catch (error) {
+        console.warn('[Auth] Could not refresh live account context:', error);
+      }
     }
   };
 
   useEffect(() => {
-    withAuthTimeout(
-      supabase.auth.getSession(),
-      { data: { session: null }, error: null },
-      'Stored session restore',
-    )
-      .then(async ({ data: { session: s }, error }) => {
-        if (error) {
-          if (isInvalidRefreshTokenError(error)) {
-            console.warn('[Auth] Stored session refresh token is invalid; clearing local auth state.');
+    let cancelled = false;
+    const openOfflineAccount = async (snapshot: NonNullable<ReturnType<typeof readOfflineAccount>>) => {
+      setSession(null);
+      setUser(snapshot.user);
+      setProfile(snapshot.profile);
+      setOrganization(snapshot.organization);
+      setUserRoles([]);
+      setRoles([]);
+      setCapabilities({});
+      setPreviewModeRequested(null);
+      setOfflineMode(true);
+      offlineModeRef.current = true;
+      activeUserIdRef.current = snapshot.user.id;
+      await activateDeviceCache(deviceCacheScope(snapshot.user.id, snapshot.profile.org_id));
+      console.info('[Auth] Opened saved Android account in read-only offline mode.');
+    };
+    const restore = async () => {
+      let candidateSession: Session | null = null;
+      try {
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const saved = readOfflineAccount(readSavedAccounts());
+          if (saved) {
+            await openOfflineAccount(saved);
+            return;
+          }
+        }
+        const { data, error } = await withAuthDeadline(supabase.auth.getSession(), 'Stored session restore');
+        candidateSession = data.session;
+        if (error) throw error;
+        if (!candidateSession?.user) {
+          if (typeof navigator !== 'undefined' && !navigator.onLine) throw new Error('Device is offline');
+          if (!cancelled) {
+            revokeOfflineAccount();
+            clearUserContext();
+            await fetchRoles();
+          }
+          return;
+        }
+        // getSession is local storage. Confirm the server still accepts this user before
+        // opening online routes or renewing the offline identity record.
+        const verified = await withAuthDeadline(supabase.auth.getUser(), 'User revalidation');
+        if (verified.error) throw verified.error;
+        if (verified.data.user?.id !== candidateSession.user.id) throw new Error('Stored account does not match the verified user.');
+        const liveAccount = await verifyLiveAccount(verified.data.user.id);
+        if (cancelled) return;
+        if (!liveAccount.profile?.org_id || liveAccount.organization?.id !== liveAccount.profile.org_id) revokeOfflineAccount();
+        setSession(candidateSession);
+        setUser(verified.data.user);
+        activeUserIdRef.current = verified.data.user.id;
+        await hydrateUserContext(verified.data.user.id, candidateSession, liveAccount);
+      } catch (error) {
+        if (cancelled) return;
+        const snapshot = readOfflineAccount(readSavedAccounts());
+        const canRestore = snapshot && (!candidateSession || candidateSession.user.id === snapshot.user.id)
+          && !isDefinitelyInvalidSession(error)
+          && (isOfflineNetworkError(error) || (typeof navigator !== 'undefined' && !navigator.onLine));
+        if (canRestore) {
+          await openOfflineAccount(snapshot);
+        } else {
+          if (isDefinitelyInvalidSession(error)) {
+            revokeOfflineAccount();
             await clearStoredAuthSession();
-          } else {
-            console.error('[Auth] Failed to restore session:', error);
           }
           clearUserContext();
           await fetchRoles();
+          console.warn('[Auth] Session restore unavailable:', error);
+        }
+      } finally {
+        if (!cancelled) {
+          authTransitionRef.current = false;
           setLoading(false);
-          return;
         }
-
-        setSession(s);
-        setUser(s?.user ?? null);
-        activeUserIdRef.current = s?.user?.id ?? null;
-        syncSavedAccount(s);
-        if (s?.user) {
-          hydrateUserContext(s.user.id, s).finally(() => setLoading(false));
-        } else {
-          fetchRoles().finally(() => {
-            setOrganization(null);
-            setLoading(false);
-          });
-        }
-      })
-      .catch(async error => {
-        if (isInvalidRefreshTokenError(error)) {
-          console.warn('[Auth] Stored session refresh token is invalid; clearing local auth state.');
-          await clearStoredAuthSession();
-        } else {
-          console.error('[Auth] Failed to restore session:', error);
-        }
-        clearUserContext();
-        fetchRoles().finally(() => setLoading(false));
-      });
+      }
+    };
+    void restore();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
       if (event === 'INITIAL_SESSION') {
         return;
       }
+      if (authTransitionRef.current) return;
+      if (offlineModeRef.current) return;
 
       if (event === 'TOKEN_REFRESHED') {
         setSession(s);
@@ -307,9 +394,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (event === 'SIGNED_IN') {
         const nextUserId = s?.user?.id ?? null;
         const isSameUser = Boolean(nextUserId && nextUserId === activeUserIdRef.current);
+        if (!isSameUser) revokeOfflineAccount();
 
         setSession(s);
         setUser(s?.user ?? null);
+        setOfflineMode(false);
+        offlineModeRef.current = false;
         activeUserIdRef.current = nextUserId;
 
         // Supabase may emit SIGNED_IN again when an existing browser tab
@@ -336,6 +426,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       setLoading(true);
+      if (event === 'SIGNED_OUT') revokeOfflineAccount();
       setSession(s);
       setUser(s?.user ?? null);
       activeUserIdRef.current = s?.user?.id ?? null;
@@ -352,22 +443,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => { cancelled = true; subscription.unsubscribe(); };
     // The Supabase auth listener is registered once; recreating it on context updates can duplicate auth events.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const roleNames = userRoles.map(ur => ur.roles?.name || '');
   const hasOrganization = Boolean(profile?.org_id && organization);
-  const actualIsOrgAdmin = profile?.is_org_admin ?? false;
+  const actualIsOrgAdmin = !offlineMode && (profile?.is_org_admin ?? false);
   const platformOwnerEmails = new Set([
     'bryanbetes11@gmail.com',
     'fwd.bryanashleybetes@gmail.com',
     'bryanashleybetes@gmail.com',
   ]);
-  const actualIsPlatformOwner = [profile?.email, user?.email]
+  const actualIsPlatformOwner = !offlineMode && [profile?.email, user?.email]
     .some(email => platformOwnerEmails.has((email || '').trim().toLowerCase()));
-  const actualIsAdmin = roleNames.includes('Admin');
+  const actualIsAdmin = !offlineMode && roleNames.includes('Admin');
   const canPreviewMemberView = actualIsOrgAdmin || actualIsPlatformOwner || actualIsAdmin;
   const isViewingAsMember = canPreviewMemberView && previewModeRequested === 'member';
   const isViewingAsSongLeader = canPreviewMemberView && previewModeRequested === 'song_leader';
@@ -462,9 +553,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    await disconnectNativePush();
+    const mustSignOutLocally = offlineModeRef.current || (typeof navigator !== 'undefined' && !navigator.onLine);
+    // Online sign-out keeps its existing safety gate: a failed server revoke
+    // leaves this account signed in so notifications cannot cross accounts.
+    if (!mustSignOutLocally) await disconnectNativePush();
+    revokeOfflineAccount();
+    clearUserContext();
+    if (mustSignOutLocally) {
+      try { await disconnectNativePush(); }
+      catch (error) {
+        // The controller retains its owner for a later server revoke. Stop
+        // local delivery and erase visible notifications now.
+        if (androidPushAvailable()) {
+          await Promise.allSettled([
+            PushNotifications.unregister(),
+            PushNotifications.removeAllDeliveredNotifications(),
+          ]);
+        }
+        console.warn('[Auth] Phone notification server cleanup will retry after reconnect:', error);
+      }
+    }
     await activateDeviceCache(null);
-    await supabase.auth.signOut({ scope: 'local' });
+    try {
+      const result = await withAuthDeadline(supabase.auth.signOut({ scope: 'local' }), 'Local sign-out');
+      if (result.error) await clearStoredAuthSession();
+    } catch {
+      await clearStoredAuthSession();
+    }
     setProfile(null);
     setOrganization(null);
     setUserRoles([]);
@@ -520,62 +635,136 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const switchAccount = async (userId: string) => {
+    if (offlineMode) return { error: new Error('Connect to the internet before switching accounts.') };
     const targetAccount = savedAccounts.find(account => account.userId === userId);
     if (!targetAccount) return { error: new Error('Saved account not found.') };
 
     try { await disconnectNativePush(); }
     catch (error) { return { error: error instanceof Error ? error : new Error('Could not disconnect phone notifications.') }; }
 
+    revokeOfflineAccount();
+    clearUserContext();
     await activateDeviceCache(null);
     setLoading(true);
 
-    const { data: { session: currentSession } } = await supabase.auth.getSession();
-    if (currentSession?.user?.id && currentSession.user.id !== targetAccount.userId) {
-      syncSavedAccount(currentSession, profile);
-    }
-
-    const { data, error } = await supabase.auth.setSession({
-      access_token: targetAccount.session.accessToken,
-      refresh_token: targetAccount.session.refreshToken,
-    });
-
-    if (error) {
-      setLoading(false);
-      if (isInvalidRefreshTokenError(error)) {
-        setSavedAccounts(removeSavedAccount(userId));
-        return { error: new Error('This saved account expired on this device. Sign in again once to restore it.') };
+    authTransitionRef.current = true;
+    try {
+      const { data: { session: currentSession } } = await withAuthDeadline(supabase.auth.getSession(), 'Current account save');
+      if (currentSession?.user?.id && currentSession.user.id !== targetAccount.userId) {
+        syncSavedAccount(currentSession, profile);
       }
-      return { error: error as Error | null };
-    }
+      const { data, error } = await withAuthDeadline(supabase.auth.setSession({
+        access_token: targetAccount.session.accessToken,
+        refresh_token: targetAccount.session.refreshToken,
+      }), 'Saved account switch');
 
-    const nextSession = data.session ?? null;
-    if (!nextSession?.user) {
+      if (error) {
+        if (isInvalidRefreshTokenError(error)) {
+          setSavedAccounts(removeSavedAccount(userId));
+          return { error: new Error('This saved account expired on this device. Sign in again once to restore it.') };
+        }
+        return { error: error as Error | null };
+      }
+
+      const nextSession = data.session ?? null;
+      if (!nextSession?.user) {
+        return { error: new Error('Saved account could not be restored. Sign in again once to save it back.') };
+      }
+
+      const verified = await withAuthDeadline(supabase.auth.getUser(), 'Saved account verification');
+      if (verified.error || verified.data.user?.id !== targetAccount.userId) {
+        return { error: (verified.error as Error | null) ?? new Error('Saved account could not be verified.') };
+      }
+
+      setSession(nextSession);
+      setUser(verified.data.user);
+      activeUserIdRef.current = verified.data.user.id;
+      await hydrateUserContext(nextSession.user.id, nextSession);
+      return { error: null };
+    } catch (error) {
+      return { error: error instanceof Error ? error : new Error('Could not switch accounts.') };
+    } finally {
+      authTransitionRef.current = false;
       setLoading(false);
-      return { error: new Error('Saved account could not be restored. Sign in again once to save it back.') };
     }
-
-    setSession(nextSession);
-    setUser(nextSession.user);
-    await hydrateUserContext(nextSession.user.id, nextSession);
-    setLoading(false);
-
-    return { error: null };
   };
 
   const forgetSavedAccount = (userId: string) => {
+    if (activeUserIdRef.current === userId) revokeOfflineAccount();
     setSavedAccounts(removeSavedAccount(userId));
+  };
+
+  const retryOnline = async (): Promise<{ error: Error | null }> => {
+    if (!offlineMode) return { error: null };
+    const snapshot = readOfflineAccount(readSavedAccounts());
+    if (!snapshot || snapshot.user.id !== user?.id) {
+      revokeOfflineAccount();
+      clearUserContext();
+      return { error: new Error('This offline account is no longer available. Sign in again.') };
+    }
+    authTransitionRef.current = true;
+    try {
+      let nextSession: Session | null = null;
+      const stored = await withAuthDeadline(supabase.auth.getSession(), 'Stored session restore');
+      if (stored.error && isDefinitelyInvalidSession(stored.error)) throw stored.error;
+      if (!stored.error) nextSession = stored.data.session;
+      if (!nextSession || nextSession.user.id !== snapshot.user.id) {
+        const saved = readSavedAccounts().find(account => account.userId === snapshot.user.id);
+        if (!saved) throw new Error('Saved account is no longer available.');
+        const restored = await withAuthDeadline(supabase.auth.setSession({
+          access_token: saved.session.accessToken,
+          refresh_token: saved.session.refreshToken,
+        }), 'Saved account revalidation');
+        if (restored.error) throw restored.error;
+        nextSession = restored.data.session;
+      }
+      if (!nextSession || nextSession.user.id !== snapshot.user.id) throw new Error('Saved account does not match the active account.');
+      const verified = await withAuthDeadline(supabase.auth.getUser(), 'User revalidation');
+      if (verified.error) throw verified.error;
+      if (verified.data.user?.id !== snapshot.user.id) throw new Error('Saved account does not match the verified user.');
+
+      // Confirm live church membership before leaving the restricted reader.
+      const liveAccount = await verifyLiveAccount(snapshot.user.id);
+      if (!liveAccount.profile?.org_id || liveAccount.organization?.id !== liveAccount.profile.org_id) revokeOfflineAccount();
+
+      setSession(nextSession);
+      setUser(verified.data.user);
+      activeUserIdRef.current = verified.data.user.id;
+      await hydrateUserContext(verified.data.user.id, nextSession, liveAccount);
+      setOfflineMode(false);
+      offlineModeRef.current = false;
+      return { error: null };
+    } catch (error) {
+      if (isDefinitelyInvalidSession(error) || (error instanceof Error && /does not match|no longer available/.test(error.message))) {
+        revokeOfflineAccount();
+        await clearStoredAuthSession();
+        clearUserContext();
+      } else {
+        // Any partial query state is replaced with the same saved identity.
+        setSession(null);
+        setUser(snapshot.user);
+        setProfile(snapshot.profile);
+        setOrganization(snapshot.organization);
+        setUserRoles([]);
+        setRoles([]);
+        setCapabilities({});
+      }
+      return { error: error instanceof Error ? error : new Error('Could not reconnect.') };
+    } finally {
+      authTransitionRef.current = false;
+    }
   };
 
   return (
     <AuthContext.Provider
       value={{
-        session, user, profile, organization, userRoles, roles, loading,
+        session, user, profile, organization, userRoles, roles, loading, offlineMode,
         savedAccounts,
         hasOrganization, isOrgAdmin, isPlatformOwner,
         isLeader, isAdmin, isAdminCoordinator, isProductionDirector, isMusicDirector, isStageDirector, isSetlistCoordinator,
         canApproveLeave, canManageDiscipline, canManageMembers, capabilities: effectiveCapabilities,
         canPreviewMemberView, isViewingAsMember, isViewingAsSongLeader, setViewingAsMember, setViewingAsSongLeader,
-        signUp, signIn, signOut, addSavedAccount, switchAccount, forgetSavedAccount, refreshProfile,
+        signUp, signIn, signOut, addSavedAccount, switchAccount, forgetSavedAccount, refreshProfile, retryOnline,
       }}
     >
       {children}

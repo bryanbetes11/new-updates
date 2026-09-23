@@ -7,7 +7,7 @@ export interface DeviceSnapshotRow {
 }
 
 export interface DeviceSnapshotStorage {
-  reset(scope: string): Promise<void>;
+  reset(scope: string, keys?: string[]): Promise<void>;
   rows(): Promise<DeviceSnapshotRow[]>;
   put(row: DeviceSnapshotRow, removeKeys: string[]): Promise<void>;
 }
@@ -47,6 +47,22 @@ export function createDeviceSnapshotCache(storage: DeviceSnapshotStorage, now = 
       return { value: row.value as T, savedAt: row.savedAt };
     }, null);
   }
+  function list<T>(scope: string | null, prefix: string): Promise<Array<{ key: string; value: T; savedAt: number }>> {
+    const capturedEpoch = epoch;
+    return queue(async () => {
+      if (!scope || scope !== activeScope || scope !== readyScope || capturedEpoch !== epoch) return [];
+      const rows = await storage.rows();
+      if (scope !== activeScope || capturedEpoch !== epoch) return [];
+      return rows.flatMap(row => {
+        if (row.scope !== scope || !Number.isFinite(row.savedAt) || row.savedAt > now()) return [];
+        try {
+          const identity: unknown = JSON.parse(row.key);
+          if (!Array.isArray(identity) || identity.length !== 2 || identity[0] !== scope || typeof identity[1] !== 'string' || !identity[1].startsWith(prefix)) return [];
+          return [{ key: identity[1], value: row.value as T, savedAt: row.savedAt }];
+        } catch { return []; }
+      }).sort((a, b) => b.savedAt - a.savedAt);
+    }, []);
+  }
   function write<T>(scope: string | null, key: string, value: T) {
     const capturedEpoch = epoch;
     // Detach from caller-owned objects before entering the asynchronous queue.
@@ -74,18 +90,18 @@ export function createDeviceSnapshotCache(storage: DeviceSnapshotStorage, now = 
       await storage.put(row, rows.filter(entry => !retained.has(entry.key)).map(entry => entry.key));
     }, undefined);
   }
-  function clear(scope: string | null) {
+  function clear(scope: string | null, keys?: string[]) {
     if (!scope || scope !== activeScope) return Promise.resolve();
     epoch += 1;
     readyScope = null;
     const capturedEpoch = epoch;
     return queue(async () => {
       if (scope === activeScope) {
-        await storage.reset(scope);
+        await storage.reset(scope, keys?.map(key => JSON.stringify([scope, key])));
         if (capturedEpoch === epoch) readyScope = scope;
       }
       return true;
     }, false).then(success => { if (!success) throw new Error('Could not clear saved data'); });
   }
-  return { activate, read, write, clear };
+  return { activate, read, list, write, clear };
 }

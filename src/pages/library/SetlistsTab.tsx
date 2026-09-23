@@ -261,11 +261,11 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
   const fetchData = useCallback(async (invalidateFirst = false) => {
     const requestedScope = viewScope;
     const sequence = ++fetchSequenceRef.current;
-    if (invalidateFirst) await invalidateDeviceSnapshots(cacheScope).catch(() => {});
+    if (invalidateFirst) await invalidateDeviceSnapshots(cacheScope, ['library:songs-sets']).catch(() => {});
     const [setlistRes, songsRes, songLeadersRes] = await Promise.all([
       supabase
         .from('setlists')
-        .select('id, status, event_id, created_by, events(title, event_date, event_type), setlist_songs(id, position, song_id, performed_key, youtube_url, songs(id, title, artist, song_key, youtube_url, lyrics, chordpro_text))')
+        .select('id, status, event_id, created_by, events(title, event_date, event_type), setlist_songs(id, position, song_id, performed_key, youtube_url, notes, arrangement_chordpro_text, arrangement_section_order, songs(id, title, artist, song_key, youtube_url, lyrics, chordpro_text))')
         .eq('status', 'approved')
         .order('created_at', { ascending: false }),
       supabase.from('songs').select('id, title, artist, song_key, created_by, youtube_url, lyrics, chordpro_text').order('title'),

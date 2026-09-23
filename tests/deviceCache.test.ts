@@ -6,9 +6,9 @@ let failReset = false;
 let time = 100;
 let pendingRows: Promise<void> | undefined;
 const storage = {
-  reset: async (scope: string) => {
+  reset: async (scope: string, keys?: string[]) => {
     if (failReset) throw new Error('Storage unavailable');
-    rows = rows.filter(entry => entry.scope !== scope);
+    rows = rows.filter(entry => entry.scope !== scope || (keys && !keys.includes(entry.key)));
   },
   rows: async () => { await pendingRows; return rows; },
   put: async (row: DeviceSnapshotRow, removeKeys: string[]) => {
@@ -93,3 +93,24 @@ assert.ok(rows.reduce((total, row) => total + row.bytes, 0) <= 32 * 1024 * 1024)
 assert.equal(await cache.read('alice:church-a', 'large-library-0'), null);
 assert.ok(await cache.read('alice:church-a', 'large-library-1'), 'retains more than the old total budget');
 assert.ok(await cache.read('alice:church-a', 'large-library-5'), 'latest large snapshot survives eviction');
+
+// Offline browsing must obey the same account boundary, including pending reads.
+await cache.activate('alice:church-a');
+await cache.write('alice:church-a', 'events:detail:a', { title: 'Alice event' });
+assert.equal((await cache.list('alice:church-a', 'events:detail:')).length, 1);
+assert.deepEqual(await cache.list('bob:church-b', 'events:detail:'), []);
+pendingRows = new Promise(resolve => { unblock = resolve; });
+const pendingList = cache.list('alice:church-a', 'events:detail:');
+await Promise.resolve();
+const revokeList = cache.activate(null);
+unblock(); pendingRows = undefined;
+assert.deepEqual(await pendingList, [], 'pending event list revoked at sign-out');
+await revokeList;
+assert.deepEqual(await cache.list('alice:church-a', ''), []);
+await cache.activate('alice:church-a');
+assert.equal((await cache.list('alice:church-a', 'events:detail:')).length, 1);
+
+await cache.write('alice:church-a', 'library:videos', ['video']);
+await cache.clear('alice:church-a', ['library:videos']);
+assert.equal(await cache.read('alice:church-a', 'library:videos'), null);
+assert.equal((await cache.list('alice:church-a', 'events:detail:')).length, 1, 'editing videos must retain prepared services');

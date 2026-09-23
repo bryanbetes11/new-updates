@@ -34,3 +34,11 @@ Device validation: open Songs, Sets, Videos and an event online, reopen them and
 - Save a safe sample attachment to Downloads, cancel a save, open/share a sample file, and verify a failed download reports an error. Android saving uses the system location picker; it does not require broad storage access.
 - Enter Live Mode, confirm the screen stays on, background/resume, and exit Live Mode to restore normal screen timeout. Confirm song/scroll state and unsaved drafts survive the applicable existing resume flows.
 - Test Chat with keyboard visible and after returning from a file chooser. Browser-sized checks are not evidence of the physical Android keyboard, installer, native chooser or screen timeout.
+
+## Offline service reading (Android build 13)
+
+After a successful online sign-in and church verification, Android can reopen the last signed-in account in a restricted offline workspace when connectivity is unavailable, including when its access token needs renewal. Sign-out revokes offline access without deleting account caches; switching accounts requires internet. Cached profile data never grants online permissions. Return online explicitly revalidates the user and current church before opening normal routes.
+
+While online, open the Library and each event needed for the service. Event details report readiness only after their saved snapshot is read back successfully. Approved set charts (including linked service charts for rehearsals) can be opened in saved Live Mode with song navigation, arranged sections, transposition, text size and auto scroll. Missing charts are labelled. The reader stays on the saved version during reconnection; live team cues, messages, media streaming and server changes require internet. This is local chart reading, not cross-device offline synchronization.
+
+The offline workspace lists only the matching account/church's saved events, songs, sets and video information. It exposes no administrative routes or server editors. APK assets are bundled; the browser PWA is not granted this Android offline identity fallback. Test a real device by signing in online, opening a service until its readiness notice appears, enabling airplane mode, force-closing/reopening, reading the set, then reconnecting and choosing Return online.

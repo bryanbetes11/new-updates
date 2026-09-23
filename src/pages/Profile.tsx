@@ -6,7 +6,7 @@ import {
   Pencil, Save, LogOut, X, Check, Crown,
   Camera, Loader2, Shield, ChevronDown, Clock,
   MessageSquare, XCircle, CheckCircle, Eye, KeyRound,
-  Phone, Cake, Calendar, AlertCircle, Mail, Info, RefreshCw
+  Phone, Cake, Calendar, AlertCircle, Mail
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -19,11 +19,6 @@ import { RoleBadge, sortRolesLeadershipFirst } from '../components/RoleBadge';
 import { mergeUntouchedFields } from '../lib/draftRecovery';
 import { phoneHref } from '../lib/phone';
 import { PARTICIPANT_ROLE_NAME } from '../lib/eventAssignmentRoles';
-import { APP_BUILD_ID, APP_UPDATE_PUBLISHED_AT, APP_VERSION_LABEL } from '../lib/appUpdate';
-import { checkForAppUpdate } from '../lib/serviceWorkerUpdate';
-import { androidUpdates, isAndroidApp } from '../lib/nativeAppUpdates';
-import { NativeAppUpdateCard } from '../components/NativeAppUpdate';
-import { DeviceCacheSetting } from '../components/DeviceCacheSetting';
 import type { DisciplineRecord } from '../types';
 
 interface AccountabilitySummary {
@@ -91,7 +86,6 @@ export function Profile() {
   const [emailPanelOpen, setEmailPanelOpen] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [emailUpdating, setEmailUpdating] = useState(false);
-  const [checkingForUpdate, setCheckingForUpdate] = useState(false);
 
   useEffect(() => {
     if (profile) {
@@ -220,35 +214,6 @@ export function Profile() {
     toast('success', 'Profile picture updated');
   };
 
-  const handleCheckForUpdates = async () => {
-    setCheckingForUpdate(true);
-    if (isAndroidApp()) {
-      const result = await androidUpdates.check(true);
-      setCheckingForUpdate(false);
-      if (result.status === 'available') toast('success', `ServeSync ${result.release?.version} is available. Use Download update on this page.`);
-      else if (result.status === 'up-to-date') toast('success', `ServeSync ${result.installedVersion} (Android build ${result.installedBuild}) is up to date.`);
-      else toast('error', 'Could not check Android releases. Check your connection and try again.');
-      return;
-    }
-    const result = await checkForAppUpdate();
-    setCheckingForUpdate(false);
-
-    if (result.status === 'native-managed') {
-      toast('info', 'This installed app updates through a new app version. Website updates do not update this installation.');
-      return;
-    }
-
-    if (result.status === 'up-to-date') {
-      toast('success', `ServeSync ${APP_VERSION_LABEL} is up to date.`);
-      return;
-    }
-    if (result.status === 'available') {
-      toast('success', `ServeSync v${result.manifest.version} is being prepared.`);
-      return;
-    }
-    toast('error', 'Could not check for updates. Check your connection and try again.');
-  };
-
   if (!profile) return <PageLoader />;
 
   const sortedUserRoles = sortRolesLeadershipFirst(userRoles);
@@ -298,8 +263,8 @@ export function Profile() {
       />
 
       <div className="relative max-w-2xl md:max-w-4xl lg:max-w-5xl xl:max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-10 space-y-5 sm:space-y-6">
-        <NativeAppUpdateCard alwaysVisible />
-        <DeviceCacheSetting />
+
+
         {billingLocked && billingStatus === 'suspended' && (
           <div className="rounded-[26px] border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-900/10 px-4 py-4">
             <div className="flex items-start gap-3">
@@ -818,41 +783,7 @@ export function Profile() {
           <NotificationPreferencesSetting />
         </motion.section>
 
-        <motion.section
-          initial={{ opacity: 0, y: 14, filter: 'blur(4px)' }}
-          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-          transition={{ duration: 0.5, delay: 0.28, ease: [0.16, 1, 0.3, 1] }}
-        >
-          <SectionLabel>
-            <span className="flex items-center gap-1.5"><Info className="h-3 w-3" /> About ServeSync</span>
-          </SectionLabel>
-          <PremiumCard className="p-5 sm:p-6">
-            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3.5">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-500/[0.10] dark:text-emerald-300">
-                  <img src="/logo.png" alt="" className="h-9 w-9 rounded-xl object-cover" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[15px] font-black tracking-[-0.02em] text-gray-950 dark:text-white">ServeSync {APP_VERSION_LABEL}</p>
-                  <p className="mt-0.5 text-[11px] text-gray-500 dark:text-white/40">
-                    Build {APP_BUILD_ID} · Released {format(new Date(APP_UPDATE_PUBLISHED_AT), 'MMM d, yyyy')}
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-col gap-2 min-[390px]:flex-row">
-                <button
-                  type="button"
-                  onClick={handleCheckForUpdates}
-                  disabled={checkingForUpdate}
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-emerald-500 px-4 text-[12px] font-bold text-white transition-colors hover:bg-emerald-600 disabled:opacity-45"
-                >
-                  <RefreshCw className={`h-4 w-4 ${checkingForUpdate ? 'animate-spin motion-reduce:animate-none' : ''}`} />
-                  {checkingForUpdate ? 'Checking…' : 'Check for Updates'}
-                </button>
-              </div>
-            </div>
-          </PremiumCard>
-        </motion.section>
+
 
       </div>
     </div>

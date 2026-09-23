@@ -205,7 +205,7 @@ export function Layout() {
   const isMyAssignmentsPage = location.pathname === "/my-assignments";
   const isNotificationsPage = location.pathname === "/notifications";
   const isProfilePage = location.pathname === "/profile";
-  const isSoundSettingsPage = location.pathname === "/settings/sounds";
+  const isSoundSettingsPage = location.pathname === "/settings/sounds" || location.pathname === "/settings/app";
   const isPushNotificationSettingsPage = location.pathname === "/settings/notifications";
   const isUnavailableMembersPage = location.pathname === "/unavailable-members";
   const isActivityLogPage = location.pathname === "/activity-log";

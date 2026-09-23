@@ -935,6 +935,13 @@ export function Navigation({
   ];
   const desktopShortcutItems = [
     {
+      title: "App settings",
+      caption: "Updates & saved content",
+      path: "/settings/app",
+      tone: "from-zinc-400/35 to-zinc-900/65",
+      icon: Settings,
+    },
+    {
       title: "My Assignments",
       caption: "Serving schedule",
       path: "/my-assignments",
@@ -1110,6 +1117,14 @@ export function Navigation({
       label: "Profile",
       desc: "Account and personal settings",
       path: "/profile",
+      show: true,
+      color: "#10b981",
+    },
+    {
+      icon: Settings,
+      label: "App updates",
+      desc: "Check for updates and saved content",
+      path: "/settings/app",
       show: true,
       color: "#10b981",
     },
@@ -1555,21 +1570,24 @@ export function Navigation({
 
           <section>
             <p className="mb-2 px-1 text-[10px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
-              Feedback
+              App settings
             </p>
             <button
               type="button"
-              onClick={() => handleNav('/settings/sounds')}
+              onClick={() => handleNav('/settings/app')}
               className="flex w-full items-center gap-3 rounded-[1.4rem] border border-black/[0.06] bg-white/72 px-3.5 py-3.5 text-left transition-colors hover:bg-white dark:border-white/[0.08] dark:bg-white/[0.045] dark:hover:bg-white/[0.07]"
             >
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-400/[0.13] text-emerald-700 dark:text-emerald-200">
-                <Volume2 className="h-5 w-5" />
+                <Settings className="h-5 w-5" />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-[14px] font-black text-gray-900 dark:text-white">Sound & feedback</span>
-                <span className="mt-0.5 block text-[11px] font-semibold text-gray-500 dark:text-white/45">Test and adjust interaction volume</span>
+                <span className="block text-[14px] font-black text-gray-900 dark:text-white">Updates & saved content</span>
+                <span className="mt-0.5 block text-[11px] font-semibold text-gray-500 dark:text-white/45">Check for updates and manage device storage</span>
               </span>
               <ChevronRight className="h-4 w-4 text-gray-400 dark:text-white/40" />
+            </button>
+            <button type="button" onClick={() => handleNav('/settings/sounds')} className="mt-2 flex min-h-11 w-full items-center gap-3 rounded-2xl px-3.5 text-left text-sm font-bold text-gray-700 hover:bg-black/[0.04] dark:text-white/75 dark:hover:bg-white/[0.06]">
+              <Volume2 className="h-5 w-5" /> Sound & feedback
             </button>
           </section>
 

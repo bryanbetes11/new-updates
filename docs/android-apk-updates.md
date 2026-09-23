@@ -1,8 +1,8 @@
 # Android APK updates
 
-The Android app checks public releases in `bryanbetes11/new-updates` on launch and when returning to the app. Successful checks are throttled to once per six hours within the running app; failed checks retry after at least one minute on the next trigger. A foreground timer and reconnect event also trigger a check. Profile's manual check bypasses the throttle and shares any in-flight request.
+The Android app checks public releases in `bryanbetes11/new-updates` on launch and when returning to the app. Successful checks are throttled to once per six hours within the running app; failed checks retry after at least one minute on the next trigger. A foreground timer and reconnect event also trigger a check. App settings' manual check bypasses the throttle and shares any in-flight request.
 
-This is an in-app check, not a background notification while Android has closed the app. Home shows a dismissible notice; Profile keeps the download action available. The current testing channel includes published prereleases.
+This is an in-app check, not a background notification while Android has closed the app. Home shows a dismissible notice; App settings keeps the download action available (mobile sidebar: App updates). The current testing channel includes published prereleases.
 
 ## Publishing a discoverable APK
 
@@ -25,9 +25,9 @@ Android keeps seven-day, account-and-church-scoped snapshots for Library songs/s
 
 Starting with Android build 10, snapshots use IndexedDB (32 MiB total, 512 entries, 8 MiB maximum per entry). Profile pictures and song/event/video thumbnail images use app-private files (480 MiB retained total, 5 MiB per image, up to three downloads at once). The combined allowance is 512 MiB; storage grows as content is saved rather than being reserved upfront. Thumbnail downloads begin near the viewport. Successful public artwork lookup URLs are reused too. The limits apply across saved accounts; older content may be evicted. Clearing Android app storage or uninstalling also removes these files. This is faster repeat loading, not a complete offline application.
 
-Signing out or switching accounts revokes access and cancels old cache responses without deleting that account's saved content. Returning to the same account and church restores its cache after auth hydration. Profile's **Clear this account’s cache** removes only the current account/church snapshots and images; server content and drafts remain unchanged.
+Signing out or switching accounts revokes access and cancels old cache responses without deleting that account's saved content. Returning to the same account and church restores its cache after auth hydration. App settings’ **Clear this account’s cache** removes only the current account/church snapshots and images; server content and drafts remain unchanged.
 
-Device validation: open Songs, Sets, Videos and an event online, reopen them and restart the app, check that thumbnails and saved content return quickly; switch to another account and verify it cannot see the first account's saved content; switch back and verify it is retained. Test a network interruption after login, then reconnect and verify fresh content replaces saved data. Use Profile to clear only the current account's cache. Browser fixtures simulate native bridges and do not establish physical Android filesystem or installer behavior.
+Device validation: open Songs, Sets, Videos and an event online, reopen them and restart the app, check that thumbnails and saved content return quickly; switch to another account and verify it cannot see the first account's saved content; switch back and verify it is retained. Test a network interruption after login, then reconnect and verify fresh content replaces saved data. Use App settings to clear only the current account's cache. Browser fixtures simulate native bridges and do not establish physical Android filesystem or installer behavior.
 
 - Swipe Videos, Songs and Sets immediately after launch, after opening/closing the account menu, and after returning from Live Mode; verify side padding and horizontal filter access.
 - Back closes a dialog/preview/drawer before navigating. In Live Mode it opens the existing exit confirmation. At the start of app navigation it minimizes the app.

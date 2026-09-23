@@ -198,6 +198,9 @@ const NotificationSettings = lazy(() =>
     ({ NotificationSettings }) => ({ default: NotificationSettings }),
   ),
 );
+const AppSettings = lazy(() =>
+  import("./pages/AppSettings").then(({ AppSettings }) => ({ default: AppSettings })),
+);
 const NotificationActivity = lazy(() => import('./pages/leadership/NotificationActivity').then(({ NotificationActivity }) => ({ default: NotificationActivity })));
 const SurveyManagement = lazy(() =>
   import("./pages/leadership/SurveyManagement").then(
@@ -574,6 +577,7 @@ export default function App() {
                       />
                       <Route path="/profile" element={<Profile />} />
                       <Route path="/settings/sounds" element={<SoundSettings />} />
+                      <Route path="/settings/app" element={<AppSettings />} />
                       <Route path="/settings/notifications" element={<PushNotificationSettings />} />
                       <Route
                         path="/change-password"

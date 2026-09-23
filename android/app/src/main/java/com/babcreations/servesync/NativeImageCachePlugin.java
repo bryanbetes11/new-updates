@@ -27,7 +27,6 @@ import java.util.concurrent.Executors;
 public class NativeImageCachePlugin extends Plugin {
     private static final long MAX_FILE_BYTES = 5L * 1024L * 1024L;
     private static final long MAX_CACHE_BYTES = 480L * 1024L * 1024L;
-    private static final long MAX_AGE_MS = 7L * 24L * 60L * 60L * 1000L;
     private final ExecutorService io = Executors.newFixedThreadPool(3);
     private final ExecutorService scopeIo = Executors.newSingleThreadExecutor();
     private final Object cacheLock = new Object();
@@ -118,7 +117,7 @@ public class NativeImageCachePlugin extends Plugin {
                     if (candidates != null) for (File cached : candidates) {
                         long createdAt = createdAt(cached.getName());
                         if (cached.getName().startsWith(cacheKey + "-") && cached.isFile() && cached.length() > 0
-                            && createdAt > 0 && System.currentTimeMillis() - createdAt <= MAX_AGE_MS) {
+                            && createdAt > 0) {
                             cached.setLastModified(System.currentTimeMillis());
                             resolveFile(call, cached);
                             return;
@@ -178,7 +177,7 @@ public class NativeImageCachePlugin extends Plugin {
                 continue;
             }
             long createdAt = createdAt(file.getName());
-            if (!file.isFile() || createdAt == 0 || file.length() > MAX_FILE_BYTES || now - createdAt > MAX_AGE_MS) {
+            if (!file.isFile() || createdAt == 0 || file.length() > MAX_FILE_BYTES) {
                 if (!file.delete() && file.isFile()) total += file.length();
             } else {
                 total += file.length();

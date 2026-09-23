@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createDeviceSnapshotCache, DEVICE_SNAPSHOT_TTL, type DeviceSnapshotRow } from '../src/lib/deviceCacheStore';
+import { createDeviceSnapshotCache, type DeviceSnapshotRow } from '../src/lib/deviceCacheStore';
 
 let rows: DeviceSnapshotRow[] = [];
 let failReset = false;
@@ -27,8 +27,15 @@ assert.equal(await cache.read('bob:church-a', 'songs'), null);
 const reopened = createDeviceSnapshotCache(storage, () => time);
 await reopened.activate('alice:church-a');
 assert.ok(await reopened.read('alice:church-a', 'songs'), 'same account persists across process restarts');
-time += DEVICE_SNAPSHOT_TTL + 1;
-assert.equal(await cache.read('alice:church-a', 'songs'), null, 'expired content is not shown');
+time += 365 * 24 * 60 * 60 * 1000;
+assert.ok(await cache.read('alice:church-a', 'songs'), 'saved content remains readable after a year');
+await cache.activate('bob:church-a');
+await cache.write('bob:church-a', 'new-content', ['new']);
+await cache.activate('alice:church-a');
+assert.ok(await cache.read('alice:church-a', 'songs'), 'writing new content does not expire another account cache');
+await cache.activate('bob:church-a');
+await cache.clear('bob:church-a');
+await cache.activate('alice:church-a');
 await cache.write('alice:church-a', 'songs', ['fresh']);
 await cache.activate('alice:church-b');
 assert.equal(rows.length, 1, 'church switch preserves the other church cache');

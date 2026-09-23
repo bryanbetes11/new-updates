@@ -12,7 +12,6 @@ export interface DeviceSnapshotStorage {
   put(row: DeviceSnapshotRow, removeKeys: string[]): Promise<void>;
 }
 
-export const DEVICE_SNAPSHOT_TTL = 7 * 24 * 60 * 60 * 1000;
 export const DEVICE_SNAPSHOT_MAX_BYTES = 32 * 1024 * 1024;
 const MAX_ENTRY_BYTES = 8 * 1024 * 1024;
 const MAX_ENTRIES = 512;
@@ -44,7 +43,7 @@ export function createDeviceSnapshotCache(storage: DeviceSnapshotStorage, now = 
       if (!scope || scope !== activeScope || scope !== readyScope || capturedEpoch !== epoch) return null;
       const row = (await storage.rows()).find(entry => entry.scope === scope && entry.key === JSON.stringify([scope, key]));
       if (scope !== activeScope || capturedEpoch !== epoch || !row || !Number.isFinite(row.savedAt)
-        || now() - row.savedAt > DEVICE_SNAPSHOT_TTL || row.savedAt > now()) return null;
+        || row.savedAt > now()) return null;
       return { value: row.value as T, savedAt: row.savedAt };
     }, null);
   }
@@ -63,7 +62,7 @@ export function createDeviceSnapshotCache(storage: DeviceSnapshotStorage, now = 
       if (!scope || scope !== activeScope || scope !== readyScope || capturedEpoch !== epoch) return;
       const rows = await storage.rows();
       if (scope !== activeScope || capturedEpoch !== epoch) return;
-      const keep = rows.filter(entry => entry.key !== row.key && now() - entry.savedAt <= DEVICE_SNAPSHOT_TTL)
+      const keep = rows.filter(entry => entry.key !== row.key && Number.isFinite(entry.savedAt))
         .sort((a, b) => b.savedAt - a.savedAt);
       let bytes = row.bytes;
       const retained = new Set<string>([row.key]);

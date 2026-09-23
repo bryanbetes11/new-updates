@@ -1,8 +1,8 @@
 export const ANDROID_TEST_RELEASE = {
   version: '1.3.2',
-  build: 11,
-  filename: 'ServeSync-1.3.2-android-test-build11.apk',
-  url: 'https://github.com/bryanbetes11/new-updates/releases/download/android-test-v1.3.2-build11/ServeSync-1.3.2-android-test-build11.apk',
+  build: 12,
+  filename: 'ServeSync-1.3.2-android-test-build12.apk',
+  url: 'https://github.com/bryanbetes11/new-updates/releases/download/android-test-v1.3.2-build12/ServeSync-1.3.2-android-test-build12.apk',
 };
 
 export function shouldOfferAndroidApp(options: { android: boolean; standalone: boolean; native: boolean; signedIn: boolean; dashboard: boolean; dismissed: boolean }) {

@@ -28,7 +28,7 @@ export function DeviceCacheSetting() {
       <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
         Songs, sets, event details, and images you open are saved for faster loading. The app checks for fresh data when you return.
         Each account and church has its own saved cache, kept when you sign out or switch accounts.
-        Saved data expires after 7 days and can use up to 512 MB across accounts. Space is used only as content is saved.
+        Saved data has no time limit and can use up to 512 MB across accounts. Older content is removed when the cache fills up. Space is used only as content is saved.
       </p>
       <button type="button" disabled={clearing} onClick={() => void clear()} className="btn-secondary mt-3 text-sm">
         {clearing ? 'Clearing…' : 'Clear this account’s cache'}

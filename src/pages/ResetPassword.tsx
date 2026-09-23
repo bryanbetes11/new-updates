@@ -4,6 +4,7 @@ import { Eye, EyeOff, CheckCircle, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../contexts/ToastContext';
+import { disconnectNativePush } from '../lib/nativePush';
 
 const requirements = [
   { label: 'At least 8 characters', test: (p: string) => p.length >= 8 },
@@ -122,8 +123,11 @@ export function ResetPassword() {
       setStatus('success');
       // Sign out and redirect to login after a brief moment
       setTimeout(async () => {
-        await supabase.auth.signOut();
-        navigate('/login');
+        try {
+          await disconnectNativePush();
+          await supabase.auth.signOut();
+          navigate('/login');
+        } catch (error) { toast('error', error instanceof Error ? error.message : 'Could not sign out.'); }
       }, 2500);
     }
   };

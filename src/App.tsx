@@ -12,6 +12,9 @@ import { RefreshCw } from "lucide-react";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { NotificationOpenTracker } from './components/NotificationOpenTracker';
+import { NativePushBridge } from './components/NativePushBridge';
+import { AndroidAppPromotion } from './components/AndroidAppPromotion';
+import { AndroidDownload } from './pages/AndroidDownload';
 import { ToastProvider } from "./contexts/ToastContext";
 import { Layout } from "./components/Layout";
 import { PageLoader } from "./components/LoadingSpinner";
@@ -69,9 +72,6 @@ const EventDetail = lazy(() =>
   import("./pages/EventDetail").then(({ EventDetail }) => ({
     default: EventDetail,
   })),
-);
-const Landing = lazy(() =>
-  import("./pages/Landing").then(({ Landing }) => ({ default: Landing })),
 );
 const CreateChurch = lazy(() =>
   import("./pages/CreateChurch").then(({ CreateChurch }) => ({ default: CreateChurch })),
@@ -307,7 +307,7 @@ function StartupGate({ children }: { children: ReactNode }) {
 
 function RootRedirect() {
   const { user, hasOrganization } = useAuth();
-  if (!user) return <Landing />;
+  if (!user) return <Navigate to="/login" replace />;
   if (!hasOrganization) return <Navigate to="/create-church" replace />;
   const storage = getBrowserStorage();
   const target = storage ? getLastAppRoute(storage, user.id) : "/dashboard";
@@ -478,11 +478,13 @@ export default function App() {
       <ThemeProvider>
         <AuthProvider>
           <NotificationOpenTracker />
+          <NativePushBridge />
           <StartupGate>
             <ServiceModeResumeRedirect />
             <LastRouteTracker />
             <ResumeSyncIndicator />
             <ToastProvider>
+              <AndroidAppPromotion />
               <BackgroundAppUpdateWatcher />
               <AppUpdateModal
                 open={showAppUpdate}
@@ -496,6 +498,7 @@ export default function App() {
               />
               <Routes>
               <Route path="/" element={<RootRedirect />} />
+              <Route path="/download/android" element={<AndroidDownload />} />
               <Route
                 path="/platform"
                 element={<Navigate to="/activity-log" replace />}
@@ -506,7 +509,7 @@ export default function App() {
               />
               <Route element={<Layout />}>
                 <Route element={<RouteLoadingBoundary />}>
-                  <Route path="/landing" element={<Landing />} />
+                  <Route path="/landing" element={<Navigate to="/login" replace />} />
                   <Route path="/login" element={<LoginRoute />} />
                   <Route path="/reset-password" element={<ResetPassword />} />
                   <Route path="/auth/confirm" element={<AuthConfirm />} />

@@ -43,8 +43,8 @@ export function PlatformPortal({ view = 'dashboard' }: PlatformPortalProps) {
   };
 
   const handleSignOut = async () => {
-    await signOut();
-    setPassword('');
+    try { await signOut(); setPassword(''); }
+    catch (error) { toast('error', error instanceof Error ? error.message : 'Could not sign out.'); }
   };
 
   if (loading) return <PageLoader />;

@@ -1,6 +1,9 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 import webpush from "npm:web-push@3.6.7";
+import { createFcmSender } from './fcm.ts';
+
+const sendFcm = createFcmSender(Deno.env.get('FCM_SERVICE_ACCOUNT'));
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -176,8 +179,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY") || config.vapid_private_key;
-    if (!vapidPrivateKey) return json({ error: "Push service is not configured" }, 503);
-    webpush.setVapidDetails(
+    if (vapidPrivateKey) webpush.setVapidDetails(
       Deno.env.get("VAPID_SUBJECT") || "mailto:admin@worshipportal.com",
       VAPID_PUBLIC_KEY,
       vapidPrivateKey,
@@ -193,7 +195,7 @@ Deno.serve(async (req: Request) => {
     ) return json({ error: "Invalid push payload" }, 400);
 
     const updateStatus = async (values: Record<string, unknown>) => {
-      if (notification_id) await supabase.from("notifications").update(values).eq("id", notification_id);
+      if (notification_id) await supabase.from("notifications").update(values).eq("id", notification_id).eq("user_id", user_id);
     };
 
     const { data: profileOrgRow, error: profileOrgError } = await supabase
@@ -223,6 +225,7 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
       notification = notificationRow as NotificationRow | null;
       if (!notification) return json({ error: "Notification not found" }, 404);
+      if (notification.org_id !== profile.org_id) return json({ error: "Notification organization mismatch" }, 403);
     }
 
     const type = notification?.type || String(data?.notification_type || "system");
@@ -265,28 +268,55 @@ Deno.serve(async (req: Request) => {
     }
     const organizationName = (organizationRow as OrganizationRow | null)?.name?.trim() || null;
     const resolvedTitle = resolvePushTitle(title, organizationName, type);
-    const { data: subscriptions } = await supabase
+    const { data: subscriptions, error: subscriptionError } = await supabase
       .from("push_subscriptions")
       .select("id, endpoint, p256dh, auth_key")
       .eq("user_id", user_id);
-    if (!subscriptions?.length) {
+    // Roll out the additive migration before enabling this server-side switch.
+    // Every opted-in installation receives this user's regular eligible notifications.
+    const { data: devices, error: deviceError } = Deno.env.get('ANDROID_PUSH_ENABLED') === 'true'
+      ? await supabase.from('native_push_devices').select('installation_id, token')
+        .eq('user_id', user_id).eq('org_id', profile.org_id).eq('enabled', true).not('token', 'is', null)
+      : { data: [], error: null };
+    if (subscriptionError || deviceError) {
+      await updateStatus({ push_status: 'failed' });
+      return json({ error: 'Device lookup failed' }, 500);
+    }
+    const total = (subscriptions?.length || 0) + (devices?.length || 0);
+    if (!total) {
       await updateStatus({ push_status: "no_subscription" });
       return json({ message: "No subscriptions found", sent: 0 });
     }
 
     const priority = notification?.priority || rule?.priority || "normal";
-    const results = await Promise.all((subscriptions as PushSubscriptionRow[]).map(async (sub) => {
-      const result = await sendWebPush(sub, { title: resolvedTitle, body, data }, priority, type);
+    const results = await Promise.all([
+      ...(subscriptions as PushSubscriptionRow[] || []).map(async (sub) => {
+      const result = vapidPrivateKey
+        ? await sendWebPush(sub, { title: resolvedTitle, body, data }, priority, type)
+        : { ok: false, stale: false };
       if (!result.ok && result.stale && sub.id) {
         await supabase.from("push_subscriptions").delete().eq("id", sub.id);
       }
       return { sub, ...result };
-    }));
+      }),
+      ...(devices || []).map(async device => {
+        const options = pushOptions(priority, type);
+        const result = await sendFcm({ token: device.token, title: resolvedTitle, body,
+          userId: user_id, notificationId: notification_id, url: data?.url,
+          highPriority: options.urgency === 'high', ttl: options.TTL });
+        if (result.stale) {
+          // Token equality protects a concurrent refresh from being removed by an old send.
+          await supabase.from('native_push_devices').update({ enabled: false, token: null })
+            .eq('installation_id', device.installation_id).eq('token', device.token);
+        }
+        return result;
+      }),
+    ]);
 
     const sent = results.filter((result) => result.ok).length;
     const stale = results.filter((result) => result.stale).length;
     const deliverableFailures = results.filter((result) => !result.ok && !result.stale).length;
-    const status = sent === subscriptions.length ? "sent" : sent > 0 ? "partial" : "failed";
+    const status = sent === total ? "sent" : sent > 0 ? "partial" : "failed";
     await updateStatus({
       push_status: status,
       push_sent_at: sent > 0 ? new Date().toISOString() : null,
@@ -295,7 +325,7 @@ Deno.serve(async (req: Request) => {
     return json({
       message: `Sent ${sent} push notifications`,
       sent,
-      total: subscriptions.length,
+      total,
       staleRemoved: stale,
       failed: deliverableFailures,
     });

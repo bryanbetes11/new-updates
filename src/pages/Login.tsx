@@ -107,7 +107,7 @@ export function Login() {
   };
 
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-[#050505] text-white">
+    <div className="relative h-dvh overflow-x-hidden overflow-y-auto overscroll-contain bg-[#050505] text-white">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_16%_8%,rgba(34,197,94,0.18),transparent_32%),radial-gradient(circle_at_82%_18%,rgba(250,204,21,0.08),transparent_28%),linear-gradient(180deg,#090b09_0%,#050505_48%,#000_100%)]" />
 
       <aside className="fixed inset-y-0 left-0 hidden w-[48%] max-w-[740px] flex-col justify-between overflow-hidden border-r border-white/[0.06] bg-[linear-gradient(160deg,rgba(16,185,129,0.12)_0%,rgba(255,255,255,0.035)_42%,rgba(0,0,0,0)_100%)] p-12 lg:flex">
@@ -157,14 +157,14 @@ export function Login() {
         </div>
       </aside>
 
-      <main className="relative flex min-h-screen flex-col lg:ml-[48%]">
+      <main className="relative flex min-h-dvh flex-col lg:ml-[48%]">
         <div className="flex items-center gap-3 px-6 pt-14 pb-2 lg:hidden">
           <img src="/servesync-mark-transparent.png" alt="ServeSync" className="h-12 w-12 shrink-0 object-contain" />
           <span className="text-[26px] font-black tracking-[-0.055em] text-white">ServeSync</span>
         </div>
 
-        <div className="flex flex-1 items-start justify-center px-6 py-6 sm:items-center sm:px-10 sm:py-10 lg:px-16">
-          <div className="w-full max-w-[430px]">
+        <div className="flex flex-1 items-center justify-center px-6 py-6 sm:px-10 sm:py-10 lg:px-16">
+          <div className="w-full max-w-[430px] shrink-0">
             <div className="relative overflow-hidden rounded-[2rem] border border-white/[0.08] bg-white/[0.035] p-7 shadow-[0_30px_90px_-60px_rgba(34,197,94,0.7)] backdrop-blur-xl transition-colors duration-300 sm:p-8">
               <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-emerald-300/35 to-transparent" />
               <div className="pointer-events-none absolute -right-20 -top-20 h-48 w-48 rounded-full bg-emerald-400/[0.06] blur-[70px]" />

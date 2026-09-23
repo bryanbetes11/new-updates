@@ -385,8 +385,8 @@ export function PlatformDashboard() {
   };
 
   const handleSignOut = async () => {
-    await signOut();
-    navigate('/login', { replace: true });
+    try { await signOut(); navigate('/login', { replace: true }); }
+    catch (error) { toast('error', error instanceof Error ? error.message : 'Could not sign out.'); }
   };
 
   const handleRejectSubmission = async () => {

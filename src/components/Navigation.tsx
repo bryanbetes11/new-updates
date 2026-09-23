@@ -1891,7 +1891,7 @@ export function Navigation({
                   type="button"
                   onClick={() => {
                     setDesktopProfileOpen(false);
-                    signOut();
+                    void signOut().catch(error => toast('error', error instanceof Error ? error.message : 'Could not sign out.'));
                   }}
                   className="flex w-full items-center gap-3 rounded-[0.7rem] px-3 py-2.5 text-left text-red-300 transition-colors hover:bg-red-500/10"
                   role="menuitem"
@@ -2265,7 +2265,7 @@ export function Navigation({
                       <button
                         onClick={() => {
                           onMobileOpenChange(false);
-                          signOut();
+                          void signOut().catch(error => toast('error', error instanceof Error ? error.message : 'Could not sign out.'));
                         }}
                         className="flex w-full items-center gap-3 rounded-2xl px-3 py-3.5 text-left text-red-500 transition-colors hover:bg-red-500/10 dark:text-red-400"
                       >

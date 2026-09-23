@@ -27,3 +27,15 @@ screenshots/
 supabase/.temp/
 .claude/
 .vercel/
+
+# Native signing material and local SDK configuration
+*.jks
+*.keystore
+*.p12
+*.mobileprovision
+android/key.properties
+android/local.properties
+android/app/google-services.json
+ios/App/App/GoogleService-Info.plist
+.secrets/
+*-firebase-adminsdk-*.json

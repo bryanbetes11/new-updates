@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ServeSync</string>
+    <string name="title_activity_main">ServeSync</string>
+    <string name="package_name">com.babcreations.servesync</string>
+    <string name="custom_url_scheme">com.babcreations.servesync</string>
+</resources>

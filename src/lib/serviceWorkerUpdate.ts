@@ -1,3 +1,4 @@
+import { isNativeApp } from './nativePlatform';
 import {
   APP_BUILD_ID,
   APP_BUILD_NUMBER,
@@ -31,6 +32,7 @@ export interface PendingAppUpdate extends AppVersionManifest {
 }
 
 export type AppUpdateCheckResult =
+  | { status: 'native-managed' }
   | { status: 'up-to-date'; manifest: AppVersionManifest }
   | { status: 'available'; manifest: PendingAppUpdate }
   | { status: 'unavailable'; error: Error };
@@ -273,6 +275,7 @@ export function shouldRequireAppUpdate() {
 }
 
 async function performAppUpdateCheck(): Promise<AppUpdateCheckResult> {
+  if (isNativeApp()) return { status: 'native-managed' };
   if (import.meta.env.DEV || isLocalPreviewHost() || !('serviceWorker' in navigator)) {
     return { status: 'up-to-date', manifest: currentManifest };
   }
@@ -339,7 +342,9 @@ export function checkForAppUpdate(): Promise<AppUpdateCheckResult> {
 }
 
 export async function applyPendingAppUpdate() {
+  if (isNativeApp()) return false;
   const latestCheck = await checkForAppUpdate();
+  if (latestCheck.status === 'native-managed') return false;
 
   if (latestCheck.status === 'unavailable') {
     console.warn('The latest ServeSync version could not be verified. No older update was applied.');
@@ -393,6 +398,9 @@ export async function applyPendingAppUpdate() {
 }
 
 export function registerAppServiceWorker() {
+  // Packaged apps update their bundled assets through a new native build.
+  // Do not register a web worker or clear native-origin caches as localhost QA.
+  if (isNativeApp()) return;
   if (!('serviceWorker' in navigator)) return;
   if (import.meta.env.DEV || isLocalPreviewHost()) {
     window.addEventListener('load', async () => {

@@ -161,7 +161,10 @@ export function Profile() {
     refreshProfile();
   };
 
-  const handleSignOut = async () => { await signOut(); navigate('/'); };
+  const handleSignOut = async () => {
+    try { await signOut(); navigate('/'); }
+    catch (error) { toast('error', error instanceof Error ? error.message : 'Could not sign out. Please try again.'); }
+  };
 
   const handleEmailUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -218,6 +221,11 @@ export function Profile() {
     setCheckingForUpdate(true);
     const result = await checkForAppUpdate();
     setCheckingForUpdate(false);
+
+    if (result.status === 'native-managed') {
+      toast('info', 'This installed app updates through a new app version. Website updates do not update this installation.');
+      return;
+    }
 
     if (result.status === 'up-to-date') {
       toast('success', `ServeSync ${APP_VERSION_LABEL} is up to date.`);
@@ -786,6 +794,7 @@ export function Profile() {
           transition={{ duration: 0.5, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
         >
           <PushNotificationSetting />
+          <button type="button" onClick={() => navigate('/download/android')} className="mt-3 min-h-11 px-2 text-sm font-semibold text-emerald-600 dark:text-emerald-400">Android app download &amp; installation guide</button>
         </motion.section>
 
         <motion.section

@@ -4,6 +4,7 @@ import type { Session, User } from '@supabase/supabase-js';
 import { createTransientSupabaseClient, supabase } from '../lib/supabase';
 import { readSavedAccounts, removeSavedAccount, upsertSavedAccount, type SavedAccount } from '../lib/savedAccounts';
 import type { Organization, Profile, Role, UserRole } from '../types';
+import { disconnectNativePush } from '../lib/nativePush';
 
 interface AuthContextValue {
   session: Session | null;
@@ -444,6 +445,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    await disconnectNativePush();
     await supabase.auth.signOut({ scope: 'local' });
     setProfile(null);
     setOrganization(null);
@@ -502,6 +504,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const switchAccount = async (userId: string) => {
     const targetAccount = savedAccounts.find(account => account.userId === userId);
     if (!targetAccount) return { error: new Error('Saved account not found.') };
+
+    try { await disconnectNativePush(); }
+    catch (error) { return { error: error instanceof Error ? error : new Error('Could not disconnect phone notifications.') }; }
 
     setLoading(true);
 

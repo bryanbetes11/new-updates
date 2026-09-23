@@ -5,6 +5,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { isIosDevice, isStandalonePwa } from '../lib/device';
 import { VAPID_PUBLIC_KEY } from '../lib/push';
+import { isNativeApp } from '../lib/nativePlatform';
+import { androidPushAvailable, disableNativePush, enableNativePush, nativePushChanged, nativePushEnabled, openNativePushSettingsIfBlocked } from '../lib/nativePush';
 
 interface PushNotificationSettingProps {
   surface?: 'profile' | 'drawer' | 'compact';
@@ -59,6 +61,11 @@ export function PushNotificationSetting({ surface = 'profile', onEnabled }: Push
     if (!user || typeof window === 'undefined') return;
 
     const checkPushStatus = async () => {
+      if (isNativeApp()) {
+        try { setPushEnabled(await nativePushEnabled(user.id)); }
+        catch { setPushEnabled(false); }
+        return;
+      }
       if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
         setPushEnabled(false);
         return;
@@ -85,10 +92,12 @@ export function PushNotificationSetting({ surface = 'profile', onEnabled }: Push
     };
 
     checkPushStatus();
+    window.addEventListener(nativePushChanged, checkPushStatus);
+    return () => window.removeEventListener(nativePushChanged, checkPushStatus);
   }, [user]);
 
   useEffect(() => {
-    if (!user || !pushEnabled || typeof window === 'undefined') return;
+    if (!user || !pushEnabled || typeof window === 'undefined' || isNativeApp()) return;
     let cancelled = false;
 
     const syncExistingSubscription = async () => {
@@ -112,6 +121,27 @@ export function PushNotificationSetting({ surface = 'profile', onEnabled }: Push
     if (!user || typeof window === 'undefined') return;
 
     setPushLoading(true);
+
+    if (androidPushAvailable()) {
+      try {
+        if (pushEnabled) {
+          await disableNativePush(user.id);
+          setPushEnabled(false);
+          toast('info', 'Notifications disabled on this phone');
+        } else {
+          if (await openNativePushSettingsIfBlocked()) return;
+          if (!await enableNativePush(user.id)) return;
+          await savePushPreference(true);
+          window.dispatchEvent(new Event(nativePushChanged));
+          setPushEnabled(true);
+          onEnabled?.();
+          toast('success', 'Phone notifications enabled');
+        }
+      } catch (error) {
+        toast('error', error instanceof Error ? error.message : 'Could not update phone notifications');
+      } finally { setPushLoading(false); }
+      return;
+    }
 
     if (!pushEnabled) {
       try {
@@ -193,6 +223,16 @@ export function PushNotificationSetting({ surface = 'profile', onEnabled }: Push
     : typeof window !== 'undefined' && !('PushManager' in window) && isIosDevice() && !isStandalonePwa()
       ? 'Add to Home Screen to enable'
       : 'Allow alerts for assignments and messages';
+
+  // Keep unconfigured builds and iOS out of browser permission flows.
+  if (isNativeApp() && !androidPushAvailable()) {
+    if (surface === 'compact') return null;
+    return (
+      <p role="status" className="rounded-xl border border-gray-200 p-4 text-sm text-gray-600 dark:border-white/10 dark:text-gray-300">
+        Phone notifications are not available in this test version. You can still check updates inside ServeSync.
+      </p>
+    );
+  }
 
   if (surface === 'compact') {
     return (

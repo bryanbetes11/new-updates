@@ -499,7 +499,7 @@ export function MinistryReflection() {
                 : "Request temporary access"}
             </button>
             <button
-              onClick={() => void signOut()}
+              onClick={() => void signOut().catch(error => toast('error', error instanceof Error ? error.message : 'Could not sign out.'))}
               className="mt-5 w-full text-sm font-bold text-white/40"
             >
               Sign out

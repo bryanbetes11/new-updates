@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { isIosDevice, isStandalonePwa } from '../lib/device';
 import { supabase } from '../lib/supabase';
+import { isNativeApp } from '../lib/nativePlatform';
+import { nativePushChanged, nativePushReadiness, openNativePushSettingsIfBlocked } from '../lib/nativePush';
 
 type PushReadinessBannerProps = {
   variant?: 'default' | 'chat';
@@ -16,6 +18,11 @@ export function PushReadinessBanner({ variant = 'default' }: PushReadinessBanner
 
   const checkReadiness = useCallback(async () => {
     if (!user || typeof window === 'undefined') return;
+    if (isNativeApp()) {
+      try { setReady(await nativePushReadiness(user.id)); }
+      catch { setReady(null); }
+      return;
+    }
 
     if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
       setReady(false);
@@ -51,26 +58,41 @@ export function PushReadinessBanner({ variant = 'default' }: PushReadinessBanner
       else checkReadiness();
     };
     window.addEventListener('push-readiness-updated', handleUpdate);
-    return () => window.removeEventListener('push-readiness-updated', handleUpdate);
+    window.addEventListener(nativePushChanged, checkReadiness);
+    window.addEventListener('focus', checkReadiness);
+    const handleVisibility = () => { if (document.visibilityState === 'visible') void checkReadiness(); };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('push-readiness-updated', handleUpdate);
+      window.removeEventListener(nativePushChanged, checkReadiness);
+      window.removeEventListener('focus', checkReadiness);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [checkReadiness]);
 
   if (!user || ready !== false) return null;
 
-  const message = isIosDevice() && !isStandalonePwa()
+  const setup = async () => {
+    try { if (await openNativePushSettingsIfBlocked()) return; }
+    catch { /* The setup screen includes the manual recovery path. */ }
+    navigate('/settings/notifications?setup=push');
+  };
+
+  const message = !isNativeApp() && isIosDevice() && !isStandalonePwa()
     ? 'Add ServeSync to your Home Screen, then enable notifications so reminders reach you on time.'
-    : 'Enable push notifications so assignments, attendance reminders, and team updates reach this device.';
-  const reminderNote = 'This reminder stays visible until notifications are enabled.';
+    : 'You won’t receive lock-screen alerts for messages, assignments, or reminders while notifications are off. You can still view updates inside ServeSync.';
+  const reminderNote = 'Enable notifications to receive alerts on this device.';
 
   if (variant === 'chat') {
     return (
       <button
         type="button"
-        onClick={() => navigate('/settings/notifications?setup=push')}
+        onClick={setup}
         className="sticky top-0 z-20 -mx-2 mb-1 flex w-[calc(100%+1rem)] items-center gap-3 border-b border-red-400/20 bg-[#21090c]/[0.98] px-3 py-3 text-left shadow-[0_10px_24px_-22px_rgba(0,0,0,0.9)] backdrop-blur-xl transition hover:bg-red-400/[0.09] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-red-300 dark:bg-[#21090c]/[0.98]"
       >
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-black text-white">Push notifications are not ready</span>
-          <span className="mt-0.5 block truncate text-[12px] text-white/55">Set up notifications to clear this reminder.</span>
+          <span className="block text-[13px] font-black text-white">Notifications are off</span>
+          <span className="mt-0.5 block text-[12px] text-white/55">You won’t receive lock-screen message alerts. Enable notifications to stay updated.</span>
         </span>
         <span className="rounded-full bg-red-500 px-2.5 py-1.5 text-[11px] font-black text-white">Set up</span>
       </button>
@@ -83,13 +105,13 @@ export function PushReadinessBanner({ variant = 'default' }: PushReadinessBanner
       <div className="pointer-events-none fixed inset-x-0 top-[calc(3.5rem+env(safe-area-inset-top))] z-50 bg-[#25090d] p-4 text-white shadow-lg shadow-black/25 lg:static lg:mx-[30px] lg:flex lg:max-w-none lg:items-center lg:gap-3 lg:rounded-2xl lg:px-4 lg:py-3 lg:shadow-lg">
         <div className="lg:min-w-0 lg:flex-1">
           <div className="min-w-0 flex-1">
-            <p className="text-[15px] font-black lg:text-sm">Push notifications are not ready</p>
+            <p className="text-[15px] font-black lg:text-sm">Notifications are off</p>
             <p className="mt-1 text-[13px] leading-5 text-white/60 lg:mt-0.5 lg:text-xs">{message} {reminderNote}</p>
           </div>
         </div>
         <button
           type="button"
-          onClick={() => navigate('/settings/notifications?setup=push')}
+          onClick={setup}
           className="pointer-events-auto mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-red-500 px-4 text-[13px] font-black text-white transition hover:bg-red-400 active:scale-[0.98] lg:mt-0 lg:h-auto lg:w-auto lg:shrink-0 lg:rounded-full lg:px-3 lg:py-2 lg:text-xs"
         >
           <span className="lg:hidden">Allow My Notifications</span>

@@ -1770,15 +1770,12 @@ function AccountDashboard() {
               </section>
 
               <section aria-label="Setlists awaiting approval" className={`${reviewSets.length === 0 ? 'hidden lg:block' : ''} w-full min-w-0 max-w-full overflow-hidden rounded-[0.75rem] border p-3 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)] sm:p-4 ${reviewSets.length > 0 && canReviewSetlists ? 'border-amber-400/50 bg-gradient-to-br from-[#322411] via-[#201c17] to-[#181818] shadow-[0_18px_42px_-30px_rgba(245,158,11,0.45)]' : reviewSets.length > 0 ? 'border-sky-400/25 bg-gradient-to-br from-[#17232a] to-[#181818]' : 'border-white/[0.08] bg-[#181818]'}`}>
-                <div className="mb-3 flex items-center justify-between gap-2">
+                <div className="mb-3 flex items-center gap-2">
                   <div className="flex min-w-0 items-center gap-2">
                     {reviewSets.length > 0 && <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${canReviewSetlists ? 'bg-amber-400/20 text-amber-300' : 'bg-sky-400/15 text-sky-300'}`}><ListChecks className="h-4 w-4" /></span>}
-                    <h2 className="min-w-0 text-[18px] font-black leading-tight text-white"><span className="sm:hidden">Awaiting Approval</span><span className="hidden sm:inline">Setlists Awaiting Approval</span></h2>
+                    <h2 className="min-w-0 whitespace-nowrap text-[16px] font-black leading-tight text-white sm:text-[18px]">Setlists Awaiting Approval</h2>
                     {reviewSets.length > 0 && <span className={`rounded-full px-2 py-0.5 text-[11px] font-black ${canReviewSetlists ? 'bg-amber-400 text-amber-950' : 'bg-sky-400/15 text-sky-200'}`}>{pendingSetlists.length}</span>}
                   </div>
-                  <button onClick={() => navigate(canReviewSetlists ? '/leadership/setlists' : '/events')} className={`-mr-2 ml-1 inline-flex min-h-11 shrink-0 items-center px-2 text-[12px] font-bold focus-visible:outline-none focus-visible:ring-2 sm:ml-3 ${canReviewSetlists ? 'text-amber-300 focus-visible:ring-amber-300' : 'text-sky-300 focus-visible:ring-sky-300'}`}>
-                    {canReviewSetlists ? 'Review queue' : 'See events'}
-                  </button>
                 </div>
                 {reviewSets.length > 0 && <p className={`mb-2 text-[11px] font-semibold ${canReviewSetlists ? 'text-amber-100/70' : 'text-sky-100/65'}`}>{canReviewSetlists ? 'Your review is needed before these sets can be used.' : 'These sets are waiting for a leadership decision.'}</p>}
                 <div className={reviewSets.length > 0 ? 'space-y-1' : 'flex min-h-[270px] flex-1 items-center justify-center rounded-[0.6rem] border border-dashed border-white/[0.14] bg-white/[0.035] px-5 py-8'}>

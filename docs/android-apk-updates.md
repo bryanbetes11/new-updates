@@ -17,6 +17,8 @@ From Android build 15, Download update saves the APK inside ServeSync's private 
 
 Build 16 bundles the pending-setlist dashboard improvements: all signed-in church members can see submitted sets, authorized reviewers see a highlighted approval card, each row shows submission date and pending age, and mobile has four priority shortcuts with more bottom-navigation spacing. The update keeps version 1.4.0, the existing package ID and signing identity, so Android can install it over build 15 while retaining app data. A compatibility-named copy remains available for older update checkers.
 
+Build 17 removes the extra See Events / Review Queue action from the pending-setlist card header for both members and reviewers, leaving enough room for the full title on one line on phones. The set rows remain clickable and open their event details. The Android package ID, visible version, signing identity, and in-app update flow stay the same.
+
 Users on APKs without the checker need to install the first checker-enabled APK once. Future published releases can then be discovered inside that app. Merely building or copying a local APK does not publish an update to everyone. The website download link remains tied to the last published APK until separately updated for an authorized release.
 
 ## Device checks for the Android improvement batch

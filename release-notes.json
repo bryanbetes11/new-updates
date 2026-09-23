@@ -1,10 +1,10 @@
 {
-  "headline": "Pending setlists are easier to spot and review on mobile.",
+  "headline": "The pending-setlist card stays focused on the sets awaiting review.",
   "highlights": [
+    "The pending-setlist card keeps its full title on one line and removes the See Events or Review Queue header button; each set still opens its event details.",
     "Pending setlists appear on every church member's dashboard, with decisions limited to authorized reviewers.",
     "Setlists show their submission date and pending age in the dashboard card.",
     "The mobile dashboard has four priority shortcuts and more room beneath the bottom navigation.",
-    "On Android, Home, Events, and Library use saved content inside their normal layouts when offline.",
     "Android downloads verified updates inside ServeSync and offers a separate Install update action."
   ]
 }

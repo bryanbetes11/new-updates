@@ -1,8 +1,8 @@
 {
-  "headline": "Android app prompts are clearer and easier to find.",
+  "headline": "The Android app reminder stays visible while browsing Home.",
   "highlights": [
-    "A compact Android app reminder alternates with the notification reminder on eligible installed Android PWAs.",
-    "The notification reminder is shorter, and the rotating banner scrolls naturally with the page.",
-    "App Settings and the download page show the version number without the internal Android build number."
+    "The single rotating reminder stays below the header while Home scrolls, without extra carousel controls.",
+    "The Android reminder uses an Android icon and explains that this early test APK is separate from the PWA and not on Play Store yet.",
+    "The Android app and website use version 1.4.2."
   ]
 }

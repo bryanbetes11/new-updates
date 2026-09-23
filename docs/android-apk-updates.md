@@ -25,6 +25,8 @@ Build 19 keeps the pending-setlist ribbon within compact event artwork on the Ev
 
 Version 1.4.1 (internal Android code 20) moves the Android install reminder out of Needs Your Attention into one rotating dashboard banner shared with the shorter notification reminder. The banner scrolls with the page and includes manual selection and pause controls; when only one reminder applies, it stays visible. The app reminder appears only in signed-in installed Android PWAs, not iOS PWAs, browser tabs or the native APK. The old daily popup is removed. App Settings, update notices and the website download page show the visible version without the internal code. Release tags still include the code because installed updaters use it to find newer releases.
 
+Version 1.4.2 (internal Android code 21) keeps that single reminder below the header while the dashboard scrolls and removes its visible selection and pause controls. The Android reminder uses a robot icon and labels the APK as an early Android app test, separate from the installed PWA and not yet on Play Store. The reminder still alternates automatically when notifications are off and the Android offer applies.
+
 Users on APKs without the checker need to install the first checker-enabled APK once. Future published releases can then be discovered inside that app. Merely building or copying a local APK does not publish an update to everyone. The website download link remains tied to the last published APK until separately updated for an authorized release.
 
 ## Device checks for the Android improvement batch

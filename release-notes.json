@@ -1,9 +1,10 @@
 {
-  "headline": "ServeSync 1.4.0 keeps familiar screens available when your connection drops.",
+  "headline": "ServeSync updates inside the Android app and shows who added each song.",
   "highlights": [
     "On Android, Home, Events, and Library use saved content inside their normal layouts when offline.",
     "Approved charts for nearby events are prepared while connected, so Live Mode can open them without internet.",
     "Offline and cache readiness banners no longer cover the app or interrupt event details.",
-    "The Android download is now named ServeSync-1.4.0.apk and can be discovered by the in-app updater."
+    "Android now downloads a verified update inside ServeSync and offers a separate Install update action.",
+    "Song details show when a song was added and which member added it."
   ]
 }

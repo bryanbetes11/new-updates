@@ -9,7 +9,7 @@ function expectEqual(actual: unknown, expected: unknown, message: string) {
 const usages = buildSongUsages({
   songs: [
     { id: 'song-1', title: '  Bro. Living Hope  ', artist: 'Phil Wickham', song_key: 'D' },
-    { id: 'song-2', title: 'New Song', artist: '', song_key: 'G' },
+    { id: 'song-2', title: 'New Song', artist: '', song_key: 'G', created_by: 'member-2', created_at: '2026-06-20T10:00:00Z', creator_name: 'Bryan Betes' },
   ],
   setlists: [
     {
@@ -53,3 +53,5 @@ if (!newSong) throw new Error('expected new song');
 expectEqual(newSong.days_since, null, 'never-used songs have no reuse age');
 expectEqual(newSong.is_safe, true, 'never-used songs are ready');
 expectEqual(newSong.latest_usage, null, 'never-used songs have no event usage');
+expectEqual(newSong.created_at, '2026-06-20T10:00:00Z', 'retains the song creation date');
+expectEqual(newSong.creator_name, 'Bryan Betes', 'retains the creator name for song details');

@@ -6,6 +6,8 @@ export interface SongUsageSong {
   artist?: string | null;
   song_key?: string | null;
   created_by?: string | null;
+  created_at?: string | null;
+  creator_name?: string | null;
   youtube_url?: string | null;
   lyrics?: string | null;
   chordpro_text?: string | null;
@@ -105,6 +107,8 @@ export function buildSongUsages({
       artist: song.artist || '',
       song_key: song.song_key || '',
       created_by: song.created_by ?? null,
+      created_at: song.created_at ?? null,
+      creator_name: song.creator_name ?? null,
       youtube_url: song.youtube_url ?? null,
       chordpro_text: song.chordpro_text ?? null,
       last_used_date: latestUsage?.event_date ?? null,

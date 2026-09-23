@@ -268,7 +268,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
         .select('id, status, event_id, created_by, events(title, event_date, event_type), setlist_songs(id, position, song_id, performed_key, youtube_url, notes, arrangement_chordpro_text, arrangement_section_order, songs(id, title, artist, song_key, youtube_url, lyrics, chordpro_text))')
         .eq('status', 'approved')
         .order('created_at', { ascending: false }),
-      supabase.from('songs').select('id, title, artist, song_key, created_by, youtube_url, lyrics, chordpro_text').order('title'),
+      supabase.from('songs').select('id, title, artist, song_key, created_by, created_at, youtube_url, lyrics, chordpro_text').order('title'),
       supabase.from('event_assignments').select('event_id, user_id, profiles(first_name, last_name, nickname, gender, avatar_url), roles!inner(name)').eq('roles.name', 'Song Leader'),
     ]);
 
@@ -302,8 +302,14 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
     });
 
     const songs = songsRes.data || [];
+    const creatorIds = [...new Set(songs.map(song => song.created_by).filter((id): id is string => !!id))];
+    const { data: creators } = creatorIds.length
+      ? await supabase.from('profiles').select('id, first_name, last_name').in('id', creatorIds)
+      : { data: [] };
+    if (activeScopeRef.current !== requestedScope || sequence !== fetchSequenceRef.current) return [];
+    const creatorNames = new Map((creators || []).map(person => [person.id, [person.first_name, person.last_name].filter(Boolean).join(' ').trim()]));
     const usages = buildSongUsages({
-      songs,
+      songs: songs.map(song => ({ ...song, creator_name: creatorNames.get(song.created_by) || null })),
       setlists: approvedSetlists,
       ruleDays: RULE_DAYS,
       sanitizeTitle: sanitizeSongTitle,
@@ -370,6 +376,8 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
         artist: parsed.artist || '',
         song_key: parsed.song_key || '',
         created_by: parsed.created_by ?? null,
+        created_at: parsed.created_at ?? null,
+        creator_name: parsed.creator_name ?? null,
         youtube_url: parsed.youtube_url ?? null,
         lyrics: parsed.lyrics ?? null,
         chordpro_text: parsed.chordpro_text ?? null,
@@ -1427,6 +1435,10 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
               <h2 className="truncate text-2xl font-black tracking-[-0.04em]">{selectedChartSong.title}</h2>
               <p className="mt-0.5 truncate text-sm text-gray-500 dark:text-white/55">
                 {selectedChartSong.artist || 'No artist'}{selectedChartSong.song_key ? ` · Key ${selectedChartSong.song_key}` : ''}
+              </p>
+              <p className="mt-1 text-xs text-gray-500 dark:text-white/50">
+                Added {selectedChartSong.created_at ? format(parseISO(selectedChartSong.created_at), 'MMM d, yyyy · h:mm a') : 'date unavailable'}
+                {' · by '}{selectedChartSong.creator_name || (selectedChartSong.created_by === user?.id ? 'you' : 'unknown member')}
               </p>
             </div>
             <button onClick={closeChartSong} aria-label="Close song details" className="rounded-full p-2 text-gray-400 transition-colors hover:bg-black/[0.04] hover:text-gray-700 dark:hover:bg-white/[0.08] dark:hover:text-white">

@@ -3,6 +3,7 @@ export interface AndroidRelease {
   build: number;
   url: string;
   size: number;
+  sha256: string | null;
 }
 
 export const ANDROID_RELEASES_API = 'https://api.github.com/repos/bryanbetes11/new-updates/releases?per_page=100';
@@ -29,14 +30,21 @@ export function newestAndroidRelease(data: unknown, installedBuild: number): And
     const asset = item.assets.find((entry: Record<string, unknown>) => {
       if (!entry || typeof entry !== 'object') return false;
       const name = entry.name;
-      return (name === `ServeSync-${version}.apk`
-        || name === `ServeSync-${version}-android-test-build${build}.apk`
+      return name === `ServeSync-${version}.apk`
+        && entry.state === 'uploaded' && typeof entry.size === 'number' && entry.size > 0
+        && entry.browser_download_url === `${downloadRoot}${item.tag_name}/${name}`;
+    }) || item.assets.find((entry: Record<string, unknown>) => {
+      if (!entry || typeof entry !== 'object') return false;
+      const name = entry.name;
+      return (name === `ServeSync-${version}-android-test-build${build}.apk`
         || name === `ServeSync-${version}-android-release-build${build}.apk`)
         && entry.state === 'uploaded' && typeof entry.size === 'number' && entry.size > 0
         && entry.browser_download_url === `${downloadRoot}${item.tag_name}/${name}`;
     });
     if (asset && isTrustedAndroidDownload(asset.browser_download_url)) {
-      newest = { version, build, url: asset.browser_download_url, size: asset.size };
+      const digest = typeof asset.digest === 'string' && /^sha256:[0-9a-f]{64}$/i.test(asset.digest)
+        ? asset.digest.slice(7).toLowerCase() : null;
+      newest = { version, build, url: asset.browser_download_url, size: asset.size, sha256: digest };
     }
   }
   return newest;

@@ -13,7 +13,15 @@ assert.equal(newestAndroidRelease([release(8)], 7)?.version, '1.3.1', 'same mark
 const cleanTag = 'android-v1.4.0-build14';
 const cleanName = 'ServeSync-1.4.0.apk';
 const cleanUrl = `https://github.com/bryanbetes11/new-updates/releases/download/${cleanTag}/${cleanName}`;
-assert.equal(newestAndroidRelease([{ tag_name: cleanTag, draft: false, published_at: '2026-09-24T00:00:00Z', assets: [{ name: cleanName, state: 'uploaded', size: 123456, browser_download_url: cleanUrl }] }], 13)?.url, cleanUrl);
+const digest = 'a'.repeat(64);
+const compatibilityName = 'ServeSync-1.4.0-android-release-build14.apk';
+const compatibilityUrl = `https://github.com/bryanbetes11/new-updates/releases/download/${cleanTag}/${compatibilityName}`;
+const cleanRelease = { tag_name: cleanTag, draft: false, published_at: '2026-09-24T00:00:00Z', assets: [
+  { name: compatibilityName, state: 'uploaded', size: 123456, digest: `sha256:${digest}`, browser_download_url: compatibilityUrl },
+  { name: cleanName, state: 'uploaded', size: 123456, digest: `sha256:${digest}`, browser_download_url: cleanUrl },
+] };
+assert.equal(newestAndroidRelease([cleanRelease], 13)?.url, cleanUrl, 'prefer the clean filename even when the compatibility asset comes first');
+assert.equal(newestAndroidRelease([cleanRelease], 13)?.sha256, digest, 'carry the release checksum into the native download');
 assert.equal(isTrustedAndroidDownload(cleanUrl), true);
 assert.equal(isTrustedAndroidDownload(cleanUrl.replace('1.4.0.apk', '1.4.1.apk')), false, 'asset version must match the release tag');
 assert.equal(newestAndroidRelease([{ ...release(9), draft: true }], 7), null);

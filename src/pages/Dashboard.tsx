@@ -21,6 +21,7 @@ import { hasArtworkArtist } from '../lib/songArtworkEligibility';
 import { deviceCacheScope, readDeviceSnapshot, writeDeviceSnapshot } from '../lib/deviceCache';
 import { getEventPreparationHighlight, type EventPreparationHighlight, type EventPreparationInput } from '../lib/eventPreparation';
 import { isSetlistMeaningfullyCreated } from '../lib/setlistPersistence';
+import { describeSetlistReviewAge } from '../lib/setlistReviewAge';
 import type { Event, EventAssignment, Setlist, Announcement, UserAvailability, SwapRequest } from '../types';
 
 const verses = [
@@ -1772,7 +1773,7 @@ function AccountDashboard() {
                 <div className="mb-3 flex items-center justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-2">
                     {reviewSets.length > 0 && <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${canReviewSetlists ? 'bg-amber-400/20 text-amber-300' : 'bg-sky-400/15 text-sky-300'}`}><ListChecks className="h-4 w-4" /></span>}
-                    <h2 className="min-w-0 text-[18px] font-black leading-tight text-white">Setlists Awaiting Approval</h2>
+                    <h2 className="min-w-0 text-[18px] font-black leading-tight text-white"><span className="sm:hidden">Awaiting Approval</span><span className="hidden sm:inline">Setlists Awaiting Approval</span></h2>
                     {reviewSets.length > 0 && <span className={`rounded-full px-2 py-0.5 text-[11px] font-black ${canReviewSetlists ? 'bg-amber-400 text-amber-950' : 'bg-sky-400/15 text-sky-200'}`}>{pendingSetlists.length}</span>}
                   </div>
                   <button onClick={() => navigate(canReviewSetlists ? '/leadership/setlists' : '/events')} className={`-mr-2 ml-1 inline-flex min-h-11 shrink-0 items-center px-2 text-[12px] font-bold focus-visible:outline-none focus-visible:ring-2 sm:ml-3 ${canReviewSetlists ? 'text-amber-300 focus-visible:ring-amber-300' : 'text-sky-300 focus-visible:ring-sky-300'}`}>
@@ -1785,6 +1786,7 @@ function AccountDashboard() {
                     reviewSets.map((set) => {
                       const eventId = set.events?.id || set.event_id;
                       const songCount = set.setlist_songs?.length ?? 0;
+                      const reviewAge = describeSetlistReviewAge(set.submitted_at);
                       const artworkUrls = eventId ? eventArtworkMap[eventId] || [] : [];
                       const artworkSongs = eventId ? eventArtworkSongsMap[eventId] || [] : [];
                       return (
@@ -1804,11 +1806,16 @@ function AccountDashboard() {
                             <p className="truncate text-[13px] font-black text-white">{set.events?.title || 'Submitted setlist'}</p>
                             <p className="mt-0.5 truncate text-[11px] font-semibold text-white/45">
                               {set.events?.event_date ? format(parseISO(set.events.event_date), 'MMM d, yyyy') : 'Ready for review'}
-                              {!canReviewSetlists ? ' · Awaiting leadership' : ''}
+                            </p>
+                            <p className="mt-0.5 truncate text-[11px] font-semibold text-white/60">
+                              {reviewAge.pendingDays === null ? reviewAge.submittedDateLabel : `Submitted ${reviewAge.submittedDateLabel}`}
                             </p>
                           </div>
-                          <span className="shrink-0 rounded-full bg-white/[0.08] px-3 py-1.5 text-[11px] font-black text-white/80">
-                            {songCount} {songCount === 1 ? 'song' : 'songs'}
+                          <span className="flex shrink-0 flex-col items-end gap-1">
+                            <span className="rounded-full bg-white/[0.08] px-3 py-1.5 text-[11px] font-black text-white/80">
+                              {songCount} {songCount === 1 ? 'song' : 'songs'}
+                            </span>
+                            {reviewAge.pendingDays !== null && <span className={`text-[10px] font-bold ${canReviewSetlists ? 'text-amber-300' : 'text-sky-300'}`}>{reviewAge.pendingDaysLabel}</span>}
                           </span>
                           <ChevronRight className="h-4 w-4 shrink-0 text-white/70 transition-transform group-hover:translate-x-0.5" />
                         </button>

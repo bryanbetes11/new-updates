@@ -8,7 +8,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Avatar } from '../../components/Avatar';
 import { LeadershipHeroCard } from '../../components/LeadershipHeroCard';
-import { describeSetlistReviewAge } from '../../lib/setlistReviewAge';
+import { describeSetlistReviewAge, isSetlistPendingProcess } from '../../lib/setlistReviewAge';
 
 interface DeadlineEvent {
   id: string;
@@ -55,6 +55,14 @@ function getDeadlineStatus(dueDate: string, setlistStatus: string | null): {
       icon: <CheckCircle2 className="h-3.5 w-3.5" />,
     };
   }
+  if (setlistStatus === 'revision_requested') {
+    return {
+      label: 'Revision requested',
+      color: 'text-amber-700 dark:text-amber-300',
+      bgColor: 'bg-amber-50 dark:bg-amber-900/20',
+      icon: <AlertTriangle className="h-3.5 w-3.5" />,
+    };
+  }
 
   const due = parseISO(dueDate);
   if (isPast(due) && !isToday(due)) {
@@ -82,7 +90,7 @@ function getDeadlineStatus(dueDate: string, setlistStatus: string | null): {
 }
 
 function getDaysLabel(dueDate: string, setlistStatus: string | null): { text: string; urgent: boolean } {
-  if (setlistStatus === 'approved' || setlistStatus === 'pending_review') return { text: '', urgent: false };
+  if (setlistStatus === 'approved' || isSetlistPendingProcess(setlistStatus)) return { text: '', urgent: false };
   const due = parseISO(dueDate);
   const now = new Date();
   if (isToday(due)) {
@@ -247,7 +255,7 @@ export function SetlistDeadlines() {
         proposal_due_date: e.proposal_due_date,
         song_leader: Array.isArray(e.song_leader) ? e.song_leader[0] || null : e.song_leader || null,
         setlist_status: setlistStatus,
-        setlist_submitted_at: selectedSetlist?.submitted_at || selectedSetlist?.created_at || null,
+        setlist_submitted_at: selectedSetlist?.submitted_at || null,
         reminder_count: reminderCounts[e.id]?.count ?? 0,
         last_reminder_at: reminderCounts[e.id]?.last_sent ?? null,
       };
@@ -348,9 +356,9 @@ export function SetlistDeadlines() {
     setSavingDueDateId(null);
   };
 
-  const isSubmitted = (e: DeadlineEvent) => e.setlist_status === 'approved' || e.setlist_status === 'pending_review';
+  const isSubmitted = (e: DeadlineEvent) => e.setlist_status === 'approved' || isSetlistPendingProcess(e.setlist_status);
   const isOverdue = (e: DeadlineEvent) => !isSubmitted(e) && isPast(parseISO(e.proposal_due_date)) && !isToday(parseISO(e.proposal_due_date));
-  const isDueToday = (e: DeadlineEvent) => isToday(parseISO(e.proposal_due_date));
+  const isDueToday = (e: DeadlineEvent) => !isSubmitted(e) && isToday(parseISO(e.proposal_due_date));
   const isUpcoming = (e: DeadlineEvent) => !isSubmitted(e) && !isPast(parseISO(e.proposal_due_date)) && !isToday(parseISO(e.proposal_due_date));
 
   const filteredEvents = events.filter(e => {
@@ -451,7 +459,7 @@ export function SetlistDeadlines() {
           {filteredEvents.map(event => {
             const status = getDeadlineStatus(event.proposal_due_date, event.setlist_status);
             const { text: daysText, urgent: daysUrgent } = getDaysLabel(event.proposal_due_date, event.setlist_status);
-            const pendingReviewAge = event.setlist_status === 'pending_review'
+            const pendingReviewAge = isSetlistPendingProcess(event.setlist_status)
               ? describeSetlistReviewAge(event.setlist_submitted_at)
               : null;
             const isSending = sendingId === event.id;
@@ -534,7 +542,7 @@ export function SetlistDeadlines() {
                         </span>
                       )}
 
-                      {pendingReviewAge && (
+                      {pendingReviewAge && pendingReviewAge.pendingDays !== null && (
                         <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                           (pendingReviewAge.pendingDays ?? 0) > 1
                             ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'

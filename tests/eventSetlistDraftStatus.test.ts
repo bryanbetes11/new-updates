@@ -11,6 +11,6 @@ assert.match(
 );
 assert.match(
   eventsSource,
-  /hasApprovedSetlist \? 'Ready' : setlistInfo\?\.status === 'pending_review' \? 'Pending review' : hasSetlistSongs \? 'Draft' : 'No songs yet'/,
-  'Events with saved songs must show Draft until they are submitted or approved',
+  /hasApprovedSetlist \? 'Ready' : setlistInfo\?\.status === 'revision_requested' \? 'Revision requested' : setlistInfo\?\.status === 'pending_review' \? 'Pending review' : hasSetlistSongs \? 'Draft' : 'No songs yet'/,
+  'Events with saved songs must show revision or review status while pending, and Draft before submission',
 );

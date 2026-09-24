@@ -1,4 +1,4 @@
-import { describeSetlistReviewAge, getSetlistPendingMessage } from '../src/lib/setlistReviewAge';
+import { describeSetlistReviewAge, getSetlistPendingMessage, isSetlistPendingProcess } from '../src/lib/setlistReviewAge';
 
 function expectEqual(actual: unknown, expected: unknown, message: string) {
   if (actual !== expected) {
@@ -23,3 +23,7 @@ expectEqual(getSetlistPendingMessage(longPending, true), 'Your setlist has been 
 expectEqual(getSetlistPendingMessage(longPending, false), 'Setlist pending for 9 days', 'formats general pending message');
 expectEqual(getSetlistPendingMessage(sameDay, true), 'Your setlist is pending today', 'formats same-day submitter pending message');
 expectEqual(getSetlistPendingMessage(missing, false), null, 'hides pending message when age is unavailable');
+expectEqual(isSetlistPendingProcess('pending_review'), true, 'awaiting review is part of the pending process');
+expectEqual(isSetlistPendingProcess('revision_requested'), true, 'revision requests retain pending-process age');
+expectEqual(isSetlistPendingProcess('draft'), false, 'never-submitted drafts have no pending age');
+expectEqual(isSetlistPendingProcess('approved'), false, 'approved sets leave the pending process');

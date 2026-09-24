@@ -1,8 +1,11 @@
 {
-  "headline": "The notification action keeps its intended title case.",
+  "headline": "Shared proposals and clearer revision discussions.",
   "highlights": [
-    "The notification button visibly reads Turn On, including in browsers that recase button text.",
-    "The two mobile reminders retain their larger icons, spacing and balanced description lines.",
-    "The Android app and website use version 1.4.4."
+    "Both app and notification reminders stay available outside chat for quick access.",
+    "Rehearsal and Sunday Service proposals share one linked plan, so updates stay together.",
+    "Discussion viewers keep their history, and authors count as having seen their own updates.",
+    "Submitted proposals no longer show the initial overdue reminder; pending ribbons and day counts continue through revisions.",
+    "Attached guides use the same readable sections in revision requests and discussions.",
+    "Readable lyrics are required for proposal submission, and lyrics from chord charts appear in the lyrics editor and checker."
   ]
 }

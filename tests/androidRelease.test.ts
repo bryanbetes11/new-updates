@@ -46,14 +46,14 @@ const newestRelease = { tag_name: newestTag, draft: false, published_at: '2026-0
 ] };
 assert.equal(newestAndroidRelease([currentRelease, newestRelease], 21)?.url, newestUrl, 'installed 1.4.2 detects 1.4.3');
 assert.equal(newestAndroidRelease([currentRelease, newestRelease], 22), null, 'installed 1.4.3 is current');
-const patchTag = 'android-v1.4.4-build23';
-const patchName = 'ServeSync-1.4.4.apk';
+const patchTag = 'android-v1.4.5-build24';
+const patchName = 'ServeSync-1.4.5.apk';
 const patchUrl = `https://github.com/bryanbetes11/new-updates/releases/download/${patchTag}/${patchName}`;
 const patchRelease = { tag_name: patchTag, draft: false, published_at: '2026-09-24T00:00:00Z', assets: [
   { name: patchName, state: 'uploaded', size: 123456, digest: `sha256:${digest}`, browser_download_url: patchUrl },
 ] };
-assert.equal(newestAndroidRelease([newestRelease, patchRelease], 22)?.url, patchUrl, 'installed 1.4.3 detects 1.4.4');
-assert.equal(newestAndroidRelease([newestRelease, patchRelease], 23), null, 'installed 1.4.4 is current');
+assert.equal(newestAndroidRelease([newestRelease, patchRelease], 23)?.url, patchUrl, 'installed 1.4.4 detects 1.4.5');
+assert.equal(newestAndroidRelease([newestRelease, patchRelease], 24), null, 'installed 1.4.5 is current');
 assert.equal(isTrustedAndroidDownload(cleanUrl), true);
 assert.equal(isTrustedAndroidDownload(cleanUrl.replace('1.4.0.apk', '1.4.1.apk')), false, 'asset version must match the release tag');
 assert.equal(newestAndroidRelease([{ ...release(9), draft: true }], 7), null);

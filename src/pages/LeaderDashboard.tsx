@@ -392,7 +392,7 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
           >
             <div className="divide-y divide-black/[0.03] dark:divide-white/[0.04]">
               {pendingSetlists.map(s => {
-                const reviewAge = describeSetlistReviewAge(s.submitted_at || s.created_at);
+                const reviewAge = describeSetlistReviewAge(s.submitted_at);
                 const isAging = (reviewAge.pendingDays ?? 0) > 1;
 
                 return (
@@ -403,7 +403,7 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
                       <p className="text-[13px] font-bold text-gray-900 dark:text-white" style={{ letterSpacing: '-0.01em' }}>{s.events?.title}</p>
                       <p className="text-[11px] font-mono text-gray-400 dark:text-white/30 mt-0.5 tracking-wide">{s.events?.event_date && format(parseISO(s.events.event_date), 'MMM d, yyyy')}</p>
                       <p className="text-[11px] text-gray-500 dark:text-white/42 mt-1">
-                        Submitted {reviewAge.submittedDateLabel} · {reviewAge.pendingDaysLabel}
+                        {reviewAge.pendingDays === null ? reviewAge.submittedDateLabel : `Submitted ${reviewAge.submittedDateLabel} · ${reviewAge.pendingDaysLabel}`}
                       </p>
                     </div>
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border shrink-0 ${isAging ? 'bg-red-50 dark:bg-red-500/[0.12] text-red-700 dark:text-red-300 border-red-200 dark:border-red-500/25' : 'bg-amber-50 dark:bg-amber-500/[0.12] text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/25'}`}>

@@ -10,6 +10,7 @@ export interface SavedEventDetail {
   linkedApprovedSetlist?: Setlist | null;
   linkedApprovedSongs?: SetlistSong[];
   linkedServiceTitle?: string | null;
+  linkedServiceEvent?: Event | null;
 }
 
 export function savedEventDetailKey(eventId: string): string {

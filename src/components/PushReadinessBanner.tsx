@@ -8,11 +8,10 @@ import { isNativeApp } from '../lib/nativePlatform';
 import { nativePushChanged, nativePushReadiness, openNativePushSettingsIfBlocked } from '../lib/nativePush';
 
 type PushReadinessBannerProps = {
-  variant?: 'default' | 'chat';
   onVisibilityChange?: (visible: boolean) => void;
 };
 
-export function PushReadinessBanner({ variant = 'default', onVisibilityChange }: PushReadinessBannerProps) {
+export function PushReadinessBanner({ onVisibilityChange }: PushReadinessBannerProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [ready, setReady] = useState<boolean | null>(null);
@@ -86,22 +85,6 @@ export function PushReadinessBanner({ variant = 'default', onVisibilityChange }:
   const message = !isNativeApp() && isIosDevice() && !isStandalonePwa()
     ? 'Add ServeSync to your Home Screen to turn on alerts.'
     : <>Get notified when you receive{' '}<br className="sm:hidden" />new messages or reminders.</>;
-
-  if (variant === 'chat') {
-    return (
-      <button
-        type="button"
-        onClick={setup}
-        className="sticky top-0 z-20 -mx-2 mb-1 flex w-[calc(100%+1rem)] items-center gap-3 border-b border-red-400/20 bg-[#21090c]/[0.98] px-3 py-3 text-left shadow-[0_10px_24px_-22px_rgba(0,0,0,0.9)] backdrop-blur-xl transition hover:bg-red-400/[0.09] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-red-300 dark:bg-[#21090c]/[0.98]"
-      >
-        <span className="min-w-0 flex-1">
-          <span className="block text-[13px] font-black text-white">Notifications are off</span>
-          <span className="mt-0.5 block text-[12px] text-white/55">You won’t receive lock-screen message alerts. Enable notifications to stay updated.</span>
-        </span>
-        <span className="rounded-full bg-red-500 px-2.5 py-1.5 text-[11px] font-black text-white">Set up</span>
-      </button>
-    );
-  }
 
   return (
       <div className="relative flex items-center gap-3 bg-[#25090d] px-4 py-3 text-white shadow-lg shadow-black/25 lg:mx-[30px] lg:rounded-2xl">

@@ -21,7 +21,6 @@ import { EventArtwork } from '../components/EventArtwork';
 import { Modal } from '../components/Modal';
 import { MentionTextarea } from '../components/MentionTextarea';
 import { ReactionFlightAnimation, type ReactionFlightPath } from '../components/ReactionFlightAnimation';
-import { PushReadinessBanner } from '../components/PushReadinessBanner';
 import { playInteractionSound, primeInteractionSounds } from '../lib/interactionSounds';
 import { isFileSaveCanceled, openRemoteFile, saveRemoteFile, shareRemoteFile, usesNativeAndroidFiles } from '../lib/nativeFiles';
 import { nativeBackHandlers } from '../lib/nativeBack';
@@ -5512,7 +5511,7 @@ export function Messages() {
   return (
     <div
       className="relative flex h-full min-h-0 w-full overflow-hidden bg-white dark:bg-[#111013] lg:bg-[#f5f5f7] lg:dark:bg-[#0d0d0f] lg:p-4"
-      style={isDesktop ? { paddingTop: 'calc(72px + var(--desktop-safe-area-top, 0px) + 1rem)' } : undefined}
+      style={isDesktop ? { paddingTop: 'calc(72px + var(--desktop-safe-area-top, 0px) + var(--app-reminders-height, 0px) + 1rem)' } : undefined}
     >
       <div className="contents lg:relative lg:flex lg:h-full lg:flex-1 lg:min-h-0 lg:overflow-hidden lg:rounded-[2rem] lg:border lg:border-black/[0.06] lg:bg-white lg:shadow-[0_24px_80px_-52px_rgba(15,23,42,0.85)] lg:ring-1 lg:ring-white/70 dark:lg:border-white/[0.07] dark:lg:bg-[#111013] dark:lg:ring-white/[0.04]">
         <div className="pointer-events-none absolute inset-x-10 top-0 z-10 hidden h-px bg-gradient-to-r from-transparent via-white/90 to-transparent dark:via-white/[0.12] lg:block" />
@@ -5525,6 +5524,7 @@ export function Messages() {
           className={`relative z-[1] flex min-h-0 flex-col bg-white dark:bg-[#111013] lg:border-r lg:border-gray-100 dark:lg:border-white/[0.06] lg:bg-white/96 dark:lg:bg-[#111013]/96 ${
             isDesktop ? 'h-full w-[320px] min-w-[320px] shrink-0 relative' : 'fixed inset-0 z-10 h-[100svh] h-[100dvh] w-[100dvw] max-w-none will-change-transform'
           }`}
+          style={isDesktop ? undefined : { paddingTop: 'var(--app-reminders-height, 0px)' }}
           initial={isDesktop ? false : { x: 0, opacity: 1 }}
           animate={isDesktop ? undefined : { x: 0, opacity: 1 }}
           exit={isDesktop ? undefined : { x: 0, opacity: 1 }}
@@ -5559,9 +5559,6 @@ export function Messages() {
 
         {/* Conversations */}
         <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain bg-white px-2 space-y-0.5 dark:bg-[#111013]" style={{ paddingBottom: 'calc(64px + env(safe-area-inset-bottom) + 1rem)' }}>
-          <div className="lg:hidden">
-            <PushReadinessBanner variant="chat" />
-          </div>
           {convsLoading && (
             <div className="flex justify-center py-8" role="status" aria-label="Loading conversations">
               <span className="h-5 w-5 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />

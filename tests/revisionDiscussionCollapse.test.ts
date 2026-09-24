@@ -31,8 +31,8 @@ assert.match(
 );
 assert.match(
   source,
-  /\.rpc\('record_setlist_revision_discussion_view',[\s\S]*?p_setlist_id: setlistId/,
-  'opening a revision discussion must persist a first-seen receipt',
+  /\.rpc\('record_setlist_revision_discussion_read',[\s\S]*?p_setlist_id: setlistId/,
+  'opening a revision discussion must persist a current discussion read receipt',
 );
 assert.match(
   source,

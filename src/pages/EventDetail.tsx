@@ -45,7 +45,7 @@ import { ReactionFlightAnimation, type ReactionFlightPath } from '../components/
 import { VoiceKeyDetector } from '../components/VoiceKeyDetector';
 import { withSaveTimeout } from '../lib/saveTimeout';
 import { clearActiveServiceMode, getActiveServiceMode, saveActiveServiceMode } from '../lib/serviceModeResume';
-import { describeSetlistReviewAge, getSetlistPendingMessage } from '../lib/setlistReviewAge';
+import { describeSetlistReviewAge, getSetlistPendingMessage, isSetlistPendingProcess } from '../lib/setlistReviewAge';
 import { getSingleLyricsAutofill, normalizeLyricsInputForSave, normalizeLyricsSearchResults, type LyricsSearchResult } from '../lib/lyricsSearch';
 import { getEventAssignmentKey, prepareEventAssignmentBatch, type EventAssignmentDraft } from '../lib/eventAssignmentBatch';
 import { hasEventScheduleEnded, isEventCompleted, type EventLifecycleOverride } from '../lib/eventLifecycle';
@@ -68,6 +68,9 @@ import { getOutMemberIdsForDate, type MemberAvailabilityWindow } from '../lib/me
 import { canAssignMemberToEventRole, isNonServingEventAssignmentRole, isParticipantRole } from '../lib/eventAssignmentRoles';
 
 import type { Event, EventAssignment, Setlist, SetlistSong, Song, ServiceFormat, SetlistCheckReport, PostEventObservation, PostEventObservationCategory, PostEventObservationStatus, PostEventObservationView } from '../types';
+import { allSetlistDiscussionViewers, currentSetlistDiscussionViewers, latestSetlistDiscussionActivityAt, setlistDiscussionCommentActivityAt, shouldRecordSetlistDiscussionRead } from '../lib/setlistDiscussionReadState';
+import { resolveSetlistEvent } from '../lib/sharedSetlist';
+import { SetlistGuideNote } from '../components/SetlistGuideNote';
 import { inferServiceFormat, SERVICE_FORMAT_LABELS } from '../lib/setlistCheckerEngine';
 import { SetlistReport } from '../components/setlist-checker/SetlistReport';
 import { CheckingAnimation } from '../components/setlist-checker/CheckingAnimation';
@@ -91,6 +94,7 @@ interface SetlistRevisionComment {
   content: string;
   reply_to: string | null;
   created_at: string;
+  updated_at?: string | null;
   profiles?: { first_name: string; last_name: string; avatar_url: string | null } | null;
   setlist_revision_comment_reactions?: SetlistRevisionCommentReaction[];
 }
@@ -109,6 +113,7 @@ interface SetlistRevisionDiscussionView {
   setlist_id: string;
   user_id: string;
   viewed_at: string;
+  last_viewed_at: string;
   profiles?: { first_name: string; last_name: string; avatar_url: string | null } | null;
 }
 
@@ -625,6 +630,8 @@ export function EventDetail() {
   const [linkedSetlist, setLinkedSetlist] = useState<Setlist | null>(null);
   const [linkedSetlistSongs, setLinkedSetlistSongs] = useState<SetlistSong[]>([]);
   const [linkedServiceEvent, setLinkedServiceEvent] = useState<Event | null>(null);
+  const setlistEvent = linkedServiceEvent || event;
+  const setlistEventId = setlistEvent?.id || id;
   const [linkedSongLeaderAssignment, setLinkedSongLeaderAssignment] = useState<EventAssignment | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
@@ -679,6 +686,7 @@ export function EventDetail() {
   const [revisionReason, setRevisionReason] = useState('');
   const [attachGuideToRevision, setAttachGuideToRevision] = useState(false);
   const [revisionComments, setRevisionComments] = useState<SetlistRevisionComment[]>([]);
+  const [discussionAccess, setDiscussionAccess] = useState(false);
   const [revisionDiscussionViews, setRevisionDiscussionViews] = useState<SetlistRevisionDiscussionView[]>([]);
   const [showRevisionDiscussionViewers, setShowRevisionDiscussionViewers] = useState(false);
   const [loadingRevisionDiscussionViewers, setLoadingRevisionDiscussionViewers] = useState(false);
@@ -700,6 +708,7 @@ export function EventDetail() {
   const [pendingRevisionReactionReveal, setPendingRevisionReactionReveal] = useState<{ commentId: string; emoji: string } | null>(null);
   const [revisionReactionLanding, setRevisionReactionLanding] = useState<{ commentId: string; emoji: string; token: number } | null>(null);
   const [revisionReactionFlight, setRevisionReactionFlight] = useState<RevisionCommentReactionFlight | null>(null);
+  const revisionDiscussionContentRef = useRef<HTMLDivElement>(null);
   const revisionDiscussionViewsRef = useRef<SetlistRevisionDiscussionView[]>([]);
   const pendingRevisionDiscussionViewsRef = useRef(new Set<string>());
   const revisionReactionMutationsRef = useRef(new Set<string>());
@@ -1142,8 +1151,16 @@ export function EventDetail() {
     fetchingDetailSequenceRef.current = sequence;
     if (invalidateFirst) await invalidateDeviceSnapshots(cacheScope, ['events:list', 'library:songs-sets']).catch(() => {});
     try {
-      const [eventRes, assignRes, membersRes, memberRolesRes, memberSettingsRes, availabilityRes, setlistRes, songsRes, allSetlistsRes, proposalSetlistsRes, sundayServicesRes, observationsRes, observationRepliesRes, observationViewsRes] = await Promise.all([
-        supabase.from('events').select('*').eq('id', id).maybeSingle(),
+      const eventRes = await supabase.from('events').select('*').eq('id', id).maybeSingle();
+      if (eventRes.error) throw eventRes.error;
+      let ownerEvent = eventRes.data as Event | null;
+      if (ownerEvent?.event_type === 'Rehearsals' && ownerEvent.linked_event_id) {
+        const linked = await supabase.from('events').select('*').eq('id', ownerEvent.linked_event_id).maybeSingle();
+        if (linked.error) throw linked.error;
+        ownerEvent = resolveSetlistEvent(ownerEvent, linked.data as Event | null);
+      }
+      const ownerEventId = ownerEvent?.id || id;
+      const [assignRes, membersRes, memberRolesRes, memberSettingsRes, availabilityRes, setlistRes, songsRes, allSetlistsRes, proposalSetlistsRes, sundayServicesRes, observationsRes, observationRepliesRes, observationViewsRes] = await Promise.all([
         supabase.from('event_assignments').select('*, events(*), profiles(first_name, last_name, gender, avatar_url), roles(name)').eq('event_id', id),
         supabase.from('profiles').select('id, first_name, last_name, ministry_status').eq('ministry_status', 'active'),
         supabase.from('user_roles').select('user_id, role_id'),
@@ -1152,7 +1169,7 @@ export function EventDetail() {
         supabase
           .from('setlists')
           .select('*, setlist_songs(*, songs(*))')
-          .eq('event_id', id)
+          .eq('event_id', ownerEventId)
           .order('created_at', { ascending: true })
           .limit(1)
           .maybeSingle(),
@@ -1184,6 +1201,15 @@ export function EventDetail() {
       ]);
       if (activeDetailRef.current !== requestedIdentity || sequence !== fetchSequenceRef.current) return;
       if (eventRes.error || setlistRes.error) throw eventRes.error || setlistRes.error;
+      // Preserve rehearsal proposals while an older database/app is being upgraded.
+      // The migration keeps this record's ID and moves it to the shared service.
+      if (ownerEventId !== id && !isSetlistMeaningfullyCreated(setlistRes.data)) {
+        const legacy = await supabase.from('setlists').select('*, setlist_songs(*, songs(*))')
+          .eq('event_id', id).order('created_at', { ascending: true }).limit(1).maybeSingle();
+        if (legacy.error) throw legacy.error;
+        if (activeDetailRef.current !== requestedIdentity || sequence !== fetchSequenceRef.current) return;
+        if (isSetlistMeaningfullyCreated(legacy.data)) setlistRes.data = legacy.data;
+      }
       networkAppliedRef.current = true;
       setEvent(eventRes.data);
       setAssignments(assignRes.data || []);
@@ -1245,43 +1271,15 @@ export function EventDetail() {
       }
       setLinkedSetlist(null);
       setLinkedSetlistSongs([]);
-      setLinkedServiceEvent(null);
+      const sharedService = ownerEventId !== id ? ownerEvent : null;
+      setLinkedServiceEvent(sharedService);
       setLinkedSongLeaderAssignment(null);
-      let linkedApprovedSetlist: Setlist | null = null;
-      let linkedApprovedSongs: SetlistSong[] = [];
-      let linkedServiceTitle: string | null = null;
-
-      if (eventRes.data?.event_type === 'Rehearsals' && eventRes.data.linked_event_id) {
-        const [linkedEventRes, linkedSetlistRes, linkedSongLeaderRes] = await Promise.all([
-          supabase.from('events').select('*').eq('id', eventRes.data.linked_event_id).maybeSingle(),
-          supabase.from('setlists').select('*').eq('event_id', eventRes.data.linked_event_id).maybeSingle(),
-          supabase
-            .from('event_assignments')
-            .select('*, profiles(first_name, last_name, gender, avatar_url), roles!inner(name)')
-            .eq('event_id', eventRes.data.linked_event_id)
-            .eq('roles.name', 'Song Leader')
-            .maybeSingle(),
-        ]);
+      if (sharedService) {
+        const linkedLeader = await supabase.from('event_assignments')
+          .select('*, profiles(first_name, last_name, gender, avatar_url), roles!inner(name)')
+          .eq('event_id', ownerEventId).eq('roles.name', 'Song Leader').maybeSingle();
         if (activeDetailRef.current !== requestedIdentity || sequence !== fetchSequenceRef.current) return;
-        if (linkedSetlistRes.error) throw linkedSetlistRes.error;
-        setLinkedServiceEvent(linkedEventRes.data || null);
-        linkedServiceTitle = linkedEventRes.data?.title || null;
-        setLinkedSongLeaderAssignment((linkedSongLeaderRes.data as EventAssignment | null) || null);
-        if (linkedSetlistRes.data) {
-          setLinkedSetlist(linkedSetlistRes.data);
-          const { data: linkedSongsData, error: linkedSongsError } = await supabase
-            .from('setlist_songs')
-            .select('*, songs(*)')
-            .eq('setlist_id', linkedSetlistRes.data.id)
-            .order('position');
-          if (activeDetailRef.current !== requestedIdentity || sequence !== fetchSequenceRef.current) return;
-          if (linkedSongsError) throw linkedSongsError;
-          setLinkedSetlistSongs((linkedSongsData || []) as SetlistSong[]);
-          if (linkedSetlistRes.data.status === 'approved') {
-            linkedApprovedSetlist = linkedSetlistRes.data as Setlist;
-            linkedApprovedSongs = (linkedSongsData || []) as SetlistSong[];
-          }
-        }
+        setLinkedSongLeaderAssignment((linkedLeader.data as EventAssignment | null) || null);
       }
       if (activeDetailRef.current !== requestedIdentity || sequence !== fetchSequenceRef.current) return;
       setSongs(songsRes.data || []);
@@ -1298,9 +1296,9 @@ export function EventDetail() {
       }
 
       const usage: Record<string, SongUsageAge> = {};
-      const targetEventDate = eventRes.data?.event_date;
+      const targetEventDate = ownerEvent?.event_date;
       ((allSetlistsRes.data || []) as ApprovedSetlistUsage[]).forEach(sl => {
-        if (sl.event_id === id) return;
+        if (sl.event_id === ownerEventId) return;
         const usageEvent = Array.isArray(sl.events) ? undefined : sl.events;
         const eventDate = usageEvent?.event_date;
         if (!eventDate) return;
@@ -1321,7 +1319,7 @@ export function EventDetail() {
       if (setlistRes.data?.service_format) {
         setServiceFormat(setlistRes.data.service_format as ServiceFormat);
       } else if (eventRes.data?.event_type) {
-        setServiceFormat(inferServiceFormat(eventRes.data.event_type));
+        setServiceFormat(inferServiceFormat(ownerEvent?.event_type || eventRes.data.event_type));
       }
       const approvedSetlist = setlistRes.data?.status === 'approved' ? setlistRes.data as Setlist : null;
       networkFailedRef.current = false;
@@ -1331,9 +1329,10 @@ export function EventDetail() {
         event: eventRes.data as Event | null,
         approvedSetlist,
         approvedSongs: approvedSetlist?.setlist_songs || [],
-        linkedApprovedSetlist,
-        linkedApprovedSongs,
-        linkedServiceTitle,
+        linkedApprovedSetlist: null,
+        linkedApprovedSongs: [],
+        linkedServiceTitle: sharedService?.title || null,
+        linkedServiceEvent: sharedService,
       };
       if (shouldBlockEventDetails((assignRes.data || []) as EventAssignment[], user?.id, isLeader || isOrgAdmin || isPlatformOwner)) {
         lastSavedDetailRef.current = null;
@@ -1370,6 +1369,8 @@ export function EventDetail() {
     setSavedDetail(null);
     setVisibleDetailIdentity(null);
     setEvent(null);
+    setLinkedServiceEvent(null);
+    setLinkedSongLeaderAssignment(null);
     setSetlist(null);
     setSetlistSongs([]);
     setAssignments([]);
@@ -1387,6 +1388,7 @@ export function EventDetail() {
       }
       setSavedDetail(snapshot);
       setEvent(snapshot.value.event);
+      setLinkedServiceEvent(snapshot.value.linkedServiceEvent || null);
       setSetlist(snapshot.value.approvedSetlist);
       setSetlistSongs(snapshot.value.approvedSongs);
       setLinkedSetlist(snapshot.value.linkedApprovedSetlist || null);
@@ -1410,6 +1412,7 @@ export function EventDetail() {
       linkedApprovedSetlist,
       linkedApprovedSongs: linkedApprovedSetlist ? linkedSetlistSongs : [],
       linkedServiceTitle: linkedServiceEvent?.title || null,
+      linkedServiceEvent,
     };
     const current = JSON.stringify(snapshot);
     if (current === lastSavedDetailRef.current) return;
@@ -1520,7 +1523,7 @@ export function EventDetail() {
   const fetchRevisionComments = useCallback(async (setlistId: string) => {
     const { data, error } = await supabase
       .from('setlist_revision_comments')
-      .select('id, setlist_id, user_id, content, reply_to, created_at, profiles!setlist_revision_comments_user_id_fkey(first_name, last_name, avatar_url), setlist_revision_comment_reactions(id, org_id, setlist_id, comment_id, user_id, emoji, created_at)')
+      .select('id, setlist_id, user_id, content, reply_to, created_at, updated_at, profiles!setlist_revision_comments_user_id_fkey(first_name, last_name, avatar_url), setlist_revision_comment_reactions(id, org_id, setlist_id, comment_id, user_id, emoji, created_at)')
       .eq('setlist_id', setlistId)
       .order('created_at', { ascending: true });
 
@@ -1535,7 +1538,7 @@ export function EventDetail() {
   const refreshRevisionDiscussionViews = useCallback(async (setlistId: string) => {
     const { data, error } = await supabase
       .from('setlist_revision_discussion_views')
-      .select('setlist_id, user_id, viewed_at, profiles!setlist_revision_discussion_views_user_id_fkey(first_name, last_name, avatar_url)')
+      .select('setlist_id, user_id, viewed_at, last_viewed_at, profiles!setlist_revision_discussion_views_user_id_fkey(first_name, last_name, avatar_url)')
       .eq('setlist_id', setlistId)
       .order('viewed_at', { ascending: false });
 
@@ -1546,48 +1549,30 @@ export function EventDetail() {
     return views;
   }, []);
 
+  const latestRevisionActivityAt = useMemo(() => latestSetlistDiscussionActivityAt(
+    setlist?.status === 'revision_requested' ? setlist.reviewed_at : null,
+    revisionComments,
+  ), [setlist?.status, setlist?.reviewed_at, revisionComments]);
+
   const handleRevisionDiscussionSeen = useCallback(async (setlistId: string) => {
     const viewerId = user?.id;
-    if (!viewerId) return;
-
-    if (
-      pendingRevisionDiscussionViewsRef.current.has(setlistId) ||
-      revisionDiscussionViewsRef.current.some(view => view.setlist_id === setlistId && view.user_id === viewerId)
-    ) return;
-
-    pendingRevisionDiscussionViewsRef.current.add(setlistId);
+    if (!viewerId || !latestRevisionActivityAt || document.visibilityState !== 'visible') return;
+    const requestKey = setlistId + ':' + latestRevisionActivityAt;
+    if (pendingRevisionDiscussionViewsRef.current.has(requestKey)
+      || !shouldRecordSetlistDiscussionRead(revisionDiscussionViewsRef.current, setlistId, viewerId, latestRevisionActivityAt)) return;
+    pendingRevisionDiscussionViewsRef.current.add(requestKey);
     try {
-      const { data: inserted, error } = await supabase.rpc('record_setlist_revision_discussion_view', {
+      const { error } = await supabase.rpc('record_setlist_revision_discussion_read', {
         p_setlist_id: setlistId,
       });
       if (error) throw error;
-
-      if (inserted) {
-        const newView: SetlistRevisionDiscussionView = {
-          setlist_id: setlistId,
-          user_id: viewerId,
-          viewed_at: new Date().toISOString(),
-          profiles: profile ? {
-            first_name: profile.first_name,
-            last_name: profile.last_name,
-            avatar_url: profile.avatar_url,
-          } : null,
-        };
-        setRevisionDiscussionViews(current => {
-          if (current.some(view => view.setlist_id === setlistId && view.user_id === viewerId)) return current;
-          const next = [newView, ...current];
-          revisionDiscussionViewsRef.current = next;
-          return next;
-        });
-      } else if (!revisionDiscussionViewsRef.current.some(view => view.setlist_id === setlistId && view.user_id === viewerId)) {
-        await refreshRevisionDiscussionViews(setlistId);
-      }
+      await refreshRevisionDiscussionViews(setlistId);
     } catch (error) {
       console.warn('Failed to record revision discussion view:', error);
     } finally {
-      pendingRevisionDiscussionViewsRef.current.delete(setlistId);
+      pendingRevisionDiscussionViewsRef.current.delete(requestKey);
     }
-  }, [profile, refreshRevisionDiscussionViews, user?.id]);
+  }, [latestRevisionActivityAt, refreshRevisionDiscussionViews, user?.id]);
 
   const handleOpenRevisionDiscussionViewers = useCallback(() => {
     if (!setlist?.id) return;
@@ -1601,17 +1586,9 @@ export function EventDetail() {
       .finally(() => setLoadingRevisionDiscussionViewers(false));
   }, [refreshRevisionDiscussionViews, setlist?.id, toast]);
 
-  const revisionDiscussionViewers = useMemo(() => {
-    if (!setlist?.id) return [];
-    const latestByUser = new Map<string, SetlistRevisionDiscussionView>();
-    revisionDiscussionViews
-      .filter(view => view.setlist_id === setlist.id)
-      .forEach(view => {
-        const current = latestByUser.get(view.user_id);
-        if (!current || view.viewed_at > current.viewed_at) latestByUser.set(view.user_id, view);
-      });
-    return [...latestByUser.values()].sort((a, b) => b.viewed_at.localeCompare(a.viewed_at));
-  }, [revisionDiscussionViews, setlist?.id]);
+  const revisionDiscussionViewers = useMemo(() => setlist?.id
+    ? allSetlistDiscussionViewers(revisionDiscussionViews, setlist.id)
+    : [], [revisionDiscussionViews, setlist?.id]);
 
   const revisionDiscussionViewerCount = useMemo(() => {
     return revisionDiscussionViewers.length;
@@ -1619,7 +1596,7 @@ export function EventDetail() {
 
   const isAssignedSongLeader = assignments.some(
     assignment => assignment.user_id === user?.id && assignment.roles?.name === 'Song Leader',
-  );
+  ) || Boolean(user?.id && linkedSongLeaderAssignment?.user_id === user.id);
 
   const showRevisionDiscussion = setlist
     ? revisionDiscussionOverride?.setlistId === setlist.id && revisionDiscussionOverride.status === setlist.status
@@ -1633,7 +1610,12 @@ export function EventDetail() {
       setRevisionDiscussionViews([]);
       return;
     }
+    let active = true;
+    setDiscussionAccess(false);
+    void supabase.rpc('can_access_setlist_revision_discussion', { p_setlist_id: setlist.id })
+      .then(({ data }) => { if (active) setDiscussionAccess(data === true); });
     void fetchRevisionComments(setlist.id);
+    return () => { active = false; };
   }, [fetchRevisionComments, setlist?.id]);
 
   useEffect(() => {
@@ -1642,13 +1624,25 @@ export function EventDetail() {
       return;
     }
 
-    void refreshRevisionDiscussionViews(setlist.id);
+    void refreshRevisionDiscussionViews(setlist.id).catch(error => console.warn('Failed to load discussion views:', error));
   }, [refreshRevisionDiscussionViews, setlist?.id]);
 
   useEffect(() => {
-    if (!setlist?.id || !showRevisionDiscussion || !user?.id) return;
-    void handleRevisionDiscussionSeen(setlist.id);
-  }, [handleRevisionDiscussionSeen, showRevisionDiscussion, setlist?.id, user?.id]);
+    if (!setlist?.id || !showRevisionDiscussion || showRevisionDiscussionViewers || !user?.id || !latestRevisionActivityAt) return;
+    const content = revisionDiscussionContentRef.current;
+    const latestItem = content && [...content.querySelectorAll<HTMLElement>('[data-discussion-activity-at]')]
+      .find(item => Date.parse(item.dataset.discussionActivityAt || '') === Date.parse(latestRevisionActivityAt));
+    if (!latestItem) return;
+    let visible = false;
+    const recordIfVisible = () => { if (visible && document.visibilityState === 'visible') void handleRevisionDiscussionSeen(setlist.id); };
+    const observer = new IntersectionObserver(entries => {
+      visible = entries.some(entry => entry.isIntersecting && entry.intersectionRatio >= 0.1);
+      recordIfVisible();
+    }, { threshold: 0.1 });
+    observer.observe(latestItem);
+    document.addEventListener('visibilitychange', recordIfVisible);
+    return () => { observer.disconnect(); document.removeEventListener('visibilitychange', recordIfVisible); };
+  }, [handleRevisionDiscussionSeen, showRevisionDiscussion, showRevisionDiscussionViewers, setlist?.id, user?.id, latestRevisionActivityAt]);
 
   useEffect(() => {
     if (!setlist?.id) return;
@@ -1677,8 +1671,14 @@ export function EventDetail() {
 
   useEffect(() => {
     const activeSetlistIds = [setlist?.id, linkedSetlist?.id].filter((value): value is string => Boolean(value));
-    if (!id || !user?.id || activeSetlistIds.length === 0) return;
+    if (!id || !setlistEventId || !user?.id) return;
     let cancelled = false;
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+    const refreshSharedSetlist = () => {
+      if (serviceModeActiveRef.current) { serviceNotifyUpdate.current(); return; }
+      if (refreshTimer) clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => { if (!cancelled) void fetchAll(true); }, 150);
+    };
 
     const mergeSetlistSongUpdate = (updated: Partial<SetlistSong> & { id?: string }) => (song: SetlistSong): SetlistSong => {
       if (!updated.id || song.id !== updated.id) return song;
@@ -1702,7 +1702,14 @@ export function EventDetail() {
 
     const channel = supabase.channel(`event-detail-setlist-live-${id}-${activeSetlistIds.join('-')}`);
 
+    channel.on('postgres_changes', {
+      event: '*', schema: 'public', table: 'setlists', filter: 'event_id=eq.' + setlistEventId,
+    }, refreshSharedSetlist);
+
     activeSetlistIds.forEach(setlistId => {
+      channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'setlist_songs', filter: 'setlist_id=eq.' + setlistId }, refreshSharedSetlist);
+      // Deleted row payloads may only expose the primary key under RLS.
+      channel.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'setlist_songs' }, refreshSharedSetlist);
       channel.on(
         'postgres_changes',
         {
@@ -1761,9 +1768,10 @@ export function EventDetail() {
 
     return () => {
       cancelled = true;
+      if (refreshTimer) clearTimeout(refreshTimer);
       supabase.removeChannel(channel);
     };
-  }, [id, linkedSetlist?.id, setlist?.id, user?.id]);
+  }, [fetchAll, id, setlistEventId, linkedSetlist?.id, setlist?.id, user?.id]);
 
   useEffect(() => {
     if (!chartModalStorageKey || loading || chartModalSong) return;
@@ -2421,10 +2429,20 @@ export function EventDetail() {
   const markSetlistNeedsReapproval = async () => {
     if (!setlist || setlist.status !== 'approved' || !event) return true;
 
+    // Read the saved edit, which may be newer than the current React state.
+    const { data: currentSongs, error: songsError } = await supabase.from('setlist_songs')
+      .select('songs(lyrics, chordpro_text)').eq('setlist_id', setlist.id);
+    if (songsError) { toast('error', 'Could not check the edited songs before requesting approval'); return false; }
+    const lyricsComplete = Boolean(currentSongs?.length) && currentSongs!.every(row => {
+      const song = Array.isArray(row.songs) ? row.songs[0] : row.songs;
+      return Boolean(getEffectiveSongLyrics(song));
+    });
+    const nextStatus = lyricsComplete ? 'pending_review' : 'draft';
+
     const { data, error } = await withSaveTimeout(
       supabase
         .from('setlists')
-        .update({ status: 'pending_review' })
+        .update({ status: nextStatus })
         .eq('id', setlist.id)
         .select('id, status')
         .maybeSingle()
@@ -2435,8 +2453,8 @@ export function EventDetail() {
       return false;
     }
 
-    setSetlist(prev => prev ? { ...prev, status: 'pending_review' } : prev);
-    toast('info', 'Setlist updated — re-approval required');
+    setSetlist(prev => prev ? { ...prev, status: nextStatus } : prev);
+    toast('info', lyricsComplete ? 'Setlist updated — re-approval required' : 'Edits saved as a draft. Add readable lyrics to every song before resubmitting.');
     return true;
   };
 
@@ -2445,11 +2463,11 @@ export function EventDetail() {
     let targetSetlist = setlist;
 
     if (!targetSetlist) {
-      const fmt = serviceFormat || (event ? inferServiceFormat(event.event_type) : 'custom');
+      const fmt = serviceFormat || (setlistEvent ? inferServiceFormat(setlistEvent.event_type) : 'custom');
       const { data: existing, error: existingError } = await supabase
         .from('setlists')
         .select('*')
-        .eq('event_id', id)
+        .eq('event_id', setlistEventId)
         .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle();
@@ -2464,7 +2482,7 @@ export function EventDetail() {
       } else {
         const { data: created, error: createError } = await supabase
           .from('setlists')
-          .insert({ event_id: id, created_by: user.id, service_format: fmt })
+          .insert({ event_id: setlistEventId, created_by: user.id, service_format: fmt })
           .select('*')
           .single();
 
@@ -2564,7 +2582,7 @@ export function EventDetail() {
     }
     const notReadyDraft = event ? setlistBuilderSongs.find(draft => {
       const usage = songUsage[draft.song_id];
-      return !projectSongReadiness(usage?.lastDate, event.event_date).meetsRule;
+      return !projectSongReadiness(usage?.lastDate, setlistEvent!.event_date).meetsRule;
     }) : undefined;
     if (notReadyDraft) {
       const song = songs.find(candidate => candidate.id === notReadyDraft.song_id);
@@ -2576,11 +2594,11 @@ export function EventDetail() {
     try {
       let targetSetlist = setlist;
       if (!targetSetlist) {
-        const fmt = serviceFormat || (event ? inferServiceFormat(event.event_type) : 'custom');
+        const fmt = serviceFormat || (setlistEvent ? inferServiceFormat(setlistEvent.event_type) : 'custom');
         const { data: existing, error: existingError } = await supabase
           .from('setlists')
           .select('*')
-          .eq('event_id', id)
+          .eq('event_id', setlistEventId)
           .order('created_at', { ascending: true })
           .limit(1)
           .maybeSingle();
@@ -2595,7 +2613,7 @@ export function EventDetail() {
         } else {
           const { data: created, error: createError } = await supabase
             .from('setlists')
-            .insert({ event_id: id, created_by: user.id, service_format: fmt })
+            .insert({ event_id: setlistEventId, created_by: user.id, service_format: fmt })
             .select('*')
             .single();
 
@@ -2654,7 +2672,7 @@ export function EventDetail() {
     }
     const selectedSong = songs.find(song => song.id === selectedSongForConfig);
     if (event) {
-      const projection = projectSongReadiness(songUsage[selectedSongForConfig]?.lastDate, event.event_date);
+      const projection = projectSongReadiness(songUsage[selectedSongForConfig]?.lastDate, setlistEvent!.event_date);
       if (!projection.meetsRule) {
         toast('error', `${selectedSong?.title || 'This song'} cannot be added yet. It needs ${projection.shortfallDays} more days to meet the ${SONG_READINESS_RULE_DAYS}-day rule.`);
         return;
@@ -2893,17 +2911,17 @@ export function EventDetail() {
   const handleSetlistAction = async (action: 'pending_review' | 'approved' | 'revision_requested' | 'rejected' | 'draft', notes?: string) => {
     if (!setlist) return;
     if ((action === 'pending_review' || action === 'approved') && !ensureArtistsReady(action === 'approved' ? 'approve' : 'submit')) return;
-    if (action === 'pending_review' && !ensureLyricsReady('submit')) return;
+    if ((action === 'pending_review' || action === 'approved') && !ensureLyricsReady(action === 'approved' ? 'approve' : 'submit')) return;
     const now = new Date().toISOString();
     const update: Record<string, string | null> = { status: action };
     const isReviewDecision = action === 'approved' || action === 'revision_requested' || action === 'rejected';
     if (action === 'approved' && user) update.approved_by = user.id;
-    if (action === 'pending_review') update.submitted_at = now;
+    if (action === 'pending_review') update.submitted_at = setlist.submitted_at || now;
     if (isReviewDecision && user) { update.reviewed_at = now; update.reviewed_by = user.id; }
     if (notes && isReviewDecision) update.review_note = notes;
     if (action === 'revision_requested' && notes) update.approval_notes = notes;
     const { error } = await supabase.from('setlists').update(update).eq('id', setlist.id);
-    if (error) { toast('error', 'Failed to update setlist'); return; }
+    if (error) { toast('error', error.message || 'Failed to update setlist'); return; }
 
     setSetlist({ ...setlist, status: action, review_note: (isReviewDecision && notes) ? notes : setlist.review_note, approval_notes: action === 'revision_requested' && notes ? notes : setlist.approval_notes, approved_by: action === 'approved' && user ? user.id : setlist.approved_by } as Setlist);
 
@@ -2933,7 +2951,8 @@ export function EventDetail() {
       const guideText = getSongGuideText(setlistSong.song_category || '');
       if (guideText) categories.add(setlistSong.song_category);
     }
-    return Array.from(categories);
+    const order = ['Opening', 'Praise', 'Worship', 'Offering', 'Closing'];
+    return Array.from(categories).sort((a, b) => order.indexOf(a) - order.indexOf(b));
   }, [getSongGuideText, setlistSongs]);
 
   const setlistGuideAttachment = useMemo(() => {
@@ -3003,14 +3022,14 @@ export function EventDetail() {
     if (!recipientIds.length) return;
     if (!event || !setlist) return;
 
-    const eventLabel = `${event.event_type} · ${event.title}`;
-    const eventDateLabel = event.event_date ? format(parseISO(event.event_date), 'MMM d, yyyy') : 'Upcoming date';
+    const eventLabel = `${setlistEvent!.event_type} · ${setlistEvent!.title}`;
+    const eventDateLabel = setlistEvent!.event_date ? format(parseISO(setlistEvent!.event_date), 'MMM d, yyyy') : 'Upcoming date';
 
     const { data: existingMentions = [] } = await supabase
       .from('notifications')
       .select('user_id')
       .in('type', ['mention', 'setlist_revision_mention'])
-      .eq('data->>event_id', event.id)
+      .eq('data->>event_id', setlistEvent!.id)
       .in('user_id', recipientIds)
       .eq('data->>setlist_id', relatedSetlistId)
       .eq('data->>revision_discussion', 'true')
@@ -3025,7 +3044,7 @@ export function EventDetail() {
         type: 'mention',
         category: 'setlist',
         title: `Mentioned in ${eventLabel}`,
-        body: `${actorProfileName} mentioned you in the revision discussion for ${event.title} (${event.event_type}) on ${eventDateLabel}.`,
+        body: `${actorProfileName} mentioned you in the revision discussion for ${setlistEvent!.title} (${setlistEvent!.event_type}) on ${eventDateLabel}.`,
         data: {
           event_id: eventId,
           setlist_id: relatedSetlistId,
@@ -3057,8 +3076,8 @@ export function EventDetail() {
     await handleSetlistAction('revision_requested', buildRevisionRequestNotes(revisionReason));
 
     if (setlist && user && event && profile?.org_id) {
-      const reviewRequestEventLabel = `${event.event_type} · ${event.title}`;
-      const eventDateLabel = event.event_date ? format(parseISO(event.event_date), 'MMM d, yyyy') : 'Upcoming date';
+      const reviewRequestEventLabel = `${setlistEvent!.event_type} · ${setlistEvent!.title}`;
+      const eventDateLabel = setlistEvent!.event_date ? format(parseISO(setlistEvent!.event_date), 'MMM d, yyyy') : 'Upcoming date';
       const reason = buildRevisionRequestNotes(revisionReason);
       const requestorName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim()
         || user?.email
@@ -3066,7 +3085,7 @@ export function EventDetail() {
       const audience = members
         .map(member => member.id)
         .filter(memberId => memberId !== user.id);
-      const revisionNotificationFingerprint = `${setlist.id}:${user.id}:${event.id}:${reason.toLowerCase().trim()}`;
+      const revisionNotificationFingerprint = `${setlist.id}:${user.id}:${setlistEvent!.id}:${reason.toLowerCase().trim()}`;
 
       if (audience.length > 0) {
         const dedupeKeyBase = `${profile.org_id}:${revisionNotificationFingerprint}`;
@@ -3074,7 +3093,7 @@ export function EventDetail() {
           .from('notifications')
           .select('user_id')
           .eq('type', 'setlist_revision')
-          .eq('event_id', event.id)
+          .eq('event_id', setlistEvent!.id)
           .eq('dedupe_key', dedupeKeyBase);
 
         const alreadyNotified = new Set((existingRows.data || []).map(item => item.user_id));
@@ -3087,13 +3106,13 @@ export function EventDetail() {
             type: 'setlist_revision',
             category: 'setlist',
             title: `Revision Requested: ${reviewRequestEventLabel}`,
-            body: `${requestorName} requested a revision for ${event.title} (${event.event_type}) on ${eventDateLabel}. Reason: ${reason || 'No reason provided.'}`,
+            body: `${requestorName} requested a revision for ${setlistEvent!.title} (${setlistEvent!.event_type}) on ${eventDateLabel}. Reason: ${reason || 'No reason provided.'}`,
             data: {
-              url: `/events/${event.id}?tab=revision`,
-              event_id: event.id,
+              url: `/events/${setlistEvent!.id}?tab=revision`,
+              event_id: setlistEvent!.id,
               setlist_id: setlist.id,
-              event_type: event.event_type,
-              event_date: event.event_date,
+              event_type: setlistEvent!.event_type,
+              event_date: setlistEvent!.event_date,
               revision_requested_by: user.id,
             },
             dedupe_key: dedupeKeyBase,
@@ -3123,7 +3142,7 @@ export function EventDetail() {
   };
 
   const handlePostRevisionComment = async () => {
-    const canParticipateRevisionDiscussion = canReviewSetlist || isSongLeader;
+    const canParticipateRevisionDiscussion = discussionAccess || canReviewSetlist || isSongLeader;
     if (!canParticipateRevisionDiscussion) return;
     const content = revisionCommentText.trim();
     if (!setlist || !user || !event || !content || postingRevisionComment) return;
@@ -3146,7 +3165,7 @@ export function EventDetail() {
           actorId: user.id,
           recipientIds: mentionedIds,
           relatedSetlistId: setlist.id,
-          eventId: event.id,
+          eventId: setlistEvent!.id,
           actorProfileName: `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim()
             || user?.email
             || 'A team member',
@@ -3237,7 +3256,7 @@ export function EventDetail() {
           actorId: user.id,
           recipientIds: newlyAddedMentions,
           relatedSetlistId: setlist.id,
-          eventId: event.id,
+          eventId: setlistEvent!.id,
           actorProfileName: `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim()
             || user?.email
             || 'A team member',
@@ -3509,7 +3528,7 @@ export function EventDetail() {
 const openLyricsModal = (ss: SetlistSong) => {
     setMobileSongActionsSong(null);
     setLyricsModalSong(ss);
-    setLyricsInput(ss.songs?.lyrics || '');
+    setLyricsInput(getEffectiveSongLyrics(ss.songs));
     setLyricsSearchResults([]);
     setLyricsSearchNotice(null);
   };
@@ -3527,7 +3546,7 @@ const openLyricsModal = (ss: SetlistSong) => {
         title: ss.songs?.title || '',
         artist: ss.songs?.artist || '',
         slot: ss.song_category || '',
-        lyrics: ss.songs?.lyrics || '',
+        lyrics: getEffectiveSongLyrics(ss.songs),
       })),
       report,
       verdict: report.verdict,
@@ -3730,10 +3749,10 @@ const openLyricsModal = (ss: SetlistSong) => {
     .slice(0, 3)
     .join(', ');
 
-  const ensureLyricsReady = useCallback((action: 'check' | 'submit') => {
+  const ensureLyricsReady = useCallback((action: 'check' | 'submit' | 'approve') => {
     if (!hasMissingLyrics) return true;
 
-    const actionLabel = action === 'check' ? 'check' : 'submit';
+    const actionLabel = action;
     const moreCount = missingLyricsSongs.length - Math.min(missingLyricsSongs.length, 3);
     const suffix = moreCount > 0 ? ` and ${moreCount} more` : '';
 
@@ -4104,7 +4123,7 @@ const openLyricsModal = (ss: SetlistSong) => {
       : '';
   const songLeaderName = directSongLeaderName || linkedSongLeaderName;
   const eventDisplayTitle = directSongLeaderName || shortenPrefixedTitle(event.title);
-  const isSongLeader = myAssignments.some(a => a.roles?.name === 'Song Leader');
+  const isSongLeader = myAssignments.some(a => a.roles?.name === 'Song Leader') || Boolean(user?.id && linkedSongLeaderAssignment?.user_id === user.id);
   const userIsSongLeaderRole = userRoles.some(ur => ur.roles?.name === 'Song Leader');
   const hasEventManagementAccess = isLeader || isOrgAdmin || isPlatformOwner;
   const visiblePendingAssignments = myPendingAssignments;
@@ -4199,12 +4218,12 @@ const openLyricsModal = (ss: SetlistSong) => {
   const isSetlistCreator = isViewingAsSongLeader || (!isRolePreviewActive && (setlist ? setlist.created_by === user?.id : false));
   const canSeeEventSongReadiness = isViewingAsSongLeader || isSetlistCreator || isSetlistCoordinator || isOrgAdmin || isAdmin || isPlatformOwner;
   const canReviewSetlist = !offlineMode && (isLeader || isOrgAdmin || isPlatformOwner || isAdmin || isProductionDirector || isMusicDirector || isSetlistCoordinator || capabilities.review_setlists);
-  const canParticipateRevisionDiscussion = canReviewSetlist || isSongLeader;
+  const canParticipateRevisionDiscussion = discussionAccess || canReviewSetlist || isSongLeader;
   const canSubmitSetlist = isSetlistCreator || canManageSetlist;
-  const pendingReviewAge = setlist?.status === 'pending_review'
-    ? describeSetlistReviewAge(setlist.submitted_at || setlist.created_at)
+  const pendingReviewAge = setlist && isSetlistPendingProcess(setlist.status)
+    ? describeSetlistReviewAge(setlist.submitted_at)
     : null;
-  const pendingReviewMessage = pendingReviewAge ? getSetlistPendingMessage(pendingReviewAge, isSetlistCreator) : null;
+  const pendingReviewMessage = pendingReviewAge ? getSetlistPendingMessage(pendingReviewAge, isSetlistCreator) || pendingReviewAge.pendingDaysLabel : null;
 
   const statusColors: Record<string, string> = {
     draft: 'badge-blue',
@@ -4244,10 +4263,10 @@ const openLyricsModal = (ss: SetlistSong) => {
       viewingObservation.author_id
     )
     : [];
-  const heroProposalDue = event.proposal_due_date ? parseISO(event.proposal_due_date) : null;
+  const heroProposalDue = setlistEvent?.proposal_due_date ? parseISO(setlistEvent.proposal_due_date) : null;
   const heroDaysUntilDue = heroProposalDue ? differenceInDays(heroProposalDue, new Date()) : null;
   const heroHasApprovedSetlist = setlist?.status === 'approved';
-  const heroDeadlineState = getSetlistReminderState(event, [setlist?.status || null]);
+  const heroDeadlineState = getSetlistReminderState(setlistEvent || event, [setlist || null]);
   const heroIsOverdue = heroDeadlineState === 'overdue';
   const heroIsDueSoon = heroDeadlineState === 'due_soon';
   const isApprovedSetlist = setlist?.status === 'approved';
@@ -4275,7 +4294,7 @@ const openLyricsModal = (ss: SetlistSong) => {
     : null;
   const selectedSongConfigUsage = selectedSongForConfig ? songUsage[selectedSongForConfig] : undefined;
   const selectedSongConfigProjection = selectedSongForConfig
-    ? projectSongReadiness(selectedSongConfigUsage?.lastDate, event.event_date)
+    ? projectSongReadiness(selectedSongConfigUsage?.lastDate, setlistEvent!.event_date)
     : null;
   const eventDetailArtworkSongs = eventDetailSongs.slice(0, 4).map(ss => ({
     title: ss.songs?.title,
@@ -5223,8 +5242,14 @@ const openLyricsModal = (ss: SetlistSong) => {
           );
         })()}
 
-        {event.setlist_required !== false && setlist && user && (canParticipateRevisionDiscussion || revisionComments.length > 0 || !!setlist.review_note || !!setlist.approval_notes) && setlist.status !== 'rejected' && (setlist.status === 'revision_requested' || revisionComments.length > 0 || !!setlist.review_note || !!setlist.approval_notes) && (
-          <div className="card overflow-hidden animate-slide-up">
+        {linkedServiceEvent && (
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-emerald-500/10 px-3.5 py-3 text-xs text-emerald-800 dark:text-emerald-200">
+            <span>Shared setlist with Sunday Service · {format(parseISO(linkedServiceEvent.event_date), 'MMM d')}. Songs, revisions and approval stay the same on both events.</span>
+            <button type="button" onClick={() => navigate('/events/' + linkedServiceEvent.id)} className="shrink-0 font-bold underline underline-offset-4">Open Sunday Service</button>
+          </div>
+        )}
+        {setlistEvent?.setlist_required !== false && setlist && user && (canParticipateRevisionDiscussion || revisionComments.length > 0 || !!setlist.review_note || !!setlist.approval_notes) && setlist.status !== 'rejected' && (setlist.status === 'revision_requested' || revisionComments.length > 0 || !!setlist.review_note || !!setlist.approval_notes) && (
+          <div className="card mb-4 overflow-hidden animate-slide-up">
             <div className={`flex min-h-12 items-center gap-3 px-3.5 py-2.5 transition-colors hover:bg-black/[0.025] dark:hover:bg-white/[0.035] sm:px-4 ${showRevisionDiscussion ? 'border-b border-gray-200/70 dark:border-white/[0.08]' : ''}`}>
               <button
                 type="button"
@@ -5291,11 +5316,12 @@ const openLyricsModal = (ss: SetlistSong) => {
                 }}
                 className="origin-top overflow-hidden will-change-[height,opacity,transform]"
               >
+              <div ref={revisionDiscussionContentRef}>
               {(setlist.review_note || setlist.approval_notes) && (
                 <div className="mx-3.5 mt-3 flex items-start gap-2 rounded-xl border border-amber-300/50 bg-amber-50/80 px-3 py-2.5 dark:border-amber-700/35 dark:bg-amber-900/15 sm:mx-4">
                   <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                  <div className="min-w-0 flex-1">
-                    <p className="whitespace-pre-wrap break-words text-sm leading-5 text-amber-800 dark:text-amber-200">{setlist.review_note || setlist.approval_notes || 'Please review and make necessary changes to the setlist.'}</p>
+                  <div data-discussion-activity-at={setlist.reviewed_at || undefined} className="min-w-0 flex-1">
+                    <SetlistGuideNote text={setlist.review_note || setlist.approval_notes || 'Please review and make necessary changes to the setlist.'} />
                   </div>
                 </div>
               )}
@@ -5322,6 +5348,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                 return (
                   <div
                     key={comment.id}
+                    data-discussion-activity-at={setlistDiscussionCommentActivityAt(comment)}
                     data-app-nonselect="true"
                     data-revision-comment-reaction-root={comment.id}
                     className={`relative overflow-hidden rounded-lg border border-gray-200/70 bg-gray-50/70 dark:border-white/[0.08] dark:bg-white/[0.03] sm:overflow-visible ${isReactionPickerOpen ? 'sm:z-30' : 'sm:z-0'} ${comment.reply_to ? 'ml-4 border-l-2 border-l-amber-400/70 sm:ml-6' : ''}`}
@@ -5539,13 +5566,14 @@ const openLyricsModal = (ss: SetlistSong) => {
                 </>
               )}
             </div>
+              </div>
               </motion.div>
             )}
             </AnimatePresence>
           </div>
         )}
 
-        {event.setlist_required !== false && setlist && setlist.status === 'rejected' && (
+        {setlistEvent?.setlist_required !== false && setlist && setlist.status === 'rejected' && (
           <div className="card p-4 bg-red-50 dark:bg-red-900/20 ring-red-200 dark:ring-red-800 animate-slide-up" style={{ animationDelay: '100ms' }}>
             <div className="flex items-start gap-3">
               <div className="flex items-center justify-center h-9 w-9 rounded-full bg-red-100 dark:bg-red-900/40 shrink-0">
@@ -5560,10 +5588,10 @@ const openLyricsModal = (ss: SetlistSong) => {
           </div>
         )}
 
-        <EventSetlistReminder key={event.id} event={event} status={setlist?.status}
-          recipientId={songLeaderAssignment ? (songLeaderAssignment.status === 'declined' ? null : songLeaderAssignment.user_id) : event.song_leader_id}
-          recipientName={directSongLeaderName} />
-        {event.setlist_required === false ? (
+        <EventSetlistReminder key={setlistEvent!.id} event={setlistEvent!} status={setlist?.status} submittedAt={setlist?.submitted_at}
+          recipientId={(linkedSongLeaderAssignment || songLeaderAssignment)?.status === 'declined' ? null : (linkedSongLeaderAssignment || songLeaderAssignment)?.user_id || setlistEvent?.song_leader_id}
+          recipientName={songLeaderName} />
+        {setlistEvent?.setlist_required === false ? (
           <p className="rounded-xl border border-white/10 p-4 text-sm text-white/55">No setlist needed for this event.</p>
         ) : !setlist ? (
           showLinkedSetlistReference ? (
@@ -5679,7 +5707,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                     <div className="flex flex-col gap-2 sm:flex-row md:flex-col lg:flex-row">
                       <select
                         id="event-service-format"
-                        value={serviceFormat || inferServiceFormat(event.event_type)}
+                        value={serviceFormat || inferServiceFormat(setlistEvent?.event_type || event.event_type)}
                         onChange={e => setServiceFormat(e.target.value as ServiceFormat)}
                         className="input-field min-h-11 min-w-0 flex-1 text-sm"
                       >
@@ -5715,6 +5743,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                   transition={{ duration: 0.28, ease: 'easeInOut' }}
                 >
                 <CheckingAnimation
+                  onBack={() => navigateCard('setlist', 'back')}
                   songs={setlistSongs.sort((a, b) => a.position - b.position).map(ss => ({
                     title: ss.songs?.title || '',
                     artist: ss.songs?.artist || '',
@@ -5741,7 +5770,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                 <SetlistReport
                   report={checkReport}
                   onBack={() => navigateCard('setlist', 'back')}
-                  onRecheck={() => { setCheckReport(null); navigateCard('checking', 'back'); }}
+                  onRecheck={() => { if (!ensureArtistsReady('check') || !ensureLyricsReady('check')) return; setCheckReport(null); navigateCard('checking', 'back'); }}
                   onSubmitProposal={canSubmitSetlist ? () => handleSetlistAction('pending_review') : undefined}
                   canSubmit={!hasMissingLyrics && canSubmitSetlist && ['draft', 'revision_requested'].includes(setlist.status)}
                   setlistStatus={setlist.status}
@@ -5944,7 +5973,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                       {setlistSongs.sort((a, b) => a.position - b.position).map((ss, i) => {
                         const usage = songUsage[ss.song_id];
                         const proposalConflict = canReviewSetlist ? songProposalConflicts[ss.song_id] : undefined;
-                        const readiness = getSongReadinessBadge(usage, event.event_date);
+                        const readiness = getSongReadinessBadge(usage, setlistEvent!.event_date);
                         const ReadinessIcon = readiness.Icon;
                         const displayKey = ss.performed_key || ss.songs?.song_key || '';
                         const keyChanged = ss.performed_key && ss.songs?.song_key && ss.performed_key !== ss.songs.song_key;
@@ -6713,10 +6742,10 @@ const openLyricsModal = (ss: SetlistSong) => {
         >
           {readinessDetailsSong && (() => {
             const usage = songUsage[readinessDetailsSong.songId];
-            const projection = projectSongReadiness(usage?.lastDate, event.event_date);
-            const readiness = getSongReadinessBadge(usage, event.event_date);
+            const projection = projectSongReadiness(usage?.lastDate, setlistEvent!.event_date);
+            const readiness = getSongReadinessBadge(usage, setlistEvent!.event_date);
             const ReadinessIcon = readiness.Icon;
-            const targetDateLabel = format(parseISO(event.event_date), 'MMM d, yyyy');
+            const targetDateLabel = format(parseISO(setlistEvent!.event_date), 'MMM d, yyyy');
             const readyDateLabel = projection.readyDate
               ? format(parseISO(projection.readyDate), 'MMM d, yyyy')
               : null;
@@ -6921,8 +6950,8 @@ const openLyricsModal = (ss: SetlistSong) => {
               <>
                 <p className="text-xs leading-relaxed text-gray-500 dark:text-white/45">
                   {revisionDiscussionViewers.length === 1
-                    ? '1 person has seen this discussion.'
-                    : `${revisionDiscussionViewers.length} people have seen this discussion.`}
+                    ? '1 person has viewed this discussion.'
+                    : `${revisionDiscussionViewers.length} people have viewed this discussion.`}
                 </p>
                 <div className="max-h-80 space-y-1.5 overflow-y-auto pr-1">
                   {revisionDiscussionViewers.map(viewer => {
@@ -6940,7 +6969,10 @@ const openLyricsModal = (ss: SetlistSong) => {
                             {viewerName}{viewer.user_id === user?.id ? ' (You)' : ''}
                           </p>
                           <p className="mt-0.5 text-[11px] text-gray-500 dark:text-white/40">
-                            Seen {format(parseISO(viewer.viewed_at), 'M/d · h:mm a')}
+                            Discussion seen {formatInTimeZone(parseISO(viewer.last_viewed_at || viewer.viewed_at), 'Asia/Manila', 'M/d · h:mm a') + ' PHT'}
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-gray-500 dark:text-white/50">
+                            {currentSetlistDiscussionViewers([viewer], viewer.setlist_id, latestRevisionActivityAt).length > 0 ? 'Seen latest update' : 'Viewed earlier · latest update not seen'}
                           </p>
                         </div>
                       </div>
@@ -7438,8 +7470,8 @@ const openLyricsModal = (ss: SetlistSong) => {
                 })
                 .map(song => {
                   const usage = songUsage[song.id];
-                  const projection = projectSongReadiness(usage?.lastDate, event.event_date);
-                  const eventDateLabel = format(parseISO(event.event_date), 'MMM d');
+                  const projection = projectSongReadiness(usage?.lastDate, setlistEvent!.event_date);
+                  const eventDateLabel = format(parseISO(setlistEvent!.event_date), 'MMM d');
                   const proposalReservation = songProposalReservations[song.id];
                   return (
                     <div
@@ -7616,11 +7648,11 @@ const openLyricsModal = (ss: SetlistSong) => {
         >
           <div className="space-y-4">
             {selectedSongConfigSong && selectedSongConfigProjection && (() => {
-              const eventDateLabel = format(parseISO(event.event_date), 'MMM d, yyyy');
+              const eventDateLabel = format(parseISO(setlistEvent!.event_date), 'MMM d, yyyy');
               const readyDateLabel = selectedSongConfigProjection.readyDate
                 ? format(parseISO(selectedSongConfigProjection.readyDate), 'MMM d, yyyy')
                 : null;
-              const readiness = getSongReadinessBadge(selectedSongConfigUsage, event.event_date);
+              const readiness = getSongReadinessBadge(selectedSongConfigUsage, setlistEvent!.event_date);
               const ReadinessIcon = readiness.Icon;
               const lyricsSource = getSongLyricsSource(selectedSongConfigSong);
               const explanation = selectedSongConfigProjection.daysAtTarget === null
@@ -8968,6 +9000,11 @@ const openLyricsModal = (ss: SetlistSong) => {
                   rows={12}
                   className="input-field resize-none text-sm leading-relaxed"
                 />
+                {getSongLyricsSource(lyricsModalSong.songs) === 'chart' && (
+                  <p className="mt-2 rounded-lg bg-brand-50 px-3 py-2 text-xs leading-relaxed text-brand-700 dark:bg-brand-900/20 dark:text-brand-200">
+                    These lyrics come from the song’s chord chart and are available to Check Setlist. Saving here creates a separate lyrics copy.
+                  </p>
+                )}
                 <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
                   Lyrics are shared across all setlists — other members won&apos;t need to add them again.
                 </p>
@@ -9168,10 +9205,9 @@ const openLyricsModal = (ss: SetlistSong) => {
                 />
               </label>
               {attachGuideToRevision && setlistGuideAttachment ? (
-                <p className="mt-1.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                  The guide text for the setlist&apos;s recognized categories will be appended to your note:
-                  <span className="block mt-1 text-[10px] leading-[1.45]">{setlistGuideSections.join(', ') || 'None detected yet'}</span>
-                </p>
+                <div className="mt-2">
+                  <SetlistGuideNote text={`Guide attached for this setlist:\n${setlistGuideAttachment}`} />
+                </div>
               ) : attachGuideToRevision && !setlistGuideAttachment ? (
                 <p className="mt-1.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
                   No recognized category guide text is available yet. Add song roles (Opening, Praise, Worship, Closing, Offering) or continue with notes only.

@@ -5,6 +5,7 @@ import {
 } from 'date-fns';
 import { ChevronLeft, ChevronRight, Cake, CalendarOff, GripVertical } from 'lucide-react';
 import type { Event } from '../types';
+import { describeSetlistReviewAge, isSetlistPendingProcess } from '../lib/setlistReviewAge';
 
 interface CalendarEntry {
   type: 'birthday' | 'leave';
@@ -175,6 +176,9 @@ export function CalendarGrid({ events, calendarEntries, songLeaderMap, setlistSt
                   const isPastEvent = parseISO(event.event_date) < calendarToday;
 
                   const now = new Date();
+                  const pendingAge = isSetlistPendingProcess(setlistInfo?.status)
+                    ? describeSetlistReviewAge(setlistInfo?.submitted_at, now)
+                    : null;
                   const proposalDueDate = event.proposal_due_date ? parseISO(event.proposal_due_date) : null;
                   const daysUntilDue = proposalDueDate ? differenceInDays(proposalDueDate, now) : null;
                   const isDueSoon = daysUntilDue !== null && daysUntilDue >= 0 && daysUntilDue <= 3;
@@ -183,7 +187,8 @@ export function CalendarGrid({ events, calendarEntries, songLeaderMap, setlistSt
                   const setlistSubmittedAt = setlistInfo?.submitted_at ? parseISO(setlistInfo.submitted_at) : (setlistInfo?.created_at ? parseISO(setlistInfo.created_at) : null);
                   const wasSubmittedLate = hasApprovedSetlist && proposalDueDate && setlistSubmittedAt && setlistSubmittedAt > proposalDueDate;
 
-                  const showDueIndicator = (!hasApprovedSetlist && (isDueSoon || isOverdue)) || wasSubmittedLate;
+                  const hasSubmittedProposal = Boolean(setlistInfo?.submitted_at) || isSetlistPendingProcess(setlistInfo?.status) || hasApprovedSetlist || setlistInfo?.status === 'rejected';
+                  const showDueIndicator = (!hasSubmittedProposal && (isDueSoon || isOverdue)) || wasSubmittedLate;
 
                   const canDrag = !!onEventDateChange;
                   return (
@@ -217,6 +222,11 @@ export function CalendarGrid({ events, calendarEntries, songLeaderMap, setlistSt
                             isOverdue ? 'Proposal overdue' : 'Proposal due soon'
                           }
                         />
+                      )}
+                      {pendingAge && pendingAge.pendingDays !== null && (
+                        <span className="ml-1 inline-flex rounded bg-amber-500/20 px-1 py-0.5 text-[9px] font-black text-amber-700 dark:text-amber-200">
+                          Pending {pendingAge.pendingDays}d
+                        </span>
                       )}
                     </button>
                   );

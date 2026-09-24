@@ -1,4 +1,4 @@
-import { extractLyricsFromChordPro, getEffectiveSongLyrics, getSongLyricsSource } from '../src/lib/songLyrics';
+import { extractLyricsFromChordPro, getEffectiveSongLyrics, getSongLyricsSource, hasReadableSongLyrics } from '../src/lib/songLyrics';
 
 function expectEqual(actual: unknown, expected: unknown, message: string) {
   if (actual !== expected) {
@@ -38,3 +38,11 @@ expectEqual(
 expectEqual(getSongLyricsSource({ lyrics: 'Words', chordpro_text: chart }), 'saved', 'reports saved lyrics source');
 expectEqual(getSongLyricsSource({ lyrics: null, chordpro_text: chart }), 'chart', 'reports chart lyrics source');
 expectEqual(getSongLyricsSource({ lyrics: null, chordpro_text: null }), 'missing', 'reports missing lyrics source');
+expectEqual(hasReadableSongLyrics('Verse 1\nChorus\nIntro'), false, 'section headings alone are not lyrics');
+expectEqual(hasReadableSongLyrics('G C D\nAm F G'), false, 'plain chord rows are not lyrics');
+expectEqual(hasReadableSongLyrics('|: C/G D/F# :|\nCmaj7/G  Dsus4/A  |  Am/F'), false, 'slash chords and repeat bars are not lyrics');
+expectEqual(hasReadableSongLyrics('Jesus'), true, 'a short real lyric line is enough');
+expectEqual(extractLyricsFromChordPro('{c: Verse 1}\n[G] [C]\nLyrics not available'), '', 'chart placeholders do not satisfy the gate');
+expectEqual(getSongLyricsSource({ lyrics: 'https://example.com/chart.pdf', chordpro_text: null }), 'missing', 'a PDF link is not machine-readable lyrics');
+expectEqual(getSongLyricsSource({ lyrics: 'Verse 1', chordpro_text: chart }), 'chart', 'chart lyrics remain usable when saved field is only a heading');
+expectEqual(getSongLyricsSource({ lyrics: null, chordpro_text: '![](chart.png)' }), 'missing', 'an image reference is not lyrics');

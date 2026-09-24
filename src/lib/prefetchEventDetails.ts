@@ -2,6 +2,7 @@ import type { Event, Setlist, SetlistSong } from '../types';
 import { readSavedEventDetail, savedEventDetailKey, type SavedEventDetail } from './offlineEvent';
 import { invalidateDeviceSnapshots, writeDeviceSnapshot } from './deviceCache';
 import { supabase } from './supabase';
+import { resolveSetlistEvent } from './sharedSetlist';
 
 type ApprovedSetlist = Setlist & { setlist_songs?: SetlistSong[] };
 
@@ -45,16 +46,19 @@ export async function prefetchEventDetails(scope: string | null, userId: string 
     }
     const current = await readSavedEventDetail(scope, event.id);
     if (current && current.savedAt >= startedAt) continue;
-    const setlist = approved.get(event.id) || null;
-    const linkedSetlist = event.event_type === 'Rehearsals' && event.linked_event_id
-      ? approved.get(event.linked_event_id) || null : null;
+    const linkedEvent = event.linked_event_id ? eventById.get(event.linked_event_id) : null;
+    let owner: Event;
+    try { owner = resolveSetlistEvent(event, linkedEvent); }
+    catch { continue; } // Do not overwrite a verified snapshot with an unresolved link.
+    const setlist = approved.get(owner.id) || null;
     const snapshot: SavedEventDetail = {
       event,
       approvedSetlist: setlist,
       approvedSongs: setlist?.setlist_songs || [],
-      linkedApprovedSetlist: linkedSetlist,
-      linkedApprovedSongs: linkedSetlist?.setlist_songs || [],
-      linkedServiceTitle: event.linked_event_id ? eventById.get(event.linked_event_id)?.title || null : null,
+      linkedApprovedSetlist: null,
+      linkedApprovedSongs: [],
+      linkedServiceTitle: owner.id !== event.id ? owner.title : null,
+      linkedServiceEvent: owner.id !== event.id ? owner : null,
     };
     await writeDeviceSnapshot(scope, savedEventDetailKey(event.id), snapshot);
   }

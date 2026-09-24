@@ -8,8 +8,8 @@ import { getSetlistReminderState, setlistReminderWaitMinutes } from '../lib/setl
 import type { Event } from '../types';
 import { Modal } from './Modal';
 
-export function EventSetlistReminder({ event, status, recipientId, recipientName }: {
-  event: Event; status?: string; recipientId?: string | null; recipientName: string;
+export function EventSetlistReminder({ event, status, submittedAt, recipientId, recipientName }: {
+  event: Event; status?: string; submittedAt?: string | null; recipientId?: string | null; recipientName: string;
 }) {
   const { user, profile, isLeader } = useAuth();
   const { toast } = useToast();
@@ -19,7 +19,7 @@ export function EventSetlistReminder({ event, status, recipientId, recipientName
   const [lastSent, setLastSent] = useState<string | null>(null);
   const busy = useRef(false);
   const attempt = useRef<{ key: string; id: string } | null>(null);
-  const state = getSetlistReminderState(event, [status || null]);
+  const state = getSetlistReminderState(event, [{ status: status || '', submitted_at: submittedAt }]);
   if (!isLeader || !user || !profile?.org_id || !recipientId || !state) return null;
   const dueLabel = formatInTimeZone(new Date(event.proposal_due_date!), 'Asia/Manila', 'MMM d, h:mm a');
   const name = recipientName || 'the assigned song leader';
@@ -34,10 +34,10 @@ export function EventSetlistReminder({ event, status, recipientId, recipientName
     try {
       // Recheck recipient, submission and deadline before queueing a notification.
       const { data: latest, error: loadError } = await supabase.from('events')
-        .select('id,title,event_date,start_time,end_time,lifecycle_override,proposal_due_date,setlist_required,song_leader_id,setlists(status),event_assignments(user_id,status,roles(name))')
+        .select('id,title,event_date,start_time,end_time,lifecycle_override,proposal_due_date,setlist_required,song_leader_id,setlists(status,submitted_at),event_assignments(user_id,status,roles(name))')
         .eq('id', event.id).eq('org_id', profile.org_id).abortSignal(controller.signal).single();
       if (loadError || !latest) throw new Error('Could not check the latest setlist. Please try again.');
-      const latestState = getSetlistReminderState(latest, (latest.setlists || []).map((set: { status: string }) => set.status));
+      const latestState = getSetlistReminderState(latest, latest.setlists || []);
       if (!latestState) throw new Error('This event no longer needs a submission reminder. Refresh to see its latest status.');
       const assigned = latest.event_assignments?.find((assignment: { roles: { name: string } | { name: string }[] | null }) =>
         Array.isArray(assignment.roles) ? assignment.roles.some(role => role.name === 'Song Leader') : assignment.roles?.name === 'Song Leader');

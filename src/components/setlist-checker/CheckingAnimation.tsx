@@ -16,6 +16,28 @@ interface CheckingAnimationProps {
   theme: string;
   language: 'english' | 'taglish';
   onComplete: (report: SetlistCheckReport) => void;
+  onBack?: () => void;
+}
+
+async function getCheckErrorMessage(error: unknown): Promise<string> {
+  const fallback = 'Analysis failed. Please try again.';
+  if (!error || typeof error !== 'object') return fallback;
+
+  const context = (error as { context?: unknown }).context;
+  if (context instanceof Response) {
+    try {
+      const payload = await context.clone().json();
+      if (payload && typeof payload === 'object' && typeof (payload as { error?: unknown }).error === 'string'
+        && (payload as { error: string }).error.trim()) {
+        return (payload as { error: string }).error.trim();
+      }
+    } catch {
+      // Fall through to the useful transport message, if one exists.
+    }
+  }
+
+  const message = (error as { message?: unknown }).message;
+  return typeof message === 'string' && message.trim() && !message.toLowerCase().includes('non-2xx') ? message : fallback;
 }
 
 const STEPS = [
@@ -29,7 +51,7 @@ const STEPS = [
   { icon: Sparkles,  label: 'Preparing your report',          duration: 800  },
 ];
 
-export function CheckingAnimation({ songs, theme, language, onComplete }: CheckingAnimationProps) {
+export function CheckingAnimation({ songs, theme, language, onComplete, onBack }: CheckingAnimationProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -67,17 +89,27 @@ export function CheckingAnimation({ songs, theme, language, onComplete }: Checki
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    supabase.functions.invoke('check-setlist', {
+    let cancelled = false;
+    void supabase.functions.invoke('check-setlist', {
       body: { theme, songs, language },
-    }).then(({ data, error: fnErr }) => {
+    }).then(async ({ data, error: fnErr }) => {
+      if (cancelled) return;
       if (fnErr || !data?.report) {
-        setError(fnErr?.message || 'Analysis failed. Please try again.');
+        const message = fnErr
+          ? await getCheckErrorMessage(fnErr)
+          : typeof data?.error === 'string' && data.error.trim() ? data.error.trim() : 'Analysis failed. Please try again.';
+        if (!cancelled) setError(message);
         return;
       }
       reportRef.current = data.report as SetlistCheckReport;
       apiDoneRef.current = true;
       if (animDoneRef.current) onComplete(data.report as SetlistCheckReport);
+    }).catch(error => {
+      if (!cancelled) void getCheckErrorMessage(error).then(message => {
+        if (!cancelled) setError(message);
+      });
     });
+    return () => { cancelled = true; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (error) {
@@ -88,8 +120,8 @@ export function CheckingAnimation({ songs, theme, language, onComplete }: Checki
         </div>
         <p className="text-sm font-medium text-red-700 dark:text-red-300 mb-1">Analysis failed</p>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">{error}</p>
-        <button onClick={() => window.location.reload()} className="btn-secondary text-xs">
-          Try again
+        <button onClick={onBack || (() => window.location.reload())} className="btn-secondary text-xs">
+          {onBack ? 'Back to setlist' : 'Try again'}
         </button>
       </div>
     );

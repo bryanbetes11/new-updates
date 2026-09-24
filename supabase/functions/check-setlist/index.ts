@@ -136,6 +136,26 @@ function wordCount(text: string): number {
   return text.trim().split(/\s+/).filter(w => w.length > 0).length;
 }
 
+const SECTION_ONLY = /^(?:intro|instrumental|interlude|verse(?:\s+\d+)?|v\d+|pre[-\s]?chorus|chorus(?:\s+\d+)?|refrain|bridge(?:\s+\d+)?|b\d+|tag|ending|outro|part(?:\s+\d+)?|section(?:\s+\d+)?|vamp|turnaround|breakdown|hook)\s*[:-]?$/i;
+const PLACEHOLDER_ONLY = /^(?:\[?lyrics for .+ could not be automatically retrieved.*|(?:no|missing) lyrics?(?: found| available)?\.?|(?:lyrics?|words?)\s+(?:not available|unavailable|missing|pending|coming soon|to be added|needed)\.?|(?:please\s+)?add lyrics(?: here| manually)?\.?)\]?$/i;
+const CHORD_ROOT = '[A-G](?:#|b)?';
+const CHORD_QUALITY = '(?:maj|min|m|mi|dim|aug|sus|add|ø|o|\\+|-)?';
+const CHORD_EXTENSION = '(?:[0-9]+)?(?:maj|min|m|dim|aug|sus|add|no|omit|alt|#|b|\\d|\\(|\\)|\\+|-|\\/)*';
+const CHORD_ONLY = new RegExp(`^(?:N\\.?C\\.?|${CHORD_ROOT}${CHORD_QUALITY}${CHORD_EXTENSION}(?:/${CHORD_ROOT})?)$`, 'i');
+
+function hasReadableLyrics(value: string | null | undefined): boolean {
+  if (!value?.trim()) return false;
+  return value.split(/\r?\n/).some(rawLine => {
+    const line = rawLine.replace(/\[[A-G](?:#|b)?[^\]]*\]/g, '').replace(/[|:]/g, ' ').trim();
+    if (!line || !/\p{L}/u.test(line)) return false;
+    if (SECTION_ONLY.test(line) || PLACEHOLDER_ONLY.test(line)) return false;
+    if (/^(?:https?:\/\/|data:|file:|%PDF|!\[|<img\b|\{[^}]*\}$)/i.test(line)) return false;
+    if (/(?:https?:\/\/|\S+\.(?:pdf|png|jpe?g|webp)(?:\?\S*)?$)/i.test(line)) return false;
+    if (line.split(/\s+/).every(token => CHORD_ONLY.test(token))) return false;
+    return true;
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Lyrics Fetching
 // ---------------------------------------------------------------------------
@@ -155,7 +175,7 @@ async function fetchLyrics(artist: string, title: string): Promise<{ lyrics: str
         clearTimeout(timeout);
         if (res.ok) {
           const data = await res.json();
-          if (data.lyrics && typeof data.lyrics === 'string' && data.lyrics.trim().length > 20) {
+          if (typeof data.lyrics === 'string' && hasReadableLyrics(data.lyrics)) {
             return { lyrics: data.lyrics.trim().slice(0, 2000), source: 'fetched' };
           }
         }
@@ -166,10 +186,7 @@ async function fetchLyrics(artist: string, title: string): Promise<{ lyrics: str
       // try next title variant
     }
   }
-  return {
-    lyrics: `[Lyrics for "${title}" by ${artist} could not be automatically retrieved. Please add them manually.]`,
-    source: 'unavailable',
-  };
+  return { lyrics: '', source: 'unavailable' };
 }
 
 // ---------------------------------------------------------------------------
@@ -192,8 +209,6 @@ function inferSlot(song: SongInput, index: number, total: number): SongInput['sl
 // ---------------------------------------------------------------------------
 
 function getPriorityTier(lyrics: string): PriorityTier {
-  // When lyrics couldn't be fetched, give benefit of the doubt
-  if (lyrics.startsWith('[Lyrics for')) return 'god_centered';
   if (hasAny(lyrics, GOSPEL_KW)) return 'gospel_core';
   if (hasAny(lyrics, [...GOD_CHARACTER_KW, ...CHRIST_NAME_KW])) return 'god_centered';
   return 'experience_focused';
@@ -1185,6 +1200,11 @@ Deno.serve(async (req: Request) => {
     // Step 1: Resolve lyrics for all songs
     const songsWithLyricsInfo: SetlistCheckReport['songsWithLyrics'] = [];
     const resolvedSongs: Song[] = [];
+    const missingSongs: string[] = [];
+
+    if (rawSongs.length === 0) {
+      throw new Error('Add at least one song with readable lyrics before checking the setlist.');
+    }
 
     for (let i = 0; i < rawSongs.length; i++) {
       const raw = rawSongs[i];
@@ -1198,8 +1218,8 @@ Deno.serve(async (req: Request) => {
       let lyricsSource: 'provided' | 'fetched' | 'unavailable';
       let lyrics: string;
 
-      if (raw.lyrics && raw.lyrics.trim().length > 0) {
-        lyrics = raw.lyrics.trim().slice(0, 2000);
+      if (hasReadableLyrics(raw.lyrics)) {
+        lyrics = (raw.lyrics ?? '').trim().slice(0, 2000);
         lyricsSource = 'provided';
       } else {
         const result = await fetchLyrics(raw.artist, raw.title);
@@ -1207,8 +1227,17 @@ Deno.serve(async (req: Request) => {
         lyricsSource = result.source;
       }
 
+      if (!hasReadableLyrics(lyrics)) {
+        missingSongs.push(raw.title?.trim() || `Song ${i + 1}`);
+        continue;
+      }
+
       resolvedSongs.push({ ...raw, slot, lyrics });
       songsWithLyricsInfo.push({ title: raw.title, artist: raw.artist, slot, lyricsSource });
+    }
+
+    if (missingSongs.length > 0) {
+      throw new Error(`Readable lyrics are missing for: ${missingSongs.join(', ')}. Add lyrics or a readable chart before checking the setlist.`);
     }
 
     // Step 2: Build priority tiers and slot fit checks

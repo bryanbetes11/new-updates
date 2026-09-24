@@ -10,8 +10,7 @@ import { Navigation } from "./Navigation";
 import { InteractionSoundSetupModal } from "./InteractionSoundSetupModal";
 import { useAuth } from "../contexts/AuthContext";
 import { BillingStatusBanner } from "./BillingStatusBanner";
-import { PushReadinessBanner } from "./PushReadinessBanner";
-import { DashboardPromptCarousel } from "./DashboardPromptCarousel";
+import { AppReminderCarousel } from "./AppReminderCarousel";
 import { SurveyAccessBanner } from "./SurveyAccessBanner";
 import { NativeAppUpdateCard } from './NativeAppUpdate';
 import { nativeBackHandlers } from '../lib/nativeBack';
@@ -38,6 +37,7 @@ export function Layout() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [soundSetupOpen, setSoundSetupOpen] = useState(false);
+  const [reminderHeight, setReminderHeight] = useState(0);
   const [isIpadLandscapeSidebar, setIsIpadLandscapeSidebar] = useState(false);
   const mobileChromeHidden = false;
 
@@ -235,9 +235,11 @@ export function Layout() {
     user && !staticHideNav && !isMessagesConversation && mobileOpen;
   const desktopSidebarWidth =
     user && !staticHideNav ? (collapsed ? 72 : 220) : 0;
+  const showReminders = Boolean(user && !staticHideNav && !isMessagesConversation);
   const mainStyle = {
     pointerEvents: shouldShiftForMobileMenu ? "none" : undefined,
     "--desktop-sidebar-width": `${desktopSidebarWidth}px`,
+    "--app-reminders-height": `${showReminders ? reminderHeight : 0}px`,
   } as CSSProperties;
   const shouldAllowNativePullRefresh =
     (isWideShellPage || isUnavailableMembersPage || isActivityLogPage || isMyAssignmentsPage) &&
@@ -408,7 +410,7 @@ export function Layout() {
   }, [location.pathname]);
 
   return (
-    <div className="min-h-screen bg-[#050505]">
+    <div className="min-h-screen bg-[#050505]" style={{ "--desktop-sidebar-width": `${desktopSidebarWidth}px` } as CSSProperties}>
       {user && !staticHideNav && (
       <Navigation
           hideMobile={hideNavMobile}
@@ -423,6 +425,12 @@ export function Layout() {
         />
       )}
       <InteractionSoundSetupModal open={soundSetupOpen} onClose={() => setSoundSetupOpen(false)} />
+      {showReminders && (
+        <AppReminderCarousel
+          mobileHeaderVisible={!isEventDetail && !isMessagesPage}
+          onHeightChange={setReminderHeight}
+        />
+      )}
 
       <main
         className={`desktop-sidebar-main ${isEventDetail ? "event-detail-main" : "overflow-x-clip"} ${isMessagesPage ? "box-border flex flex-col min-h-[100dvh] overflow-hidden bg-white dark:bg-[#111013] lg:fixed lg:inset-0 lg:h-[100dvh]" : ""}`}
@@ -462,7 +470,7 @@ export function Layout() {
                   : "px-4 sm:px-6 lg:px-8 mobile-layout-padding"
             }
           >
-            {!staticHideNav && (isDashboardPage ? <DashboardPromptCarousel /> : <PushReadinessBanner />)}
+            {showReminders && <div aria-hidden="true" style={{ height: 'var(--app-reminders-height)' }} />}
             {!staticHideNav && isDashboardPage && <NativeAppUpdateCard />}
             {!staticHideNav && <SurveyAccessBanner />}
             {!staticHideNav && !isWideShellPage && (

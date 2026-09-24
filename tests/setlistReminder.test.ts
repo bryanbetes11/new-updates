@@ -7,7 +7,10 @@ function equal(actual: unknown, expected: unknown, message: string) {
 }
 equal(getSetlistReminderState(event, [], now), 'overdue', 'missing setlist is eligible immediately after deadline');
 equal(getSetlistReminderState({ ...event, proposal_due_date: now.toISOString() }, ['draft'], now), 'due_soon', 'due now');
-equal(getSetlistReminderState({ ...event, proposal_due_date: '2026-09-15T04:00:00Z' }, ['revision_requested'], now), 'due_soon', 'three-day boundary');
+equal(getSetlistReminderState({ ...event, proposal_due_date: '2026-09-15T04:00:00Z' }, ['draft'], now), 'due_soon', 'three-day boundary');
+equal(getSetlistReminderState(event, ['revision_requested'], now), null, 'revision requested means a proposal was already submitted');
+equal(getSetlistReminderState(event, ['rejected'], now), null, 'a reviewed proposal does not need an initial submission reminder');
+equal(getSetlistReminderState(event, [{ status: 'draft', submitted_at: '2026-09-10T00:00:00Z' }], now), null, 'editing a previously submitted proposal does not restore the initial reminder');
 equal(getSetlistReminderState({ ...event, proposal_due_date: '2026-09-15T04:00:01Z' }, [], now), null, 'too early');
 equal(getSetlistReminderState(event, ['pending_review'], now), null, 'submitted setlist does not remind its leader');
 equal(getSetlistReminderState(event, ['draft', 'approved'], now), null, 'any approved setlist suppresses reminder');

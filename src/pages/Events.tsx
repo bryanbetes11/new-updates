@@ -18,7 +18,7 @@ import { EventsSkeleton } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
 import { formatTime12Hour } from '../lib/timeFormat';
 import { withRequestTimeout } from '../lib/requestTimeout';
-import { describeSetlistReviewAge } from '../lib/setlistReviewAge';
+import { describeSetlistReviewAge, isSetlistPendingProcess } from '../lib/setlistReviewAge';
 import { EventArtwork } from '../components/EventArtwork';
 import { EventTypeLabel } from '../components/EventTypeLabel';
 import { EventDateChip } from '../components/EventDateChip';
@@ -279,8 +279,8 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
   const daysUntilDue = proposalDueDate ? differenceInDays(proposalDueDate, now) : null;
   const isDueSoon = daysUntilDue !== null && daysUntilDue >= 0 && daysUntilDue <= 3;
   const isOverdue = daysUntilDue !== null && daysUntilDue < 0;
-  const pendingReviewAge = setlistInfo?.status === 'pending_review'
-    ? describeSetlistReviewAge(setlistInfo.submitted_at || setlistInfo.created_at)
+  const pendingReviewAge = isSetlistPendingProcess(setlistInfo?.status)
+    ? describeSetlistReviewAge(setlistInfo?.submitted_at)
     : null;
   const scheduleHasEnded = hasEventScheduleEnded(event, now);
   const canManageLifecycle = Boolean(onLifecycleChange) && isPlatformOwner && (isPast || scheduleHasEnded);
@@ -328,8 +328,9 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
   };
 
   // Visual urgency states (only when proposal is missing)
-  const showOverdueStyle = isOverdue && !hasApprovedSetlist && !isPast && !scheduleHasEnded;
-  const showDueSoonStyle = isDueSoon && !hasApprovedSetlist && !isPast && !scheduleHasEnded;
+  const hasSubmittedProposal = Boolean(setlistInfo?.submitted_at) || isSetlistPendingProcess(setlistInfo?.status) || hasApprovedSetlist || setlistInfo?.status === 'rejected';
+  const showOverdueStyle = isOverdue && !hasSubmittedProposal && !isPast && !scheduleHasEnded;
+  const showDueSoonStyle = isDueSoon && !hasSubmittedProposal && !isPast && !scheduleHasEnded;
 
   const handleLifecycleChange = async () => {
     if (!user || !isPlatformOwner || (!isPast && !scheduleHasEnded) || savingLifecycle) return;
@@ -398,7 +399,7 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
             ) : (
               <EmptyEventArtwork className="h-full w-full rounded-none border-0" />
             )}
-            {pendingReviewAge && <PendingSetlistRibbon pendingDays={pendingReviewAge.pendingDays ?? 0} />}
+            {pendingReviewAge && pendingReviewAge.pendingDays !== null && <PendingSetlistRibbon pendingDays={pendingReviewAge.pendingDays} />}
             <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/85 to-transparent" />
             <span className="absolute left-2 top-2 rounded-md border border-white/10 bg-black/75 px-2 py-1 text-[9px] font-black uppercase tracking-[0.08em] text-white shadow-lg backdrop-blur-sm">
               {format(parseISO(event.event_date), 'MMM dd')}
@@ -443,7 +444,7 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
         ) : (
           <EmptyEventArtwork className="h-full w-full" />
         )}
-        {pendingReviewAge && <PendingSetlistRibbon compact pendingDays={pendingReviewAge.pendingDays ?? 0} />}
+        {pendingReviewAge && pendingReviewAge.pendingDays !== null && <PendingSetlistRibbon compact pendingDays={pendingReviewAge.pendingDays} />}
       </div>
 
       {/* Body */}
@@ -493,8 +494,8 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
 
       <div className="flex shrink-0 items-center gap-2 lg:gap-3">
         {!canManageLifecycle && (
-          <span className={`hidden rounded-full border px-4 py-2 text-[12px] font-bold lg:inline-flex ${hasApprovedSetlist ? 'border-[#22c55e]/20 bg-[#22c55e]/10 text-[#22c55e]' : setlistInfo?.status === 'pending_review' ? 'border-amber-400/20 bg-amber-400/10 text-amber-300' : hasSetlistSongs ? 'border-sky-400/20 bg-sky-400/10 text-sky-300' : 'border-white/[0.08] text-white/62'}`}>
-            {hasApprovedSetlist ? 'Ready' : setlistInfo?.status === 'pending_review' ? 'Pending review' : hasSetlistSongs ? 'Draft' : 'No songs yet'}
+          <span className={`hidden rounded-full border px-4 py-2 text-[12px] font-bold lg:inline-flex ${hasApprovedSetlist ? 'border-[#22c55e]/20 bg-[#22c55e]/10 text-[#22c55e]' : isSetlistPendingProcess(setlistInfo?.status) ? 'border-amber-400/20 bg-amber-400/10 text-amber-300' : hasSetlistSongs ? 'border-sky-400/20 bg-sky-400/10 text-sky-300' : 'border-white/[0.08] text-white/62'}`}>
+            {hasApprovedSetlist ? 'Ready' : setlistInfo?.status === 'revision_requested' ? 'Revision requested' : setlistInfo?.status === 'pending_review' ? 'Pending review' : hasSetlistSongs ? 'Draft' : 'No songs yet'}
           </span>
         )}
         <EventDateChip
@@ -830,7 +831,7 @@ type EventListItem =
   | { kind: 'birthday'; sortDate: string; sortKey: string; entry: CalendarEntry };
 
 function scoreSetlistInfo(info: SetlistInfo) {
-  const statusScore = info.status === 'approved' ? 100 : info.status === 'pending_review' ? 50 : 0;
+  const statusScore = info.status === 'approved' ? 100 : isSetlistPendingProcess(info.status) ? 50 : 0;
   return statusScore + (info.artworkUrls?.length || 0) * 10 + (info.songCount || 0);
 }
 

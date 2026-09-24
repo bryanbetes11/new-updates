@@ -6,6 +6,10 @@ export interface SetlistReviewAge {
   pendingDays: number | null;
 }
 
+export function isSetlistPendingProcess(status: string | null | undefined): boolean {
+  return status === 'pending_review' || status === 'revision_requested';
+}
+
 export function describeSetlistReviewAge(submittedAt: string | null | undefined, now = new Date()): SetlistReviewAge {
   if (!submittedAt) {
     return {

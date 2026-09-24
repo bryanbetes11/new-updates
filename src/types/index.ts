@@ -226,6 +226,7 @@ export interface UserRole {
 }
 
 export interface Event {
+  org_id?: string;
   id: string;
   title: string;
   event_date: string;

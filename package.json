@@ -4,6 +4,7 @@
   "version": "1.4.7",
   "type": "module",
   "scripts": {
+    "test:attendance-privacy": "node tests/privacyInternalNotes.mjs && node tests/leadershipRoleAssignments.mjs && node tests/attendanceTeamMemberships.mjs && node tests/attendanceTeamAccess.mjs && node tests/attendanceReminderPrivacy.mjs",
     "test:android-push": "node tests/nativePushDatabase.mjs && node tests/nativePushDispatch.mjs",
     "test:announcement-reactions": "node tests/announcementReactionNotifications.mjs",
     "test:notification-db": "node tests/notificationDatabase.mjs",

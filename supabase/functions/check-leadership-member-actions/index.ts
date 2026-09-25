@@ -71,24 +71,6 @@ function getQuarter(date: Date): number {
   return Math.ceil((date.getMonth() + 1) / 3);
 }
 
-function buildSummaryBody(
-  churchName: string,
-  actionableMembers: AccountabilitySummary[],
-): string {
-  const overdueProposals = actionableMembers.filter((member) => member.proposal_overdue_count > 0).length;
-  const attendanceOffenses = actionableMembers.filter((member) => member.offense_level > 0).length;
-  const openDiscipline = actionableMembers.filter((member) => member.open_discipline_count > 0).length;
-  const pendingLeaves = actionableMembers.filter((member) => member.pending_leave_count > 0).length;
-
-  const segments: string[] = [];
-  if (overdueProposals > 0) segments.push(`${overdueProposals} overdue proposal${overdueProposals > 1 ? "s" : ""}`);
-  if (attendanceOffenses > 0) segments.push(`${attendanceOffenses} attendance issue${attendanceOffenses > 1 ? "s" : ""}`);
-  if (openDiscipline > 0) segments.push(`${openDiscipline} open discipline case${openDiscipline > 1 ? "s" : ""}`);
-  if (pendingLeaves > 0) segments.push(`${pendingLeaves} pending leave approval${pendingLeaves > 1 ? "s" : ""}`);
-
-  return `${actionableMembers.length} member${actionableMembers.length > 1 ? "s" : ""} in ${churchName} need follow-up today: ${segments.join(", ")}.`;
-}
-
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -155,22 +137,9 @@ Deno.serve(async (req: Request) => {
         .eq("is_org_admin", true);
       if (orgAdminsError) throw new Error(orgAdminsError.message);
 
-      const { data: leadershipRoles, error: leadershipRolesError } = await supabase
-        .from("user_roles")
-        .select("user_id, roles!inner(is_leadership)")
-        .eq("org_id", org.id)
-        .eq("roles.is_leadership", true);
-      if (leadershipRolesError) throw new Error(leadershipRolesError.message);
-
-      const recipientIds = [
-        ...new Set([
-          ...(orgAdmins || []).map((row) => row.id),
-          ...(leadershipRoles || []).map((row) => row.user_id),
-        ]),
-      ];
-
-      const memberIds = actionableMembers.map((member) => member.user_id);
-      const body = buildSummaryBody(org.name, actionableMembers);
+      // This is a church-wide digest. Directors receive scoped attendance
+      // alerts separately; do not send them another team's totals or IDs.
+      const recipientIds = [...new Set((orgAdmins || []).map((row) => row.id))];
 
       for (const recipientId of recipientIds) {
         const { data: existing } = await supabase
@@ -188,12 +157,11 @@ Deno.serve(async (req: Request) => {
           org_id: org.id,
           type: "leadership_member_action_reminder",
           title: "Members Need Follow-Up",
-          body,
+          body: "Member records need review. Open ServeSync to view records you can access.",
           data: {
             url: "/leadership/team",
             reminder_key: reminderKey,
             church_name: org.name,
-            member_ids: memberIds,
             quarter,
             year,
           },

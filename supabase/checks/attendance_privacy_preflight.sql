@@ -5,7 +5,7 @@ select jsonb_build_object(
   'foundation_exists', to_regclass('public.attendance_team_memberships') is not null,
   'applied_privacy_migrations', (select coalesce(jsonb_agg(version order by version), '[]'::jsonb)
     from supabase_migrations.schema_migrations
-    where version in ('20260925011030','20260925011929','20260925012244','20260925013222')),
+    where version in ('20260925011030','20260925011929','20260925012244','20260925044402')),
   'nonempty_profile_notes', (select count(*) from public.profiles p
     where nullif(btrim(to_jsonb(p)->>'leadership_notes'), '') is not null),
   'nonempty_discipline_notes', (select count(*) from public.discipline_records d

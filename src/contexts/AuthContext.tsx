@@ -2,6 +2,9 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { PushNotifications } from '@capacitor/push-notifications';
+import { App } from '@capacitor/app';
+import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
+import { createAccessRefreshQueue } from '../lib/accessRefresh';
 import { createTransientSupabaseClient, supabase } from '../lib/supabase';
 import { readSavedAccounts, removeSavedAccount, upsertSavedAccount, type SavedAccount } from '../lib/savedAccounts';
 import type { Organization, Profile, Role, UserRole } from '../types';
@@ -9,6 +12,7 @@ import { androidPushAvailable, disconnectNativePush } from '../lib/nativePush';
 import { deviceCacheScope, setDeviceCacheScope } from '../lib/deviceCache';
 import { setNativeImageCacheScope } from '../lib/nativeImageCache';
 import { isDefinitelyInvalidSession, isOfflineNetworkError, readOfflineAccount, revokeOfflineAccount, saveOfflineAccount } from '../lib/offlineAccount';
+import { hasPlatformOwnerAccess, loadPlatformOwnerAccess, type PlatformOwnerAccess } from '../lib/platformOwnerAccess';
 
 function activateDeviceCache(scope: string | null) {
   return Promise.all([setDeviceCacheScope(scope), setNativeImageCacheScope(scope)])
@@ -137,10 +141,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>(() => readSavedAccounts());
   const [loading, setLoading] = useState(true);
   const [offlineMode, setOfflineMode] = useState(false);
+  const [platformOwnerAccess, setPlatformOwnerAccess] = useState<PlatformOwnerAccess | null>(null);
   const [previewModeRequested, setPreviewModeRequested] = useState<'member' | 'song_leader' | null>(null);
   const activeUserIdRef = useRef<string | null>(null);
   const authTransitionRef = useRef(true);
   const offlineModeRef = useRef(false);
+  const accessRefreshVersionRef = useRef(0);
 
   useLayoutEffect(() => {
     // Preserve the last signed-in cache during startup until live auth establishes its owner.
@@ -289,15 +295,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshProfile = async () => {
     if (user && !offlineMode) {
+      const userId = user.id;
+      const refreshVersion = ++accessRefreshVersionRef.current;
       try {
-        const liveAccount = await verifyLiveAccount(user.id);
+        const [liveAccount, roleResult, capabilityResult, ownerAccess] = await Promise.all([
+          verifyLiveAccount(userId),
+          withAuthDeadline(supabase.from('user_roles').select('*, roles(*)').eq('user_id', userId), 'Role revalidation'),
+          withAuthDeadline(supabase.from('organization_member_settings').select('capabilities').eq('user_id', userId).maybeSingle(), 'Capability revalidation'),
+          loadPlatformOwnerAccess(userId, () => withAuthDeadline(supabase.rpc('is_platform_owner'), 'Owner revalidation')),
+        ]);
+        if (activeUserIdRef.current !== userId || offlineModeRef.current || refreshVersion !== accessRefreshVersionRef.current) return;
         if (!liveAccount.profile?.org_id || liveAccount.organization?.id !== liveAccount.profile.org_id) revokeOfflineAccount();
-        await hydrateUserContext(user.id, session, liveAccount);
+        setProfile(liveAccount.profile);
+        setOrganization(liveAccount.organization);
+        setUserRoles(roleResult.error ? [] : roleResult.data || []);
+        setCapabilities(capabilityResult.error ? {} : capabilityResult.data?.capabilities || {});
+        setPlatformOwnerAccess(ownerAccess);
+        if (session?.user) saveOfflineAccount(session.user, liveAccount.profile, liveAccount.organization);
       } catch (error) {
         console.warn('[Auth] Could not refresh live account context:', error);
       }
     }
   };
+
+  const refreshAccessRef = useRef(refreshProfile);
+  useLayoutEffect(() => { refreshAccessRef.current = refreshProfile; });
+  useEffect(() => {
+    if (!user?.id || !session?.access_token || offlineMode) return;
+    let active = true;
+    let nativeListener: PluginListenerHandle | undefined;
+    const queue = createAccessRefreshQueue(() => refreshAccessRef.current());
+    const refreshVisible = () => {
+      if (active && document.visibilityState === 'visible' && navigator.onLine) void queue.request();
+    };
+    const channel = supabase.channel(`access-revision:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_access_revisions', filter: `user_id=eq.${user.id}` }, refreshVisible);
+    void supabase.realtime.setAuth(session.access_token).then(() => {
+      if (active) channel.subscribe(status => { if (status === 'SUBSCRIBED') refreshVisible(); });
+    }).catch(error => console.warn('[Auth] Access subscription unavailable:', error));
+    document.addEventListener('visibilitychange', refreshVisible);
+    window.addEventListener('focus', refreshVisible);
+    window.addEventListener('online', refreshVisible);
+    if (Capacitor.isNativePlatform()) void App.addListener('appStateChange', state => {
+      if (state.isActive && active) void queue.request();
+    }).then(listener => { if (active) nativeListener = listener; else void listener.remove(); })
+      .catch(error => console.warn('[Auth] Native resume listener unavailable:', error));
+    const timer = window.setInterval(refreshVisible, 30000);
+    return () => {
+      active = false;
+      queue.dispose();
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', refreshVisible);
+      window.removeEventListener('focus', refreshVisible);
+      window.removeEventListener('online', refreshVisible);
+      void nativeListener?.remove();
+      void supabase.removeChannel(channel);
+    };
+  }, [user?.id, session?.access_token, offlineMode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -451,13 +505,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const roleNames = userRoles.map(ur => ur.roles?.name || '');
   const hasOrganization = Boolean(profile?.org_id && organization);
   const actualIsOrgAdmin = !offlineMode && (profile?.is_org_admin ?? false);
-  const platformOwnerEmails = new Set([
-    'bryanbetes11@gmail.com',
-    'fwd.bryanashleybetes@gmail.com',
-    'bryanashleybetes@gmail.com',
-  ]);
-  const actualIsPlatformOwner = !offlineMode && [profile?.email, user?.email]
-    .some(email => platformOwnerEmails.has((email || '').trim().toLowerCase()));
+  useEffect(() => {
+    setPlatformOwnerAccess(null);
+    if (!user?.id || offlineMode) return;
+    let active = true;
+    void loadPlatformOwnerAccess(user.id, () => withAuthTimeout(
+      supabase.rpc('is_platform_owner'),
+      { data: false, error: 'Owner permission lookup unavailable' },
+      'Owner permission lookup',
+    )).then(access => { if (active) setPlatformOwnerAccess(access); });
+    return () => { active = false; };
+  }, [user?.id, offlineMode, profile?.org_id, profile?.email, profile?.is_org_admin]);
+  const actualIsPlatformOwner = hasPlatformOwnerAccess(platformOwnerAccess, user?.id, offlineMode);
   const actualIsAdmin = !offlineMode && roleNames.includes('Admin');
   const canPreviewMemberView = actualIsOrgAdmin || actualIsPlatformOwner || actualIsAdmin;
   const isViewingAsMember = canPreviewMemberView && previewModeRequested === 'member';

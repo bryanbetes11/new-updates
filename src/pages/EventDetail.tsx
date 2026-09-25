@@ -647,6 +647,7 @@ export function EventDetail() {
   const [songGuideReviewed, setSongGuideReviewed] = useState(false);
   useEffect(() => { setSongGuideReviewed(false); }, [selectedSongForConfig, songConfig.category, showSongConfig]);
   const [setlistBuilderSongs, setSetlistBuilderSongs] = useState<SetlistBuilderSong[]>([]);
+  const [setlistBuilderError, setSetlistBuilderError] = useState('');
   const [setlistBuilderActive, setSetlistBuilderActive] = useState(false);
   const [setlistBuilderDragIndex, setSetlistBuilderDragIndex] = useState<number | null>(null);
   const [savingSetlistBuilder, setSavingSetlistBuilder] = useState(false);
@@ -2299,6 +2300,7 @@ export function EventDetail() {
   };
 
   const openSetlistBuilder = () => {
+    setSetlistBuilderError('');
     if (!setlistBuilderActive) {
       setSetlistBuilderSongs([]);
       setSongSearch('');
@@ -2575,9 +2577,10 @@ export function EventDetail() {
 
   const saveSetlistBuilder = async () => {
     if (!id || !user || savingSetlistBuilder || setlistBuilderSongs.length === 0) return;
+    setSetlistBuilderError('');
     const reservedDraft = setlistBuilderSongs.find(draft => songProposalReservations[draft.song_id]);
     if (reservedDraft) {
-      toast('error', getProposalReservationMessage(songProposalReservations[reservedDraft.song_id]));
+      setSetlistBuilderError(getProposalReservationMessage(songProposalReservations[reservedDraft.song_id]));
       return;
     }
     const notReadyDraft = event ? setlistBuilderSongs.find(draft => {
@@ -2586,8 +2589,8 @@ export function EventDetail() {
     }) : undefined;
     if (notReadyDraft) {
       const song = songs.find(candidate => candidate.id === notReadyDraft.song_id);
-      const projection = projectSongReadiness(songUsage[notReadyDraft.song_id]?.lastDate, event!.event_date);
-      toast('error', `${song?.title || 'This song'} is not ready for this event. It needs ${projection.shortfallDays} more days.`);
+      const projection = projectSongReadiness(songUsage[notReadyDraft.song_id]?.lastDate, setlistEvent!.event_date);
+      setSetlistBuilderError(`${song?.title || 'This song'} is not ready for this event. It needs ${projection.shortfallDays} more days.`);
       return;
     }
     setSavingSetlistBuilder(true);
@@ -2595,30 +2598,30 @@ export function EventDetail() {
       let targetSetlist = setlist;
       if (!targetSetlist) {
         const fmt = serviceFormat || (setlistEvent ? inferServiceFormat(setlistEvent.event_type) : 'custom');
-        const { data: existing, error: existingError } = await supabase
+        const { data: existing, error: existingError } = await withSaveTimeout(supabase
           .from('setlists')
           .select('*')
           .eq('event_id', setlistEventId)
           .order('created_at', { ascending: true })
           .limit(1)
-          .maybeSingle();
+          .maybeSingle());
 
         if (existingError) {
-          toast('error', existingError.message);
+          setSetlistBuilderError(existingError.message);
           return;
         }
 
         if (existing) {
           targetSetlist = existing as Setlist;
         } else {
-          const { data: created, error: createError } = await supabase
+          const { data: created, error: createError } = await withSaveTimeout(supabase
             .from('setlists')
             .insert({ event_id: setlistEventId, created_by: user.id, service_format: fmt })
             .select('*')
-            .single();
+            .single());
 
           if (createError || !created) {
-            toast('error', createError?.message || 'Failed to start the setlist');
+            setSetlistBuilderError(createError?.message || 'Failed to start the setlist');
             return;
           }
           targetSetlist = created as Setlist;
@@ -2641,7 +2644,7 @@ export function EventDetail() {
       );
 
       if (error || !data) {
-        toast('error', error?.message || 'Failed to add the selected songs');
+        setSetlistBuilderError(error?.message || 'Failed to add the selected songs');
         return;
       }
 
@@ -2658,6 +2661,8 @@ export function EventDetail() {
 
       closeSetlistBuilder(true);
       await fetchAll(true);
+    } catch (error) {
+      setSetlistBuilderError(getErrorMessage(error, 'Could not save the setlist. Check your connection and try again.'));
     } finally {
       setSavingSetlistBuilder(false);
     }
@@ -7344,6 +7349,7 @@ const openLyricsModal = (ss: SetlistSong) => {
         {showSetlist && (canManageSetlist || canEditSetlist) && <SetlistBuilderPage
           title={setlist ? 'Add Songs to Setlist' : 'Build Setlist'}
           onBack={requestSetlistBuilderClose}
+          error={setlistBuilderError}
           footer={<>
             <button
               type="button"

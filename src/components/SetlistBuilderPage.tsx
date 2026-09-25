@@ -5,7 +5,7 @@ import { ArrowLeft, BookOpen, ChevronDown, ShieldCheck } from 'lucide-react';
 
 
 
-export function SetlistBuilderPage({ title, onBack, children, footer }: { title: string; onBack: () => void; children: ReactNode; footer: ReactNode }) {
+export function SetlistBuilderPage({ title, onBack, children, footer, error }: { title: string; onBack: () => void; children: ReactNode; footer: ReactNode; error?: string }) {
   const [activeRole, setActiveRole] = useState('Opening');
   const roleColors: Record<string, string> = { Opening: 'bg-sky-100 text-sky-800 dark:bg-sky-300/15 dark:text-sky-200', Praise: 'bg-amber-100 text-amber-800 dark:bg-amber-300/15 dark:text-amber-200', Worship: 'bg-violet-100 text-violet-800 dark:bg-violet-300/15 dark:text-violet-200', Closing: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-300/15 dark:text-emerald-200' };
   const roleCaptions: Record<string, string> = { Opening: 'Who God is', Praise: 'Celebrate Him', Worship: 'What Christ has done', Closing: 'Our response' };
@@ -29,11 +29,11 @@ export function SetlistBuilderPage({ title, onBack, children, footer }: { title:
     heading.current?.focus();
     return () => { if (root) root.inert = previousInert; document.body.style.overflow = overflow; document.documentElement.style.overflow = htmlOverflow; };
   }, []);
-  return createPortal(<main aria-label="Setlist builder" className="setlist-builder-page fixed inset-0 z-[100] flex h-[100dvh] flex-col bg-gray-50 text-gray-900 dark:bg-[#101312] dark:text-white">
+  return createPortal(<main aria-label="Setlist builder" className="setlist-builder-page fixed inset-0 z-[100] flex min-h-0 flex-col overflow-hidden bg-gray-50 text-gray-900 dark:bg-[#101312] dark:text-white">
     <header className="shrink-0 border-b border-black/10 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#101312]">
       <div className="mx-auto flex max-w-5xl items-center gap-3"><button type="button" onClick={onBack} aria-label="Back to event" className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-white/10"><ArrowLeft className="h-5 w-5" /></button><div><h1 ref={heading} tabIndex={-1} className="text-lg font-bold outline-none">{title}</h1><p className="text-xs text-gray-500 dark:text-gray-400">Choose songs, set their roles, then arrange the service.</p></div></div>
     </header>
-    <div className="no-scrollbar flex min-h-0 flex-1 flex-col overflow-hidden"><div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col p-4 md:p-6">
+    <div className="setlist-builder-content no-scrollbar flex min-h-0 flex-1 flex-col overflow-hidden"><div className="setlist-builder-workspace mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col p-4 md:p-6">
       <section aria-label="Song category guide" className="shrink-0 rounded-2xl border border-black/[0.08] bg-white dark:border-white/10 dark:bg-[#181d1b]">
         <div className="flex items-center gap-3 px-3 py-2">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-300/10 dark:text-emerald-200"><BookOpen className="h-4 w-4" /></span>
@@ -101,7 +101,7 @@ export function SetlistBuilderPage({ title, onBack, children, footer }: { title:
         </div>
       </section>
       <div
-        className="no-scrollbar min-h-0 flex-1 overflow-hidden pt-3 md:pt-4"
+        className="setlist-builder-songs no-scrollbar min-h-0 flex-1 overflow-hidden pt-3 md:pt-4"
         onScrollCapture={event => {
           if ((event.target as HTMLElement).dataset.setlistSongScroll === 'true' && questionsOpen) {
             setQuestionsOpen(false);
@@ -109,6 +109,9 @@ export function SetlistBuilderPage({ title, onBack, children, footer }: { title:
         }}
       >{children}</div>
     </div></div>
-    <footer className="shrink-0 border-t border-black/10 bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:border-white/10 dark:bg-[#101312]"><div className="mx-auto flex max-w-5xl flex-row gap-2">{footer}</div></footer>
+    <footer className="shrink-0 border-t border-black/10 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#101312]">
+      {error && <p role="alert" className="mx-auto mb-3 max-h-24 max-w-5xl overflow-y-auto rounded-lg bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">{error} Your selected songs are still here.</p>}
+      <div className="mx-auto flex max-w-5xl flex-row gap-2">{footer}</div>
+    </footer>
   </main>, document.body);
 }

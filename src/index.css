@@ -1418,7 +1418,29 @@ html[data-survey-preview-device="phone"] .survey-modal-surface > div {
 }
 
 /* The dedicated builder owns scrolling, including after a song dialog closes. */
+.setlist-builder-page {
+  /* Capacitor supplies CSS insets on Android; browsers use env(). Apply each
+     inset once to the whole portal, keeping both content and controls inside. */
+  padding-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  padding-right: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+  padding-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  padding-left: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
+}
+
 html:has(.setlist-builder-page),
 body:has(.setlist-builder-page) {
   overflow: hidden !important;
+}
+
+/* Landscape and keyboard-shortened windows must still reach the song picker. */
+@media (max-height: 650px) {
+  .setlist-builder-content { overflow-y: auto; }
+  .setlist-builder-workspace { flex: none; }
+  .setlist-builder-songs { flex: none; overflow: visible; }
+  .setlist-builder-songs > div { height: auto; }
+  .setlist-builder-songs [data-setlist-song-scroll="true"] {
+    flex: none;
+    max-height: 50dvh;
+    min-height: 8rem;
+  }
 }

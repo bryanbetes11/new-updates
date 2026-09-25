@@ -1,7 +1,7 @@
 -- Chat media is private to members of the conversation that references it.
 -- Legacy object names are retained. Their upload UUID is present in the
 -- message JSON; group photo names begin with the owning conversation ID.
-create or replace function storage.can_read_chat_attachment(p_name text, p_viewer uuid)
+create or replace function public.can_read_chat_attachment(p_name text, p_viewer uuid)
 returns boolean language plpgsql stable security definer set search_path = '' as $$
 declare
   v_uploader uuid;
@@ -37,14 +37,14 @@ begin
   );
 end;
 $$;
-revoke all on function storage.can_read_chat_attachment(text,uuid) from public, anon, authenticated;
-grant execute on function storage.can_read_chat_attachment(text,uuid) to authenticated;
+revoke all on function public.can_read_chat_attachment(text,uuid) from public, anon, authenticated;
+grant execute on function public.can_read_chat_attachment(text,uuid) to authenticated;
 
 drop policy if exists "Anyone can view chat attachments" on storage.objects;
 drop policy if exists "Authenticated users can upload chat attachments" on storage.objects;
 create policy "Conversation members can sign chat media" on storage.objects
   for select to authenticated
-  using (bucket_id='chat-attachments' and storage.can_read_chat_attachment(name,(select auth.uid())));
+  using (bucket_id='chat-attachments' and public.can_read_chat_attachment(name,(select auth.uid())));
 create policy "Members can upload own chat media" on storage.objects
   for insert to authenticated
   with check (

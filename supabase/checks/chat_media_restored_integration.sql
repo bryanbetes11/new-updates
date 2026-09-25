@@ -34,4 +34,26 @@ set local role anon;
 select pg_temp.assert_ok((select count(*)=0 from storage.objects where bucket_id='chat-attachments' and name like '%synthetic.png'), 'Anonymous caller cannot sign chat media');
 reset role;
 select pg_temp.assert_ok((select public is false from storage.buckets where id='chat-attachments'), 'Chat bucket is private');
-select 'PASS private chat media visibility for Church A/B and anonymous callers' as result;
+
+set local session_replication_role=replica;
+insert into public.messages(id,org_id,conversation_id,sender_id,content)
+values (pg_temp.fixture_id(343),pg_temp.fixture_id(100),pg_temp.fixture_id(321),pg_temp.fixture_id(1),
+  jsonb_build_object('type','image','url',
+    'https://example.supabase.co/storage/v1/object/public/chat-attachments/' ||
+    pg_temp.fixture_id(1)::text || '/legacy-synthetic.png')::text);
+insert into storage.objects(bucket_id,name,owner_id) values
+  ('chat-attachments',pg_temp.fixture_id(1)::text || '/legacy-synthetic.png',pg_temp.fixture_id(1)::text);
+set local session_replication_role=origin;
+
+select pg_temp.login(1);
+set local role authenticated;
+select pg_temp.assert_ok((select count(*)=1 from storage.objects where bucket_id='chat-attachments' and name like '%legacy-synthetic.png'), 'Church A can sign referenced legacy photo');
+reset role;
+select pg_temp.login(10);
+set local role authenticated;
+select pg_temp.assert_ok((select count(*)=0 from storage.objects where bucket_id='chat-attachments' and name like '%legacy-synthetic.png'), 'Church B cannot sign Church A legacy photo');
+reset role;
+set local role anon;
+select pg_temp.assert_ok((select count(*)=0 from storage.objects where bucket_id='chat-attachments' and name like '%legacy-synthetic.png'), 'Anonymous caller cannot sign legacy photo');
+reset role;
+select 'PASS private current and legacy chat media visibility for Church A/B and anonymous callers' as result;

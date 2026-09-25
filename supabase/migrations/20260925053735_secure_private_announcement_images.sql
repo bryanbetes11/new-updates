@@ -1,6 +1,6 @@
 -- Announcement photos can include leaders-only information, so authorize
 -- downloads against the announcement row instead of its former public URL.
-create or replace function storage.can_read_announcement_image(p_name text,p_viewer uuid)
+create or replace function public.can_read_announcement_image(p_name text,p_viewer uuid)
 returns boolean language plpgsql stable security definer set search_path = '' as $$
 declare v_uploader uuid;
 begin
@@ -16,13 +16,13 @@ begin
   );
 end;
 $$;
-revoke all on function storage.can_read_announcement_image(text,uuid) from public,anon,authenticated;
-grant execute on function storage.can_read_announcement_image(text,uuid) to authenticated;
+revoke all on function public.can_read_announcement_image(text,uuid) from public,anon,authenticated;
+grant execute on function public.can_read_announcement_image(text,uuid) to authenticated;
 drop policy if exists "Anyone can view announcement images" on storage.objects;
 drop policy if exists "Authenticated users can upload announcement images" on storage.objects;
 create policy "Church readers can sign announcement images" on storage.objects
   for select to authenticated
-  using (bucket_id='announcements' and storage.can_read_announcement_image(name,(select auth.uid())));
+  using (bucket_id='announcements' and public.can_read_announcement_image(name,(select auth.uid())));
 create policy "Members upload own announcement images" on storage.objects
   for insert to authenticated
   with check (

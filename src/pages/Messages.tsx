@@ -16,6 +16,7 @@ import { useToast } from '../contexts/ToastContext';
 import { useConversations, type Conversation } from '../hooks/useConversations';
 import { useMessages, type Message } from '../hooks/useMessages';
 import { supabase } from '../lib/supabase';
+import { chatMediaReferences, chatMediaUrl, useChatMediaUrls } from '../lib/chatMedia';
 import { Avatar } from '../components/Avatar';
 import { EventArtwork } from '../components/EventArtwork';
 import { Modal } from '../components/Modal';
@@ -104,8 +105,8 @@ function parseContent(content: string): MsgContent {
   const normalizeParsedContent = (value: unknown): MsgContent | null => {
     if (!value || typeof value !== 'object') return null;
     const p = value as Record<string, unknown>;
-    if (p.type === 'image' && typeof p.url === 'string') return { type: 'image', url: p.url };
-    if (p.type === 'file' && typeof p.url === 'string') return { type: 'file', url: p.url, name: typeof p.name === 'string' ? p.name : 'File', size: typeof p.size === 'number' ? p.size : 0 };
+    if (p.type === 'image' && typeof p.url === 'string') return { type: 'image', url: chatMediaUrl(p.url) };
+    if (p.type === 'file' && typeof p.url === 'string') return { type: 'file', url: chatMediaUrl(p.url), name: typeof p.name === 'string' ? p.name : 'File', size: typeof p.size === 'number' ? p.size : 0 };
     const eventReference = parseChatEventReference(value);
     if (eventReference) return eventReference;
     if (p.type === 'delete_request') {
@@ -598,7 +599,7 @@ function getConversationAvatarSrc(conv: Conversation, myId: string): string | un
   if (conv.type === 'personal') {
     return getOtherMember(conv, myId)?.profile?.avatar_url ?? undefined;
   }
-  return conv.photo_url ?? undefined;
+  return conv.photo_url ? chatMediaUrl(conv.photo_url) || undefined : undefined;
 }
 
 function getConversationAvatarName(conv: Conversation, myId: string): { firstName: string; lastName?: string } {
@@ -2008,6 +2009,7 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
 
   const uploadAttachment = async (file: File | undefined, type: 'image' | 'file') => {
     if (!file || !user || uploadingRef.current || sendingRef.current || failedAttachment) return;
+    if (file.size > 16 * 1024 * 1024) { toast('error', 'Attachments must be 16 MB or smaller.'); return; }
     uploadingRef.current = true;
     setShowAttachMenu(false);
     setUploading(true);
@@ -3836,6 +3838,10 @@ function ChatWindow({
     sendMessage, sendTyping, pinMessage, deleteMessage, toggleReaction,
     retry,
   } = useMessages(conv.id);
+  useChatMediaUrls([
+    ...(conv.photo_url ? [conv.photo_url] : []),
+    ...messages.flatMap(message => chatMediaReferences(message.content)),
+  ], myUserId);
   const typingLabel = formatTypingUsers(typingUsers);
 
   const headerName = getConversationListName(conv, myUserId);
@@ -4722,12 +4728,12 @@ function ChatWindow({
                       )}
                       <div className={hasReplyPreview ? `relative z-[1] -mt-4 ${bubbleSurfaceClass} ${!isMe && !isBareMessage ? 'dark:!bg-[#222224]' : ''} ${msg.is_pinned ? 'ring-1 ring-amber-400/50' : ''}` : ''}>
                       {content.type === 'image' ? (
-                        <img
+                        content.url ? <img
                           src={content.url}
                           alt="Sent image"
                           className="max-w-[220px] max-h-[280px] rounded-xl object-cover cursor-pointer"
                           onClick={e => { e.stopPropagation(); setPreviewImageUrl(content.url); }}
-                        />
+                        /> : <span className="text-xs opacity-60">Photo unavailable</span>
                       ) : content.type === 'file' ? (
                         <div
                           className="flex items-center gap-2.5 min-w-[160px] max-w-[220px]"
@@ -4740,6 +4746,7 @@ function ChatWindow({
                           </div>
                           <div className="flex items-center gap-1 shrink-0">
                             <button
+                              disabled={!content.url}
                               onClick={() => {
                                 if (usesNativeAndroidFiles()) void runAttachmentAction('open', content, toast);
                                 else setPreviewFile({ url: content.url, name: content.name });
@@ -4750,11 +4757,12 @@ function ChatWindow({
                               <ExternalLink className="h-4 w-4" />
                             </button>
                             <a
-                              href={content.url}
+                              href={content.url || undefined}
                               download={content.name}
                               target="_blank"
                               rel="noopener noreferrer"
                               onClick={event => {
+                                if (!content.url) { event.preventDefault(); return; }
                                 if (!usesNativeAndroidFiles()) return;
                                 event.preventDefault();
                                 void runAttachmentAction('save', content, toast);
@@ -4765,7 +4773,7 @@ function ChatWindow({
                               <Download className="h-4 w-4" />
                             </a>
                             {usesNativeAndroidFiles() && (
-                              <button type="button" onClick={() => void runAttachmentAction('share', content, toast)} className="opacity-60 hover:opacity-100 transition-opacity p-0.5" title="Share" aria-label={`Share ${content.name}`}>
+                              <button type="button" disabled={!content.url} onClick={() => void runAttachmentAction('share', content, toast)} className="opacity-60 hover:opacity-100 transition-opacity p-0.5" title="Share" aria-label={`Share ${content.name}`}>
                                 <Share2 className="h-4 w-4" />
                               </button>
                             )}
@@ -5401,6 +5409,7 @@ export function Messages() {
   useDisableChatEdgeBackSwipe(!isDesktop && Boolean(selectedConvId));
 
   const myUserId = user?.id ?? '';
+  useChatMediaUrls(conversations.flatMap(conv => conv.photo_url ? [conv.photo_url] : []), myUserId);
 
   const visibleConversations = conversations.filter(c => c.last_message);
 

@@ -2,6 +2,7 @@ import { useId, useRef, useState } from 'react';
 import { Camera, Image, Lock, Trash2, Type, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { announcementImageUrl, useAnnouncementImages } from '../lib/announcementMedia';
 import { useToast } from '../contexts/ToastContext';
 import { Select } from './Select';
 import { MentionTextarea } from './MentionTextarea';
@@ -43,6 +44,7 @@ export function AnnouncementComposerForm({
   const [uploading, setUploading] = useState(false);
   const [draft, setDraft, recovery] = useRecoverableDraft(draftRecoveryKey('announcement', profile?.org_id, user?.id), emptyDraft, isAnnouncementDraft);
   const { formTitle, formPriority, formLeadersOnly, contentBlocks } = draft;
+  useAnnouncementImages(contentBlocks.filter(block => block.type === 'image').map(block => block.content), user?.id ?? '');
   const setFormTitle = (value: string) => setDraft(current => ({ ...current, formTitle: value }));
   const setFormPriority = (value: typeof formPriority) => setDraft(current => ({ ...current, formPriority: value }));
   const setFormLeadersOnly = (value: (current: boolean) => boolean) => setDraft(current => ({ ...current, formLeadersOnly: value(current.formLeadersOnly) }));
@@ -62,6 +64,10 @@ export function AnnouncementComposerForm({
 
   const uploadImage = async (file: File): Promise<string | null> => {
     if (!user) return null;
+    if (file.size > 8 * 1024 * 1024 || !['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif', 'image/avif'].includes(file.type)) {
+      toast('error', 'Choose a supported image under 8 MB');
+      return null;
+    }
     const ext = file.name.split('.').pop();
     const path = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
     const { error } = await supabase.storage.from('announcements').upload(path, file);
@@ -252,7 +258,7 @@ export function AnnouncementComposerForm({
                 </div>
               ) : (
                 <div className={`relative overflow-hidden rounded-xl ${isSpotify ? 'ring-1 ring-white/[0.08]' : 'ring-1 ring-gray-200 dark:ring-gray-700'}`}>
-                  <img src={block.content} alt="" className={`max-h-60 w-full object-contain ${isSpotify ? 'bg-white/[0.04]' : 'bg-gray-100 dark:bg-gray-800'}`} />
+                  <img src={announcementImageUrl(block.content)} alt="" className={`max-h-60 w-full object-contain ${isSpotify ? 'bg-white/[0.04]' : 'bg-gray-100 dark:bg-gray-800'}`} />
                   <button
                     type="button"
                     aria-label={`Remove photo ${index + 1}`}

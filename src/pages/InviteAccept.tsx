@@ -33,6 +33,9 @@ export function InviteAccept() {
   const [loading, setLoading] = useState(true);
   const [accepting, setAccepting] = useState(false);
   const [invitation, setInvitation] = useState<InvitationLookup | null>(null);
+  const [privatePilot, setPrivatePilot] = useState(false);
+  const [adultConfirmed, setAdultConfirmed] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const roleNames = useMemo(() => {
@@ -79,18 +82,30 @@ export function InviteAccept() {
         return;
       }
 
+      if (user) {
+        const { data: pilot, error: pilotError } = await supabase.rpc('is_private_pilot_invitation', { p_token: token });
+        if (pilotError) { setError('Could not verify the invitation. Try again.'); setLoading(false); return; }
+        setPrivatePilot(Boolean(pilot));
+      }
       setInvitation(invite as InvitationLookup);
       setLoading(false);
     };
 
     fetchInvitation();
-  }, [token]);
+  }, [token, user]);
 
   const redirect = encodeURIComponent(`/invite/${token}`);
 
   const handleAccept = async () => {
     if (!invitation) return;
     setAccepting(true);
+    if (privatePilot) {
+      if (!adultConfirmed || !termsAccepted) { setAccepting(false); return; }
+      const { error: ageError } = await supabase.rpc('confirm_private_pilot_adult');
+      if (ageError) { setAccepting(false); toast('error', ageError.message); return; }
+      const { error: termsError } = await supabase.rpc('accept_private_pilot_terms', { p_version: '2026-09-25' });
+      if (termsError) { setAccepting(false); toast('error', termsError.message); return; }
+    }
 
     const { error: rpcError } = await supabase.rpc('accept_organization_invitation', {
       p_token: token,
@@ -234,7 +249,19 @@ export function InviteAccept() {
                       </div>
                     </div>
 
-                    <button onClick={handleAccept} disabled={accepting} className={`${launchPrimaryButtonClass} w-full`}>
+                    {privatePilot && (
+                      <div className="space-y-3">
+                        <label className="flex items-start gap-3 text-sm leading-6 text-white/65">
+                          <input type="checkbox" checked={adultConfirmed} onChange={event => setAdultConfirmed(event.target.checked)} className="mt-1.5" />
+                          <span>I confirm I am at least 18. This private pilot is for adult church teams.</span>
+                        </label>
+                        <label className="flex items-start gap-3 text-sm leading-6 text-white/65">
+                          <input type="checkbox" checked={termsAccepted} onChange={event => setTermsAccepted(event.target.checked)} className="mt-1.5" />
+                          <span>I agree to the <a href="/pilot-terms.html" target="_blank" rel="noopener noreferrer" className="text-emerald-300 underline">pilot terms</a> and have read the <a href="/privacy.html" target="_blank" rel="noopener noreferrer" className="text-emerald-300 underline">privacy notice</a>.</span>
+                        </label>
+                      </div>
+                    )}
+                    <button onClick={handleAccept} disabled={accepting || (privatePilot && (!adultConfirmed || !termsAccepted))} className={`${launchPrimaryButtonClass} w-full`}>
                       {accepting ? <><Loader2 className="h-4 w-4 animate-spin" /> Joining...</> : 'Accept Invite'}
                     </button>
                   </div>

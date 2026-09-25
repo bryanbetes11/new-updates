@@ -247,7 +247,7 @@ const WALK = [
 ];
 
 const STEPS = [
-  { n: 'Step 01', title: 'Create your church',  body: 'Name the workspace, confirm the first admin, and begin a 10-day trial without a card.' },
+  { n: 'Step 01', title: 'Create your church',  body: 'Join the free, invitation-only pilot. Verify the first admin, then name the church workspace.' },
   { n: 'Step 02', title: 'Set the cadence',      body: 'Add your recurring services and rehearsals. ServeSync builds the weekly view automatically.' },
   { n: 'Step 03', title: 'Build a setlist',      body: 'Drop in songs, set the keys, write the notes. Share with the band in one tap.' },
   { n: 'Step 04', title: 'Run a calmer week',    body: 'Mark attendance, post updates, and let the rhythm carry the team instead of leaders chasing it.' },
@@ -255,8 +255,8 @@ const STEPS = [
 
 const PLANS = [
   {
-    name: 'Trial', price: '₱0', cadence: 'for 10 days', seats: 'Up to 15 members',
-    desc: 'Explore the full workspace without a card.',
+    name: 'Private pilot', price: '₱0', cadence: 'during pilot', seats: 'Up to 15 members',
+    desc: 'Explore the full workspace by invitation. No card required.',
     feat: false,
     features: ['Full workspace access', 'Schedules + setlists', 'Attendance', 'Team invitations'],
   },
@@ -281,11 +281,11 @@ const PLANS = [
 ];
 
 const FAQS = [
-  { q: 'Can a new church sign up right now?', a: 'Yes. A church administrator can create a private workspace, confirm their email, and begin a 10-day trial without a card.' },
+  { q: 'Can a new church sign up right now?', a: 'A small number of churches can join our free private pilot by invitation. Email babcreations11@gmail.com to request access.' },
   { q: 'How is the team size counted?', a: 'A "member" is anyone you invite into the workspace — leaders, musicians, vocalists, tech volunteers. Inactive members can be archived without removing their history.' },
   { q: 'Can we use ServeSync for multiple teams or campuses?', a: 'One workspace is designed for one church. You can plan parallel services inside it, while separate churches should use separate workspaces. Dedicated campus boundaries are not available yet.' },
   { q: 'Does ServeSync work on mobile?', a: 'Yes. The app is built mobile-first — musicians can check setlists, confirm availability, and see schedules from their phones.' },
-  { q: 'What happens to our data if we cancel?', a: 'Cancellation, export, retention, and deletion rules will be published in the Terms before paid onboarding opens.' },
+  { q: 'What happens to our data if we leave the pilot?', a: 'We offer the church an operational-data export and plan to remove its active workspace within 30 days after exit. See the pilot terms and privacy notice for details.' },
   { q: 'Why peso pricing?', a: 'ServeSync is built and operated in the Philippines, so pricing is designed around local ministry budgets.' },
 ];
 
@@ -338,7 +338,7 @@ export function Landing() {
               </p>
               <div className="flex flex-wrap items-center gap-3 mt-7">
                 <button onClick={() => navigate('/create-church')} className="h-[50px] px-6 rounded-full bg-emerald-400 text-[#07101a] text-sm font-bold hover:bg-emerald-300 transition-all hover:-translate-y-px flex items-center gap-2">
-                  Start 10-day trial <ArrowRight className="h-4 w-4" />
+                  Join private pilot <ArrowRight className="h-4 w-4" />
                 </button>
                 <button onClick={() => navigate('/login')} className="h-[50px] px-6 rounded-full border border-white/[0.12] text-sm font-semibold text-white/75 hover:text-white hover:bg-white/[0.05] transition-all hover:-translate-y-px">
                   Sign in
@@ -373,7 +373,7 @@ export function Landing() {
               </p>
               <div className="flex items-center gap-3 mt-7">
                 <button onClick={() => navigate('/create-church')} className="h-[50px] px-6 rounded-full bg-emerald-400 text-[#07101a] text-sm font-bold hover:bg-emerald-300 transition-all hover:-translate-y-px flex items-center gap-2">
-                  Start 10-day trial <ArrowRight className="h-4 w-4" />
+                  Join private pilot <ArrowRight className="h-4 w-4" />
                 </button>
                 <button onClick={() => navigate('/login')} className="h-[50px] px-6 rounded-full border border-white/[0.12] text-sm font-semibold text-white/75 hover:text-white hover:bg-white/[0.05] transition-all hover:-translate-y-px">
                   Sign in
@@ -698,7 +698,7 @@ export function Landing() {
               Honest plans.<br />Priced for ministries.
             </h2>
             <p className="mt-4 text-[15px] leading-[1.6] text-white/60">
-              Start with every workspace feature for 10 days. No card is required to create the church.
+              Private pilot churches use the workspace free while we test it. Paid plans below are for a later launch.
             </p>
           </div>
 
@@ -750,10 +750,10 @@ export function Landing() {
                       : 'border border-white/[0.12] text-white/80 hover:text-white hover:bg-white/[0.06]'
                   }`}
                 >
-                  Start free <ArrowRight className="h-3.5 w-3.5" />
+                  Join private pilot <ArrowRight className="h-3.5 w-3.5" />
                 </button>
                 <div className="font-mono text-[11px] text-white/35 text-center mt-3">
-                  10-day trial · no card
+                  Invite required · no card
                 </div>
               </div>
             ))}
@@ -857,9 +857,9 @@ export function Landing() {
             <div className="flex flex-wrap items-center gap-5 text-[13px] text-white/50">
               <button onClick={() => navigate('/login')} className="hover:text-white transition-colors">Sign in</button>
               <button onClick={() => navigate('/create-church')} className="hover:text-white transition-colors">Create church</button>
-              <a href="#" className="hover:text-white transition-colors">Privacy</a>
-              <a href="#" className="hover:text-white transition-colors">Terms</a>
-              <a href="mailto:hello@servesync.app" className="hover:text-white transition-colors">Contact</a>
+              <a href="/privacy.html" className="hover:text-white transition-colors">Privacy</a>
+              <a href="/pilot-terms.html" className="hover:text-white transition-colors">Pilot terms</a>
+              <a href="mailto:babcreations11@gmail.com" className="hover:text-white transition-colors">Contact</a>
             </div>
           </div>
         </Wrap>

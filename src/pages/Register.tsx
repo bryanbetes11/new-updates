@@ -123,7 +123,7 @@ export function Register() {
           <section aria-labelledby="create-account-title">
             <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#63ee91]">Step {isCreateChurchFlow ? '1' : '2'} of 3</p>
             <h2 id="create-account-title" className="mt-2 text-3xl font-black tracking-[-0.04em]">Create your account</h2>
-            <p className="mt-3 text-sm leading-6 text-white/48">{isCreateChurchFlow ? 'This person becomes the first church administrator after verification.' : `This invitation is reserved for ${inviteEmail}.`}</p>
+            <p className="mt-3 text-sm leading-6 text-white/48">{isCreateChurchFlow ? 'Use the email approved for your church pilot invitation. This person becomes the first administrator after verification.' : `This invitation is reserved for ${inviteEmail}.`}</p>
 
             <form onSubmit={handleSubmit} className="mt-8 space-y-5">
               <div>
@@ -156,6 +156,7 @@ export function Register() {
               <button type="submit" disabled={loading || !firstName || !email || !password} className={`${launchPrimaryButtonClass} w-full`}>
                 {loading ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-black/20 border-t-black" />Creating account…</> : <>Create account <ArrowRight className="h-4 w-4" /></>}
               </button>
+              <p className="text-center text-xs leading-5 text-white/45">Before joining, read the <a href="/privacy.html" target="_blank" rel="noopener noreferrer" className="text-emerald-300 underline">privacy notice</a>. Private pilot participants will review the <a href="/pilot-terms.html" target="_blank" rel="noopener noreferrer" className="text-emerald-300 underline">pilot terms</a> before entering a church workspace.</p>
             </form>
           </section>
         )}

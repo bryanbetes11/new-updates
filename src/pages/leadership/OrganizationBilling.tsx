@@ -166,6 +166,9 @@ export function OrganizationBilling() {
   const lockedFromRedirect = searchParams.get('locked') === '1';
   const billingIntro = (() => {
     if (!organization) return '';
+    if (organization.is_private_pilot) {
+      return 'Your church is in the free, invitation-only pilot. No payment or plan selection is needed, and there is no automatic charge.';
+    }
     if (organization.is_billing_exempt) {
       return 'MCJC is marked billing-exempt, so this church does not need payment submissions or plan renewals.';
     }
@@ -274,7 +277,7 @@ export function OrganizationBilling() {
         <div className="relative flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
           <div className="max-w-2xl">
             <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1">Billing</p>
-            <h2 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">Manual billing, premium flow.</h2>
+            <h2 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">{organization.is_private_pilot ? 'Free private pilot' : 'Manual billing, premium flow.'}</h2>
             <p className="text-sm text-gray-500 dark:text-white/45 mt-2">
               {billingIntro}
             </p>
@@ -316,7 +319,7 @@ export function OrganizationBilling() {
               )}
               <div className="flex items-center justify-between gap-3">
                 <span className="text-gray-500 dark:text-white/45">Current Plan</span>
-                <span className="font-semibold text-gray-900 dark:text-white">{formatPlanCode(organization.billing_plan)}</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{organization.is_private_pilot ? 'Private pilot' : formatPlanCode(organization.billing_plan)}</span>
               </div>
               {!showTrialFields && (
                 <div className="flex items-center justify-between gap-3">
@@ -331,7 +334,11 @@ export function OrganizationBilling() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[1.05fr,0.95fr] gap-5">
+      {organization.is_private_pilot ? (
+        <div className="card p-5 text-sm leading-6 text-gray-600 dark:text-white/65">
+          Pilot access is free. Your church can test ServeSync for 30 days from activation, with an extension by agreement. Contact <a href="mailto:babcreations11@gmail.com" className="font-semibold text-emerald-700 dark:text-emerald-300">ServeSync support</a> to discuss the pilot or leave it. No payment details are needed.
+        </div>
+      ) : <div className="grid grid-cols-1 xl:grid-cols-[1.05fr,0.95fr] gap-5">
         <div className="space-y-5">
           <div className="card p-5">
             <div className="flex items-start justify-between gap-4 mb-5">
@@ -570,7 +577,7 @@ export function OrganizationBilling() {
             )}
           </div>
         </div>
-      </div>
+      </div>}
     </div>
   );
 

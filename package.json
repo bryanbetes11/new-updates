@@ -1,7 +1,7 @@
 {
   "name": "servesync",
   "private": true,
-  "version": "1.4.7",
+  "version": "1.4.8",
   "type": "module",
   "scripts": {
     "test:attendance-privacy": "node tests/privacyInternalNotes.mjs && node tests/leadershipRoleAssignments.mjs && node tests/attendanceTeamMemberships.mjs && node tests/attendanceTeamAccess.mjs && node tests/attendanceReminderPrivacy.mjs",

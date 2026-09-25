@@ -22,6 +22,8 @@ export function CreateChurch() {
   const [slug, setSlug] = useState('');
   const [slugTouched, setSlugTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [adultConfirmed, setAdultConfirmed] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   useEffect(() => {
     if (!slugTouched) setSlug(slugifyChurchName(name));
@@ -52,6 +54,14 @@ export function CreateChurch() {
     }
 
     setSubmitting(true);
+    const { error: ageError } = await supabase.rpc('confirm_private_pilot_adult');
+    if (ageError) {
+      setSubmitting(false);
+      toast('error', ageError.message);
+      return;
+    }
+    const { error: termsError } = await supabase.rpc('accept_private_pilot_terms', { p_version: '2026-09-25' });
+    if (termsError) { setSubmitting(false); toast('error', termsError.message); return; }
     const { error } = await supabase.rpc('create_organization_for_current_user', {
       p_name: name.trim(),
       p_slug: normalizedSlug,
@@ -65,7 +75,7 @@ export function CreateChurch() {
     }
 
     await refreshProfile();
-    toast('success', 'Church workspace created. Your 10-day trial has started.');
+    toast('success', 'Church workspace created. Your private pilot access is active.');
     navigate('/onboarding', { replace: true });
   };
 
@@ -101,13 +111,13 @@ export function CreateChurch() {
           {!user ? (
             <div className="space-y-5">
               <p className="text-sm leading-6 text-white/52">
-                Create an account for the first church administrator. After your email is confirmed, you can name the church and invite the rest of the team.
+                Create an account with the email approved for your private pilot invitation. After email confirmation, you can name the church and invite the team.
               </p>
               <div className={launchInfoRowClass}>
                 <ShieldCheck className="mt-1 h-4 w-4 shrink-0 text-[#63ee91]" />
                 <div>
                 <p className="text-sm font-black text-white">
-                  10-day trial · no card required
+                  Free private pilot · approved invite required
                 </p>
                 <p className="mt-1 text-xs leading-5 text-white/42">The first account becomes the church admin and controls invitations, roles, policies, and billing.</p>
                 </div>
@@ -152,7 +162,16 @@ export function CreateChurch() {
                 </div>
               </div>
 
-              <button type="submit" disabled={submitting || name.trim().length < 2 || !slugIsValid} className={`${launchPrimaryButtonClass} w-full`}>
+              <label className="flex items-start gap-3 text-sm leading-6 text-white/65">
+                <input type="checkbox" checked={adultConfirmed} onChange={event => setAdultConfirmed(event.target.checked)} className="mt-1.5" required />
+                <span>I confirm I am at least 18. This private pilot is for adult church teams.</span>
+              </label>
+              <label className="flex items-start gap-3 text-sm leading-6 text-white/65">
+                <input type="checkbox" checked={termsAccepted} onChange={event => setTermsAccepted(event.target.checked)} className="mt-1.5" required />
+                <span>I have read and agree to the <a href="/pilot-terms.html" target="_blank" rel="noopener noreferrer" className="text-emerald-300 underline">pilot terms</a> and have read the <a href="/privacy.html" target="_blank" rel="noopener noreferrer" className="text-emerald-300 underline">privacy notice</a>.</span>
+              </label>
+
+              <button type="submit" disabled={submitting || !adultConfirmed || !termsAccepted || name.trim().length < 2 || !slugIsValid} className={`${launchPrimaryButtonClass} w-full`}>
                 {submitting ? <><Loader2 className="h-4 w-4 animate-spin" /> Creating workspace…</> : <>Create church workspace <ArrowRight className="h-4 w-4" /></>}
               </button>
 

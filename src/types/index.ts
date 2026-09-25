@@ -38,6 +38,7 @@ export interface Organization {
   current_period_end: string | null;
   billing_grace_ends_at: string | null;
   is_billing_exempt: boolean;
+  is_private_pilot: boolean;
   seats_purchased: number;
   created_at: string;
   updated_at: string;

@@ -8,6 +8,7 @@ import {
   CornerDownRight, X, ChevronLeft, Megaphone, Smile
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { announcementImageUrl, useAnnouncementImages } from '../lib/announcementMedia';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { PageLoader } from '../components/LoadingSpinner';
@@ -492,6 +493,10 @@ export function AnnouncementDetail() {
   const [editTitle, setEditTitle] = useState('');
   const [editPriority, setEditPriority] = useState<'normal' | 'high' | 'urgent'>('normal');
   const [editContentBlocks, setEditContentBlocks] = useState<ContentBlock[]>([]);
+  useAnnouncementImages([
+    ...(announcement?.content_blocks?.filter(block => block.type === 'image').map(block => block.content) ?? []),
+    ...editContentBlocks.filter(block => block.type === 'image').map(block => block.content),
+  ], user?.id ?? '');
   const [saving, setSaving] = useState(false);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editCommentContent, setEditCommentContent] = useState('');
@@ -1034,7 +1039,7 @@ export function AnnouncementDetail() {
                     </motion.div>
                   ) : (
                     <motion.div key={i} variants={blockItem} className="rounded-2xl overflow-hidden border border-black/[0.06] dark:border-white/[0.07] bg-gray-50 dark:bg-white/[0.03]">
-                      <img src={block.content} alt={`Announcement attachment ${i + 1}`} className="w-full object-contain" />
+                      <img src={announcementImageUrl(block.content)} alt={`Announcement attachment ${i + 1}`} className="w-full object-contain" />
                     </motion.div>
                   )
                 )}
@@ -1289,7 +1294,7 @@ export function AnnouncementDetail() {
                       </div>
                     ) : (
                       <div className="relative rounded-2xl overflow-hidden ring-1 ring-black/[0.06] dark:ring-white/[0.07]">
-                        <img src={block.content} alt="" className="w-full rounded-lg" />
+                        <img src={announcementImageUrl(block.content)} alt="" className="w-full rounded-lg" />
                         <button
                           type="button"
                           onClick={() => removeEditBlock(index)}

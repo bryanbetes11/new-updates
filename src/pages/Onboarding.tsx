@@ -126,12 +126,26 @@ export function Onboarding({ preview = false }: { preview?: boolean }) {
         : 'Add only the details your leaders need for scheduling, communication, birthdays, and ministry coordination. Your church controls roles separately.'}
       steps={adminFlow ? adminSteps : memberSteps}
       currentStep={2}
+      backTo={isPreview ? `/preview/onboarding?role=${adminFlow ? 'admin&step=church' : 'member&step=account'}` : undefined}
     >
       <div className="mx-auto w-full max-w-xl">
         {isPreview && (
           <div role="status" className="mb-7 rounded-2xl border border-[#1ed760]/25 bg-[#1ed760]/[0.07] p-4 text-sm text-white/75">
             <p className="font-black text-[#7cffaa]">Onboarding preview · Nothing will be saved</p>
-            <p className="mt-1 text-white/55">Try the form as a visitor. No church or account is created.</p>
+            <p className="mt-1 text-white/55">Try the form as a visitor. No church or account is created. Scroll to see every field.</p>
+            <a href="#onboarding-profile-form" className="mt-2 inline-flex min-h-10 items-center text-xs font-bold text-[#7cffaa] underline">Jump to profile fields</a>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {(adminFlow ? adminSteps : memberSteps).map((step, index) => (
+                <Link
+                  key={step.label}
+                  to={`/preview/onboarding?role=${adminFlow ? 'admin' : 'member'}&step=${index === 2 ? 'profile' : adminFlow ? index === 0 ? 'account' : 'church' : index === 0 ? 'invite' : 'account'}`}
+                  aria-current={index === 2 ? 'step' : undefined}
+                  className={`inline-flex min-h-10 items-center rounded-full px-3 text-xs font-bold ${index === 2 ? 'bg-[#1ed760] text-black' : 'bg-white/[0.075] text-white/70'}`}
+                >
+                  {index + 1}. {step.label}
+                </Link>
+              ))}
+            </div>
             <div className="mt-3 flex gap-4 text-xs font-bold">
               <Link to="/preview/onboarding?role=admin" className="text-[#7cffaa] underline">Admin view</Link>
               <Link to="/preview/onboarding?role=member" className="text-[#7cffaa] underline">Member view</Link>
@@ -144,7 +158,7 @@ export function Onboarding({ preview = false }: { preview?: boolean }) {
           <p className="mt-3 text-sm leading-6 text-white/48">You can update these details later from your profile.</p>
         </div>
 
-              <div className="space-y-5">
+              <div id="onboarding-profile-form" className="space-y-5 scroll-mt-4">
 
                 {/* Avatar upload */}
                 <div>

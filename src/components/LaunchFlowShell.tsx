@@ -68,8 +68,8 @@ export function LaunchFlowShell({
                     <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${active ? 'bg-[#1ed760] text-black' : complete ? 'bg-[#1ed760]/12 text-[#63ee91]' : 'bg-white/[0.055] text-white/25'}`}>
                       {complete ? <Check className="h-3.5 w-3.5" /> : <Circle className={`h-2.5 w-2.5 ${active ? 'fill-current' : ''}`} />}
                     </span>
-                    <span className="min-w-0">
-                      <span className={`block truncate text-[12px] font-black ${active ? 'text-white' : 'text-white/52'}`}>{step.label}</span>
+                    <span className="w-full min-w-0">
+                      <span className={`block break-words text-[11px] font-black leading-4 lg:truncate lg:text-[12px] ${active ? 'text-white' : 'text-white/52'}`}>{step.label}</span>
                       <span className="mt-0.5 hidden truncate text-[11px] text-white/30 lg:block">{step.detail}</span>
                     </span>
                   </li>

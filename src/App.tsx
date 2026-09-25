@@ -66,6 +66,11 @@ const Onboarding = lazy(() =>
     default: Onboarding,
   })),
 );
+const OnboardingPreview = lazy(() =>
+  import("./pages/OnboardingPreview").then(({ OnboardingPreview }) => ({
+    default: OnboardingPreview,
+  })),
+);
 const Dashboard = lazy(() =>
   import("./pages/Dashboard").then(({ Dashboard }) => ({ default: Dashboard })),
 );
@@ -532,7 +537,7 @@ export default function App() {
                   <Route path="/auth/confirm" element={<AuthConfirm />} />
                   <Route path="/register" element={<Register />} />
                   <Route path="/invite/:token" element={<InviteAccept />} />
-                  <Route path="/preview/onboarding" element={<Onboarding preview />} />
+                  <Route path="/preview/onboarding" element={<OnboardingPreview />} />
                   <Route
                     path="/create-church"
                     element={<CreateChurch />}

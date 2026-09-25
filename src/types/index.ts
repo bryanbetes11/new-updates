@@ -15,7 +15,6 @@ export interface Profile {
   avatar_url: string;
   is_onboarded: boolean;
   ministry_status: 'active' | 'restoration' | 'suspended' | 'inactive';
-  leadership_notes: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -549,7 +548,6 @@ export interface DisciplineRecord {
   status: 'open' | 'verbal_warning' | 'counselling' | 'suspension' | 'resolved';
   title: string;
   notes: string | null;
-  leader_notes: string | null;
   final_decision: string | null;
   resolved_at: string | null;
   resolved_by: string | null;

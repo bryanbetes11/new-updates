@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { format, parseISO } from 'date-fns';
 import { motion } from 'framer-motion';
-import { Users, Shield, Search, ChevronDown, ChevronUp, Plus, X, Check, Crown, CreditCard as Edit3, Save, Camera, Loader2, FileText, KeyRound } from 'lucide-react';
+import { Users, Shield, Search, ChevronDown, ChevronUp, Plus, X, Check, Crown, CreditCard as Edit3, Save, Camera, Loader2, KeyRound } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { passwordResetRedirectUrl } from '../lib/authRedirect';
 import { useAuth } from '../contexts/AuthContext';
@@ -31,6 +31,12 @@ interface MemberSettings {
   exclusion_reason: string | null;
   capabilities: Record<string, boolean>;
 }
+
+type AttendanceTeam = 'music' | 'tech';
+const attendanceTeams: { value: AttendanceTeam; label: string }[] = [
+  { value: 'music', label: 'Music' },
+  { value: 'tech', label: 'Tech' },
+];
 
 const capabilityOptions = [
   ['approve_leave', 'Approve leave'], ['approve_swaps', 'Approve swaps'],
@@ -105,12 +111,19 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
   const [stats, setStats] = useState({ total: 0, leaders: 0 });
   const [editingMember, setEditingMember] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
-    first_name: '', second_name: '', middle_name: '', last_name: '', nickname: '', phone: '', gender: '', birthday: '', official_join_date: '', ministry_status: 'active', leadership_notes: '',
+    first_name: '', second_name: '', middle_name: '', last_name: '', nickname: '', phone: '', gender: '', birthday: '', official_join_date: '', ministry_status: 'active',
   });
   const [saving, setSaving] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [authAudit, setAuthAudit] = useState<Record<string, MemberAuthAudit>>({});
   const [memberSettings, setMemberSettings] = useState<Record<string, MemberSettings>>({});
+  const [attendanceTeamByMember, setAttendanceTeamByMember] = useState<Record<string, AttendanceTeam[]>>({});
+  const [attendanceTeamsReady, setAttendanceTeamsReady] = useState(false);
+  const [savingAttendanceTeam, setSavingAttendanceTeam] = useState<string | null>(null);
+  const [leaderScopes, setLeaderScopes] = useState<Record<string, AttendanceTeam[]>>({});
+  const [leaderScopesReady, setLeaderScopesReady] = useState(false);
+  const [savingLeaderScope, setSavingLeaderScope] = useState<string | null>(null);
+  const [attendanceAccessActive, setAttendanceAccessActive] = useState<boolean | null>(null);
   const [savingSettingsId, setSavingSettingsId] = useState<string | null>(null);
   const [resetConfirmMember, setResetConfirmMember] = useState<MemberWithRoles | null>(null);
   const [sendingReset, setSendingReset] = useState(false);
@@ -147,6 +160,10 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
   }, [isOrgAdmin, profile?.org_id, appAccessRefresh]);
 
   const fetchMembers = useCallback(async () => {
+    if (user?.id) {
+      const { error: accessError } = await supabase.rpc('auth_can_view_member_attendance', { p_member: user.id });
+      setAttendanceAccessActive(!accessError ? true : accessError.code === 'PGRST202' ? false : null);
+    }
     const { data } = await supabase
       .from('profiles')
       .select('*, user_roles(*, roles(*))')
@@ -157,7 +174,23 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
       map[item.user_id] = item;
       return map;
     }, {}));
+    const { data: attendanceTeamRows, error: attendanceTeamError } = await supabase
+      .from('attendance_team_memberships')
+      .select('user_id, team');
+    setAttendanceTeamsReady(!attendanceTeamError);
+    setAttendanceTeamByMember(((attendanceTeamRows || []) as { user_id: string; team: AttendanceTeam }[])
+      .reduce<Record<string, AttendanceTeam[]>>((map, row) => {
+        (map[row.user_id] ??= []).push(row.team);
+        return map;
+      }, {}));
 
+    const { data: scopeRows, error: scopeError } = await supabase.from('attendance_leader_scopes').select('user_id, team');
+    setLeaderScopesReady(!scopeError);
+    setLeaderScopes(((scopeRows || []) as { user_id: string; team: AttendanceTeam }[])
+      .reduce<Record<string, AttendanceTeam[]>>((map, row) => {
+        (map[row.user_id] ??= []).push(row.team);
+        return map;
+      }, {}));
     const leaderRoleIds = roles.filter(r => r.is_leadership).map(r => r.id);
     const leaders = (data || []).filter((m: MemberWithRoles) =>
       m.user_roles?.some(ur => leaderRoleIds.includes(ur.role_id))
@@ -182,7 +215,7 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
     }
 
     setLoading(false);
-  }, [roles, canManageChurchMembers]);
+  }, [roles, canManageChurchMembers, user?.id]);
 
   useEffect(() => { fetchMembers(); }, [fetchMembers]);
 
@@ -197,9 +230,42 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
   };
 
   const removeRole = async (userRoleId: string) => {
-    await supabase.from('user_roles').delete().eq('id', userRoleId);
+    const { data, error } = await supabase.from('user_roles').delete().eq('id', userRoleId).select('id');
+    if (error || !data?.length) { toast('error', 'Could not remove role'); return; }
     toast('info', 'Role removed');
     fetchMembers();
+  };
+
+  const toggleAttendanceTeam = async (member: MemberWithRoles, team: AttendanceTeam) => {
+    if (!isOrgAdmin || !user || !member.org_id || savingAttendanceTeam) return;
+    setSavingAttendanceTeam(member.id);
+    const assigned = attendanceTeamByMember[member.id]?.includes(team);
+    const { data, error } = assigned
+      ? await supabase.from('attendance_team_memberships').delete()
+          .eq('org_id', member.org_id).eq('user_id', member.id).eq('team', team).select('team')
+      : await supabase.from('attendance_team_memberships').insert({
+          org_id: member.org_id, user_id: member.id, team, created_by: user.id,
+        }).select('team');
+    setSavingAttendanceTeam(null);
+    if (error || !data?.length) { toast('error', 'Could not update attendance team'); return; }
+    await fetchMembers();
+  };
+
+  const toggleLeaderScope = async (member: MemberWithRoles, team: AttendanceTeam) => {
+    if (!isOrgAdmin || !user || !member.org_id || savingLeaderScope) return;
+    setSavingLeaderScope(member.id);
+    try {
+      const assigned = leaderScopes[member.id]?.includes(team);
+      const { data, error } = assigned
+        ? await supabase.from('attendance_leader_scopes').delete()
+            .eq('org_id', member.org_id).eq('user_id', member.id).eq('team', team).select('team')
+        : await supabase.from('attendance_leader_scopes').insert({
+            org_id: member.org_id, user_id: member.id, team, created_by: user.id,
+          }).select('team');
+      if (error || !data?.length) { toast('error', 'Could not update leader attendance access'); return; }
+      await fetchMembers();
+    } catch { toast('error', 'Could not update leader attendance access'); }
+    finally { setSavingLeaderScope(null); }
   };
 
   const startEditing = (member: MemberWithRoles) => {
@@ -214,7 +280,6 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
       birthday: member.birthday || '',
       official_join_date: member.official_join_date || '',
       ministry_status: member.ministry_status || 'active',
-      leadership_notes: member.leadership_notes || '',
     });
     setEditingMember(member.id);
   };
@@ -598,16 +663,6 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                             />
                           </div>
 
-                          <div>
-                            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5 uppercase tracking-wide">Leadership Notes (internal)</label>
-                            <textarea
-                              value={editForm.leadership_notes}
-                              onChange={e => setEditForm({ ...editForm, leadership_notes: e.target.value })}
-                              className="input-field min-h-[60px] resize-none"
-                              placeholder="Internal notes for leadership..."
-                            />
-                          </div>
-
                           <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
                             <button onClick={() => setEditingMember(null)} className="btn-secondary min-h-11 justify-center text-xs">Cancel</button>
                             <button onClick={() => saveMemberEdit(member.id)} disabled={saving} className="btn-primary min-h-11 justify-center text-xs">
@@ -727,14 +782,6 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                               </div>
                             )}
 
-                            {member.leadership_notes && (
-                              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 ring-1 ring-amber-200/60 dark:ring-amber-800/40">
-                                <p className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-wide mb-1 flex items-center gap-1">
-                                  <FileText className="h-3 w-3" /> Leadership Notes
-                                </p>
-                                <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">{member.leadership_notes}</p>
-                              </div>
-                            )}
                           </div>
 
                           <div>
@@ -761,7 +808,7 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                                 >
                                   {ur.roles.is_leadership && <Crown className="h-3 w-3" />}
                                   {ur.roles.name}
-                                  {member.id !== user?.id && canManageChurchMembers && (
+                                  {member.id !== user?.id && canManageChurchMembers && (!ur.roles.is_leadership || isOrgAdmin) && (
                                     <button onClick={() => removeRole(ur.id)} className="hover:text-red-500 transition-colors ml-0.5">
                                       <X className="h-3 w-3" />
                                     </button>
@@ -773,6 +820,53 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                               )}
                             </div>
                           </div>
+
+                          <div>
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-wide mb-2">Attendance team</p>
+                            {attendanceTeamsReady && attendanceAccessActive !== true && (
+                              <p className="mb-2 text-xs text-amber-600">{attendanceAccessActive === false
+                                ? 'Setup stage: save team and leader assignments now. Current attendance permissions remain in effect until the access rules are activated.'
+                                : 'Could not confirm whether attendance access rules are active. Saved assignments alone do not confirm restricted access.'}</p>
+                            )}
+                            {attendanceTeamsReady ? (
+                              <div className="flex flex-wrap gap-2">
+                                {attendanceTeams.map(team => {
+                                  const assigned = Boolean(attendanceTeamByMember[member.id]?.includes(team.value));
+                                  return <button
+                                    key={team.value}
+                                    type="button"
+                                    aria-pressed={assigned}
+                                    disabled={!isOrgAdmin || savingAttendanceTeam === member.id}
+                                    onClick={() => toggleAttendanceTeam(member, team.value)}
+                                    className={`min-h-11 rounded-xl px-3 text-xs font-bold ring-1 ${assigned ? 'bg-emerald-50 text-emerald-700 ring-emerald-300 dark:bg-emerald-900/20 dark:text-emerald-300' : 'bg-gray-50 text-gray-500 ring-gray-200 dark:bg-white/[0.04] dark:text-white/45 dark:ring-white/10'}`}
+                                  >{assigned ? '✓ ' : ''}{team.label}</button>;
+                                })}
+                              </div>
+                            ) : <p className="text-xs text-amber-600">Attendance teams are unavailable until the database update is applied.</p>}
+                            {attendanceTeamsReady && !attendanceTeamByMember[member.id]?.length && (
+                              <p className="mt-2 text-xs text-amber-600">Unassigned: {attendanceAccessActive === true ? 'only this member and church admins can view their attendance.' : 'once access rules are active, only this member and church admins will see their attendance.'}</p>
+                            )}
+                          </div>
+                          {(isOrgAdmin && (member.is_org_admin || memberRoles.some(ur => ur.roles?.is_leadership))) && (
+                            <div>
+                              <p className="text-[10px] font-black text-gray-400 uppercase tracking-wide mb-2">Leader attendance access</p>
+                              {member.is_org_admin ? <p className="text-xs text-gray-500">Church admins can manage attendance for everyone in this church.</p> : <>
+                                <p className="mb-2 text-xs text-gray-500">Choose the groups this leader may view and manage. This is separate from the team they serve in.</p>
+                                {leaderScopesReady ? <div className="flex flex-wrap gap-2">
+                                  {attendanceTeams.map(team => {
+                                    const assigned = Boolean(leaderScopes[member.id]?.includes(team.value));
+                                    return <button key={team.value} type="button" aria-pressed={assigned}
+                                      aria-label={`${team.label} attendance access for ${member.first_name} ${member.last_name}`}
+                                      disabled={savingLeaderScope !== null}
+                                      onClick={() => toggleLeaderScope(member, team.value)}
+                                      className={`min-h-11 rounded-xl px-3 text-xs font-bold ring-1 ${assigned ? 'bg-emerald-50 text-emerald-700 ring-emerald-300 dark:bg-emerald-900/20 dark:text-emerald-300' : 'bg-gray-50 text-gray-500 ring-gray-200 dark:bg-white/[0.04] dark:text-white/45'}`}
+                                    >{assigned ? '✓ ' : ''}{team.label}</button>;
+                                  })}
+                                </div> : <p className="text-xs text-amber-600">Leader access settings are unavailable until the database update is applied.</p>}
+                                {leaderScopesReady && !leaderScopes[member.id]?.length && <p className="mt-2 text-xs text-amber-600">No groups selected: {attendanceAccessActive === true ? 'this leader can only view their own attendance.' : 'once access rules are active, this leader will only see their own attendance.'}</p>}
+                              </>}
+                            </div>
+                          )}
                         </>
                       )}
                     </div>
@@ -811,7 +905,7 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                 <Select
                   value={selectedRole}
                   onChange={setSelectedRole}
-                  options={roles.map(r => ({ value: r.id, label: r.name }))}
+                  options={roles.filter(role => !role.is_leadership || isOrgAdmin).map(r => ({ value: r.id, label: r.name }))}
                   placeholder="Select a role"
                 />
               </div>

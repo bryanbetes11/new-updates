@@ -20,7 +20,8 @@
     "mobile:open:android": "cap open android",
     "mobile:open:ios": "cap open ios",
     "mobile:doctor": "node scripts/mobile-doctor.mjs",
-    "mobile:apk": "node scripts/build-android.mjs"
+    "mobile:apk": "node scripts/build-android.mjs",
+    "test:attendance-foundation": "node tests/privacyInternalNotes.mjs && node tests/leadershipRoleAssignments.mjs && node tests/attendanceTeamMemberships.mjs"
   },
   "dependencies": {
     "@capacitor/android": "8.5.2",

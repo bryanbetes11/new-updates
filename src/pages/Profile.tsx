@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { motion } from 'framer-motion';
 import {
-  Pencil, Save, LogOut, X, Check, Crown,
+  Pencil, Save, LogOut, X, Crown,
   Camera, Loader2, Shield, ChevronDown, Clock,
   MessageSquare, XCircle, CheckCircle, Eye, KeyRound,
   Phone, Cake, Calendar, AlertCircle, Mail
@@ -18,7 +18,6 @@ import { NotificationPreferencesSetting } from '../components/NotificationPrefer
 import { RoleBadge, sortRolesLeadershipFirst } from '../components/RoleBadge';
 import { mergeUntouchedFields } from '../lib/draftRecovery';
 import { phoneHref } from '../lib/phone';
-import { PARTICIPANT_ROLE_NAME } from '../lib/eventAssignmentRoles';
 import type { DisciplineRecord } from '../types';
 
 interface AccountabilitySummary {
@@ -67,13 +66,11 @@ function PremiumCard({ children, className = '' }: { children: React.ReactNode; 
 }
 
 export function Profile() {
-  const { user, profile, userRoles, roles, signOut, refreshProfile, isLeader, organization } = useAuth();
+  const { user, profile, userRoles, signOut, refreshProfile, isLeader, organization } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [editing, setEditing] = useState(false);
-  const [editingRoles, setEditingRoles] = useState(false);
-  const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     first_name: '', second_name: '', middle_name: '', last_name: '', nickname: '', phone: '', gender: '', birthday: '', official_join_date: '',
@@ -217,23 +214,6 @@ export function Profile() {
   if (!profile) return <PageLoader />;
 
   const sortedUserRoles = sortRolesLeadershipFirst(userRoles);
-  const startEditingRoles = () => { setSelectedRoleIds(userRoles.map(ur => ur.role_id)); setEditingRoles(true); };
-  const toggleRoleSelection = (roleId: string) => setSelectedRoleIds(prev => prev.includes(roleId) ? prev.filter(r => r !== roleId) : [...prev, roleId]);
-
-  const saveRoles = async () => {
-    if (!user) return;
-    setLoading(true);
-    const currentIds = userRoles.map(ur => ur.role_id);
-    const toAdd = selectedRoleIds.filter(id => !currentIds.includes(id));
-    const toRemove = currentIds.filter(id => !selectedRoleIds.includes(id));
-    for (const roleId of toRemove) await supabase.from('user_roles').delete().eq('user_id', user.id).eq('role_id', roleId);
-    if (toAdd.length > 0) await supabase.from('user_roles').insert(toAdd.map(role_id => ({ user_id: user.id, role_id })));
-    await refreshProfile();
-    setEditingRoles(false);
-    setLoading(false);
-    toast('success', 'Roles updated');
-  };
-
   const openDisciplineCount = myDisciplineRecords.filter(r => r.status !== 'resolved').length;
   const fullName = `${profile.first_name} ${profile.last_name}`.trim();
   const displayEmail = user?.email || profile.email;
@@ -571,63 +551,17 @@ export function Profile() {
           animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
           transition={{ duration: 0.5, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
         >
-          <SectionLabel
-            action={
-              !editingRoles ? (
-                <button type="button" onClick={startEditingRoles} className="inline-flex min-h-11 items-center gap-1 rounded-xl px-2 text-[11px] font-semibold text-emerald-600 transition-colors hover:bg-emerald-500/[0.08] hover:text-emerald-500 dark:text-emerald-400/80 dark:hover:text-emerald-300">
-                  <Pencil className="h-3 w-3" /> Edit
-                </button>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <button type="button" onClick={() => setEditingRoles(false)} className="min-h-11 rounded-xl px-2 text-[11px] font-semibold text-gray-400 transition-colors hover:bg-black/[0.035] hover:text-gray-600 dark:text-white/40 dark:hover:bg-white/[0.04] dark:hover:text-white/60">Cancel</button>
-                  <button
-                    type="button"
-                    onClick={saveRoles}
-                    disabled={loading}
-                    className="inline-flex h-11 items-center gap-1 rounded-full px-3 text-[11px] font-semibold text-white"
-                    style={{ background: 'linear-gradient(135deg, #16a34a, #15803d)', boxShadow: '0 3px 10px rgba(22,163,74,0.3)' }}
-                  >
-                    <Save className="h-3 w-3" /> {loading ? 'Saving…' : 'Save'}
-                  </button>
-                </div>
-              )
-            }
-          >
+          <SectionLabel>
             <span className="flex items-center gap-1.5"><Crown className="h-3 w-3" /> My Roles</span>
           </SectionLabel>
 
           <PremiumCard className="p-5 sm:p-6">
-            {editingRoles ? (
-              <div className="flex flex-wrap gap-2">
-                {sortRolesLeadershipFirst(roles).filter(role => role.name !== PARTICIPANT_ROLE_NAME).map(role => {
-                  const selected = selectedRoleIds.includes(role.id);
-                  return (
-                    <button
-                      key={role.id}
-                      type="button"
-                      onClick={() => toggleRoleSelection(role.id)}
-                      className={`inline-flex h-11 items-center gap-1.5 rounded-full border px-3 text-[12px] font-bold transition-all ${
-                        selected
-                          ? role.is_leadership
-                            ? 'bg-amber-50 dark:bg-amber-500/[0.18] border-amber-300 dark:border-amber-500/35 text-amber-700 dark:text-amber-300'
-                            : 'bg-emerald-50 dark:bg-emerald-500/[0.18] border-emerald-300 dark:border-emerald-500/35 text-emerald-700 dark:text-emerald-300'
-                          : 'bg-white/70 dark:bg-white/[0.04] border-black/[0.06] dark:border-white/[0.07] text-gray-500 dark:text-white/45 hover:bg-white dark:hover:bg-white/[0.07]'
-                      }`}
-                    >
-                      {selected && <Check className="h-3 w-3" />}
-                      {role.is_leadership && <Crown className="h-3 w-3" />}
-                      {role.name}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {sortedUserRoles.length > 0
-                  ? sortedUserRoles.map(ur => ur.roles && <RoleBadge key={ur.id} role={ur.roles} />)
-                  : <p className="text-[13px] text-gray-400 dark:text-white/30 italic">No roles assigned yet</p>}
-              </div>
-            )}
+            <div className="flex flex-wrap gap-2">
+              {sortedUserRoles.length > 0
+                ? sortedUserRoles.map(ur => ur.roles && <RoleBadge key={ur.id} role={ur.roles} />)
+                : <p className="text-[13px] text-gray-400 dark:text-white/30 italic">No roles assigned yet</p>}
+            </div>
+            <p className="mt-3 text-xs text-gray-500 dark:text-white/45">Ask your church admin to update your ministry roles.</p>
           </PremiumCard>
         </motion.section>
 

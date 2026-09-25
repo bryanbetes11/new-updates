@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import {
   Shield, Plus, ChevronDown, Search,
   Filter, CheckCircle, Clock, XCircle, FileCheck, MessageSquare,
-  Eye, X, Lock, AlertTriangle, ArrowRight
+  Eye, X, AlertTriangle, ArrowRight
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -86,7 +86,6 @@ export function Discipline({ embedded }: DisciplineProps = {}) {
     status: 'open' as string,
     title: '',
     notes: '',
-    leader_notes: '',
     final_decision: '',
   });
   const [saving, setSaving] = useState(false);
@@ -152,7 +151,6 @@ export function Discipline({ embedded }: DisciplineProps = {}) {
       status: 'open',
       title: '',
       notes: '',
-      leader_notes: '',
       final_decision: '',
     });
   };
@@ -176,7 +174,6 @@ export function Discipline({ embedded }: DisciplineProps = {}) {
       status: level >= 4 ? 'suspension' : level === 3 ? 'counselling' : 'verbal_warning',
       title: `Quarterly Attendance - ${offenseLabels[level].label}`,
       notes: `Automatically detected from the current quarter attendance record.\n\nLate: ${candidate.late_count}\nAbsent: ${candidate.absent_count}\n\nRequired action: ${action}`,
-      leader_notes: '',
       final_decision: '',
     });
     setEditingRecord(null);
@@ -202,7 +199,6 @@ export function Discipline({ embedded }: DisciplineProps = {}) {
       status: record.status,
       title: record.title,
       notes: record.notes ?? '',
-      leader_notes: record.leader_notes ?? '',
       final_decision: record.final_decision ?? '',
     });
     setEditingRecord(record);
@@ -226,7 +222,6 @@ export function Discipline({ embedded }: DisciplineProps = {}) {
       status: formData.status,
       title: formData.title,
       notes: formData.notes || null,
-      leader_notes: formData.leader_notes || null,
       final_decision: formData.final_decision || null,
       resolved_at: formData.status === 'resolved' && !editingRecord?.resolved_at ? new Date().toISOString() : (editingRecord?.resolved_at ?? null),
       resolved_by: formData.status === 'resolved' && !editingRecord?.resolved_by ? user.id : (editingRecord?.resolved_by ?? null),
@@ -513,14 +508,6 @@ export function Discipline({ embedded }: DisciplineProps = {}) {
                         </div>
                       )}
 
-                      {isLeader && record.leader_notes && (
-                        <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 ring-1 ring-amber-200/60 dark:ring-amber-800/40 p-3">
-                          <p className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-wide mb-1 flex items-center gap-1">
-                            <Lock className="h-3 w-3" /> Leadership Notes (internal)
-                          </p>
-                          <p className="text-sm text-amber-700 dark:text-amber-300 leading-relaxed">{record.leader_notes}</p>
-                        </div>
-                      )}
 
                       {record.resolved_at && (
                         <p className="text-xs text-gray-400">
@@ -645,21 +632,6 @@ export function Discipline({ embedded }: DisciplineProps = {}) {
               onChange={e => setFormData({ ...formData, notes: e.target.value })}
               className="input-field min-h-[80px] resize-none"
               placeholder="Details visible to the member..."
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-              <span className="flex items-center gap-1.5">
-                <Lock className="h-3.5 w-3.5 text-amber-500" />
-                Leadership Notes (internal only)
-              </span>
-            </label>
-            <textarea
-              value={formData.leader_notes}
-              onChange={e => setFormData({ ...formData, leader_notes: e.target.value })}
-              className="input-field min-h-[60px] resize-none"
-              placeholder="Internal notes not shown to the member..."
             />
           </div>
 

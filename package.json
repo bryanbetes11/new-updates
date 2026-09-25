@@ -1,7 +1,7 @@
 {
   "name": "servesync",
   "private": true,
-  "version": "1.4.6",
+  "version": "1.4.7",
   "type": "module",
   "scripts": {
     "test:android-push": "node tests/nativePushDatabase.mjs && node tests/nativePushDispatch.mjs",

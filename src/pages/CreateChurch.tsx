@@ -11,7 +11,7 @@ import { launchInfoRowClass, launchInputClass, launchLabelClass, launchPrimaryBu
 const steps = [
   { label: 'Admin account', detail: 'Verify the first church administrator' },
   { label: 'Church workspace', detail: 'Name the church and choose its identifier' },
-  { label: 'Invite the team', detail: 'Add members privately after setup' },
+  { label: 'Your profile', detail: 'Complete your details before inviting the team' },
 ];
 
 export function CreateChurch() {

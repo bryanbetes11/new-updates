@@ -5,9 +5,11 @@ Pilot version: 2026-09-25. Owner and support contact: Bryan Ashley Lopez Betes, 
 ## Invite one outside church
 
 1. Confirm the first administrator's email and that the pilot team will consist of adults. Do not request passwords. The first administrator must verify that email, confirm adulthood, and accept the versioned pilot terms in ServeSync.
-2. As the platform operator, add only that normalized email to `private.church_pilot_invites` with a short expiry. Use a scoped SQL editor session; never put the email or SQL result in a public issue, log, or release note. Do not reset an already claimed invitation. The server rejects unapproved email addresses even if someone reaches the registration page.
+2. Sign in with the ServeSync platform-owner account and open **Admin Settings → Invite a church to the pilot**. Enter the first administrator's email and choose **Approve email**. Approval lasts seven days. Copy the church setup link from the same panel and share it with that person yourself; ServeSync does not send this email automatically. You can revoke an unused approval there. The server rejects unapproved email addresses even if someone reaches the registration page.
 3. Give the administrator the `/create-church` link. ServeSync creates a billing-exempt workspace with 15 seats and no automatic charge. The administrator can then invite members. Each member of a pilot church must confirm adulthood and accept the pilot terms before joining. A recorded birthday indicating under 18 is rejected.
 4. On the first real pilot church, verify that the administrator can invite a member, schedule an event, create a setlist, post a notice, and exchange a test message. Ask the church to remove its test content afterward. Synthetic cross-church isolation has already been rehearsed locally; do not use private data from another church as test material.
+
+To inspect the profile forms without creating a church, open `/preview/onboarding?role=admin` on the ServeSync website or switch to **Member view** on that page. The preview works on desktop or phone; its completion button never saves data. It checks the design and form behavior, not email delivery or a real invitation acceptance.
 
 ## Support, access, and incidents
 

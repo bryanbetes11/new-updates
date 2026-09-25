@@ -532,6 +532,7 @@ export default function App() {
                   <Route path="/auth/confirm" element={<AuthConfirm />} />
                   <Route path="/register" element={<Register />} />
                   <Route path="/invite/:token" element={<InviteAccept />} />
+                  <Route path="/preview/onboarding" element={<Onboarding preview />} />
                   <Route
                     path="/create-church"
                     element={<CreateChurch />}

@@ -9,7 +9,7 @@ android {
         applicationId "com.babcreations.servesync"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 27
+        versionCode 28
         versionName webPackage.version
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {

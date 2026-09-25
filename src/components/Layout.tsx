@@ -182,6 +182,7 @@ export function Layout() {
       "/login",
       "/register",
       "/onboarding",
+      "/preview/onboarding",
       "/reflection",
       "/reset-password",
       "/auth/confirm",

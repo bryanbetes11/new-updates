@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { DEFAULT_EVENT_TEMPLATE_POLICIES, normalizeEventTemplatePolicies, type EventTemplatePolicies, type SetlistSubmissionMode } from '../../lib/eventPolicy';
 import { TechModeMessageSettings } from '../../components/TechModeMessageSettings';
+import { PlatformPilotInvites } from '../../components/PlatformPilotInvites';
 
 type PolicySettings = {
   org_id: string;
@@ -207,6 +208,8 @@ export function AdminSettings() {
       <section className="overflow-hidden rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.16] via-emerald-500/[0.05] to-transparent p-5 sm:p-6">
         <div className="flex items-start gap-4"><span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-900/25"><Settings2 className="h-6 w-6" /></span><div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-300">Organization administration</p><h1 className="mt-1 text-2xl font-black tracking-tight text-gray-950 dark:text-white">Admin Settings</h1><p className="mt-1 max-w-2xl text-sm leading-relaxed text-gray-600 dark:text-white/55">Manage the rules that control how ServeSync operates for your church. Leadership queues stay separate; these controls change organization-wide behavior.</p></div></div>
       </section>
+
+      {isPlatformOwner && <PlatformPilotInvites />}
 
       <section className="card overflow-hidden">
         <div className="border-b border-gray-100 p-5 dark:border-white/[0.06]">

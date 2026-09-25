@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight, Cake, Upload, X, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -8,29 +8,38 @@ import { DatePicker } from '../components/DatePicker';
 import { LaunchFlowShell } from '../components/LaunchFlowShell';
 import { launchInfoRowClass, launchInputClass, launchPrimaryButtonClass } from '../lib/launchFlowStyles';
 
-const steps = [
+const memberSteps = [
   { label: 'Church invite', detail: 'Join the correct private workspace' },
   { label: 'Member account', detail: 'Secure your ServeSync access' },
   { label: 'Your profile', detail: 'Share the details your team needs' },
 ];
 
-export function Onboarding() {
-  const { user, profile, refreshProfile } = useAuth();
+const adminSteps = [
+  { label: 'Admin account', detail: 'Verify your administrator email' },
+  { label: 'Church workspace', detail: 'Create your private church space' },
+  { label: 'Your profile', detail: 'Add your own details before inviting the team' },
+];
+
+export function Onboarding({ preview = false }: { preview?: boolean }) {
+  const { user, profile, isOrgAdmin, refreshProfile } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const isPreview = preview;
+  const adminFlow = isPreview ? searchParams.get('role') === 'admin' : isOrgAdmin;
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
-    first_name: profile?.first_name || '',
-    second_name: profile?.second_name || '',
-    middle_name: profile?.middle_name || '',
-    last_name: profile?.last_name || '',
-    nickname: profile?.nickname || '',
-    phone: profile?.phone || '',
-    gender: profile?.gender || '',
-    birthday: profile?.birthday || '',
+    first_name: isPreview ? '' : profile?.first_name || '',
+    second_name: isPreview ? '' : profile?.second_name || '',
+    middle_name: isPreview ? '' : profile?.middle_name || '',
+    last_name: isPreview ? '' : profile?.last_name || '',
+    nickname: isPreview ? '' : profile?.nickname || '',
+    phone: isPreview ? '' : profile?.phone || '',
+    gender: isPreview ? '' : profile?.gender || '',
+    birthday: isPreview ? '' : profile?.birthday || '',
   });
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(profile?.avatar_url || null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(isPreview ? null : profile?.avatar_url || null);
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -51,6 +60,14 @@ export function Onboarding() {
   };
 
   const handleFinish = async () => {
+    if (!form.first_name.trim() || !form.last_name.trim()) {
+      toast('error', 'Enter your first and last name');
+      return;
+    }
+    if (isPreview) {
+      toast('info', 'Preview only — no profile or church data was saved.');
+      return;
+    }
     if (!user) return;
     setLoading(true);
 
@@ -74,11 +91,11 @@ export function Onboarding() {
     }
 
     const profileUpdate: Record<string, unknown> = {
-      first_name: form.first_name,
-      second_name: form.second_name,
-      middle_name: form.middle_name,
-      last_name: form.last_name,
-      nickname: form.nickname,
+      first_name: form.first_name.trim(),
+      second_name: form.second_name.trim(),
+      middle_name: form.middle_name.trim(),
+      last_name: form.last_name.trim(),
+      nickname: form.nickname.trim(),
       phone: form.phone,
       gender: form.gender,
       is_onboarded: true,
@@ -97,21 +114,33 @@ export function Onboarding() {
     await refreshProfile();
     setLoading(false);
     toast('success', 'Welcome to the team!');
-    navigate('/dashboard');
+    navigate(adminFlow ? '/admin/church' : '/dashboard');
   };
 
   return (
     <LaunchFlowShell
-      eyebrow="Member setup"
-      title="Make your profile useful on service day."
-      description="Add only the details your leaders need for scheduling, communication, birthdays, and ministry coordination. Your church controls roles separately."
-      steps={steps}
+      eyebrow={adminFlow ? 'Church administrator setup' : 'Member setup'}
+      title={adminFlow ? 'Put a familiar face behind your church.' : 'Make your profile useful on service day.'}
+      description={adminFlow
+        ? 'Add your details before you invite your team. You can update your profile later.'
+        : 'Add only the details your leaders need for scheduling, communication, birthdays, and ministry coordination. Your church controls roles separately.'}
+      steps={adminFlow ? adminSteps : memberSteps}
       currentStep={2}
     >
       <div className="mx-auto w-full max-w-xl">
+        {isPreview && (
+          <div role="status" className="mb-7 rounded-2xl border border-[#1ed760]/25 bg-[#1ed760]/[0.07] p-4 text-sm text-white/75">
+            <p className="font-black text-[#7cffaa]">Onboarding preview · Nothing will be saved</p>
+            <p className="mt-1 text-white/55">Try the form as a visitor. No church or account is created.</p>
+            <div className="mt-3 flex gap-4 text-xs font-bold">
+              <Link to="/preview/onboarding?role=admin" className="text-[#7cffaa] underline">Admin view</Link>
+              <Link to="/preview/onboarding?role=member" className="text-[#7cffaa] underline">Member view</Link>
+            </div>
+          </div>
+        )}
         <div className="mb-8">
           <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#63ee91]">Step 3 of 3</p>
-          <h2 className="mt-2 text-3xl font-black tracking-[-0.04em]">Tell your team who you are</h2>
+          <h2 className="mt-2 text-3xl font-black tracking-[-0.04em]">{adminFlow ? 'Complete your admin profile' : 'Tell your team who you are'}</h2>
           <p className="mt-3 text-sm leading-6 text-white/48">You can update these details later from your profile.</p>
         </div>
 
@@ -160,7 +189,7 @@ export function Onboarding() {
                 {/* Gender */}
                 <div>
                   <label className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-white/36">
-                    I am a…
+                    Gender <span className="normal-case font-semibold tracking-normal text-white/22">optional</span>
                   </label>
                   <div className="flex gap-2">
                     {(['male', 'female'] as const).map(g => (
@@ -207,6 +236,7 @@ export function Onboarding() {
                       onChange={e => setForm({ ...form, last_name: e.target.value })}
                       className={launchInputClass}
                       placeholder="Last"
+                      required
                     />
                   </div>
                 </div>
@@ -284,7 +314,9 @@ export function Onboarding() {
                 <div className={launchInfoRowClass}>
                   <Shield className="mt-1 h-4 w-4 shrink-0 text-[#63ee91]" />
                   <p>
-                    Ministry roles and church access are assigned by your church admin after you join.
+                    {adminFlow
+                      ? 'After this step, you can invite members and assign their ministry roles in Church Settings.'
+                      : 'Ministry roles and church access are assigned by your church admin after you join.'}
                   </p>
                 </div>
 
@@ -292,12 +324,12 @@ export function Onboarding() {
                 <div className="pt-1">
                   <button
                     onClick={handleFinish}
-                    disabled={loading || !form.first_name}
+                    disabled={loading || !form.first_name.trim() || !form.last_name.trim()}
                     className={`${launchPrimaryButtonClass} w-full`}
                   >
                     {loading
                       ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-black/20 border-t-black" />Setting up…</>
-                      : <>Get Started <ArrowRight className="h-4 w-4" /></>}
+                      : <>{isPreview ? 'Try completion' : adminFlow ? 'Continue to invite your team' : 'Get started'} <ArrowRight className="h-4 w-4" /></>}
                   </button>
                 </div>
 

@@ -48,7 +48,7 @@ interface AuthContextValue {
   isViewingAsSongLeader: boolean;
   setViewingAsMember: (enabled: boolean) => void;
   setViewingAsSongLeader: (enabled: boolean) => void;
-  signUp: (email: string, password: string, firstName: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, firstName: string, confirmationPath?: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   addSavedAccount: (email: string, password: string) => Promise<{ error: Error | null }>;
@@ -574,13 +574,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     else window.sessionStorage.removeItem(storageKey);
   };
 
-  const signUp = async (email: string, password: string, firstName: string) => {
+  const signUp = async (email: string, password: string, firstName: string, confirmationPath?: string) => {
     const normalizedEmail = normalizeAuthEmail(email);
     const normalizedFirstName = firstName.trim();
     const { data, error } = await supabase.auth.signUp({
       email: normalizedEmail,
       password,
-      options: { data: { first_name: normalizedFirstName } },
+      options: {
+        data: { first_name: normalizedFirstName },
+        ...(confirmationPath ? { emailRedirectTo: `${window.location.origin}${confirmationPath}` } : {}),
+      },
     });
     if (error) return { error: error as Error | null };
 

@@ -12,7 +12,7 @@ import { launchInfoRowClass, launchInputClass, launchLabelClass, launchPrimaryBu
 const churchSteps = [
   { label: 'Admin account', detail: 'Create and verify the first administrator' },
   { label: 'Church workspace', detail: 'Name the church and secure its space' },
-  { label: 'Invite the team', detail: 'Bring members in through private links' },
+  { label: 'Your profile', detail: 'Complete your details before inviting the team' },
 ];
 
 const memberSteps = [
@@ -28,6 +28,7 @@ export function Register() {
   const [birthday, setBirthday] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [confirmationSent, setConfirmationSent] = useState(false);
   const { signUp, user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -62,7 +63,7 @@ export function Register() {
       return;
     }
     setLoading(true);
-    const { error } = await signUp(email.trim().toLowerCase(), password, firstName.trim());
+    const { error } = await signUp(email.trim().toLowerCase(), password, firstName.trim(), redirectTo);
     if (error) {
       toast('error', error.message);
       setLoading(false);
@@ -87,7 +88,8 @@ export function Register() {
           : 'Account created. Continue to accept your church invite.'
         : 'Account created. Confirm your email, then sign in to continue.',
     );
-    navigate(redirectTo);
+    if (session) navigate(redirectTo);
+    else setConfirmationSent(true);
   };
 
   const steps = isCreateChurchFlow ? churchSteps : memberSteps;
@@ -105,7 +107,15 @@ export function Register() {
       onBack={smartBack}
     >
       <div className="mx-auto w-full max-w-xl">
-        {!registrationAllowed ? (
+        {confirmationSent ? (
+          <section aria-labelledby="verify-email-title" className="space-y-5">
+            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#63ee91]">Check your inbox</p>
+            <h2 id="verify-email-title" className="text-3xl font-black tracking-[-0.04em]">Verify your email</h2>
+            <p className="text-sm leading-6 text-white/55">We sent a confirmation link to <strong className="text-white">{email.trim().toLowerCase()}</strong>. Open it to continue {isCreateChurchFlow ? 'creating your church' : 'joining your church'}.</p>
+            <p className="text-sm leading-6 text-white/45">If you open the email on another device, return to your original church invitation link after verifying. Use the same email address to sign in.</p>
+            <Link to={`/login?redirect=${encodeURIComponent(redirectTo)}`} className={launchPrimaryButtonClass}>Already verified? Sign in <ArrowRight className="h-4 w-4" /></Link>
+          </section>
+        ) : !registrationAllowed ? (
           <section aria-labelledby="invite-only-title">
             <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#63ee91]">Private by design</p>
             <h2 id="invite-only-title" className="mt-2 text-3xl font-black tracking-[-0.04em]">You need a church invite.</h2>

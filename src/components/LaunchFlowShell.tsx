@@ -18,6 +18,7 @@ interface LaunchFlowShellProps {
   backTo?: string;
   onBack?: () => void;
   backLabel?: string;
+  scrollAssist?: boolean;
 }
 
 export function LaunchFlowShell({
@@ -30,13 +31,14 @@ export function LaunchFlowShell({
   backTo,
   onBack,
   backLabel = 'Back',
+  scrollAssist = false,
 }: LaunchFlowShellProps) {
   const backClass = 'inline-flex min-h-11 items-center gap-2 rounded-full px-3.5 text-sm font-bold text-white/52 transition-colors hover:bg-white/[0.07] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1ed760]/70';
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#050505] text-white">
+    <div data-launch-scroll className="relative h-dvh overflow-x-clip overflow-y-auto overscroll-y-contain touch-pan-y bg-[#050505] text-white [-webkit-overflow-scrolling:touch]">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_14%_12%,rgba(30,215,96,0.12),transparent_32%),radial-gradient(circle_at_88%_78%,rgba(30,215,96,0.055),transparent_28%)]" />
-      <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col px-5 pb-12 pt-[max(1rem,env(safe-area-inset-top))] sm:px-8 lg:px-10">
+      <div className={`relative mx-auto flex min-h-screen w-full max-w-6xl flex-col px-5 pt-[max(1rem,env(safe-area-inset-top))] sm:px-8 lg:px-10 ${scrollAssist ? 'pb-28' : 'pb-12'}`}>
         <header className="flex min-h-14 items-center justify-between">
           {backTo ? (
             <Link to={backTo} className={backClass}>

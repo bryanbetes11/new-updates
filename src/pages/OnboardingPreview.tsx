@@ -2,6 +2,7 @@ import { ArrowRight, Building2, Cake, Mail, ShieldCheck } from 'lucide-react';
 import { useLayoutEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { LaunchFlowShell } from '../components/LaunchFlowShell';
+import { PreviewScrollAssist } from '../components/PreviewScrollAssist';
 import { launchInfoRowClass, launchInputClass, launchLabelClass, launchPrimaryButtonClass } from '../lib/launchFlowStyles';
 import { Onboarding } from './Onboarding';
 
@@ -68,7 +69,7 @@ export function OnboardingPreview() {
   const currentStep = requestedStep === 'profile' ? 2 : requestedStep === (role === 'admin' ? 'church' : 'account') ? 1 : 0;
 
   useLayoutEffect(() => {
-    window.scrollTo(0, 0);
+    document.querySelector<HTMLElement>('[data-launch-scroll]')?.scrollTo(0, 0);
   }, [role, currentStep]);
 
   if (currentStep === 2) return <Onboarding preview />;
@@ -92,7 +93,9 @@ export function OnboardingPreview() {
       steps={steps[role]}
       currentStep={currentStep}
       backTo={currentStep === 1 ? onboardingPreviewUrl(role, 0) : undefined}
+      scrollAssist
     >
+      <PreviewScrollAssist nextTo={nextUrl} />
       <div className="mx-auto w-full max-w-xl">
         <OnboardingPreviewNavigation role={role} currentStep={currentStep} />
         <div className="mb-7 flex items-center gap-4">

@@ -6,6 +6,7 @@ import { useToast } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
 import { DatePicker } from '../components/DatePicker';
 import { LaunchFlowShell } from '../components/LaunchFlowShell';
+import { PreviewScrollAssist } from '../components/PreviewScrollAssist';
 import { launchInfoRowClass, launchInputClass, launchPrimaryButtonClass } from '../lib/launchFlowStyles';
 
 const memberSteps = [
@@ -127,7 +128,9 @@ export function Onboarding({ preview = false }: { preview?: boolean }) {
       steps={adminFlow ? adminSteps : memberSteps}
       currentStep={2}
       backTo={isPreview ? `/preview/onboarding?role=${adminFlow ? 'admin&step=church' : 'member&step=account'}` : undefined}
+      scrollAssist={isPreview}
     >
+      {isPreview && <PreviewScrollAssist />}
       <div className="mx-auto w-full max-w-xl">
         {isPreview && (
           <div role="status" className="mb-7 rounded-2xl border border-[#1ed760]/25 bg-[#1ed760]/[0.07] p-4 text-sm text-white/75">

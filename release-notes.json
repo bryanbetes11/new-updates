@@ -1,8 +1,8 @@
 {
-  "headline": "More reliable event-card long presses on Android.",
+  "headline": "Church admins can move finished events to Past.",
   "highlights": [
-    "Event options stay open when you lift your finger after a long press.",
-    "The release after a long press no longer opens the event underneath the menu.",
-    "Normal taps, scrolling, and the existing hold duration are preserved."
+    "Church admins and users with the Admin role can move finished events to Past and restore past events within their church.",
+    "Previously authorized event accounts retain access, independently of platform administration.",
+    "Long-press release handling, normal taps, scrolling, and the existing hold duration are preserved."
   ]
 }

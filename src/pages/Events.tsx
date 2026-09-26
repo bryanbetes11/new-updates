@@ -27,6 +27,7 @@ import { CalendarGrid } from '../components/CalendarGrid';
 import type { Event } from '../types';
 import { hasArtworkArtist } from '../lib/songArtworkEligibility';
 import { hasEventScheduleEnded, isEventCompleted } from '../lib/eventLifecycle';
+import { hasEventLifecycleAccess } from '../lib/eventLifecycleAccess';
 import { loadSyncedPreference, saveSyncedPreference } from '../lib/syncedPreferences';
 import { calculatePolicyProposalDueDate, DEFAULT_EVENT_TEMPLATE_POLICIES, eventTemplateFor, normalizeEventTemplatePolicies, type EventTemplatePolicies } from '../lib/eventPolicy';
 import { compareEventSchedule, eventScheduleKey } from '../lib/eventChronology';
@@ -259,7 +260,7 @@ function formatSongLeaderName(profile: RelatedProfile) {
 function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEventClick, onLifecycleChange, isPast, artworkClassName = 'h-16 w-16', variant = 'list' }: {
   event: Event; calendarEntries: CalendarEntry[]; songLeaderMap?: Record<string, string>; setlistInfoMap?: Record<string, SetlistInfo>; onEventClick: (id: string) => void; onLifecycleChange?: (event: Event) => void; isPast?: boolean; artworkClassName?: string; variant?: 'list' | 'featured';
 }) {
-  const { user, isPlatformOwner } = useAuth();
+  const { user, profile, isOrgAdmin, isAdmin, offlineMode, isViewingAsMember, isViewingAsSongLeader } = useAuth();
   const { toast } = useToast();
   const [lifecycleDialogMode, setLifecycleDialogMode] = useState<EventLifecycleDialogMode | null>(null);
   const [lifecycleAnchorRect, setLifecycleAnchorRect] = useState<EventActionAnchorRect | null>(null);
@@ -283,7 +284,15 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
     ? describeSetlistReviewAge(setlistInfo?.submitted_at)
     : null;
   const scheduleHasEnded = hasEventScheduleEnded(event, now);
-  const canManageLifecycle = Boolean(onLifecycleChange) && isPlatformOwner && (isPast || scheduleHasEnded);
+  const canManageLifecycle = Boolean(onLifecycleChange) && hasEventLifecycleAccess({
+    authenticatedEmail: user?.email,
+    isOrgAdmin,
+    isAdmin,
+    accountOrgId: profile?.id === user?.id ? profile?.org_id : null,
+    eventOrgId: event.org_id,
+    offline: offlineMode,
+    rolePreview: isViewingAsMember || isViewingAsSongLeader,
+  }) && (isPast || scheduleHasEnded);
 
   const cancelLongPress = () => {
     if (longPressTimerRef.current !== null) {
@@ -338,7 +347,7 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
   const showDueSoonStyle = isDueSoon && !hasSubmittedProposal && !isPast && !scheduleHasEnded;
 
   const handleLifecycleChange = async () => {
-    if (!user || !isPlatformOwner || (!isPast && !scheduleHasEnded) || savingLifecycle) return;
+    if (!user || !canManageLifecycle || savingLifecycle) return;
 
     setSavingLifecycle(true);
     const nextOverride = isPast ? 'upcoming' : 'completed';

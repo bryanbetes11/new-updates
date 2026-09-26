@@ -62,6 +62,14 @@ const gestureRelease = { tag_name: gestureTag, draft: false, published_at: '2026
 ] };
 assert.equal(newestAndroidRelease([patchRelease, gestureRelease], 28)?.url, gestureUrl, 'installed 1.4.9 detects the long-press update');
 assert.equal(newestAndroidRelease([patchRelease, gestureRelease], 29), null, 'installed 1.4.10 is current');
+const accessTag = 'android-v1.4.11-build30';
+const accessName = 'ServeSync-1.4.11.apk';
+const accessUrl = `https://github.com/bryanbetes11/new-updates/releases/download/${accessTag}/${accessName}`;
+const accessRelease = { tag_name: accessTag, draft: false, published_at: '2026-09-27T00:00:00Z', assets: [
+  { name: accessName, state: 'uploaded', size: 123456, digest: `sha256:${digest}`, browser_download_url: accessUrl },
+] };
+assert.equal(newestAndroidRelease([gestureRelease, accessRelease], 29)?.url, accessUrl, 'installed 1.4.10 detects restored event access');
+assert.equal(newestAndroidRelease([gestureRelease, accessRelease], 30), null, 'installed 1.4.11 is current');
 assert.equal(isTrustedAndroidDownload(cleanUrl), true);
 assert.equal(isTrustedAndroidDownload(cleanUrl.replace('1.4.0.apk', '1.4.1.apk')), false, 'asset version must match the release tag');
 assert.equal(newestAndroidRelease([{ ...release(9), draft: true }], 7), null);

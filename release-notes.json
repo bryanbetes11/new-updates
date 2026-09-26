@@ -1,11 +1,8 @@
 {
-  "headline": "Shared proposals and clearer revision discussions.",
+  "headline": "More reliable event-card long presses on Android.",
   "highlights": [
-    "Both app and notification reminders stay available outside chat for quick access.",
-    "Rehearsal and Sunday Service proposals share one linked plan, so updates stay together.",
-    "Discussion viewers keep their history, and authors count as having seen their own updates.",
-    "Submitted proposals no longer show the initial overdue reminder; pending ribbons and day counts continue through revisions.",
-    "Attached guides use the same readable sections in revision requests and discussions.",
-    "Readable lyrics are required for proposal submission, and lyrics from chord charts appear in the lyrics editor and checker."
+    "Event options stay open when you lift your finger after a long press.",
+    "The release after a long press no longer opens the event underneath the menu.",
+    "Normal taps, scrolling, and the existing hold duration are preserved."
   ]
 }

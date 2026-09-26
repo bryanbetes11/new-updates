@@ -60,6 +60,7 @@ export function EventLifecycleActionModal({
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
   const savingRef = useRef(saving);
+  const backdropPressRef = useRef<EventTarget | null>(null);
   const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
   const [placement, setPlacement] = useState<DialogPlacement | null>(null);
 
@@ -70,6 +71,7 @@ export function EventLifecycleActionModal({
 
   useEffect(() => {
     if (!open) return;
+    backdropPressRef.current = null;
     restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const previousHtmlOverflow = document.documentElement.style.overflow;
     const previousBodyOverflow = document.body.style.overflow;
@@ -138,17 +140,30 @@ export function EventLifecycleActionModal({
   };
   const backdropClass = 'fixed bg-black/65 backdrop-blur-[5px] animate-fade-in pointer-events-auto';
   const lifecycleLabel = isPast ? 'Move to Upcoming' : 'Move to Past events';
+  const backdropHandlers = {
+    onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => {
+      backdropPressRef.current = event.currentTarget;
+    },
+    onPointerCancel: () => { backdropPressRef.current = null; },
+    onClick: (event: React.MouseEvent<HTMLDivElement>) => {
+      // A touch released after opening the menu can land on its new backdrop.
+      // Only dismiss for a separate press that actually started there.
+      const startedHere = backdropPressRef.current === event.currentTarget;
+      backdropPressRef.current = null;
+      if (startedHere && !savingRef.current) onClose();
+    },
+  };
 
   return createPortal(
-    <div className="pointer-events-none fixed inset-0 z-[2147483647]" role="presentation">
-      <div aria-hidden="true" onClick={onClose} className={backdropClass} style={{ inset: `0 0 auto 0`, height: halo.top }} />
-      <div aria-hidden="true" onClick={onClose} className={backdropClass} style={{ inset: `${halo.bottom}px 0 0 0` }} />
-      <div aria-hidden="true" onClick={onClose} className={backdropClass} style={{ left: 0, top: halo.top, width: halo.left, height: halo.bottom - halo.top }} />
-      <div aria-hidden="true" onClick={onClose} className={backdropClass} style={{ left: halo.right, right: 0, top: halo.top, height: halo.bottom - halo.top }} />
+    <div className="pointer-events-none fixed inset-0 z-[2147483647]" role="presentation" onContextMenu={event => event.preventDefault()}>
+      <div aria-hidden="true" {...backdropHandlers} className={backdropClass} style={{ inset: `0 0 auto 0`, height: halo.top }} />
+      <div aria-hidden="true" {...backdropHandlers} className={backdropClass} style={{ inset: `${halo.bottom}px 0 0 0` }} />
+      <div aria-hidden="true" {...backdropHandlers} className={backdropClass} style={{ left: 0, top: halo.top, width: halo.left, height: halo.bottom - halo.top }} />
+      <div aria-hidden="true" {...backdropHandlers} className={backdropClass} style={{ left: halo.right, right: 0, top: halo.top, height: halo.bottom - halo.top }} />
 
       <div
         aria-hidden="true"
-        onClick={onClose}
+        {...backdropHandlers}
         className="pointer-events-auto fixed rounded-[0.8rem] border border-emerald-300/45 bg-transparent shadow-[0_0_0_1px_rgba(34,197,94,0.12),0_18px_55px_-24px_rgba(34,197,94,0.9)]"
         style={{ left: halo.left, top: halo.top, width: halo.right - halo.left, height: halo.bottom - halo.top }}
       />

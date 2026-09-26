@@ -290,6 +290,7 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
       window.clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
+    longPressOriginRef.current = null;
   };
 
   useEffect(() => () => cancelLongPress(), []);
@@ -308,17 +309,21 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
     setLifecycleDialogMode(mode);
   };
 
-  const startLongPress = (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (!canManageLifecycle) return;
+  const triggerLongPress = () => {
     cancelLongPress();
+    if (lifecycleDialogMode) return;
+    longPressTriggeredRef.current = true;
+    openLifecycleDialog('options');
+    if ('vibrate' in navigator) navigator.vibrate(35);
+  };
+
+  const startLongPress = (event: React.PointerEvent<HTMLButtonElement>) => {
+    cancelLongPress();
+    if (!event.isPrimary || event.button !== 0) return;
     longPressTriggeredRef.current = false;
+    if (!canManageLifecycle) return;
     longPressOriginRef.current = { x: event.clientX, y: event.clientY };
-    longPressTimerRef.current = window.setTimeout(() => {
-      longPressTriggeredRef.current = true;
-      openLifecycleDialog('options');
-      longPressTimerRef.current = null;
-      if ('vibrate' in navigator) navigator.vibrate(35);
-    }, 600);
+    longPressTimerRef.current = window.setTimeout(triggerLongPress, 600);
   };
 
   const handleLongPressMove = (event: React.PointerEvent<HTMLButtonElement>) => {
@@ -364,8 +369,10 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
     <div className="relative">
       <button
         ref={eventButtonRef}
-        onClick={() => {
-          if (longPressTriggeredRef.current) {
+        onClick={clickEvent => {
+          if (longPressTriggeredRef.current || lifecycleDialogMode) {
+            clickEvent.preventDefault();
+            clickEvent.stopPropagation();
             longPressTriggeredRef.current = false;
             return;
           }
@@ -379,7 +386,9 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
         onContextMenu={pointerEvent => {
           if (!canManageLifecycle) return;
           pointerEvent.preventDefault();
-          openLifecycleDialog('options');
+          // Android can deliver contextmenu before the hold timer, followed by
+          // pointercancel and a compatibility click when the finger is lifted.
+          triggerLongPress();
         }}
         className={`touch-action-pan-y group relative w-full text-left transition-all duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] motion-reduce:transform-none ${variant === 'featured' ? 'flex flex-col rounded-[1rem] p-1.5 hover:-translate-y-1 hover:scale-[1.01] hover:shadow-[0_20px_46px_-24px_rgba(34,197,94,0.55)]' : 'flex min-h-[5.5rem] items-center gap-3 px-0 py-3 focus-visible:ring-inset'} ${lifecycleDialogMode ? 'z-10 scale-[1.005] bg-[#080d0a] shadow-[0_16px_48px_-24px_rgba(34,197,94,0.75)]' : variant === 'featured' ? 'bg-white/[0.025] hover:bg-white/[0.06]' : 'bg-transparent hover:bg-white/[0.03]'} ${canManageLifecycle ? 'select-none' : ''}`}
         style={{ opacity: isPast ? 0.62 : 1 }}

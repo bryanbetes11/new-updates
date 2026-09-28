@@ -83,6 +83,7 @@ export function AppSettings() {
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Your church admin handles church records first. ServeSync can help with a privacy, account, or security request.</p>
           <div className="mt-3 flex flex-wrap gap-4 text-sm font-semibold text-emerald-700 dark:text-emerald-300">
             <a href="/privacy.html" target="_blank" rel="noopener noreferrer">Privacy notice</a>
+            <a href="/delete-account.html" target="_blank" rel="noopener noreferrer">Delete account or data</a>
             <a href="/pilot-terms.html" target="_blank" rel="noopener noreferrer">Pilot terms</a>
             <a href="mailto:babcreations11@gmail.com?subject=ServeSync%20account%20or%20privacy%20request">Contact support</a>
           </div>

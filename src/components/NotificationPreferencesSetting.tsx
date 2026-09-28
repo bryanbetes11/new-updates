@@ -139,7 +139,7 @@ export function NotificationPreferencesSetting() {
             <BellRing className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-[15px] font-black text-gray-950 dark:text-white">What should reach you</h2>
+            <h2 className="text-[15px] font-black text-gray-950 dark:text-white">What Should Reach You</h2>
             <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-white/45">Choose optional alerts. Essential schedule and accountability notices always stay on.</p>
           </div>
         </div>

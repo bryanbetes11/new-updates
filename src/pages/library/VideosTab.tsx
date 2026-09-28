@@ -628,7 +628,7 @@ export function VideosTab() {
         transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
         className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
       >
-        <div className="-mx-1 flex min-w-0 gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="desktop-video-filters -mx-1 flex min-w-0 gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {[{ label: 'All', value: '', count: scopedVideos.length }, ...categories
             .filter(cat => scopedVideos.some(v => v.category === cat))
             .map(cat => ({ label: cat, value: cat, count: scopedVideos.filter(v => v.category === cat).length }))]
@@ -639,6 +639,7 @@ export function VideosTab() {
                   key={filter.label}
                   type="button"
                   onClick={() => setCategoryFilter(active && filter.value ? '' : filter.value)}
+                  aria-pressed={active}
                   className={`inline-flex h-11 shrink-0 items-center gap-3 rounded-full px-5 text-sm font-black transition-all active:scale-[0.98] ${
                     active
                       ? 'bg-[#1ed760] text-black shadow-[0_14px_34px_-20px_rgba(30,215,96,0.9)]'
@@ -720,7 +721,7 @@ export function VideosTab() {
                 <motion.div
                   key={video.id}
                   variants={itemVariants}
-                  className="group relative overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.025] transition-colors duration-200 hover:bg-white/[0.045]"
+                  className="desktop-video-card group relative overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.025] transition-colors duration-200 hover:bg-white/[0.045]"
                 >
                   <button
                     type="button"
@@ -736,7 +737,7 @@ export function VideosTab() {
                         fallback={<div className="flex h-full items-center justify-center"><Film className="h-8 w-8 text-white/18" /></div>}
                       />
 
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                        <div className="desktop-video-overlay absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
                         <div className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-300 group-hover:opacity-100">
                           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15 backdrop-blur-md ring-1 ring-white/40">
                             <PlayCircle className="h-6 w-6 text-white" />

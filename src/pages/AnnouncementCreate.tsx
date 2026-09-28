@@ -9,8 +9,8 @@ export function AnnouncementCreate() {
   const smartBack = useSmartBack('/announcements');
 
   return (
-    <div className="page-container page-bottom-pad relative min-h-screen overflow-hidden bg-[#050505] text-white">
-      <div className="pointer-events-none fixed inset-0 -z-10 bg-[#050505] [background-image:radial-gradient(circle_at_18%_0%,rgba(34,197,94,0.12),transparent_28%),radial-gradient(circle_at_88%_6%,rgba(255,255,255,0.05),transparent_20%),linear-gradient(180deg,#121212_0%,#050505_26%,#050505_100%)]" />
+    <div className="theme-adaptive-page page-container page-bottom-pad relative min-h-screen overflow-hidden bg-[#f6f8fb] text-slate-900 dark:bg-[#050505] dark:text-white">
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-[#f6f8fb] dark:bg-[#050505] dark:[background-image:radial-gradient(circle_at_18%_0%,rgba(34,197,94,0.12),transparent_28%),radial-gradient(circle_at_88%_6%,rgba(255,255,255,0.05),transparent_20%),linear-gradient(180deg,#121212_0%,#050505_26%,#050505_100%)]" />
       <div className="mx-auto max-w-2xl space-y-5 px-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] pt-4 sm:max-w-3xl sm:space-y-6 sm:px-6 sm:pt-5 lg:max-w-4xl lg:px-8 lg:pb-24 xl:max-w-5xl">
         <motion.section
           initial={{ opacity: 0, y: 10, filter: 'blur(5px)' }}

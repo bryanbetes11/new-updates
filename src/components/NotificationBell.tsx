@@ -252,7 +252,7 @@ export function NotificationBell() {
         ref={buttonRef}
         type="button"
         onClick={() => open ? setOpen(false) : void openPreview()}
-        className={`relative flex h-10 w-10 items-center justify-center rounded-full text-white transition-colors hover:bg-white/[0.08] ${open ? 'bg-white/[0.08]' : ''}`}
+        className={`relative flex h-10 w-10 items-center justify-center rounded-full text-slate-800 transition-colors hover:bg-slate-100 dark:text-white dark:hover:bg-white/[0.08] ${open ? 'bg-slate-100 dark:bg-white/[0.08]' : ''}`}
         aria-label={count > 0 ? `Notifications, ${count} unread` : 'Notifications'}
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -285,7 +285,7 @@ export function NotificationBell() {
             role="dialog"
             aria-modal="true"
             aria-label="Recent notifications"
-            className="absolute w-[min(26rem,calc(100vw-1.5rem))] origin-top-right rounded-2xl border border-white/[0.1] text-white shadow-[0_24px_70px_-20px_rgba(0,0,0,0.9)]"
+            className="theme-popover absolute w-[min(26rem,calc(100vw-1.5rem))] origin-top-right rounded-2xl border border-[#d3d4dd] bg-white text-[#474a65] shadow-[0_24px_70px_-20px_rgba(34,38,58,0.18)] dark:border-white/[0.1] dark:bg-[#171717] dark:text-white dark:shadow-[0_24px_70px_-20px_rgba(0,0,0,0.9)]"
             style={{
               top: panelPosition.top,
               right: panelPosition.right,
@@ -293,11 +293,11 @@ export function NotificationBell() {
             }}
           >
             <span
-              className="absolute top-0 z-10 h-2.5 w-2.5 -translate-y-1/2 rotate-45 border-l border-t border-white/[0.1] bg-[#171717]"
+              className="absolute top-0 z-10 h-2.5 w-2.5 -translate-y-1/2 rotate-45 border-l border-t border-[#d3d4dd] bg-white dark:border-white/[0.1] dark:bg-[#171717]"
               style={{ right: panelPosition.caretRight }}
               aria-hidden="true"
             />
-            <div className="relative overflow-hidden rounded-[inherit] bg-[#171717]">
+            <div className="relative overflow-hidden rounded-[inherit] bg-white dark:bg-[#171717]">
             <header className="flex items-center gap-2 border-b border-white/[0.08] px-4 py-3.5">
               <div>
                 <h2 className="text-[16px] font-black">Notifications</h2>
@@ -340,7 +340,7 @@ export function NotificationBell() {
               </button>
             </header>
 
-            <div className="max-h-[min(55dvh,26rem)] overflow-y-auto overscroll-contain">
+            <div className="no-scrollbar max-h-[min(55dvh,26rem)] overflow-y-auto overscroll-contain">
               {loading && notifications.length === 0 ? (
                 <div className="space-y-3 p-4" aria-label="Loading notifications">
                   {[0, 1, 2].map((item) => <div key={item} className="h-16 animate-pulse rounded-xl bg-white/[0.05]" />)}

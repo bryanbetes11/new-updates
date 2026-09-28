@@ -235,7 +235,7 @@ export function Layout() {
   const shouldShiftForMobileMenu =
     user && !staticHideNav && !isMessagesConversation && mobileOpen;
   const desktopSidebarWidth =
-    user && !staticHideNav ? (collapsed ? 72 : 220) : 0;
+    user && !staticHideNav ? (collapsed ? 64 : 236) : 0;
   const showReminders = Boolean(user && !staticHideNav && !isMessagesConversation);
   const mainStyle = {
     pointerEvents: shouldShiftForMobileMenu ? "none" : undefined,
@@ -411,7 +411,7 @@ export function Layout() {
   }, [location.pathname]);
 
   return (
-    <div className="min-h-screen bg-[#050505]" style={{ "--desktop-sidebar-width": `${desktopSidebarWidth}px` } as CSSProperties}>
+    <div className="desktop-workspace min-h-screen bg-[#f6f8fb] dark:bg-[#050505]" style={{ "--desktop-sidebar-width": `${desktopSidebarWidth}px` } as CSSProperties}>
       {user && !staticHideNav && (
       <Navigation
           hideMobile={hideNavMobile}
@@ -467,7 +467,7 @@ export function Layout() {
               staticHideNav
                 ? ""
                 : isWideShellPage
-                  ? `wide-shell-spacing ${isDashboardPage ? "dashboard-shell-spacing" : ""} ${isEventDetail ? "event-detail-shell-spacing" : ""} bg-[#050505]`
+                  ? `wide-shell-spacing ${isDashboardPage ? "dashboard-shell-spacing" : ""} ${isEventDetail ? "event-detail-shell-spacing" : ""} bg-[#f6f8fb] dark:bg-[#050505]`
                   : "px-4 sm:px-6 lg:px-8 mobile-layout-padding"
             }
           >

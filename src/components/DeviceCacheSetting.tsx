@@ -24,7 +24,7 @@ export function DeviceCacheSetting() {
   };
   return (
     <section className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4 sm:p-5">
-      <h2 className="text-sm font-bold text-gray-900 dark:text-white">Saved on this device</h2>
+      <h2 className="text-sm font-bold text-gray-900 dark:text-white">Saved On This Device</h2>
       <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
         The home page, songs, sets, videos, nearby event details and approved charts, and images you view are saved for faster loading. The app checks for fresh data when you return.
         Each account and church has its own saved cache, kept when you sign out or switch accounts.

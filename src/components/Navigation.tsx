@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
   ArrowLeftRight,
   BookOpen,
@@ -15,12 +15,17 @@ import {
   Layers3,
   LayoutDashboard,
   MessageCircle,
+  Monitor,
   Music2,
+  Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   RefreshCw,
   Search,
   Settings,
   Sparkles,
+  Sun,
   Trash2,
   User,
   UserPlus,
@@ -31,6 +36,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+import { useTheme, type ThemeMode } from "../contexts/ThemeContext";
 import { useToast } from "../contexts/ToastContext";
 import { useUnreadCounts } from "../hooks/useUnreadCounts";
 import { NotificationBell } from "./NotificationBell";
@@ -189,7 +195,6 @@ const sidebarMainItems: NavItem[] = ([
     label: "Home",
     icon: HomeIcon,
     exact: true,
-    tone: "from-emerald-500/45 to-emerald-950/55",
   },
   {
     path: "/events",
@@ -197,7 +202,6 @@ const sidebarMainItems: NavItem[] = ([
     icon: CalendarIcon,
     badgeKey: "events",
     badgeColor: "red",
-    tone: "from-sky-500/45 to-sky-950/55",
   },
   {
     path: "/announcements",
@@ -205,7 +209,6 @@ const sidebarMainItems: NavItem[] = ([
     icon: NewsIcon,
     badgeKey: "announcements",
     badgeColor: "blue",
-    tone: "from-amber-500/40 to-amber-950/55",
   },
   {
     path: "/messages",
@@ -213,7 +216,6 @@ const sidebarMainItems: NavItem[] = ([
     icon: MessageIcon,
     badgeKey: "messages",
     badgeColor: "red",
-    tone: "from-violet-500/45 to-violet-950/55",
   },
 ] satisfies NavItem[]).filter(item => MESSENGER_ENABLED || item.path !== '/messages');
 
@@ -355,6 +357,8 @@ export function Navigation({
     setViewingAsSongLeader,
   } = useAuth();
   const { toast } = useToast();
+  const { theme, mode, setMode, toggle: toggleTheme } = useTheme();
+  const prefersReducedMotion = useReducedMotion();
   const unread = useUnreadCounts();
   const switchableSavedAccounts = savedAccounts.filter(
     (account) => account.userId !== user?.id,
@@ -832,7 +836,6 @@ export function Navigation({
             path: leadershipHomePath,
             label: "Overview",
             icon: ShieldNavIcon,
-            tone: "from-indigo-500/45 to-indigo-950/55",
           },
         ]
       : []),
@@ -840,7 +843,6 @@ export function Navigation({
       path: canApproveLeave ? "/leadership/leave" : "/request-leave",
       label: canApproveLeave ? "Leave Queue" : "Request Leave",
       icon: LeaveIcon,
-      tone: "from-orange-500/45 to-orange-950/55",
       ...(canApproveLeave
         ? { badgeKey: "pendingLeave" as const, badgeColor: "red" as const }
         : {}),
@@ -851,13 +853,11 @@ export function Navigation({
             path: "/leadership/setlists",
             label: "Setlist Queue",
             icon: SetsNavIcon,
-            tone: "from-emerald-500/45 to-emerald-950/55",
           }] : []),
           ...(isLeader || capabilities.approve_swaps ? [{
             path: "/leadership/swaps",
             label: "Swap Requests",
             icon: SwapsNavIcon,
-            tone: "from-cyan-500/45 to-cyan-950/55",
           }] : []),
         ]
       : []),
@@ -867,13 +867,11 @@ export function Navigation({
             path: "/leadership/team",
             label: "Team Roster",
             icon: TeamNavIcon,
-            tone: "from-fuchsia-500/40 to-fuchsia-950/55",
           },
           {
             path: "/leadership/accountability",
             label: "Accountability",
             icon: ListChecks,
-            tone: "from-amber-500/40 to-amber-950/55",
           },
         ]
       : []),
@@ -883,7 +881,6 @@ export function Navigation({
       path: "/admin/settings",
       label: "Admin Settings",
       icon: Settings,
-      tone: "from-emerald-500/45 to-emerald-950/55",
     }] : []),
   ];
   const displayName = profile?.nickname || profile?.first_name || "";
@@ -915,81 +912,33 @@ export function Navigation({
       title: "Songs",
       caption: "Charts & library",
       path: "/songs",
-      tone: "from-emerald-500/45 to-emerald-950/55",
       icon: Music2,
     },
     {
       title: "Sets",
       caption: "Approved setlists",
       path: "/sets",
-      tone: "from-violet-500/45 to-violet-950/55",
       icon: ListChecks,
     },
     {
       title: "Videos",
       caption: "Training media",
       path: "/videos",
-      tone: "from-sky-500/45 to-sky-950/55",
       icon: Video,
     },
   ];
-  const desktopShortcutItems = [
-    {
-      title: "App settings",
-      caption: "Updates & saved content",
-      path: "/settings/app",
-      tone: "from-zinc-400/35 to-zinc-900/65",
-      icon: Settings,
-    },
-    {
-      title: "My Assignments",
-      caption: "Serving schedule",
-      path: "/my-assignments",
-      tone: "from-emerald-500/45 to-emerald-950/55",
-      icon: CheckCircle2,
-    },
-    {
-      title: "My Sets",
-      caption: "As Song Leader",
-      path: "/sets?owner=me",
-      tone: "from-indigo-500/45 to-indigo-950/55",
-      icon: ListChecks,
-    },
-    {
-      title: "Profile",
-      caption: "Account & details",
-      path: "/profile",
-      tone: "from-zinc-400/35 to-zinc-900/65",
-      icon: User,
-    },
-  ];
-
   const isDesktopListItemActive = (path: string) => {
-    const [pathname, query = ""] = path.split("?");
-    if (location.pathname !== pathname && !location.pathname.startsWith(`${pathname}/`)) {
-      return false;
-    }
-    const currentParams = new URLSearchParams(location.search);
-    if (!query) {
-      const hasMatchingQuerySpecificShortcut = desktopShortcutItems.some((entry) => {
-        const [shortcutPathname, shortcutQuery = ""] = entry.path.split("?");
-        if (shortcutPathname !== pathname || !shortcutQuery) return false;
-
-        const shortcutParams = new URLSearchParams(shortcutQuery);
-        return Array.from(shortcutParams.entries()).every(
-          ([key, value]) => currentParams.get(key) === value,
-        );
-      });
-      return !hasMatchingQuerySpecificShortcut;
-    }
-
-    const requestedParams = new URLSearchParams(query);
-    return Array.from(requestedParams.entries()).every(
-      ([key, value]) => currentParams.get(key) === value,
-    );
+    return location.pathname === path || location.pathname.startsWith(`${path}/`);
   };
 
-  const sidebarWidth = collapsed ? 72 : 220;
+  const sidebarWidth = collapsed ? 64 : 236;
+  const desktopPageTitle = location.pathname.startsWith('/events/') ? 'Event Details'
+    : location.pathname.startsWith('/announcements/') ? 'Announcement'
+    : location.pathname.startsWith('/messages/') ? 'Conversation'
+    : location.pathname.startsWith('/dashboard') ? 'Home'
+    : [...sidebarMainItems, ...sidebarManagementItems, ...sidebarAdminItems].find((entry) => isDesktopListItemActive(entry.path))?.label
+      || desktopLibraryItems.find((entry) => isDesktopListItemActive(entry.path))?.title
+      || 'Workspace';
 
   const handleMobileNavStyleChange = async (style: MobileNavStyle) => {
     if (!user?.id || style === mobileNavStyle || savingNavStyle) return;
@@ -1271,7 +1220,9 @@ export function Navigation({
     const active = isActive(item);
     const Icon = item.icon;
     const badge = getBadgeCount(item);
-    const iconTone = item.tone || "from-zinc-300/75 via-zinc-700 to-black";
+    const iconTone = active
+      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
+      : "bg-slate-100 text-slate-600 dark:bg-white/[0.06] dark:text-white/55";
 
     if (isCollapsed) {
       const openCollapsedItem = () => {
@@ -1302,6 +1253,7 @@ export function Navigation({
           <button
             data-collapsed-nav-item
             aria-label={item.badgeKey === 'events' && badge > 0 ? `Events, ${badge} assignments awaiting your response` : item.label}
+            aria-current={active ? "page" : undefined}
             onClick={openCollapsedItem}
             onPointerEnter={() => {
               void preloadRoute(item.path);
@@ -1312,10 +1264,10 @@ export function Navigation({
             onTouchStart={() => {
               void preloadRoute(item.path);
             }}
-            className={`group relative mx-auto flex h-11 w-11 items-center justify-center rounded-[0.85rem] border transition-all duration-200 ${
+            className={`desktop-nav-link group relative mx-auto flex h-11 w-11 items-center justify-center rounded-[0.85rem] border transition-all duration-200 ${
               active
-                ? "border-white/[0.10] bg-white/[0.10] text-white shadow-[0_14px_24px_-18px_rgba(0,0,0,0.85)]"
-                : "border-transparent text-white/58 hover:border-white/[0.08] hover:bg-white/[0.065] hover:text-white"
+                ? "border-slate-200 bg-white text-slate-900 dark:border-white/[0.10] dark:bg-white/[0.08] dark:text-white"
+                : "border-transparent text-slate-600 hover:border-slate-200 hover:bg-white hover:text-slate-900 dark:text-white/58 dark:hover:border-white/[0.08] dark:hover:bg-white/[0.065] dark:hover:text-white"
             }`}
           >
             {active && (
@@ -1326,10 +1278,10 @@ export function Navigation({
               />
             )}
             <div className="relative flex h-9 w-9 items-center justify-center overflow-visible">
-              <span className={`absolute inset-0 flex items-center justify-center overflow-hidden rounded-[0.6rem] border border-white/[0.08] bg-gradient-to-br ${iconTone} shadow-[0_4px_12px_-8px_rgba(0,0,0,0.8)]`}>
+              <span className={`absolute inset-0 flex items-center justify-center overflow-hidden rounded-[0.6rem] ${iconTone}`}>
                 <Icon
                   {...(ACTIVE_STATE_NAV_ICONS.has(Icon) ? { active } : {})}
-                  className="relative h-[18px] w-[18px] shrink-0 text-white/90"
+                  className="relative h-[18px] w-[18px] shrink-0"
                   style={{ width: "18px", height: "18px", strokeWidth: 2.1 }}
                 />
               </span>
@@ -1350,6 +1302,7 @@ export function Navigation({
       <button
         key={item.path}
         aria-label={item.badgeKey === 'events' && badge > 0 ? `Events, ${badge} assignments awaiting your response` : undefined}
+        aria-current={active ? "page" : undefined}
         onClick={() => handleNav(item.path)}
         onPointerEnter={() => {
           void preloadRoute(item.path);
@@ -1360,10 +1313,10 @@ export function Navigation({
         onTouchStart={() => {
           void preloadRoute(item.path);
         }}
-        className={`relative group flex h-12 w-full items-center gap-3 rounded-[0.8rem] border px-1.5 text-[13px] transition-all duration-200 ${
+        className={`desktop-nav-link relative group flex h-12 w-full items-center gap-3 rounded-[0.8rem] border px-1.5 text-[13px] transition-all duration-200 ${
           active
-            ? "border-white/[0.10] bg-white/[0.10] font-bold text-white shadow-[0_16px_32px_-24px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.12)]"
-            : "border-transparent font-semibold text-white/62 hover:border-white/[0.08] hover:bg-white/[0.065] hover:text-white"
+                ? "border-slate-200 bg-white font-bold text-slate-900 dark:border-white/[0.10] dark:bg-white/[0.08] dark:text-white"
+                : "border-transparent font-semibold text-slate-600 hover:border-slate-200 hover:bg-white hover:text-slate-900 dark:text-white/62 dark:hover:border-white/[0.08] dark:hover:bg-white/[0.065] dark:hover:text-white"
         }`}
       >
         {active && (
@@ -1374,11 +1327,11 @@ export function Navigation({
           />
         )}
         <span
-          className={`relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-[0.6rem] border border-white/[0.08] bg-gradient-to-br ${iconTone} shadow-[0_4px_12px_-8px_rgba(0,0,0,0.8)] transition-colors group-hover:border-white/[0.14]`}
+          className={`relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-[0.6rem] ${iconTone}`}
         >
           <Icon
 			{...(ACTIVE_STATE_NAV_ICONS.has(Icon) ? { active } : {})}
-            className="relative h-[18px] w-[18px] shrink-0 text-white/90"
+            className="relative h-[18px] w-[18px] shrink-0"
             style={{ width: "18px", height: "18px", strokeWidth: 2.1 }}
           />
         </span>
@@ -1408,7 +1361,7 @@ export function Navigation({
               Settings
             </p>
             <p className="mt-0.5 truncate text-[12px] font-semibold text-gray-500 dark:text-gray-300">
-              Navigation, accounts, notifications
+              Appearance, navigation, accounts
             </p>
           </div>
           <button
@@ -1431,6 +1384,28 @@ export function Navigation({
         className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain touch-action-pan-y px-3 py-3"
       >
         <div className="space-y-4">
+          <section className="rounded-[1.55rem] border border-black/[0.06] bg-black/[0.02] p-3.5 dark:border-white/[0.08] dark:bg-white/[0.035]">
+            <p className="mb-3 text-[10px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Appearance</p>
+            <div className="grid grid-cols-3 gap-2" role="group" aria-label="Appearance mode">
+              {([
+                { value: 'light', label: 'Light', icon: Sun },
+                { value: 'dark', label: 'Dark', icon: Moon },
+                { value: 'system', label: 'System', icon: Monitor },
+              ] as const).map(({ value, label, icon: Icon }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setMode(value as ThemeMode)}
+                  aria-pressed={mode === value}
+                  className={`flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl border px-2 py-2 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${mode === value ? 'border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-white/[0.09] dark:bg-white/[0.05] dark:text-slate-300 dark:hover:bg-white/[0.09]'}`}
+                >
+                  <Icon className="h-4 w-4" aria-hidden="true" />
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-[11px] leading-4 text-slate-500 dark:text-slate-400">System follows your device appearance.</p>
+          </section>
           <section className="rounded-[1.55rem] border border-black/[0.06] bg-black/[0.02] p-3.5 dark:border-white/[0.08] dark:bg-white/[0.035]">
             <div className="mb-3">
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
@@ -1603,36 +1578,13 @@ export function Navigation({
   );
 
   return (
-    <div className="dark contents">
+    <div className="contents">
       {/* ── Desktop top bar ── */}
-      <div className="desktop-top-bar fixed inset-x-0 top-0 z-50 hidden items-center gap-4 bg-[#050505]/96 px-5 text-white backdrop-blur-2xl lg:flex">
-        <button
-          onClick={() => handleNav("/dashboard")}
-          className="flex min-w-[170px] items-center gap-3 text-left"
-          aria-label="Go to dashboard"
-        >
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center">
-            <img
-              src="/servesync-mark-transparent.png"
-              alt=""
-              aria-hidden="true"
-              className="h-9 w-9 object-contain drop-shadow-[0_0_14px_rgba(74,222,128,0.22)]"
-            />
-          </span>
-          <span className="min-w-0">
-            <span className="block truncate text-[18px] font-black leading-none">
-              ServeSync
-            </span>
-          </span>
-        </button>
-
-        <button
-          onClick={() => handleNav("/dashboard")}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[0.65rem] border border-white/[0.08] bg-white/[0.08] text-white transition-colors hover:bg-white/[0.13]"
-          aria-label="Home"
-        >
-          <HomeIcon active className="h-5 w-5" />
-        </button>
+      <div className="desktop-top-bar fixed top-0 right-0 z-50 hidden items-center gap-5 border-b border-slate-200 bg-white/95 px-6 text-slate-900 dark:border-white/[0.07] dark:text-white lg:flex" style={{ backgroundColor: theme === 'dark' ? '#050505' : '#f8f8fa' }}>
+        <div className="desktop-page-heading min-w-0 shrink-0">
+          <span className="sr-only">ServeSync workspace</span>
+          <span className="block truncate text-[17px] font-bold leading-tight">{desktopPageTitle}</span>
+        </div>
 
         <form
           ref={globalSearchFormRef}
@@ -1641,9 +1593,9 @@ export function Navigation({
             if (globalSearchResults[0])
               handleGlobalResultSelect(globalSearchResults[0]);
           }}
-          className="flex h-11 max-w-[560px] flex-1 items-center gap-3 rounded-[0.65rem] border border-white/[0.10] bg-[#151515] px-3.5 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-colors focus-within:border-[#22c55e]/70 focus-within:bg-[#181818]"
+          className="desktop-global-search flex h-11 max-w-[560px] flex-1 items-center gap-3 rounded-[0.65rem] border border-slate-200 bg-slate-100 px-3.5 text-slate-900 transition-colors focus-within:border-emerald-500 dark:border-white/[0.10] dark:bg-[#151515] dark:text-white dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] dark:focus-within:bg-[#181818]"
         >
-          <Search className="h-5 w-5 shrink-0 text-white/60" />
+          <Search className="h-5 w-5 shrink-0 text-slate-500 dark:text-white/60" />
           <input
             ref={globalSearchInputRef}
             value={globalSearchQuery}
@@ -1654,7 +1606,7 @@ export function Navigation({
               setGlobalSearchOpen(true);
               updateGlobalSearchAnchor();
             }}
-            className="min-w-0 flex-1 bg-transparent text-[13px] font-semibold text-white outline-none placeholder:text-white/46"
+            className="min-w-0 flex-1 bg-transparent text-[13px] font-semibold text-slate-900 outline-none placeholder:text-slate-500 dark:text-white dark:placeholder:text-white/46"
             placeholder="Search events, songs, people, sets..."
             aria-label="Search events, songs, people, sets"
           />
@@ -1666,7 +1618,7 @@ export function Navigation({
                 updateGlobalSearchAnchor();
                 globalSearchInputRef.current?.focus();
               }}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-white/42 transition-colors hover:bg-white/[0.08] hover:text-white"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-900 dark:text-white/42 dark:hover:bg-white/[0.08] dark:hover:text-white"
               aria-label="Clear search"
             >
               <X className="h-4 w-4" />
@@ -1675,7 +1627,7 @@ export function Navigation({
             <button
               type="button"
               onClick={openGlobalSearch}
-              className="rounded-md border border-white/[0.08] bg-white/[0.05] px-2 py-1 text-[11px] font-bold text-white/46 transition-colors hover:bg-white/[0.09] hover:text-white"
+              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-500 transition-colors hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-white/46 dark:hover:bg-white/[0.09] dark:hover:text-white"
               aria-label="Open search"
             >
               ⌘ K
@@ -1687,7 +1639,7 @@ export function Navigation({
           <NotificationBell />
           {MESSENGER_ENABLED && <button
             onClick={() => handleNav("/messages")}
-            className="relative flex h-11 w-11 items-center justify-center rounded-full text-white transition-colors hover:bg-white/[0.08]"
+            className="relative flex h-11 w-11 items-center justify-center rounded-full text-slate-800 transition-colors hover:bg-slate-100 dark:text-white dark:hover:bg-white/[0.08]"
             aria-label="Chat"
           >
             <MessageCircle className="h-6 w-6" />
@@ -1700,7 +1652,7 @@ export function Navigation({
               setGlobalSearchOpen(false);
               setDesktopProfileOpen((open) => !open);
             }}
-            className={`flex items-center gap-2 rounded-full px-1.5 py-1 transition-colors hover:bg-white/[0.08] ${desktopProfileOpen ? "bg-white/[0.08]" : ""}`}
+            className={`flex items-center gap-2 rounded-full px-1.5 py-1 transition-colors hover:bg-slate-100 dark:hover:bg-white/[0.08] ${desktopProfileOpen ? "bg-slate-100 dark:bg-white/[0.08]" : ""}`}
             aria-label="Open profile menu"
             aria-expanded={desktopProfileOpen}
           >
@@ -1709,10 +1661,10 @@ export function Navigation({
               firstName={profile?.first_name || "?"}
               lastName={profile?.last_name}
               size="sm"
-              className="!h-11 !w-11 ring-1 ring-white/10"
+              className="!h-8 !w-8 ring-1 ring-white/10"
             />
             <ChevronRight
-              className={`h-4 w-4 text-white/70 transition-transform ${desktopProfileOpen ? "-rotate-90" : "rotate-90"}`}
+              className={`h-4 w-4 text-slate-500 transition-transform dark:text-white/70 ${desktopProfileOpen ? "-rotate-90" : "rotate-90"}`}
             />
           </button>
         </div>
@@ -1735,7 +1687,7 @@ export function Navigation({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -6, scale: 0.985 }}
               transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
-              className="fixed right-5 top-[4.55rem] z-[95] hidden w-[290px] overflow-hidden rounded-[0.9rem] border border-white/[0.10] bg-[#121212]/98 text-white shadow-[0_24px_80px_-34px_rgba(0,0,0,0.92)] backdrop-blur-2xl lg:block"
+              className="theme-popover fixed right-5 top-[4.55rem] z-[95] hidden w-[290px] overflow-hidden rounded-[0.9rem] border border-[#d3d4dd] bg-white text-[#474a65] shadow-[0_24px_80px_-34px_rgba(34,38,58,0.2)] dark:border-white/[0.10] dark:bg-[#121212] dark:text-white dark:shadow-[0_24px_80px_-34px_rgba(0,0,0,0.92)] lg:block"
               role="menu"
               aria-label="Profile menu"
             >
@@ -1953,12 +1905,12 @@ export function Navigation({
                     }
                   : undefined
               }
-              className="fixed left-1/2 top-[4.6rem] z-[90] w-[min(92vw,620px)] -translate-x-1/2 overflow-hidden rounded-[0.9rem] border border-white/[0.10] bg-[#121212]/98 text-white shadow-[0_24px_80px_-34px_rgba(0,0,0,0.92)] backdrop-blur-2xl lg:-translate-x-0"
+              className="theme-popover fixed left-1/2 top-[4.6rem] z-[90] w-[min(92vw,620px)] -translate-x-1/2 overflow-hidden rounded-[0.9rem] border border-[#d3d4dd] bg-white text-[#474a65] shadow-[0_24px_80px_-34px_rgba(34,38,58,0.2)] dark:border-white/[0.10] dark:bg-[#121212] dark:text-white dark:shadow-[0_24px_80px_-34px_rgba(0,0,0,0.92)] lg:-translate-x-0"
               role="dialog"
               aria-label="Global search"
             >
               <div className="border-b border-white/[0.07] p-3 lg:hidden">
-                <div className="flex h-11 items-center gap-3 rounded-[0.65rem] border border-white/[0.10] bg-[#181818] px-3">
+                <div className="flex h-11 items-center gap-3 rounded-[0.65rem] border border-[#d3d4dd] bg-[#f1f2f6] px-3 dark:border-white/[0.10] dark:bg-[#181818]">
                   <Search className="h-5 w-5 shrink-0 text-white/60" />
                   <input
                     ref={globalSearchMobileInputRef}
@@ -1966,7 +1918,7 @@ export function Navigation({
                     onChange={(event) =>
                       setGlobalSearchQuery(event.target.value)
                     }
-                    className="min-w-0 flex-1 bg-transparent text-[14px] font-semibold text-white outline-none placeholder:text-white/42"
+                    className="min-w-0 flex-1 bg-transparent text-[14px] font-semibold text-[#474a65] outline-none placeholder:text-[#62657b] dark:text-white dark:placeholder:text-white/42"
                     placeholder="Search events, songs, people, sets..."
                     aria-label="Search"
                   />
@@ -2043,14 +1995,14 @@ export function Navigation({
       {/* ── Mobile top bar ── */}
       <div
         aria-hidden="true"
-        className={`pointer-events-none fixed inset-x-0 top-0 z-40 bg-[#050505] lg:hidden ${hideMobileAll || hideMobileHeader ? "hidden" : ""}`}
+        className={`pointer-events-none fixed inset-x-0 top-0 z-40 bg-white dark:bg-[#050505] lg:hidden ${hideMobileAll || hideMobileHeader ? "hidden" : ""}`}
         style={{ height: "calc(env(safe-area-inset-top) + 2px)" }}
       />
       <div
         data-mobile-header="true"
         className={`fixed inset-x-0 top-0 z-50 flex items-end justify-between overflow-visible lg:hidden ${hideMobileAll || hideMobileHeader ? "hidden" : ""} ${mobileOpen ? "invisible pointer-events-none" : ""}`}
         style={{
-          background: "#050505",
+          background: theme === 'dark' ? '#050505' : '#f8f8fa',
           borderBottom: "none",
           boxShadow: "none",
           paddingTop: "env(safe-area-inset-top)",
@@ -2065,7 +2017,7 @@ export function Navigation({
           backfaceVisibility: "visible",
         }}
       >
-        <div className="relative z-10 flex h-14 w-full items-center justify-between gap-2 bg-[#050505] px-4 pb-0">
+        <div className="relative z-10 flex h-14 w-full items-center justify-between gap-2 bg-white px-4 pb-0 dark:bg-[#050505]">
           <button
             onClick={() => {
               setDrawerPanel("menu");
@@ -2082,7 +2034,7 @@ export function Navigation({
               className="!h-8 !w-8 !text-[11px] ring-1 ring-white/10"
             />
             <div className="min-w-0">
-              <p className="truncate text-[20px] font-black leading-tight text-white">
+              <p className="truncate text-[20px] font-black leading-tight text-slate-900 dark:text-white">
                 {mobileTitle}
               </p>
             </div>
@@ -2092,11 +2044,11 @@ export function Navigation({
             <NotificationBell />
             <button
               onClick={() => handleNav("/attendance/scan")}
-              className="group relative flex h-10 w-10 items-center justify-center rounded-full text-white transition-colors hover:bg-white/[0.08] active:bg-white/[0.12]"
+              className="group relative flex h-10 w-10 items-center justify-center rounded-full text-slate-900 transition-colors hover:bg-slate-100 active:bg-slate-200 dark:text-white dark:hover:bg-white/[0.08] dark:active:bg-white/[0.12]"
               aria-label="Scan attendance QR"
               title="Scan attendance QR"
             >
-              <AttendanceQrScanIcon className="h-[1.65rem] w-[1.65rem] text-white transition-opacity group-hover:opacity-90" />
+              <AttendanceQrScanIcon className="h-[1.65rem] w-[1.65rem] text-slate-900 transition-opacity group-hover:opacity-90 dark:text-white" />
             </button>
           </div>
         </div>
@@ -2115,7 +2067,7 @@ export function Navigation({
               onClick={() => onMobileOpenChange(false)}
             />
             <motion.aside
-              className="fixed inset-y-0 left-0 z-[70] w-[min(82vw,340px)] overflow-hidden touch-action-none bg-[#121212] text-white shadow-[24px_0_70px_-44px_rgba(0,0,0,0.9)] lg:hidden"
+              className="fixed inset-y-0 left-0 z-[70] w-[min(82vw,340px)] overflow-hidden touch-action-none bg-white text-slate-900 shadow-[24px_0_70px_-44px_rgba(0,0,0,0.9)] dark:bg-[#121212] dark:text-white lg:hidden"
               style={{ overscrollBehaviorY: "none" }}
               initial={{ x: "-100%" }}
               animate={{ x: 0 }}
@@ -2171,6 +2123,20 @@ export function Navigation({
                       }}
                       className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain touch-action-pan-y px-3 py-3"
                     >
+                      <button
+                        type="button"
+                        onClick={() => setDrawerPanel("settings")}
+                        className="group mb-2 flex w-full items-center gap-3.5 rounded-2xl border border-black/[0.06] bg-black/[0.02] px-3 py-3.5 text-left transition-colors hover:bg-black/[0.05] dark:border-white/[0.08] dark:bg-white/[0.035] dark:hover:bg-white/[0.07]"
+                      >
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center text-gray-900 dark:text-white">
+                          {mode === 'system' ? <Monitor className="h-5 w-5" /> : theme === 'dark' ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-[16px] font-bold text-gray-900 dark:text-white">Appearance</span>
+                          <span className="block text-[11px] font-semibold text-gray-500 dark:text-gray-300">{mode === 'system' ? 'System' : theme === 'dark' ? 'Dark' : 'Light'} mode · Tap to change</span>
+                        </span>
+                        <ChevronRight className="h-[18px] w-[18px] shrink-0 text-gray-400 dark:text-gray-500" />
+                      </button>
                       {primaryMenuItems
                         .filter((item) => item.label !== "Profile")
                         .map((item) => {
@@ -2306,36 +2272,37 @@ export function Navigation({
       {/* ── Desktop sidebar ── */}
       <motion.aside
         animate={{ width: sidebarWidth }}
-        transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-        className="desktop-sidebar fixed left-0 z-40 hidden flex-col bg-[#050505] lg:flex"
+        transition={{ duration: prefersReducedMotion ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}
+        className="desktop-sidebar fixed left-0 z-40 hidden flex-col border-r border-slate-200 bg-[#f8fafc] dark:border-white/[0.09] dark:bg-[#101010] lg:flex"
         style={{ overflow: "visible" }}
       >
         <div
-          className={`flex h-full flex-col bg-[#050505] ${collapsed ? "overflow-visible" : "overflow-hidden"}`}
+          className={`flex h-full flex-col bg-[#f8fafc] dark:bg-[#101010] ${collapsed ? "overflow-visible" : "overflow-hidden"}`}
         >
-          <div
-            className={`flex-1 min-h-0 ${collapsed ? "overflow-visible px-2 pb-2 pt-5" : "overflow-y-auto overscroll-y-contain touch-action-pan-y [-webkit-overflow-scrolling:touch] px-4 pb-3 pt-5 no-scrollbar"}`}
+            <button
+              type="button"
+              onClick={() => handleNav('/dashboard')}
+              aria-label="Go to dashboard"
+              className={`desktop-sidebar-brand flex h-16 shrink-0 items-center border-b border-slate-200 text-left dark:border-white/10 ${collapsed ? 'justify-center' : 'gap-2.5 px-4'}`}
+            >
+              <img src="/servesync-mark-transparent.png" alt="" aria-hidden="true" className="desktop-brand-mark h-8 w-8 shrink-0 object-contain" />
+              {!collapsed && <span className="truncate text-[16px] font-bold tracking-tight text-slate-950 dark:text-white">ServeSync</span>}
+            </button>
+            <motion.div
+              key={collapsed ? "collapsed" : "expanded"}
+              initial={prefersReducedMotion ? false : { opacity: 0.45, x: collapsed ? 5 : -5 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: prefersReducedMotion ? 0 : 0.22, ease: "easeOut" }}
+              className={`desktop-sidebar-scroll min-h-0 min-w-0 flex-1 ${collapsed ? "overflow-visible px-2 pb-2 pt-5" : "overflow-y-auto overscroll-y-contain touch-action-pan-y [-webkit-overflow-scrolling:touch] px-3 pb-3 pt-5 no-scrollbar"}`}
           >
             <div
-              className={`flex items-center pb-2 pt-1 ${collapsed ? "justify-center" : "justify-between px-2.5"}`}
+              className={`flex items-center pb-2 pt-1 ${collapsed ? "justify-center" : "px-2.5"}`}
             >
               {!collapsed && (
-                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/36">
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-white/45">
                   Main
                 </p>
               )}
-              <button
-                type="button"
-                onClick={() => onCollapsedChange(!collapsed)}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[0.5rem] border border-white/[0.08] bg-white/[0.055] text-white/62 transition-colors hover:bg-white/[0.10] hover:text-white"
-                aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              >
-                {collapsed ? (
-                  <ChevronRight className="h-3.5 w-3.5" />
-                ) : (
-                  <ChevronLeft className="h-3.5 w-3.5" />
-                )}
-              </button>
             </div>
 
             <div className="space-y-1.5">
@@ -2344,9 +2311,9 @@ export function Navigation({
 
             {!collapsed && (
               <>
-                <div className="mt-5 border-t border-white/[0.08] pt-4">
+                <div className="mt-5 border-t border-slate-200 pt-4 dark:border-white/[0.08]">
                   <div className="mb-2 px-2.5">
-                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-white/36">
+                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500 dark:text-white/45">
                       Ministry Library
                     </p>
                   </div>
@@ -2367,21 +2334,21 @@ export function Navigation({
                           void preloadRoute(entry.path);
                         }}
                         aria-current={active ? "page" : undefined}
-                        className={`group flex w-full items-center gap-3 rounded-[0.8rem] border px-1.5 py-1.5 text-left transition-colors ${active ? "border-white/[0.10] bg-white/[0.10] shadow-[0_16px_32px_-24px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.12)]" : "border-transparent hover:border-white/[0.08] hover:bg-white/[0.065]"}`}
+                        className={`desktop-library-link group flex w-full items-center gap-3 rounded-[0.8rem] border px-1.5 py-1.5 text-left transition-colors ${active ? "border-slate-200 bg-white dark:border-white/[0.10] dark:bg-white/[0.08]" : "border-transparent hover:border-slate-200 hover:bg-white dark:hover:border-white/[0.08] dark:hover:bg-white/[0.065]"}`}
                       >
                         <span
-                          className={`relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-[0.6rem] border border-white/[0.08] bg-gradient-to-br ${entry.tone} shadow-[0_4px_12px_-8px_rgba(0,0,0,0.8)] transition-colors group-hover:border-white/[0.14]`}
+                          className={`relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-[0.6rem] ${active ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" : "bg-slate-100 text-slate-600 dark:bg-white/[0.06] dark:text-white/55"}`}
                         >
                           <entry.icon
-                            className="absolute h-[18px] w-[18px] text-white/90"
+                            className="h-[18px] w-[18px]"
                             strokeWidth={2.1}
                           />
                         </span>
                         <span className="min-w-0">
-                          <span className="block truncate text-[13px] font-bold leading-tight text-white">
+                          <span className="block truncate text-[13px] font-bold leading-tight text-slate-900 dark:text-white">
                             {entry.title}
                           </span>
-                          <span className="mt-0.5 block truncate text-[11px] font-semibold leading-tight text-white/45">
+                          <span className="mt-0.5 block truncate text-[11px] font-semibold leading-tight text-slate-500 dark:text-white/45">
                             {entry.caption}
                           </span>
                         </span>
@@ -2391,43 +2358,6 @@ export function Navigation({
                   </div>
                 </div>
 
-                <div className="mt-4 border-t border-white/[0.08] pt-4">
-                  <div className="mb-2 px-2.5">
-                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-white/36">
-                      My Shortcuts
-                    </p>
-                  </div>
-                  <div className="space-y-1.5">
-                    {desktopShortcutItems.map((entry) => {
-                      const active = isDesktopListItemActive(entry.path);
-                      return (
-                      <button
-                        key={entry.title}
-                        onClick={() => handleNav(entry.path)}
-                        aria-current={active ? "page" : undefined}
-                        className={`group flex w-full items-center gap-3 rounded-[0.8rem] border px-1.5 py-1.5 text-left transition-colors ${active ? "border-white/[0.10] bg-white/[0.10] shadow-[0_16px_32px_-24px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.12)]" : "border-transparent hover:border-white/[0.08] hover:bg-white/[0.065]"}`}
-                      >
-                        <span
-                          className={`relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-[0.6rem] border border-white/[0.08] bg-gradient-to-br ${entry.tone} shadow-[0_4px_12px_-8px_rgba(0,0,0,0.8)] transition-colors group-hover:border-white/[0.14]`}
-                        >
-                          <entry.icon
-                            className="absolute h-[18px] w-[18px] text-white/90"
-                            strokeWidth={2.1}
-                          />
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block truncate text-[13px] font-bold leading-tight text-white">
-                            {entry.title}
-                          </span>
-                          <span className="mt-0.5 block truncate text-[11px] font-semibold leading-tight text-white/45">
-                            {entry.caption}
-                          </span>
-                        </span>
-                      </button>
-                      );
-                    })}
-                  </div>
-                </div>
               </>
             )}
 
@@ -2435,7 +2365,7 @@ export function Navigation({
               <div className="mt-5">
                 {!collapsed && (
                   <div className="mb-2 px-2.5">
-                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-white/36">
+                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500 dark:text-white/45">
                       Leadership
                     </p>
                   </div>
@@ -2452,7 +2382,7 @@ export function Navigation({
               <div className="mt-5">
                 {!collapsed && (
                   <div className="mb-2 px-2.5">
-                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-white/36">
+                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500 dark:text-white/45">
                       Admin
                     </p>
                   </div>
@@ -2463,7 +2393,29 @@ export function Navigation({
                 </div>
               </div>
             )}
-          </div>
+          </motion.div>
+          {!collapsed && (
+            <div className="flex shrink-0 flex-col items-stretch border-t border-[#d3d4dd] bg-[#e6e7ef] px-4 py-2 dark:border-white/[0.09] dark:bg-[#101010]">
+              <button type="button" onClick={toggleTheme} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} className="flex h-10 items-center gap-2 rounded-xl px-2 text-xs font-bold text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-white/[0.08]">
+                {theme === 'dark' ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
+                {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+              </button>
+              <button type="button" onClick={() => onCollapsedChange(true)} aria-label="Collapse sidebar" className="flex h-10 items-center gap-2 rounded-xl px-2 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-white/[0.08]">
+                <PanelLeftClose className="h-[18px] w-[18px]" />
+                Collapse
+              </button>
+            </div>
+          )}
+          {collapsed && (
+            <div className="mt-auto flex flex-col items-center gap-2 border-t border-[#d3d4dd] bg-[#e6e7ef] px-2 py-3 dark:border-white/[0.09] dark:bg-[#101010]">
+              <button type="button" onClick={toggleTheme} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-white/[0.08]">
+                {theme === 'dark' ? <Sun className="h-[19px] w-[19px]" /> : <Moon className="h-[19px] w-[19px]" />}
+              </button>
+              <button type="button" onClick={() => onCollapsedChange(false)} aria-label="Expand sidebar" title="Expand sidebar" className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-600 transition-colors hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-white/[0.08]">
+                <PanelLeftOpen className="h-[19px] w-[19px]" />
+              </button>
+            </div>
+          )}
         </div>
       </motion.aside>
 
@@ -2477,9 +2429,9 @@ export function Navigation({
               ? "0px"
               : "max(0px, calc(env(safe-area-inset-bottom) - 6px))",
             paddingTop: useDockedMobileNav ? "0px" : "6px",
-            background: useDockedMobileNav ? "rgba(5,5,5,0.96)" : "transparent",
+            background: useDockedMobileNav ? (theme === 'dark' ? "rgba(5,5,5,0.96)" : "rgba(248,248,250,0.97)") : "transparent",
             borderTop: useDockedMobileNav
-              ? "1px solid rgba(255,255,255,0.08)"
+              ? (theme === 'dark' ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(15,23,42,0.12)")
               : undefined,
             boxShadow: useDockedMobileNav
               ? "0 -18px 42px -34px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.08)"

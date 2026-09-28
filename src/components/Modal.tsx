@@ -292,6 +292,8 @@ export function Modal({
 
     const handleFocusIn = (event: FocusEvent) => {
       if (!isTopmostModal(dialog)) return;
+      // The song picker is a full-screen child flow portaled above this dialog.
+      if (event.target instanceof Element && event.target.closest('.setlist-builder-page')) return;
       if (event.target instanceof Node && !dialog.contains(event.target)) {
         focusInitialElement(dialog);
       }
@@ -320,6 +322,7 @@ export function Modal({
     const handleKeyDown = (event: KeyboardEvent) => {
       const dialog = dialogRef.current;
       if (!dialog || !isTopmostModal(dialog)) return;
+      if (document.querySelector('.setlist-builder-page')) return;
 
       if (event.key === 'Escape') {
         if (closeOnEscape) requestClose();

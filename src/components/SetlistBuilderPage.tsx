@@ -1,7 +1,7 @@
 import { SONG_ROLE_GUIDE } from '../lib/songRoleGuide';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, BookOpen, ChevronDown, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, BookOpen, ChevronDown, ShieldCheck, X } from 'lucide-react';
 
 
 
@@ -29,9 +29,10 @@ export function SetlistBuilderPage({ title, onBack, children, footer, error }: {
     heading.current?.focus();
     return () => { if (root) root.inert = previousInert; document.body.style.overflow = overflow; document.documentElement.style.overflow = htmlOverflow; };
   }, []);
-  return createPortal(<main aria-label="Setlist builder" className="setlist-builder-page fixed inset-0 z-[100] flex min-h-0 flex-col overflow-hidden bg-gray-50 text-gray-900 dark:bg-[#101312] dark:text-white">
+  return createPortal(<div className="setlist-builder-overlay fixed inset-0 z-[2147483647]" onMouseDown={event => { if (event.target === event.currentTarget) onBack(); }}>
+  <main role="dialog" aria-modal="true" aria-label={title} className="setlist-builder-page fixed inset-0 flex min-h-0 flex-col overflow-hidden bg-gray-50 text-gray-900 dark:bg-[#101312] dark:text-white">
     <header className="shrink-0 border-b border-black/10 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#101312]">
-      <div className="mx-auto flex max-w-5xl items-center gap-3"><button type="button" onClick={onBack} aria-label="Back to event" className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-white/10"><ArrowLeft className="h-5 w-5" /></button><div><h1 ref={heading} tabIndex={-1} className="text-lg font-bold outline-none">{title}</h1><p className="text-xs text-gray-500 dark:text-gray-400">Choose songs, set their roles, then arrange the service.</p></div></div>
+      <div className="mx-auto flex max-w-5xl items-center gap-3"><button type="button" onClick={onBack} aria-label="Back to event" className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-white/10 lg:order-2 lg:ml-auto"><ArrowLeft className="h-5 w-5 lg:hidden" /><X className="hidden h-5 w-5 lg:block" /></button><div><h1 ref={heading} tabIndex={-1} className="text-lg font-bold outline-none">{title}</h1><p className="text-xs text-gray-500 dark:text-gray-400">Choose songs, set their roles, then arrange the service.</p></div></div>
     </header>
     <div className="setlist-builder-content no-scrollbar flex min-h-0 flex-1 flex-col overflow-hidden"><div className="setlist-builder-workspace mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col p-4 md:p-6">
       <section aria-label="Song category guide" className="shrink-0 rounded-2xl border border-black/[0.08] bg-white dark:border-white/10 dark:bg-[#181d1b]">
@@ -55,7 +56,7 @@ export function SetlistBuilderPage({ title, onBack, children, footer, error }: {
                   <h2 className="text-sm font-bold">{role}</h2>
                 </div>
                 <p className={`mb-2 inline-flex rounded-md px-2 py-1 text-[11px] font-bold ${roleColors[role]}`}>{roleCaptions[role]}</p>
-                <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">{description}</p>
+                <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300 lg:hidden">{description}</p>
               </section>
             ))}
           </div>
@@ -113,5 +114,5 @@ export function SetlistBuilderPage({ title, onBack, children, footer, error }: {
       {error && <p role="alert" className="mx-auto mb-3 max-h-24 max-w-5xl overflow-y-auto rounded-lg bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">{error} Your selected songs are still here.</p>}
       <div className="mx-auto flex max-w-5xl flex-row gap-2">{footer}</div>
     </footer>
-  </main>, document.body);
+  </main></div>, document.body);
 }

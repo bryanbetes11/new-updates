@@ -12,7 +12,7 @@ export function InteractionSoundSetupModal({ open, onClose }: InteractionSoundSe
     <Modal
       open={open}
       onClose={onClose}
-      title="Sound & feedback"
+      title="Sound & Feedback"
       headerIcon={<Volume2 className="h-4 w-4" />}
       size="md"
       mobileView="dialog"

@@ -233,7 +233,7 @@ export function LeaderDashboard({ embedded }: LeaderDashboardProps = {}) {
           >
             <div className="border-b border-gray-100 px-5 py-4 dark:border-white/[0.06]">
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-300">Leadership Overview</p>
-              <h2 className="mt-1 text-lg font-black text-gray-950 dark:text-white">Your Ministry Tools at a Glance</h2>
+              <h2 className="mt-1 text-lg font-black text-gray-950 dark:text-white">Your Ministry Tools At A Glance</h2>
               <p className="mt-1 text-sm text-gray-500 dark:text-white/45">Review the current queues or open an area for more detail.</p>
             </div>
             <div className="grid gap-px bg-gray-100 dark:bg-white/[0.06] sm:grid-cols-2 xl:grid-cols-3">

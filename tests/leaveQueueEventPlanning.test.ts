@@ -37,7 +37,7 @@ assert.match(source, /context="pending"/, 'pending leave warnings should use pre
 assert.match(source, /context="approved"/, 'approved leave warnings should use post-approval planning guidance');
 assert.match(source, /display="badge"/, 'pending coverage warnings should collapse into a compact badge');
 assert.match(source, /aria-haspopup="dialog"/, 'the coverage badge should advertise its warning dialog');
-assert.match(source, /title="Coverage warning"/, 'clicking the coverage badge should open the full warning in a modal');
+assert.match(source, /title="Coverage Warning"/, 'clicking the coverage badge should open the full warning in a modal');
 assert.match(
   source,
   /<EventScheduleDuringLeave[\s\S]*?<LeaveConflictWarning[\s\S]*?context="approved"/,

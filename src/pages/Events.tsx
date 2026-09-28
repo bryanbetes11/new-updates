@@ -24,6 +24,7 @@ import { EventTypeLabel } from '../components/EventTypeLabel';
 import { EventDateChip } from '../components/EventDateChip';
 import { EventLifecycleActionModal, type EventActionAnchorRect, type EventLifecycleDialogMode } from '../components/EventLifecycleActionModal';
 import { CalendarGrid } from '../components/CalendarGrid';
+import { DesktopPageHeading } from '../components/DesktopPageHeading';
 import type { Event } from '../types';
 import { hasArtworkArtist } from '../lib/songArtworkEligibility';
 import { hasEventScheduleEnded, isEventCompleted } from '../lib/eventLifecycle';
@@ -258,7 +259,7 @@ function formatSongLeaderName(profile: RelatedProfile) {
 }
 
 function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEventClick, onLifecycleChange, isPast, artworkClassName = 'h-16 w-16', variant = 'list' }: {
-  event: Event; calendarEntries: CalendarEntry[]; songLeaderMap?: Record<string, string>; setlistInfoMap?: Record<string, SetlistInfo>; onEventClick: (id: string) => void; onLifecycleChange?: (event: Event) => void; isPast?: boolean; artworkClassName?: string; variant?: 'list' | 'featured';
+  event: Event; calendarEntries: CalendarEntry[]; songLeaderMap?: Record<string, string>; setlistInfoMap?: Record<string, SetlistInfo>; onEventClick: (id: string) => void; onLifecycleChange?: (event: Event) => void; isPast?: boolean; artworkClassName?: string; variant?: 'list' | 'featured' | 'directory';
 }) {
   const { user, profile, isOrgAdmin, isAdmin, offlineMode, isViewingAsMember, isViewingAsSongLeader } = useAuth();
   const { toast } = useToast();
@@ -375,7 +376,7 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
   };
 
   return (
-    <div className="relative">
+    <div className={variant === 'featured' ? 'desktop-featured-event relative h-full' : 'relative'}>
       <button
         ref={eventButtonRef}
         onClick={clickEvent => {
@@ -399,13 +400,13 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
           // pointercancel and a compatibility click when the finger is lifted.
           triggerLongPress();
         }}
-        className={`touch-action-pan-y group relative w-full text-left transition-all duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] motion-reduce:transform-none ${variant === 'featured' ? 'flex flex-col rounded-[1rem] p-1.5 hover:-translate-y-1 hover:scale-[1.01] hover:shadow-[0_20px_46px_-24px_rgba(34,197,94,0.55)]' : 'flex min-h-[5.5rem] items-center gap-3 px-0 py-3 focus-visible:ring-inset'} ${lifecycleDialogMode ? 'z-10 scale-[1.005] bg-[#080d0a] shadow-[0_16px_48px_-24px_rgba(34,197,94,0.75)]' : variant === 'featured' ? 'bg-white/[0.025] hover:bg-white/[0.06]' : 'bg-transparent hover:bg-white/[0.03]'} ${canManageLifecycle ? 'select-none' : ''}`}
+        className={`touch-action-pan-y group relative w-full text-left transition-colors duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] ${variant === 'featured' ? 'flex h-full flex-col rounded-[1rem] p-1.5' : 'flex min-h-[5.5rem] items-center gap-3 px-0 py-3 focus-visible:ring-inset'} ${lifecycleDialogMode ? 'z-10 bg-[#080d0a]' : variant === 'featured' ? 'bg-white/[0.025] hover:bg-white/[0.06]' : 'bg-transparent hover:bg-white/[0.03]'} ${canManageLifecycle ? 'select-none' : ''}`}
         style={{ opacity: isPast ? 0.62 : 1 }}
         aria-expanded={lifecycleDialogMode ? true : undefined}
       >
       {variant === 'featured' ? (
         <>
-          <div className="relative aspect-[4/3] w-full overflow-hidden rounded-[0.72rem] border border-white/[0.08] bg-[#161a18]">
+          <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden rounded-[0.72rem] border border-white/[0.08] bg-[#161a18]">
             {setlistInfo?.songCount ? (
               <EventArtwork
                 eventType={event.event_type}
@@ -418,12 +419,12 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
               <EmptyEventArtwork className="h-full w-full rounded-none border-0" />
             )}
             {pendingReviewAge && pendingReviewAge.pendingDays !== null && <PendingSetlistRibbon pendingDays={pendingReviewAge.pendingDays} />}
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/85 to-transparent" />
-            <span className="absolute left-2 top-2 rounded-md border border-white/10 bg-black/75 px-2 py-1 text-[9px] font-black uppercase tracking-[0.08em] text-white shadow-lg backdrop-blur-sm">
+            <div className="desktop-event-artwork-fade pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/85 to-transparent" />
+            <span className="keep-white absolute left-2 top-2 rounded-md border border-white/10 bg-black/75 px-2 py-1 text-[9px] font-black uppercase tracking-[0.08em] text-white shadow-lg backdrop-blur-sm">
               {format(parseISO(event.event_date), 'MMM dd')}
             </span>
             {(showOverdueStyle || showDueSoonStyle || scheduleHasEnded || isPast) && (
-              <span className={`absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[9px] font-black shadow-lg backdrop-blur-sm ${showOverdueStyle ? 'bg-red-500/85 text-white' : showDueSoonStyle ? 'bg-amber-400/90 text-black' : isPast ? 'bg-black/75 text-white/75' : 'bg-amber-400/90 text-black'}`}>
+              <span className={`keep-white absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[9px] font-black shadow-lg backdrop-blur-sm ${showOverdueStyle ? 'bg-red-500/85 text-white' : showDueSoonStyle ? 'bg-amber-400/90 text-black' : isPast ? 'bg-black/75 text-white/75' : 'bg-amber-400/90 text-black'}`}>
                 {showOverdueStyle ? <AlertCircle className="h-3 w-3" /> : <CheckCircle className="h-3 w-3" />}
                 {showOverdueStyle ? 'Overdue' : showDueSoonStyle ? `Due in ${daysUntilDue}d` : isPast ? 'Completed' : 'Finished'}
               </span>
@@ -434,22 +435,52 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
               </span>
             ) : null}
           </div>
-          <div className="w-full min-w-0 px-1 pb-1 pt-2.5">
+          <div className="flex w-full min-w-0 flex-1 flex-col px-1 pb-1 pt-2.5">
             <p className="truncate text-[13px] font-black leading-snug text-white" style={{ letterSpacing: '-0.015em' }}>{songLeader || event.title}</p>
             <div className="mt-1 flex min-w-0 items-center gap-1.5">
               <EventTypeLabel type={event.event_type} />
               <span className="h-0.5 w-0.5 shrink-0 rounded-full bg-white/25" />
               <span className="truncate text-[10px] font-semibold text-white/42">{formatTime12Hour(event.start_time || '')}{event.end_time && ` – ${formatTime12Hour(event.end_time)}`}</span>
             </div>
-            {dayEntries.length > 0 ? (
-              <span role="button" tabIndex={0} onClick={(event) => { event.stopPropagation(); setLeaveReasonsOpen(true); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); setLeaveReasonsOpen(true); } }} className="mt-1 inline-flex max-w-full touch-manipulation cursor-pointer items-center gap-1 rounded-full border border-amber-400/25 bg-amber-400/[0.08] px-2 py-0.5 text-[9px] font-bold leading-4 text-amber-200 transition-colors hover:bg-amber-400/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300">
-                <CalendarOff className="h-2.5 w-2.5 shrink-0" />
-                <span className="truncate">{dayEntries.length} unavailable · View reason{dayEntries.length === 1 ? '' : 's'}</span>
-              </span>
-            ) : null}
+            <div className="mt-auto min-h-6 pt-1">
+              {dayEntries.length > 0 ? (
+                <span role="button" tabIndex={0} onClick={(event) => { event.stopPropagation(); setLeaveReasonsOpen(true); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); setLeaveReasonsOpen(true); } }} className="inline-flex max-w-full touch-manipulation cursor-pointer items-center gap-1 rounded-full border border-amber-400/25 bg-amber-400/[0.08] px-2 py-0.5 text-[9px] font-bold leading-4 text-amber-800 transition-colors hover:bg-amber-400/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 dark:text-amber-200">
+                  <CalendarOff className="h-2.5 w-2.5 shrink-0" />
+                  <span className="truncate">{dayEntries.length} unavailable · View reason{dayEntries.length === 1 ? '' : 's'}</span>
+                </span>
+              ) : null}
+            </div>
           </div>
         </>
-      ) : <>
+      ) : variant === 'directory' ? <>
+      <div className="desktop-event-directory-identity flex min-w-0 items-center gap-3">
+        <div className={`event-list-artwork relative shrink-0 overflow-hidden rounded-[0.35rem] ${artworkClassName}`}>
+          {hasSetlistSongs ? (
+            <EventArtwork eventType={event.event_type} title={event.title} artworkUrls={setlistInfo?.artworkUrls || []} songs={setlistInfo?.artworkSongs} className="h-full w-full rounded-[0.35rem]" />
+          ) : <EmptyEventArtwork className="h-full w-full" />}
+          {pendingReviewAge && pendingReviewAge.pendingDays !== null && <PendingSetlistRibbon compact pendingDays={pendingReviewAge.pendingDays} />}
+        </div>
+        <div className="min-w-0">
+          <p className="truncate text-[13px] font-black leading-snug text-white">{songLeader || event.title}</p>
+          <div className="desktop-event-directory-type mt-0.5 truncate"><EventTypeLabel type={event.event_type} /></div>
+        </div>
+      </div>
+      <div className="desktop-event-directory-schedule min-w-0">
+        <span className="block text-[11px] font-bold text-white">{format(parseISO(event.event_date), 'EEEE')}</span>
+        <div className="mt-1 flex min-w-0 items-center gap-1 text-[11px] font-semibold text-white/45">
+          <Clock className="h-3 w-3 shrink-0" />
+          <span className="truncate">{formatTime12Hour(event.start_time || '')}{event.end_time && ` – ${formatTime12Hour(event.end_time)}`}</span>
+        </div>
+      </div>
+      <div className="desktop-event-directory-availability min-w-0">
+        {dayEntries.length === 0 && <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300"><CheckCircle className="h-3.5 w-3.5 shrink-0" />No Leave Reported</span>}
+      </div>
+      <div className="desktop-event-directory-status min-w-0">
+        {showOverdueStyle || showDueSoonStyle ? <span className={`block text-[10px] font-bold ${showOverdueStyle ? 'text-red-600 dark:text-red-400' : 'text-amber-700 dark:text-amber-300'}`}>{showOverdueStyle ? 'Overdue' : `Due in ${daysUntilDue}d`}</span> : null}
+        {!canManageLifecycle && <span className={`inline-flex max-w-full rounded-md border px-2 py-1 text-[11px] font-semibold ${hasApprovedSetlist ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-700/50 dark:bg-emerald-900/20 dark:text-emerald-300' : isSetlistPendingProcess(setlistInfo?.status) ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-700/50 dark:bg-amber-900/20 dark:text-amber-300' : 'border-slate-200 text-slate-600 dark:border-white/10 dark:text-white/60'}`}>{hasApprovedSetlist ? 'Ready' : setlistInfo?.status === 'revision_requested' ? 'Revision Requested' : setlistInfo?.status === 'pending_review' ? 'Pending Review' : hasSetlistSongs ? 'Draft' : 'No Songs Yet'}</span>}
+      </div>
+      <time dateTime={event.event_date} className="desktop-event-directory-date whitespace-nowrap text-right text-[12px] font-bold text-white">{format(parseISO(event.event_date), 'MMM dd, yyyy')}</time>
+      </> : <>
       <div className={`relative shrink-0 overflow-hidden rounded-[0.35rem] ${artworkClassName}`}>
         {setlistInfo?.songCount ? (
           <EventArtwork
@@ -503,7 +534,7 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
         </div>
 
         {dayEntries.length > 0 && (
-          <span role="button" tabIndex={0} onClick={(event) => { event.stopPropagation(); setLeaveReasonsOpen(true); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); setLeaveReasonsOpen(true); } }} className="mt-1.5 flex w-fit max-w-full min-w-0 touch-manipulation cursor-pointer items-center gap-1.5 rounded-full border border-amber-400/25 bg-amber-400/[0.08] px-2 py-0.5 text-[10px] font-bold leading-4 text-amber-200 transition-colors hover:bg-amber-400/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300">
+          <span role="button" tabIndex={0} onClick={(event) => { event.stopPropagation(); setLeaveReasonsOpen(true); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); setLeaveReasonsOpen(true); } }} className="mt-1.5 flex w-fit max-w-full min-w-0 touch-manipulation cursor-pointer items-center gap-1.5 rounded-full border border-amber-400/25 bg-amber-400/[0.08] px-2 py-0.5 text-[10px] font-bold leading-4 text-amber-800 transition-colors hover:bg-amber-400/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 dark:text-amber-200">
             <CalendarOff className="h-3 w-3 shrink-0 text-amber-400/70" />
             <span className="truncate">{dayEntries.length} unavailable · View reason{dayEntries.length === 1 ? '' : 's'}</span>
           </span>
@@ -525,6 +556,14 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
       </div>
       </>}
       </button>
+
+      {variant === 'directory' && dayEntries.length > 0 && (
+        <div className="desktop-event-availability-action pointer-events-none absolute inset-0 z-10 grid items-center" >
+          <button type="button" onClick={() => setLeaveReasonsOpen(true)} className="pointer-events-auto col-start-3 inline-flex w-fit max-w-full items-center gap-1.5 rounded-md px-1 py-1 text-left text-[11px] font-semibold text-amber-700 transition-colors hover:bg-amber-50 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 dark:text-amber-300 dark:hover:bg-amber-400/10" aria-label={`View ${dayEntries.length} unavailable team member${dayEntries.length === 1 ? '' : 's'} for ${songLeader || event.title}`}>
+            <CalendarOff className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{dayEntries.length} Unavailable</span>
+          </button>
+        </div>
+      )}
 
       {dayEntries.length > 0 && (
         <Modal open={leaveReasonsOpen} onClose={() => setLeaveReasonsOpen(false)} title={`Unavailable for ${format(parseISO(event.event_date), 'MMM d')}`} size="sm" mobileView="dialog" dialogClassName="max-w-[calc(100%-2rem)] sm:max-w-sm">
@@ -575,7 +614,7 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
   );
 }
 
-function BirthdayCard({ name, date, artworkClassName = 'h-16 w-16' }: { name: string; date: string; artworkClassName?: string }) {
+function BirthdayCard({ name, date, artworkClassName = 'h-16 w-16', variant = 'list' }: { name: string; date: string; artworkClassName?: string; variant?: 'list' | 'directory' }) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [wishing, setWishing] = useState(false);
@@ -648,6 +687,23 @@ function BirthdayCard({ name, date, artworkClassName = 'h-16 w-16' }: { name: st
     toast('success', `Birthday wish sent to ${firstName}! 🎉`);
     setWished(true);
   };
+
+  if (variant === 'directory') return (
+    <div className="desktop-event-birthday-directory grid w-full items-center gap-4 py-2">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className={`flex shrink-0 items-center justify-center rounded-md border border-pink-200 bg-pink-50 text-pink-600 dark:border-pink-900/60 dark:bg-pink-900/20 dark:text-pink-300 ${artworkClassName}`}><PartyPopper className="h-5 w-5" /></span>
+        <div className="min-w-0">
+          <p className="truncate text-[13px] font-black text-white">{name}</p>
+          <span className="mt-0.5 block text-[11px] font-bold text-pink-600 dark:text-pink-300">Birthday</span>
+          {isToday && <button type="button" onClick={handleWish} disabled={wishing || wished} className="mt-1 text-[11px] font-bold text-pink-700 hover:underline disabled:opacity-60 dark:text-pink-300">{wished ? 'Wished' : wishing ? 'Sending…' : 'Send Birthday Wish'}</button>}
+        </div>
+      </div>
+      <div className="min-w-0"><span className="block text-[11px] font-bold text-white">{format(parseISO(date), 'EEEE')}</span><span className="mt-1 block text-[11px] text-white/45">All Day</span></div>
+      <span className="text-[11px] font-semibold text-white/45">Not Applicable</span>
+      <span className="text-[11px] font-semibold text-white/45">Not Required</span>
+      <time dateTime={date} className="whitespace-nowrap text-right text-[12px] font-bold text-white">{format(parseISO(date), 'MMM dd, yyyy')}</time>
+    </div>
+  );
 
   return (
     <div
@@ -879,50 +935,32 @@ function EventDesktopCardGroups({ events, calendarEntries, songLeaderMap, setlis
   showPast?: boolean;
 }) {
   const allItems = getEventListItems(events, calendarEntries, showPast) as EventListItem[];
-  const featuredEvents = allItems.filter((item): item is Extract<EventListItem, { kind: 'event' }> => item.kind === 'event').slice(0, 4);
-  const featuredEventIds = new Set(featuredEvents.map(item => item.event.id));
-  const monthGroups = groupEventItemsByMonth(allItems.filter(item => item.kind !== 'event' || !featuredEventIds.has(item.event.id)));
+  const monthGroups = groupEventItemsByMonth(allItems);
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-      className="space-y-8"
+      className="desktop-event-directory"
     >
-      {featuredEvents.length > 0 ? (
-        <section className="grid grid-cols-4 gap-3 border-b border-white/[0.08] pb-6">
-          {featuredEvents.map(item => (
-            <EventCard
-              key={item.event.id}
-              event={item.event}
-              calendarEntries={calendarEntries}
-              songLeaderMap={songLeaderMap}
-              setlistInfoMap={setlistInfoMap}
-              onEventClick={onEventClick}
-              onLifecycleChange={onLifecycleChange}
-              isPast={showPast}
-              variant="featured"
-            />
-          ))}
-        </section>
-      ) : null}
       {monthGroups.map((group) => (
-        <section key={group.month} className="space-y-3">
-          <div className="flex items-center gap-3">
+        <section key={group.month} className="desktop-event-month">
+          <div className="desktop-event-month-heading flex items-center gap-3">
             <h2 className="text-[22px] font-black text-white" style={{ letterSpacing: '-0.025em' }}>{group.month}</h2>
-            <span className="rounded-full bg-white/[0.08] px-2 py-0.5 text-[11px] font-black text-white/58">{group.items.length}</span>
+            <span className="rounded-full bg-white/[0.08] px-2 py-0.5 text-[11px] font-black text-white/58">{group.items.length} {group.items.length === 1 ? 'item' : 'items'}</span>
           </div>
-
-          <div className="divide-y divide-white/[0.08] border-y border-white/[0.08]">
+          <div className="desktop-event-month-body">
+          <div className="desktop-event-column-head" aria-hidden="true"><span>Event</span><span>Schedule</span><span>Availability</span><span>Setlist</span><span>Date</span></div>
+          <div className="desktop-event-rows divide-y divide-white/[0.08] border-y border-white/[0.08]">
             {group.items.map((item) => {
               if (item.kind === 'birthday') {
                 return (
                   <div
                     key={`desktop-bday-${item.entry.name}-${item.entry.date}`}
-                    className="transition-colors hover:bg-white/[0.035]"
+                    className="desktop-event-row desktop-event-row-birthday transition-colors hover:bg-white/[0.035]"
                   >
-                    <BirthdayCard name={item.entry.name} date={item.entry.date} artworkClassName="h-24 w-24" />
+                    <BirthdayCard name={item.entry.name} date={item.entry.date} artworkClassName="h-12 w-12" variant="directory" />
                   </div>
                 );
               }
@@ -930,7 +968,8 @@ function EventDesktopCardGroups({ events, calendarEntries, songLeaderMap, setlis
               return (
                 <div
                   key={item.event.id}
-                  className="transition-colors hover:bg-white/[0.035]"
+                  className="desktop-event-row transition-colors hover:bg-white/[0.035]"
+                  data-event-type={item.event.event_type.toLowerCase()}
                 >
                   <EventCard
                     event={item.event}
@@ -940,11 +979,13 @@ function EventDesktopCardGroups({ events, calendarEntries, songLeaderMap, setlis
                     onEventClick={onEventClick}
                     onLifecycleChange={onLifecycleChange}
                     isPast={showPast}
-                    artworkClassName="event-list-artwork h-24 w-24"
+                    artworkClassName="event-list-artwork h-12 w-12"
+                    variant="directory"
                   />
                 </div>
               );
             })}
+          </div>
           </div>
         </section>
       ))}
@@ -953,7 +994,8 @@ function EventDesktopCardGroups({ events, calendarEntries, songLeaderMap, setlis
 }
 
 export function Events() {
-  const { user, isLeader, roles, profile, loading: authLoading, offlineMode } = useAuth();
+  const { user, isLeader, isOrgAdmin, roles, profile, loading: authLoading, offlineMode } = useAuth();
+  const canCreateEvent = isLeader || isOrgAdmin;
   const viewScope = !authLoading && user?.id && profile?.id === user.id && profile.org_id ? JSON.stringify([user.id, profile.org_id]) : null;
   const cacheScope = viewScope ? deviceCacheScope(user?.id, profile?.org_id) : null;
   const activeScopeRef = useRef(viewScope);
@@ -966,6 +1008,12 @@ export function Events() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
+  const openEvent = useCallback((id: string) => {
+    const desktop = window.matchMedia('(min-width: 1024px)').matches;
+    navigate(`/events/${id}`, desktop
+      ? { state: { backgroundLocation: location, returnTo: `${location.pathname}${location.search}` } }
+      : undefined);
+  }, [location, navigate]);
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -1414,13 +1462,19 @@ export function Events() {
   if (loading || visibleScope !== viewScope) return <div className="page-container"><EventsSkeleton /></div>;
 
   return (
-    <div className="page-container page-bottom-pad relative overflow-hidden bg-[#050505] text-white">
-      <div className="relative mx-auto max-w-2xl space-y-5 px-4 pb-6 pt-4 sm:space-y-6 sm:px-6 sm:pt-5 md:max-w-[860px] md:px-8 lg:max-w-6xl xl:max-w-[1560px]">
+    <div className="events-theme page-container page-bottom-pad relative overflow-hidden bg-[#f6f8fb] text-slate-900 dark:bg-[#050505] dark:text-white">
+      <div className="events-desktop-content relative mx-auto max-w-2xl space-y-5 px-4 pb-6 pt-4 sm:space-y-6 sm:px-6 sm:pt-5 md:max-w-[860px] md:px-8 lg:max-w-6xl xl:max-w-[1560px]">
+
+        <DesktopPageHeading eyebrow="Schedule" title="Events" description="Plan services, review setlists, and see who is available." action={canCreateEvent ? (
+          <button type="button" onClick={() => openCreateEvent()} className="desktop-create-event inline-flex h-10 items-center gap-2 px-4 text-[12px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+            <Plus className="h-4 w-4" /> Create Event
+          </button>
+        ) : undefined} />
 
         {/* ── Toolbar ── */}
         <motion.div
           {...fadeUp(0)}
-          className="relative z-20 flex flex-col gap-3"
+          className="events-desktop-toolbar relative z-20 flex flex-col gap-3"
         >
           <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar" role="group" aria-label="Event timeframe">
             {(['upcoming', 'past'] as const).map(tab => {
@@ -1459,12 +1513,12 @@ export function Events() {
               All events
               <span className="rounded-md bg-black/15 px-1.5 py-0.5 text-[11px] font-black text-black">{calendarEvents.length}</span>
             </span>
-            {isLeader && (
+            {canCreateEvent && (
               <button
                 onClick={() => openCreateEvent()}
-                className="inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white/[0.10] px-4 text-[12px] font-black text-white transition-colors hover:bg-white/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] active:scale-[0.97]"
+                className="desktop-create-event inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white/[0.10] px-4 text-[12px] font-black text-white transition-colors hover:bg-white/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] active:scale-[0.97] lg:hidden"
               >
-                <Plus className="h-3.5 w-3.5" /> New event
+                <Plus className="h-3.5 w-3.5" /> New Event
               </button>
             )}
           </div>
@@ -1516,7 +1570,7 @@ export function Events() {
             <div className="hidden rounded-[0.75rem] bg-white/[0.045] px-3 py-2 text-[12px] font-semibold text-white/62 sm:block">
               {upcomingEvents.length === 0 && <span>No upcoming events are scheduled yet.</span>}
               {approvedLeaveToday > 0 && (
-                <span className="text-orange-300">
+                <span className="text-orange-800 dark:text-orange-300">
                   {approvedLeaveToday} team member{approvedLeaveToday === 1 ? '' : 's'} unavailable today.
                 </span>
               )}
@@ -1530,20 +1584,20 @@ export function Events() {
             icon={<Calendar className="h-8 w-8" />}
             title="No events found"
             description={search ? 'Try adjusting your search.' : 'Create your first event to get started.'}
-            action={isLeader && cacheState === 'fresh' ? <button onClick={() => openCreateEvent()} className="btn-primary"><Plus className="h-4 w-4" /> Create Event</button> : undefined}
+            action={canCreateEvent && cacheState === 'fresh' ? <button onClick={() => openCreateEvent()} className="btn-primary"><Plus className="h-4 w-4" /> Create Event</button> : undefined}
           />
         ) : (
           <>
             {desktopView === 'calendar' ? (
-              <motion.div {...fadeUp(0.1)} className="hidden md:block">
+              <motion.div {...fadeUp(0.1)} className="desktop-event-calendar hidden md:block">
                 <CalendarGrid
                   events={calendarEvents}
                   calendarEntries={calendarEntries}
                   songLeaderMap={songLeaderMap}
                   setlistInfoMap={setlistInfoMap}
-                  onEventClick={id => navigate(`/events/${id}`)}
-                  onCreateEvent={isLeader && cacheState === 'fresh' ? openCreateEvent : undefined}
-                  onEventDateChange={isLeader && cacheState === 'fresh' ? handleEventDateChange : undefined}
+                  onEventClick={openEvent}
+                  onCreateEvent={canCreateEvent && cacheState === 'fresh' ? openCreateEvent : undefined}
+                  onEventDateChange={canCreateEvent && cacheState === 'fresh' ? handleEventDateChange : undefined}
                 />
               </motion.div>
             ) : (
@@ -1553,14 +1607,14 @@ export function Events() {
                   calendarEntries={calendarEntries}
                   songLeaderMap={songLeaderMap}
                   setlistInfoMap={setlistInfoMap}
-                  onEventClick={id => navigate(`/events/${id}`)}
+                  onEventClick={openEvent}
                   onLifecycleChange={cacheState === 'fresh' ? handleEventLifecycleChange : undefined}
                   showPast={activeTab === 'past'}
                 />
               </motion.div>
             )}
             <div className={`touch-action-pan-y ${desktopView === 'calendar' ? 'md:hidden' : 'lg:hidden'}`}>
-              <EventList events={filtered} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={id => navigate(`/events/${id}`)} onLifecycleChange={cacheState === 'fresh' ? handleEventLifecycleChange : undefined} showPast={activeTab === 'past'} animateItems={false} />
+              <EventList events={filtered} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={openEvent} onLifecycleChange={cacheState === 'fresh' ? handleEventLifecycleChange : undefined} showPast={activeTab === 'past'} animateItems={false} />
             </div>
           </>
         )}
@@ -1596,7 +1650,7 @@ export function Events() {
                     Schedule
                   </p>
                   <h2 className="text-[1.35rem] font-black text-gray-900 dark:text-white leading-tight" style={{ letterSpacing: '-0.03em' }}>
-                    Create Event.
+                    Create Event
                   </h2>
                 </div>
               </div>

@@ -53,16 +53,18 @@ export function AppReminderCarousel({ mobileHeaderVisible, onHeightChange }: App
     <section
       ref={slotRef}
       aria-label="App reminders"
-      className={`fixed inset-x-0 z-40 bg-[#050505] ${mobileHeaderVisible ? 'top-[calc(3.5rem+env(safe-area-inset-top))]' : 'top-0'} ${!mobileHeaderVisible && (showNotifications || showAndroid) ? 'pt-[env(safe-area-inset-top)]' : ''} lg:left-[var(--desktop-sidebar-width)] lg:right-[env(safe-area-inset-right,0px)] lg:top-[calc(72px+env(safe-area-inset-top))] lg:pt-0`}
+      className={`fixed inset-x-0 z-40 bg-white dark:bg-[#050505] ${mobileHeaderVisible ? 'top-[calc(3.5rem+env(safe-area-inset-top))]' : 'top-0'} ${!mobileHeaderVisible && (showNotifications || showAndroid) ? 'pt-[env(safe-area-inset-top)]' : ''} lg:left-[var(--desktop-sidebar-width)] lg:right-[env(safe-area-inset-right,0px)] lg:top-[calc(72px+env(safe-area-inset-top))] lg:pt-0`}
       onMouseEnter={() => setInteracting(true)}
       onMouseLeave={() => setInteracting(false)}
       onFocusCapture={() => setInteracting(true)}
       onBlurCapture={leaveFocus}
     >
       <div className="grid overflow-hidden">
-        <div aria-hidden={active !== 'notifications'} className={`col-start-1 row-start-1 min-w-0 transition-[transform,opacity,visibility] duration-500 motion-reduce:transition-none ${active === 'notifications' ? 'visible translate-y-0 opacity-100' : 'invisible -translate-y-full opacity-0'}`}>
-          <PushReadinessBanner onVisibilityChange={setShowNotifications} />
-        </div>
+        {!import.meta.env.DEV && (
+          <div aria-hidden={active !== 'notifications'} className={`col-start-1 row-start-1 min-w-0 transition-[transform,opacity,visibility] duration-500 motion-reduce:transition-none ${active === 'notifications' ? 'visible translate-y-0 opacity-100' : 'invisible -translate-y-full opacity-0'}`}>
+            <PushReadinessBanner onVisibilityChange={setShowNotifications} />
+          </div>
+        )}
         {showAndroid && (
           <div aria-hidden={active !== 'android'} className={`col-start-1 row-start-1 min-w-0 transition-[transform,opacity,visibility] duration-500 motion-reduce:transition-none ${active === 'android' ? 'visible translate-y-0 opacity-100' : 'invisible translate-y-full opacity-0'}`}>
             <AndroidAppBanner />

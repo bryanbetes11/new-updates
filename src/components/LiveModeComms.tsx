@@ -54,7 +54,7 @@ export function LiveModeComms({session,audience,userId,performers,role,requests,
     </div>:<div className="space-y-3 px-4 py-3">
       {received.filter(m=>m.status!=='seen').map(item=><article key={item.id} className="rounded-2xl border border-amber-300/40 bg-amber-300/10 p-4"><p className="text-xs text-amber-200">From {item.sender_name} · Tech</p><p className="mt-1 text-lg font-bold">{item.text}</p><button className={`${button} mt-3`} disabled={session.busy} onClick={()=>void session.update(item,'seen')}>Acknowledge instruction</button></article>)}
       <div><h2 className="text-sm font-bold">Sound requests · {role}</h2>{techOnline===0&&<p className="mt-1 text-xs text-amber-200">Tech offline · requests will be saved.</p>}<div className="mt-2 grid grid-cols-2 gap-2">{requests[getTechMessageGroup(role)].map(text=><button className={button} key={text} disabled={disabled} onClick={()=>send('stage_request',text)}>{text}</button>)}</div></div>
-      {own.length>0&&<div><h3 className="mb-2 text-sm font-bold">Your requests</h3><div className="space-y-2">{own.slice().reverse().map(ownRequest)}</div></div>}
+      {own.length>0&&<div><h3 className="mb-2 text-sm font-bold">Your Requests</h3><div className="space-y-2">{own.slice().reverse().map(ownRequest)}</div></div>}
       {received.some(m=>m.status==='seen')&&<details><summary className="min-h-11 cursor-pointer text-sm">Acknowledged instructions</summary>{received.filter(m=>m.status==='seen').map(m=><p key={m.id} className="py-2 text-sm text-white/65">{m.text}</p>)}</details>}
     </div>}
   </section>;

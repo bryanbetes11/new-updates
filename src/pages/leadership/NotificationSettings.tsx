@@ -349,7 +349,7 @@ export function NotificationSettings() {
           <div className="flex items-start gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-600/20"><BellRing className="h-5 w-5" /></div>
             <div>
-              <h2 className="text-xl font-black text-gray-950 dark:text-white">Notification control center</h2>
+              <h2 className="text-xl font-black text-gray-950 dark:text-white">Notification Control Center</h2>
               <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500 dark:text-white/45">Decide which alerts {organization?.name || 'your church'} sends, where they appear, and how urgent they are.</p>
             </div>
           </div>

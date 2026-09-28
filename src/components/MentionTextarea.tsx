@@ -228,7 +228,7 @@ export function MentionTextarea({
         setActiveIndex(i => Math.max(i - 1, 0));
         return;
       }
-      if (e.key === 'Enter' || e.key === 'Tab') {
+      if ((e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) || e.key === 'Tab') {
         e.preventDefault();
         insertMention(filtered[activeIndex]);
         return;

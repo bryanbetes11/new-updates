@@ -10,6 +10,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { Modal } from '../components/Modal';
+import { DesktopPageHeading } from '../components/DesktopPageHeading';
 import { AnnouncementsSkeleton } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
 import { Avatar } from '../components/Avatar';
@@ -80,10 +81,17 @@ type ReactionFlight = {
 };
 
 export function Announcements() {
-  const { user, isLeader } = useAuth();
+  const { user, isLeader, isOrgAdmin } = useAuth();
+  const canCreateAnnouncement = isLeader || isOrgAdmin;
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
+  const openAnnouncement = useCallback((id: string) => {
+    const desktop = window.matchMedia('(min-width: 1024px)').matches;
+    navigate(`/announcements/${id}`, desktop
+      ? { state: { backgroundLocation: location } }
+      : undefined);
+  }, [location, navigate]);
   const prefersReducedMotion = useReducedMotion();
   const [announcements, setAnnouncements] = useState<AnnouncementWithBlocks[]>([]);
   const [loading, setLoading] = useState(true);
@@ -424,15 +432,21 @@ export function Announcements() {
   if (loading) return <div className="page-container"><AnnouncementsSkeleton /></div>;
 
   return (
-    <div className="page-container page-bottom-pad relative min-h-screen overflow-hidden bg-[#050505] text-white">
-      <div className="pointer-events-none fixed inset-0 -z-10 bg-[#050505]" />
-      <div className="app-content-shell relative space-y-4 pb-6 pt-4 sm:pt-5">
+    <div className="theme-adaptive-page page-container page-bottom-pad relative min-h-screen overflow-hidden bg-[#f6f8fb] text-slate-900 dark:bg-[#050505] dark:text-white">
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-[#f6f8fb] dark:bg-[#050505]" />
+      <div className="app-content-shell desktop-announcements-page relative space-y-4 pb-6 pt-4 sm:pt-5">
+
+        <DesktopPageHeading eyebrow="Communication" title="Announcements" description="Updates and conversations for your ministry team." action={canCreateAnnouncement ? (
+          <button type="button" onClick={openCreateAnnouncement} className="desktop-create-announcement inline-flex h-10 items-center gap-2 px-4 text-[12px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+            <Plus className="h-4 w-4" /> Create Announcement
+          </button>
+        ) : undefined} />
 
         <motion.div
           initial={{ opacity: 0, y: 10, filter: 'blur(4px)' }}
           animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
           transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-          className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+          className="announcements-desktop-toolbar flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
         >
           <div className="-mx-1 flex min-w-0 gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {filterOptions.map(option => {
@@ -442,6 +456,7 @@ export function Announcements() {
                   key={option.id}
                   type="button"
                   onClick={() => setNewsFilter(option.id)}
+                  aria-pressed={active}
                   className={`inline-flex h-11 shrink-0 items-center gap-3 rounded-full px-5 text-sm font-black transition-all active:scale-[0.98] ${
                     active
                       ? 'bg-[#1ed760] text-black shadow-[0_14px_34px_-20px_rgba(30,215,96,0.9)]'
@@ -457,13 +472,13 @@ export function Announcements() {
             })}
           </div>
 
-          {isLeader && (
+          {canCreateAnnouncement && (
             <button
               type="button"
               onClick={openCreateAnnouncement}
-              className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-white/[0.095] px-5 text-[13px] font-black text-white transition-all hover:bg-[#1ed760] hover:text-black active:scale-[0.97]"
+              className="desktop-create-announcement inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-white/[0.095] px-5 text-[13px] font-black text-white transition-all hover:bg-[#1ed760] hover:text-black active:scale-[0.97] lg:hidden"
             >
-              <Plus className="h-4 w-4" /> New announcement
+              <Plus className="h-4 w-4" /> New Announcement
             </button>
           )}
         </motion.div>
@@ -485,7 +500,7 @@ export function Announcements() {
             icon={<Megaphone className="h-8 w-8" />}
             title="No announcements"
             description="Be the first to share something with the team."
-            action={isLeader ? <button type="button" onClick={openCreateAnnouncement} className="btn-primary min-h-11"><Plus className="h-4 w-4" /> Post Announcement</button> : undefined}
+            action={canCreateAnnouncement ? <button type="button" onClick={openCreateAnnouncement} className="btn-primary min-h-11"><Plus className="h-4 w-4" /> Post Announcement</button> : undefined}
           />
         ) : (
           <motion.div
@@ -494,6 +509,12 @@ export function Announcements() {
             animate="show"
             className="space-y-1.5"
           >
+            <div className="desktop-announcement-column-head hidden lg:grid" aria-hidden="true">
+              <div className="desktop-announcement-field-grid">
+                <span>Announcement</span><span>Urgency</span><span>Posted By</span><span>Date</span><span>Comments</span>
+              </div>
+              <span>Reactions &amp; Readers</span>
+            </div>
             {sortedFiltered.map((a) => {
               const viewCount = a.announcement_views?.length || 0;
               const commentCount = a.announcement_comments?.length || 0;
@@ -530,7 +551,7 @@ export function Announcements() {
                 >
                   {(isPinned || a.priority !== 'normal') && (
                     <div
-                      className="absolute bottom-3 left-0 top-3 z-10 w-1 rounded-r-full"
+                      className="absolute bottom-3 left-0 top-3 z-10 w-1 rounded-r-full lg:hidden"
                       style={{ backgroundColor: a.priority === 'urgent' ? '#ef4444' : isPinned ? '#1ed760' : '#f59e0b' }}
                     />
                   )}
@@ -539,8 +560,8 @@ export function Announcements() {
                     {/* Main clickable body */}
                     <button
                       type="button"
-                      className="w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1ed760]/75"
-                      onClick={() => navigate(`/announcements/${a.id}`)}
+                      className="w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1ed760]/75 lg:hidden"
+                      onClick={() => openAnnouncement(a.id)}
                     >
                       <div className="grid gap-3 px-4 py-3 sm:grid-cols-[1fr_auto] sm:items-center sm:px-5 sm:py-4">
                           <div className="min-w-0">
@@ -600,6 +621,34 @@ export function Announcements() {
                       </div>
                     </button>
 
+                    <button
+                      type="button"
+                      className="desktop-announcement-summary hidden min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#4775e8] lg:grid"
+                      onClick={() => openAnnouncement(a.id)}
+                      aria-label={`Open announcement ${a.title}`}
+                    >
+                      <div className="desktop-announcement-title min-w-0">
+                        <div className="flex min-w-0 items-center gap-2">
+                          {isUnread && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#4775e8]" aria-label="Unread" />}
+                          <strong className="truncate">{a.title}</strong>
+                          {isPinned && <Pin className="h-3.5 w-3.5 shrink-0 text-[#4775e8]" aria-label="Pinned" />}
+                        </div>
+                        <p className="truncate">{getPreviewText(a)}</p>
+                      </div>
+                      <div className="desktop-announcement-urgency min-w-0">
+                        {a.priority === 'normal'
+                          ? <span className="desktop-announcement-normal">Normal</span>
+                          : <span className={`desktop-announcement-priority inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold ${pConfig.badge}`}>{PriorityIcon && <PriorityIcon className="h-3 w-3" />}{pConfig.label}</span>}
+                        {isLeadersOnly && <span className="desktop-announcement-leaders"><Lock className="h-3 w-3" />Leaders</span>}
+                      </div>
+                      <div className="desktop-announcement-author min-w-0">
+                        <Avatar src={a.profiles?.avatar_url} firstName={a.profiles?.first_name || '?'} lastName={a.profiles?.last_name} size="xs" />
+                        <span className="truncate">{[a.profiles?.first_name, a.profiles?.last_name].filter(Boolean).join(' ') || 'Team Member'}</span>
+                      </div>
+                      <time dateTime={a.created_at} className="desktop-announcement-date whitespace-nowrap">{format(parseISO(a.created_at), 'MMM dd, yyyy')}</time>
+                      <span className="desktop-announcement-comments inline-flex items-center gap-1.5"><MessageCircle className="h-3.5 w-3.5" />{commentCount}</span>
+                    </button>
+
                     <AnimatePresence initial={false}>
                       {emojiPickerId === a.id && (
                         <motion.div
@@ -626,7 +675,7 @@ export function Announcements() {
                           animate={{ opacity: 1, scale: 1, y: 0 }}
                           exit={{ opacity: 0, scale: 0.96, y: 4 }}
                           transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-                          className="absolute bottom-[3.25rem] left-3 z-40 hidden origin-bottom-left sm:block"
+                          className="announcement-reaction-picker absolute bottom-[3.25rem] left-3 z-40 hidden origin-bottom-left sm:block"
                         >
                           <EmojiReactionPicker
                             animateEntrance={!prefersReducedMotion}
@@ -637,7 +686,7 @@ export function Announcements() {
                     </AnimatePresence>
 
                     {/* Reaction row */}
-                    <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto border-t border-white/[0.055] px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:px-4">
+                    <div className="announcement-reaction-bar flex min-w-0 items-center gap-1.5 overflow-x-auto border-t border-white/[0.055] px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:px-4">
                       {reactionGroups.map(r => {
                         const isLanding = reactionLanding?.announcementId === a.id && reactionLanding.emoji === r.emoji;
                         return (
@@ -818,7 +867,7 @@ export function Announcements() {
       </Modal>
 
       {/* ── Create Modal ──────────────────────────────── */}
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="New announcement" size="lg">
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="New Announcement" size="lg">
         <AnnouncementComposerForm
           onCancel={() => setShowCreate(false)}
           onSuccess={async () => {

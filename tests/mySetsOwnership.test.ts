@@ -22,6 +22,6 @@ assert.doesNotMatch(
 );
 assert.match(
   navigation,
-  /title: "My Sets",[\s\S]*?caption: "As Song Leader"/,
-  'navigation should describe the Song Leader meaning of My Sets',
+  /title: "Sets",[\s\S]*?caption: "Approved setlists"/,
+  'desktop navigation should describe the approved setlist library',
 );

@@ -135,7 +135,7 @@ export function SwapRequests({ embedded }: Props) {
   const reviewKindLower = reviewKind.toLowerCase();
 
   return (
-    <div className={embedded ? '' : 'page-container page-bottom-pad'}>
+    <div className={embedded ? 'desktop-swap-directory' : 'desktop-swap-directory page-container page-bottom-pad'}>
       <div className={embedded ? '' : 'relative max-w-2xl lg:max-w-6xl xl:max-w-[1560px] mx-auto pt-4 sm:pt-5 pb-6 px-4 sm:px-6 lg:px-8'}>
 
         {!embedded && (
@@ -143,7 +143,7 @@ export function SwapRequests({ embedded }: Props) {
             tone="sky"
             icon={ArrowLeftRight}
             eyebrow="Leadership Flow"
-            title="Sub & Swap Requests."
+            title="Sub & Swap Requests"
             description="Review schedule coverage changes once both members have agreed to the handoff."
           />
         )}

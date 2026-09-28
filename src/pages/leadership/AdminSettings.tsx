@@ -77,7 +77,7 @@ const fallbackPolicy: Omit<PolicySettings, 'org_id'> = {
 
 function PolicyNumber({ label, detail, value, min, max, unit = 'minutes', onChange }: { label: string; detail: string; value: number; min: number; max: number; unit?: string; onChange: (value: number) => void }) {
   return (
-    <label className="block rounded-2xl border border-gray-200/80 bg-gray-50/70 p-3.5 dark:border-white/[0.07] dark:bg-white/[0.035]">
+    <label className="block border-b border-gray-200/80 py-4 dark:border-white/[0.08]">
       <span className="block text-sm font-bold text-gray-900 dark:text-white">{label}</span>
       <span className="mt-0.5 block text-xs leading-relaxed text-gray-500 dark:text-white/45">{detail}</span>
       <div className="mt-3 flex items-center gap-2">
@@ -90,7 +90,7 @@ function PolicyNumber({ label, detail, value, min, max, unit = 'minutes', onChan
 
 function PolicyToggle({ label, detail, checked, disabled, onChange }: { label: string; detail: string; checked: boolean; disabled?: boolean; onChange: (checked: boolean) => void }) {
   return (
-    <label className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-3.5 transition ${disabled ? 'cursor-not-allowed opacity-45' : 'border-gray-200/80 bg-gray-50/70 hover:border-emerald-400/45 dark:border-white/[0.07] dark:bg-white/[0.035]'}`}>
+    <label className={`flex cursor-pointer items-start gap-3 border-b border-gray-200/80 py-4 transition dark:border-white/[0.08] ${disabled ? 'cursor-not-allowed opacity-45' : 'hover:bg-emerald-500/[0.035]'}`}>
       <input type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} className="mt-0.5 h-4 w-4 rounded border-gray-300 text-emerald-500 focus:ring-emerald-500" />
       <span className="min-w-0"><span className="block text-sm font-bold text-gray-900 dark:text-white">{label}</span><span className="mt-0.5 block text-xs leading-relaxed text-gray-500 dark:text-white/45">{detail}</span></span>
     </label>
@@ -204,54 +204,54 @@ export function AdminSettings() {
   if (loading || !policy) return <div className="flex min-h-64 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-emerald-500" /></div>;
 
   return (
-    <div className="app-content-shell max-h-[calc(100dvh-5rem)] space-y-5 overflow-y-auto overscroll-contain py-4 pb-24 sm:py-6 sm:pb-24">
-      <section className="overflow-hidden rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.16] via-emerald-500/[0.05] to-transparent p-5 sm:p-6">
-        <div className="flex items-start gap-4"><span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-900/25"><Settings2 className="h-6 w-6" /></span><div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-300">Organization administration</p><h1 className="mt-1 text-2xl font-black tracking-tight text-gray-950 dark:text-white">Admin Settings</h1><p className="mt-1 max-w-2xl text-sm leading-relaxed text-gray-600 dark:text-white/55">Manage the rules that control how ServeSync operates for your church. Leadership queues stay separate; these controls change organization-wide behavior.</p></div></div>
+    <div className="desktop-admin-settings app-content-shell no-scrollbar max-h-[calc(100dvh-5rem)] space-y-8 overflow-y-auto overscroll-contain py-4 pb-24 sm:py-6 sm:pb-24">
+      <section className="border-b border-gray-200/80 pb-6 dark:border-white/10">
+        <div className="flex items-start gap-4"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"><Settings2 className="h-5 w-5" /></span><div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-300">Organization administration</p><h1 className="mt-1 text-2xl font-black tracking-tight text-gray-950 dark:text-white">Admin Settings</h1><p className="mt-1 max-w-2xl text-sm leading-relaxed text-gray-600 dark:text-white/55">Manage the rules that control how ServeSync operates for your church. Leadership queues stay separate; these controls change organization-wide behavior.</p></div></div>
       </section>
 
-      {isPlatformOwner && <PlatformPilotInvites />}
+      {isPlatformOwner && <PlatformPilotInvites flat />}
 
-      <section className="card overflow-hidden">
-        <div className="border-b border-gray-100 p-5 dark:border-white/[0.06]">
+      <section className="border-b border-gray-200/80 pb-6 dark:border-white/10">
+        <div className="pb-4">
           <div className="flex items-start gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-300"><ShieldCheck className="h-5 w-5" /></span>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center text-sky-600 dark:text-sky-300"><ShieldCheck className="h-5 w-5" /></span>
             <div>
-              <h2 className="font-black text-gray-900 dark:text-white">Administration tools</h2>
+              <h2 className="font-black text-gray-900 dark:text-white">Administration Tools</h2>
               <p className="mt-0.5 max-w-3xl text-xs leading-relaxed text-gray-500 dark:text-white/45">Open the operational areas for your church, including the attendance QR code. These shortcuts do not change a policy until you use the relevant tool.</p>
             </div>
           </div>
         </div>
-        <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid sm:grid-cols-2 xl:grid-cols-3">
           {[
-            { to: '/admin/attendance-qr', label: 'Attendance QR', detail: 'Create and manage the church check-in QR code.', icon: QrCode, tone: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-300' },
-            { to: '/admin/church', label: 'Church profile', detail: 'Manage organization details and church identity.', icon: Building2, tone: 'bg-violet-500/10 text-violet-600 dark:text-violet-300' },
-            { to: '/admin/notifications', label: 'Notification settings', detail: 'Configure member notification delivery.', icon: Bell, tone: 'bg-amber-500/10 text-amber-600 dark:text-amber-300' },
-            { to: '/admin/notification-activity', label: 'Notification activity', detail: 'See member opens from push alerts and the app.', icon: Bell, tone: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' },
-            { to: '/admin/reflections', label: 'Member reflections', detail: 'Review and manage ministry reflection prompts.', icon: ClipboardCheck, tone: 'bg-rose-500/10 text-rose-600 dark:text-rose-300' },
-            { to: '/admin/billing', label: 'Organization billing', detail: 'Review your ServeSync organization plan.', icon: CreditCard, tone: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' },
+            { to: '/admin/attendance-qr', label: 'Attendance QR', detail: 'Create and manage the church check-in QR code.', icon: QrCode, tone: 'text-cyan-600 dark:text-cyan-300' },
+            { to: '/admin/church', label: 'Church Profile', detail: 'Manage organization details and church identity.', icon: Building2, tone: 'text-violet-600 dark:text-violet-300' },
+            { to: '/admin/notifications', label: 'Notification Settings', detail: 'Configure member notification delivery.', icon: Bell, tone: 'text-amber-600 dark:text-amber-300' },
+            { to: '/admin/notification-activity', label: 'Notification Activity', detail: 'See member opens from push alerts and the app.', icon: Bell, tone: 'text-emerald-600 dark:text-emerald-300' },
+            { to: '/admin/reflections', label: 'Member Reflections', detail: 'Review and manage ministry reflection prompts.', icon: ClipboardCheck, tone: 'text-rose-600 dark:text-rose-300' },
+            { to: '/admin/billing', label: 'Organization Billing', detail: 'Review your ServeSync organization plan.', icon: CreditCard, tone: 'text-emerald-600 dark:text-emerald-300' },
           ].map((tool) => {
             const Icon = tool.icon;
-            return <Link key={tool.to} to={tool.to} className="group flex items-center gap-3 self-start rounded-2xl border border-gray-200/80 bg-gray-50/70 p-3.5 transition hover:-translate-y-0.5 hover:border-emerald-400/45 hover:bg-emerald-500/[0.035] dark:border-white/[0.07] dark:bg-white/[0.035] dark:hover:bg-emerald-500/[0.07]">
-              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${tool.tone}`}><Icon className="h-5 w-5" /></span>
+            return <Link key={tool.to} to={tool.to} className="group flex min-h-20 items-center gap-3 border-t border-gray-200/80 px-2 py-3 transition hover:bg-emerald-500/[0.035] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500 dark:border-white/[0.08] dark:hover:bg-emerald-500/[0.06]">
+              <span className={`flex h-9 w-9 shrink-0 items-center justify-center ${tool.tone}`}><Icon className="h-5 w-5" /></span>
               <span className="min-w-0 flex-1"><span className="block text-sm font-black text-gray-900 dark:text-white">{tool.label}</span><span className="mt-0.5 block text-xs leading-relaxed text-gray-500 dark:text-white/45">{tool.detail}</span></span>
-              <ChevronRight className="mt-2 h-4 w-4 shrink-0 text-gray-400 transition group-hover:translate-x-0.5 group-hover:text-emerald-500 dark:text-white/35" />
+              <ChevronRight className="h-4 w-4 shrink-0 text-gray-400 transition group-hover:translate-x-0.5 group-hover:text-emerald-500 dark:text-white/35" />
             </Link>;
           })}
         </div>
       </section>
 
-      <section className="card overflow-hidden">
-        <div className="border-b border-gray-100 p-5 dark:border-white/[0.06]"><h2 className="font-black text-gray-900 dark:text-white">Tech Mode quick messages</h2><p className="mt-1 text-xs text-gray-500 dark:text-white/45">Customize the four instructions shown for each kind of stage assignment.</p></div>
-        <div className="p-4"><TechModeMessageSettings orgId={policy.org_id} onSaved={() => toast('success', 'Tech Mode messages saved')} /></div>
+      <section className="border-b border-gray-200/80 pb-6 dark:border-white/10">
+        <div className="pb-4"><h2 className="font-black text-gray-900 dark:text-white">Tech Mode Quick Messages</h2><p className="mt-1 text-xs text-gray-500 dark:text-white/45">Customize the four instructions shown for each kind of stage assignment.</p></div>
+        <TechModeMessageSettings orgId={policy.org_id} flat onSaved={() => toast('success', 'Tech Mode messages saved')} />
       </section>
 
-      <section className="card overflow-hidden">
-        <div className="flex items-start justify-between gap-4 border-b border-gray-100 p-5 dark:border-white/[0.06]"><div className="flex gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-500/10 text-violet-600 dark:text-violet-300"><Music2 className="h-5 w-5" /></span><div><h2 className="font-black text-gray-900 dark:text-white">Event & setlist defaults</h2><p className="mt-0.5 text-xs text-gray-500 dark:text-white/45">Controls used whenever an event type is selected. Existing events keep their saved details until edited.</p></div></div><button type="button" onClick={() => void savePolicy()} disabled={saving} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-emerald-500 px-3.5 text-xs font-black text-white transition hover:bg-emerald-400 disabled:opacity-60">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}{saving ? 'Saving' : 'Save defaults'}</button></div>
-        <div className="flex flex-wrap items-end gap-2 border-b border-gray-100 px-5 py-4 dark:border-white/[0.06]"><label className="block min-w-[220px] flex-1 text-xs font-bold text-gray-700 dark:text-white/70">Add event type<input className="input-field mt-1.5 h-10 w-full text-sm" value={newEventType} onChange={(event) => setNewEventType(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addEventType(); } }} placeholder="e.g. Young Adults Night" /></label><button type="button" onClick={addEventType} disabled={!newEventType.trim()} className="btn-secondary !min-h-10 !px-3.5 text-xs font-black disabled:opacity-50">Add type</button><p className="basis-full text-[11px] leading-relaxed text-gray-500 dark:text-white/45">New types become available in the Event form immediately after you save these defaults.</p></div>
+      <section className="border-b border-gray-200/80 pb-6 dark:border-white/10">
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-gray-200/80 py-4 dark:border-white/[0.08]"><div className="flex gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-500/10 text-violet-600 dark:text-violet-300"><Music2 className="h-5 w-5" /></span><div><h2 className="font-black text-gray-900 dark:text-white">Event & Setlist Defaults</h2><p className="mt-0.5 text-xs text-gray-500 dark:text-white/45">Controls used whenever an event type is selected. Existing events keep their saved details until edited.</p></div></div><button type="button" onClick={() => void savePolicy()} disabled={saving} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-emerald-500 px-3.5 text-xs font-black text-white transition hover:bg-emerald-400 disabled:opacity-60">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}{saving ? 'Saving' : 'Save defaults'}</button></div>
+        <div className="flex flex-wrap items-end gap-2 border-b border-gray-200/80 py-4 dark:border-white/[0.08]"><label className="block min-w-[220px] flex-1 text-xs font-bold text-gray-700 dark:text-white/70">Add event type<input className="input-field mt-1.5 h-10 w-full text-sm" value={newEventType} onChange={(event) => setNewEventType(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addEventType(); } }} placeholder="e.g. Young Adults Night" /></label><button type="button" onClick={addEventType} disabled={!newEventType.trim()} className="btn-secondary !min-h-10 !px-3.5 text-xs font-black disabled:opacity-50">Add type</button><p className="basis-full text-[11px] leading-relaxed text-gray-500 dark:text-white/45">New types become available in the Event form immediately after you save these defaults.</p></div>
         <div className="overflow-x-auto"><div className="min-w-[680px] divide-y divide-gray-100 dark:divide-white/[0.06]">
-          <div className="grid grid-cols-[1.4fr_0.9fr_0.9fr_1fr_72px] gap-3 bg-gray-50/80 px-5 py-3 text-[10px] font-black uppercase tracking-[0.13em] text-gray-500 dark:bg-white/[0.025] dark:text-white/40"><span>Event type</span><span>Starts</span><span>Ends</span><span>Setlist due</span><span /></div>
+          <div className="grid grid-cols-[1.4fr_0.9fr_0.9fr_1fr_72px] gap-3 px-1 py-3 text-[10px] font-black uppercase tracking-[0.13em] text-gray-500 dark:text-white/40"><span>Event type</span><span>Starts</span><span>Ends</span><span>Setlist due</span><span /></div>
           {Object.entries(policy.event_templates).filter(([eventType]) => eventType !== 'Custom').map(([eventType, template]) => (
-            <div key={eventType} className="grid grid-cols-[1.4fr_0.9fr_0.9fr_1fr_72px] items-center gap-3 px-5 py-3.5">
+            <div key={eventType} className="grid grid-cols-[1.4fr_0.9fr_0.9fr_1fr_72px] items-center gap-3 px-1 py-3.5">
               <span className="text-sm font-bold text-gray-900 dark:text-white">{eventType}</span>
               <input type="time" className="input-field h-10 w-full text-sm" value={template.start_time} onChange={(event) => updateTemplate(eventType, 'start_time', event.target.value)} />
               <input type="time" className="input-field h-10 w-full text-sm" value={template.end_time} onChange={(event) => updateTemplate(eventType, 'end_time', event.target.value)} />
@@ -260,12 +260,12 @@ export function AdminSettings() {
             </div>
           ))}
         </div></div>
-        <div className="border-t border-gray-100 px-5 py-4 dark:border-white/[0.06]"><label className="block text-sm font-bold text-gray-900 dark:text-white">Setlist checker submission rule<select className="input-field mt-2 block h-11 w-full max-w-xl text-sm" value={policy.setlist_submission_mode} onChange={(event) => setPolicy(current => current ? { ...current, setlist_submission_mode: event.target.value as SetlistSubmissionMode } : current)}><option value="block_rejected">Block a rejected setlist from being submitted</option><option value="advisory">Advice only — leaders may submit any result</option></select></label><p className="mt-2 text-xs leading-relaxed text-gray-500 dark:text-white/45">The checker’s report still shows theological or flow concerns. This rule chooses whether a rejected report stops submission or remains advisory.</p></div>
+        <div className="border-t border-gray-200/80 py-4 dark:border-white/[0.08]"><label className="block text-sm font-bold text-gray-900 dark:text-white">Setlist checker submission rule<select className="input-field mt-2 block h-11 w-full max-w-xl text-sm" value={policy.setlist_submission_mode} onChange={(event) => setPolicy(current => current ? { ...current, setlist_submission_mode: event.target.value as SetlistSubmissionMode } : current)}><option value="block_rejected">Block a rejected setlist from being submitted</option><option value="advisory">Advice only — leaders may submit any result</option></select></label><p className="mt-2 text-xs leading-relaxed text-gray-500 dark:text-white/45">The checker’s report still shows theological or flow concerns. This rule chooses whether a rejected report stops submission or remains advisory.</p></div>
       </section>
 
-      <section className="card overflow-hidden">
-        <div className="flex items-start justify-between gap-4 border-b border-gray-100 p-5 dark:border-white/[0.06]"><div className="flex gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-300"><UserCheck className="h-5 w-5" /></span><div><h2 className="font-black text-gray-900 dark:text-white">Leave & schedule-change rules</h2><p className="mt-0.5 text-xs text-gray-500 dark:text-white/45">These rules are enforced when members submit leave, swap, or substitute requests.</p></div></div><button type="button" onClick={() => void savePolicy()} disabled={saving} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-emerald-500 px-3.5 text-xs font-black text-white transition hover:bg-emerald-400 disabled:opacity-60">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}{saving ? 'Saving' : 'Save rules'}</button></div>
-        <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
+      <section className="border-b border-gray-200/80 pb-6 dark:border-white/10">
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-gray-200/80 py-4 dark:border-white/[0.08]"><div className="flex gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-300"><UserCheck className="h-5 w-5" /></span><div><h2 className="font-black text-gray-900 dark:text-white">Leave & Schedule-Change Rules</h2><p className="mt-0.5 text-xs text-gray-500 dark:text-white/45">These rules are enforced when members submit leave, swap, or substitute requests.</p></div></div><button type="button" onClick={() => void savePolicy()} disabled={saving} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-emerald-500 px-3.5 text-xs font-black text-white transition hover:bg-emerald-400 disabled:opacity-60">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}{saving ? 'Saving' : 'Save rules'}</button></div>
+        <div className="grid gap-x-6 sm:grid-cols-2 xl:grid-cols-3">
           <PolicyToggle label="Require leave approval" detail="When off, valid leave requests are approved immediately." checked={policy.leave_policy.approval_required} onChange={(value) => updateLeavePolicy('approval_required', value)} />
           <PolicyToggle label="Require a leave reason" detail="Members must explain why they will be unavailable." checked={policy.leave_policy.reason_required} onChange={(value) => updateLeavePolicy('reason_required', value)} />
           <PolicyToggle label="Allow date-range leave" detail="Allow a member to request more than one date at a time." checked={policy.leave_policy.allow_date_ranges} onChange={(value) => updateLeavePolicy('allow_date_ranges', value)} />
@@ -275,9 +275,9 @@ export function AdminSettings() {
         </div>
       </section>
 
-      <section className="card overflow-hidden">
-        <div className="flex items-start justify-between gap-4 border-b border-gray-100 p-5 dark:border-white/[0.06]"><div className="flex gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-300"><CalendarClock className="h-5 w-5" /></span><div><h2 className="font-black text-gray-900 dark:text-white">Setlist reminder schedule</h2><p className="mt-0.5 text-xs text-gray-500 dark:text-white/45">Controls the live reminder service for unsubmitted setlist proposals. Changes apply at the next Manila reminder slot.</p></div></div><button type="button" onClick={() => void savePolicy()} disabled={saving} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-emerald-500 px-3.5 text-xs font-black text-white transition hover:bg-emerald-400 disabled:opacity-60">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}{saving ? 'Saving' : 'Save schedule'}</button></div>
-        <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
+      <section className="border-b border-gray-200/80 pb-6 dark:border-white/10">
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-gray-200/80 py-4 dark:border-white/[0.08]"><div className="flex gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-300"><CalendarClock className="h-5 w-5" /></span><div><h2 className="font-black text-gray-900 dark:text-white">Setlist Reminder Schedule</h2><p className="mt-0.5 text-xs text-gray-500 dark:text-white/45">Controls the live reminder service for unsubmitted setlist proposals. Changes apply at the next Manila reminder slot.</p></div></div><button type="button" onClick={() => void savePolicy()} disabled={saving} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-emerald-500 px-3.5 text-xs font-black text-white transition hover:bg-emerald-400 disabled:opacity-60">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}{saving ? 'Saving' : 'Save schedule'}</button></div>
+        <div className="grid gap-x-6 sm:grid-cols-2 xl:grid-cols-3">
           <PolicyToggle label="Send setlist reminders" detail="Master switch for every automatic proposal reminder." checked={policy.setlist_reminder_policy.enabled} onChange={(value) => updateSetlistReminder('enabled', value)} />
           <PolicyToggle label="One week before" detail="A morning reminder 7 days before the proposal is due." checked={policy.setlist_reminder_policy.seven_days} disabled={!policy.setlist_reminder_policy.enabled} onChange={(value) => updateSetlistReminder('seven_days', value)} />
           <PolicyToggle label="Three days before" detail="A morning reminder 3 days before the proposal is due." checked={policy.setlist_reminder_policy.three_days} disabled={!policy.setlist_reminder_policy.enabled} onChange={(value) => updateSetlistReminder('three_days', value)} />
@@ -288,9 +288,9 @@ export function AdminSettings() {
         </div>
       </section>
 
-      <section className="card overflow-hidden">
-        <div className="flex items-start justify-between gap-4 border-b border-gray-100 p-5 dark:border-white/[0.06]"><div className="flex gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-300"><ScanLine className="h-5 w-5" /></span><div><h2 className="font-black text-gray-900 dark:text-white">Attendance policy</h2><p className="mt-0.5 text-xs text-gray-500 dark:text-white/45">Applied to QR check-ins and the timed attendance reminders.</p></div></div><button type="button" onClick={() => void savePolicy()} disabled={saving} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-emerald-500 px-3.5 text-xs font-black text-white transition hover:bg-emerald-400 disabled:opacity-60">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}{saving ? 'Saving' : 'Save policy'}</button></div>
-        <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="border-b border-gray-200/80 pb-6 dark:border-white/10">
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-gray-200/80 py-4 dark:border-white/[0.08]"><div className="flex gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-300"><ScanLine className="h-5 w-5" /></span><div><h2 className="font-black text-gray-900 dark:text-white">Attendance Policy</h2><p className="mt-0.5 text-xs text-gray-500 dark:text-white/45">Applied to QR check-ins and the timed attendance reminders.</p></div></div><button type="button" onClick={() => void savePolicy()} disabled={saving} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-emerald-500 px-3.5 text-xs font-black text-white transition hover:bg-emerald-400 disabled:opacity-60">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}{saving ? 'Saving' : 'Save policy'}</button></div>
+        <div className="grid gap-x-6 sm:grid-cols-2 xl:grid-cols-4">
           <PolicyNumber label="Open attendance" detail="How early scheduled members may check in." value={policy.attendance_open_minutes_before} min={0} max={180} onChange={(value) => updatePolicy('attendance_open_minutes_before', value)} />
           <PolicyNumber label="On-time grace" detail="Check-ins after this are recorded as Late." value={policy.attendance_grace_minutes} min={0} max={60} onChange={(value) => updatePolicy('attendance_grace_minutes', value)} />
           <PolicyNumber label="Scan session" detail="How long a verified QR scan remains valid." value={policy.attendance_scan_session_minutes} min={1} max={30} onChange={(value) => updatePolicy('attendance_scan_session_minutes', value)} />
@@ -300,7 +300,7 @@ export function AdminSettings() {
         </div>
       </section>
 
-      <p className="flex items-start gap-2 rounded-2xl border border-gray-200/70 bg-gray-50 px-4 py-3 text-xs leading-relaxed text-gray-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-white/45"><Clock3 className="mt-0.5 h-4 w-4 shrink-0" />Every control on this page saves a church-wide setting and affects new activity. Security permissions, service credentials, deployment keys, and database protections are intentionally not editable here.</p>
+      <p className="flex items-start gap-2 py-3 text-xs leading-relaxed text-gray-500 dark:text-white/45"><Clock3 className="mt-0.5 h-4 w-4 shrink-0" />Every control on this page saves a church-wide setting and affects new activity. Security permissions, service credentials, deployment keys, and database protections are intentionally not editable here.</p>
     </div>
   );
 }

@@ -12,7 +12,7 @@ type PilotInvite = {
 
 const churchLink = `${window.location.origin}/create-church`;
 
-export function PlatformPilotInvites() {
+export function PlatformPilotInvites({ flat = false }: { flat?: boolean }) {
   const { toast } = useToast();
   const [email, setEmail] = useState('');
   const [invites, setInvites] = useState<PilotInvite[]>([]);
@@ -66,11 +66,11 @@ export function PlatformPilotInvites() {
   };
 
   return (
-    <section className="rounded-3xl border border-gray-200/80 bg-white p-4 shadow-sm dark:border-white/[0.07] dark:bg-white/[0.025] sm:p-5" aria-labelledby="pilot-invites-title">
+    <section className={flat ? 'border-b border-gray-200/80 pb-6 dark:border-white/10' : 'rounded-3xl border border-gray-200/80 bg-white p-4 shadow-sm dark:border-white/[0.07] dark:bg-white/[0.025] sm:p-5'} aria-labelledby="pilot-invites-title">
       <div className="flex items-start gap-3">
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"><UserPlus className="h-5 w-5" /></span>
         <div>
-          <h2 id="pilot-invites-title" className="text-lg font-bold text-gray-950 dark:text-white">Invite a church to the pilot</h2>
+          <h2 id="pilot-invites-title" className="text-lg font-bold text-gray-950 dark:text-white">Invite A Church To The Pilot</h2>
           <p className="mt-1 text-sm text-gray-500 dark:text-white/50">Approve one adult administrator’s email, then share the setup link with them. No account or email is sent automatically.</p>
         </div>
       </div>
@@ -86,7 +86,7 @@ export function PlatformPilotInvites() {
         </button>
       </form>
 
-      <div className="mt-4 rounded-2xl bg-gray-50 p-3 dark:bg-white/[0.04]">
+      <div className={flat ? 'mt-4 border-t border-gray-200/80 py-4 dark:border-white/10' : 'mt-4 rounded-2xl bg-gray-50 p-3 dark:bg-white/[0.04]'}>
         <p className="text-xs font-semibold text-gray-700 dark:text-white/75">Church setup link</p>
         <div className="mt-1.5 flex flex-col gap-2 sm:flex-row sm:items-center">
           <input readOnly aria-label="Church setup link" value={churchLink} onFocus={event => event.currentTarget.select()} className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-xs text-gray-700 dark:border-white/[0.08] dark:bg-black/20 dark:text-white/70" />
@@ -99,14 +99,14 @@ export function PlatformPilotInvites() {
 
       {error && <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-300">{error}</p>}
       <div className="mt-5 border-t border-gray-100 pt-4 dark:border-white/[0.07]">
-        <h3 className="text-sm font-bold text-gray-900 dark:text-white">Approved administrators</h3>
+        <h3 className="text-sm font-bold text-gray-900 dark:text-white">Approved Administrators</h3>
         {loading ? <p className="mt-3 text-sm text-gray-500">Loading…</p> : invites.length === 0 ? (
           <p className="mt-3 text-sm text-gray-500 dark:text-white/45">No church administrators approved yet.</p>
         ) : (
           <ul className="mt-3 space-y-2">
             {invites.map(invite => {
               const status = invite.claimed_at ? 'Church created' : new Date(invite.expires_at).getTime() <= Date.now() ? 'Expired' : `Expires ${new Date(invite.expires_at).toLocaleDateString()}`;
-              return <li key={invite.email} className="flex flex-col gap-2 rounded-xl border border-gray-100 px-3 py-2.5 dark:border-white/[0.06] sm:flex-row sm:items-center sm:justify-between">
+              return <li key={invite.email} className={flat ? 'flex flex-col gap-2 border-b border-gray-200/80 py-3 dark:border-white/[0.08] sm:flex-row sm:items-center sm:justify-between' : 'flex flex-col gap-2 rounded-xl border border-gray-100 px-3 py-2.5 dark:border-white/[0.06] sm:flex-row sm:items-center sm:justify-between'}>
                 <div className="min-w-0"><p className="break-all text-sm font-semibold text-gray-900 dark:text-white">{invite.email}</p><p className="text-xs text-gray-500 dark:text-white/45">{status}</p></div>
                 {!invite.claimed_at && (revokeTarget === invite.email ? (
                   <div className="flex gap-2"><button type="button" onClick={() => void revoke(invite.email)} disabled={saving} className="min-h-9 rounded-lg bg-red-600 px-3 text-xs font-bold text-white disabled:opacity-50">Confirm revoke</button><button type="button" onClick={() => setRevokeTarget(null)} className="min-h-9 rounded-lg px-3 text-xs font-bold text-gray-600 dark:text-white/70">Cancel</button></div>

@@ -7,6 +7,7 @@ import {
   Outlet,
   useLocation,
   useNavigate,
+  type Location,
 } from "react-router-dom";
 import { RefreshCw } from "lucide-react";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -21,6 +22,7 @@ import { NativeNavigation } from './components/NativeNavigation';
 import { AndroidDownload } from './pages/AndroidDownload';
 import { ToastProvider } from "./contexts/ToastContext";
 import { Layout } from "./components/Layout";
+import { Modal } from "./components/Modal";
 import { PageLoader } from "./components/LoadingSpinner";
 import { StartupScreen } from "./components/StartupScreen";
 import { ProtectedRoute } from "./components/ProtectedRoute";
@@ -468,6 +470,82 @@ function ResumeSyncIndicator() {
   );
 }
 
+function DesktopDetailModal({
+  backgroundLocation,
+  title,
+  kind,
+  children,
+}: {
+  backgroundLocation: Location;
+  title: string;
+  kind: 'event' | 'announcement';
+  children: ReactNode;
+}) {
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(true);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+  }, []);
+
+  const close = () => {
+    if (!open) return;
+    setOpen(false);
+    closeTimer.current = setTimeout(() => {
+      navigate(`${backgroundLocation.pathname}${backgroundLocation.search}${backgroundLocation.hash}`, { replace: true });
+    }, 200);
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={close}
+      title={title}
+      size="xl"
+      instantOpen={false}
+      bodyClassName="!p-0 no-scrollbar"
+      dialogClassName={kind === 'event'
+        ? 'sm:!max-w-[94vw] 2xl:!max-w-[1440px] sm:!max-h-[88vh]'
+        : 'lg:!max-w-5xl sm:!max-h-[88vh]'}
+    >
+      <Suspense fallback={<PageLoader />}>{children}</Suspense>
+    </Modal>
+  );
+}
+
+function ModalAwareRoutes({ children }: { children: ReactNode }) {
+  const location = useLocation();
+  const state = location.state as { backgroundLocation?: Location } | null;
+  const candidate = state?.backgroundLocation;
+  const backgroundLocation = candidate
+    && window.matchMedia('(min-width: 1024px)').matches
+    && ((location.pathname.startsWith('/events/') && candidate.pathname === '/events')
+      || (location.pathname.startsWith('/announcements/') && candidate.pathname === '/announcements'))
+    ? candidate
+    : null;
+
+  return (
+    <>
+      <Routes location={backgroundLocation ?? location}>{children}</Routes>
+      {backgroundLocation && (
+        <Routes location={location}>
+          <Route element={<ProtectedRoute />}>
+            <Route
+              path="/events/:id"
+              element={<DesktopDetailModal backgroundLocation={backgroundLocation} title="Event Details" kind="event"><EventDetail inDialog /></DesktopDetailModal>}
+            />
+            <Route
+              path="/announcements/:id"
+              element={<DesktopDetailModal backgroundLocation={backgroundLocation} title="Announcement" kind="announcement"><AnnouncementDetail /></DesktopDetailModal>}
+            />
+          </Route>
+        </Routes>
+      )}
+    </>
+  );
+}
+
 export default function App() {
   const [showAppUpdate, setShowAppUpdate] = useState(false);
   const [applyingUpdate, setApplyingUpdate] = useState(false);
@@ -518,7 +596,7 @@ export default function App() {
                 }}
                 applying={applyingUpdate}
               />
-              <Routes>
+              <ModalAwareRoutes>
               <Route path="/" element={<RootRedirect />} />
               <Route path="/download/android" element={<AndroidDownload />} />
               <Route
@@ -674,7 +752,7 @@ export default function App() {
                   <Route path="*" element={<RootRedirect />} />
                 </Route>
               </Route>
-              </Routes>
+              </ModalAwareRoutes>
               </AndroidAppOfferProvider>
             </ToastProvider>
           </StartupGate>

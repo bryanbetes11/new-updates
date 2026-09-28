@@ -344,7 +344,7 @@ export function OrganizationBilling() {
             <div className="flex items-start justify-between gap-4 mb-5">
               <div>
                 <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1">Step 1</p>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Choose a plan</h3>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Choose A Plan</h3>
                 <p className="text-sm text-gray-500 dark:text-white/45 mt-1">These plan amounts can be updated later as you finalize your pricing.</p>
               </div>
               <div className="h-11 w-11 rounded-2xl bg-emerald-50 dark:bg-emerald-500/[0.12] text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
@@ -386,7 +386,7 @@ export function OrganizationBilling() {
             <div className="flex items-start justify-between gap-4 mb-5">
               <div>
                 <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1">Step 2</p>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Send your payment</h3>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Send Your Payment</h3>
                 <p className="text-sm text-gray-500 dark:text-white/45 mt-1">Pay using GCash or bank transfer, then submit the payment reference once.</p>
               </div>
               <div className="h-11 w-11 rounded-2xl bg-sky-50 dark:bg-sky-500/[0.12] text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0">
@@ -463,7 +463,7 @@ export function OrganizationBilling() {
             <div className="flex items-start justify-between gap-4 mb-5">
               <div>
                 <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-white/35 mb-1">Step 3</p>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Submit payment</h3>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Submit Payment</h3>
                 <p className="text-sm text-gray-500 dark:text-white/45 mt-1">Only the reference number is required. Receipt uploads can stay optional for later.</p>
               </div>
               <div className="h-11 w-11 rounded-2xl bg-amber-50 dark:bg-amber-500/[0.12] text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">

@@ -27,47 +27,47 @@ const publicArtworkCache = new Map<string, string | null>();
 const eventArtworkMeta: Record<string, { icon: LucideIcon; tone: string; label: string }> = {
   'Sunday Service': {
     icon: Music2,
-    tone: 'from-blue-500 via-indigo-900 to-black',
+    tone: 'bg-[#254b78]',
     label: 'Worship',
   },
   'Prayer Meeting': {
     icon: Heart,
-    tone: 'from-violet-400 via-purple-900 to-black',
+    tone: 'bg-[#66528d]',
     label: 'Prayer',
   },
   'LGTF (Midweek)': {
     icon: Users,
-    tone: 'from-teal-300 via-emerald-800 to-black',
+    tone: 'bg-[#1d5d55]',
     label: 'Group',
   },
   Rehearsals: {
     icon: Music2,
-    tone: 'from-emerald-300 via-emerald-800 to-black',
+    tone: 'bg-[#1d5d45]',
     label: 'Rehearsal',
   },
   'Online Devotion': {
     icon: BookOpen,
-    tone: 'from-pink-400 via-rose-900 to-black',
+    tone: 'bg-[#824d69]',
     label: 'Devotion',
   },
   Equipping: {
     icon: Lightbulb,
-    tone: 'from-lime-300 via-green-800 to-black',
+    tone: 'bg-[#496b3e]',
     label: 'Training',
   },
   'Revamp Session': {
     icon: Zap,
-    tone: 'from-orange-300 via-orange-900 to-black',
+    tone: 'bg-[#75572d]',
     label: 'Revamp',
   },
   'Youth Recharge': {
     icon: Sparkles,
-    tone: 'from-cyan-300 via-blue-900 to-black',
+    tone: 'bg-[#265b68]',
     label: 'Youth',
   },
   Video: {
     icon: Video,
-    tone: 'from-sky-300 via-slate-800 to-black',
+    tone: 'bg-[#365776]',
     label: 'Video',
   },
 };
@@ -81,7 +81,7 @@ function getEventArtworkMeta(eventType?: string | null, title?: string | null) {
   if (lowerTitle.includes('devotion')) return eventArtworkMeta['Online Devotion'];
   return {
     icon: CalendarDays,
-    tone: 'from-zinc-200 via-zinc-700 to-black',
+    tone: 'bg-[#484a65]',
     label: eventType || 'Event',
   };
 }
@@ -209,7 +209,6 @@ function ArtworkTile({ url, onFailure }: { url: string; onFailure: (url: string)
         referrerPolicy="no-referrer"
         onError={() => { if (!image.retryRemoteOnError()) onFailure(url); }}
       />}
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.10),rgba(0,0,0,0.30))]" />
     </div>
   );
 }
@@ -289,18 +288,15 @@ export function EventArtwork({ eventType, title, artworkUrls = [], songs = null,
             );
           })}
         </div>
-        <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10" />
       </div>
     );
   }
 
   return (
-    <div className={`relative isolate shrink-0 overflow-hidden bg-gradient-to-br ${meta.tone} ${className}`}>
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_28%_20%,rgba(255,255,255,0.30),transparent_24%),linear-gradient(180deg,rgba(255,255,255,0.08),rgba(0,0,0,0.42))]" />
-      <div className="absolute inset-0 ring-1 ring-inset ring-white/10" />
-      <div className="relative flex h-full w-full items-center justify-center">
-        <span className="flex h-9 w-9 items-center justify-center rounded-full border border-white/55 bg-black/48 text-white shadow-[0_14px_30px_-16px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.28)] backdrop-blur-sm">
-          <Icon className="h-[18px] w-[18px]" strokeWidth={2.5} />
+    <div className={`relative isolate shrink-0 overflow-hidden ${meta.tone} ${className}`}>
+      <div className="flex h-full w-full items-center justify-center">
+        <span className="keep-white flex h-9 w-9 items-center justify-center text-white">
+          <Icon className="h-6 w-6" strokeWidth={1.8} />
         </span>
       </div>
     </div>

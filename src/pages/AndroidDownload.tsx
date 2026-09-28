@@ -27,7 +27,7 @@ export function AndroidDownload() {
           <p className="mt-4 text-sm leading-6 text-white/55">This is a development testing build, not a Google Play release. iPhones cannot install APK files; you can keep using the PWA.</p>
         </header>
         <section aria-labelledby="installation-heading" className="py-9">
-          <h2 id="installation-heading" className="text-2xl font-bold">Install in a few steps</h2>
+          <h2 id="installation-heading" className="text-2xl font-bold">Install In A Few Steps</h2>
           <p className="mt-2 text-sm leading-6 text-white/55">These screenshots show one Android installation flow. Wording and the order of prompts can vary by phone. Tap a screenshot to view it larger.</p>
           <ol className="mt-7 space-y-7">
             {steps.map(({ title, description, image, alt, caption }, index) => (
@@ -49,9 +49,9 @@ export function AndroidDownload() {
           </ol>
         </section>
         <section className="space-y-5 rounded-3xl border border-white/10 bg-white/[0.035] p-6" aria-label="Updates and help">
-          <div><h2 className="font-bold">Updating an existing APK</h2><p className="mt-2 text-sm leading-6 text-white/65">Download the newer file and install it over ServeSync. Do not uninstall first. If Android refuses the update, contact your administrator before uninstalling, so you don’t lose local drafts.</p></div>
-          <div><h2 className="font-bold">Notifications are optional</h2><p className="mt-2 text-sm leading-6 text-white/65">If you choose Don’t allow, ServeSync still works. A banner will remind you that lock-screen alerts are off and help you enable them later. The PWA and APK have separate notification permissions; keeping both enabled may show duplicate alerts.</p></div>
-          <div><h2 className="font-bold">What updates automatically?</h2><p className="mt-2 text-sm leading-6 text-white/65">Messages and church content sync normally. New screens and app fixes require a newer APK during testing. This page will show the available version.</p></div>
+          <div><h2 className="font-bold">Updating An Existing APK</h2><p className="mt-2 text-sm leading-6 text-white/65">Download the newer file and install it over ServeSync. Do not uninstall first. If Android refuses the update, contact your administrator before uninstalling, so you don’t lose local drafts.</p></div>
+          <div><h2 className="font-bold">Notifications Are Optional</h2><p className="mt-2 text-sm leading-6 text-white/65">If you choose Don’t allow, ServeSync still works. A banner will remind you that lock-screen alerts are off and help you enable them later. The PWA and APK have separate notification permissions; keeping both enabled may show duplicate alerts.</p></div>
+          <div><h2 className="font-bold">What Updates Automatically?</h2><p className="mt-2 text-sm leading-6 text-white/65">Messages and church content sync normally. New screens and app fixes require a newer APK during testing. This page will show the available version.</p></div>
         </section>
       </div>
     </main>

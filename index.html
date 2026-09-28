@@ -24,8 +24,26 @@
       })();
     </script>
     <meta name="theme-color" content="#050505" />
+    <script>
+      (() => {
+        const mobileDevice = /Android|iPhone|iPad|iPod|Windows Phone/i.test(navigator.userAgent) ||
+          (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        let preference = mobileDevice ? 'dark' : 'light';
+        try {
+          const stored = localStorage.getItem('theme');
+          if (stored === 'light' || stored === 'dark' || stored === 'system') preference = stored;
+        } catch { /* storage can be unavailable */ }
+        const theme = preference === 'system'
+          ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+          : preference;
+        document.documentElement.classList.toggle('dark', theme === 'dark');
+        document.documentElement.style.colorScheme = theme;
+        document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#050505' : '#f8f8fa');
+      })();
+    </script>
     <style>
-      html, body, #root { min-height: 100%; background: #050505; }
+      html, body, #root { min-height: 100%; background: #f8f8fa; }
+      html.dark, html.dark body, html.dark #root { background: #050505; }
       body { margin: 0; }
     </style>
     <meta name="description" content="Open the event setlist, assignments, and team details in ServeSync." />

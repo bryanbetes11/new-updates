@@ -5,13 +5,13 @@ import { resolve } from 'node:path';
 const layout = readFileSync(resolve(process.cwd(), 'src/components/Layout.tsx'), 'utf8');
 const navigation = readFileSync(resolve(process.cwd(), 'src/components/Navigation.tsx'), 'utf8');
 
-assert.match(layout, /collapsed \? 72 : 220/, 'the compact layout should reserve only 72px for the sidebar rail');
-assert.match(navigation, /sidebarWidth = collapsed \? 72 : 220/, 'the rendered compact sidebar should match the 72px shell offset');
+assert.match(layout, /collapsed \? 64 : 236/, 'the compact layout should reserve only 64px for the sidebar rail');
+assert.match(navigation, /sidebarWidth = collapsed \? 64 : 236/, 'the rendered compact sidebar should match the 64px shell offset');
 assert.match(navigation, /mx-auto flex h-11 w-11/, 'collapsed navigation highlights should be centered squares rather than full-width rows');
 assert.match(navigation, /h-9 w-9 items-center justify-center overflow-visible/, 'collapsed badge anchors should remain visible outside the icon artwork');
 assert.match(
   navigation,
-  /flex-1 min-h-0[\s\S]*?overflow-y-auto overscroll-y-contain touch-action-pan-y \[-webkit-overflow-scrolling:touch\][\s\S]*?no-scrollbar/,
+  /desktop-sidebar-scroll min-h-0 min-w-0 flex-1[\s\S]*?overflow-y-auto overscroll-y-contain touch-action-pan-y \[-webkit-overflow-scrolling:touch\][\s\S]*?no-scrollbar/,
   'the expanded desktop sidebar must retain native vertical scrolling on touch devices while its scrollbar stays hidden',
 );
 

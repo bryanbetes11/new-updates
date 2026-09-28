@@ -235,7 +235,7 @@ export function Profile() {
   ];
 
   return (
-    <div className="profile-page-scroll page-container page-bottom-pad relative">
+    <div className="profile-page-scroll desktop-profile-page page-container page-bottom-pad relative">
       {/* Ambient page glow — sits behind everything */}
       <div
         className="pointer-events-none absolute -top-32 left-1/2 -translate-x-1/2 w-[600px] h-[600px] opacity-50 dark:opacity-30"
@@ -450,7 +450,7 @@ export function Profile() {
                         <Mail className="h-4 w-4" />
                       </span>
                       <div>
-                        <h2 className="text-base font-black text-gray-950 dark:text-white">Update email address</h2>
+                        <h2 className="text-base font-black text-gray-950 dark:text-white">Update Email Address</h2>
                         <p className="text-xs text-gray-500 dark:text-white/40">We will send a confirmation email to the new address.</p>
                       </div>
                     </div>

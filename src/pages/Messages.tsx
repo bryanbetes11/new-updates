@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion, type PanInfo } from 'framer-motion';
 import {
-  ArrowLeft, Send, ImageIcon, X, Pin, CornerUpLeft, Camera,
+  ArrowLeft, ChevronLeft, Send, ImageIcon, X, Pin, CornerUpLeft, Camera,
   MessageCircle, Plus, Search, Trash2, MoreHorizontal, ChevronRight, Check,
   CalendarDays, Music2, Copy, Paperclip, FileText, Download, ExternalLink, UserPlus,
   Calendar, Clock, LogOut, PlayCircle, RefreshCw, Share2,
@@ -1757,6 +1757,14 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
     requestAnimationFrame(resizeComposer);
   };
 
+  const handleComposerKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return;
+    if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+    event.preventDefault();
+    if (!event.repeat) void handleSend();
+  };
+
   const placeCaretAtEnd = useCallback((el: HTMLElement) => {
     const range = document.createRange();
     const selection = window.getSelection();
@@ -2243,6 +2251,7 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
               }}
               onFocus={() => window.dispatchEvent(new Event('messages-composer-focus'))}
               onPointerDown={focusComposerWithoutPageScroll}
+              onKeyDown={handleComposerKeyDown}
               placeholder="Message…"
               rows={1}
               style={{ resize: 'none', maxHeight: '132px' }}
@@ -4375,8 +4384,9 @@ function ChatWindow({
           <button
             onClick={onBack}
             className="lg:hidden shrink-0 h-8 w-8 flex items-center justify-center rounded-full text-gray-500 dark:text-white/40 hover:bg-gray-100 dark:hover:bg-white/[0.07] transition-colors"
+            aria-label="Back to conversations"
           >
-            <ArrowLeft className="h-4.5 w-4.5" style={{ width: '18px', height: '18px' }} />
+            <ChevronLeft className="h-5 w-5" />
           </button>
           {conv.type === 'event' && conv.event_id ? (
             <EventConversationAvatar eventId={conv.event_id} name={headerName} className="h-8 w-8 rounded-full" />
@@ -5519,7 +5529,7 @@ export function Messages() {
 
   return (
     <div
-      className="relative flex h-full min-h-0 w-full overflow-hidden bg-white dark:bg-[#111013] lg:bg-[#f5f5f7] lg:dark:bg-[#0d0d0f] lg:p-4"
+      className="desktop-chat-workspace relative flex h-full min-h-0 w-full overflow-hidden bg-white dark:bg-[#111013] lg:bg-[#f5f5f7] lg:dark:bg-[#0d0d0f] lg:p-4"
       style={isDesktop ? { paddingTop: 'calc(72px + var(--desktop-safe-area-top, 0px) + var(--app-reminders-height, 0px) + 1rem)' } : undefined}
     >
       <div className="contents lg:relative lg:flex lg:h-full lg:flex-1 lg:min-h-0 lg:overflow-hidden lg:rounded-[2rem] lg:border lg:border-black/[0.06] lg:bg-white lg:shadow-[0_24px_80px_-52px_rgba(15,23,42,0.85)] lg:ring-1 lg:ring-white/70 dark:lg:border-white/[0.07] dark:lg:bg-[#111013] dark:lg:ring-white/[0.04]">

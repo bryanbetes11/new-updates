@@ -51,7 +51,7 @@ export function RescheduleEventModal({ event, memberCount, onClose, onSaved, pro
     }
   };
 
-  return <Modal open onClose={() => { if (!saving) onClose(); }} title="Reschedule event" size="md" closeOnBackdrop={!saving} closeOnEscape={!saving}>
+  return <Modal open onClose={() => { if (!saving) onClose(); }} title="Reschedule Event" size="md" closeOnBackdrop={!saving} closeOnEscape={!saving}>
     <form className="space-y-4" onSubmit={e => { e.preventDefault(); void save(); }}>
       <div className="rounded-xl bg-gray-100 p-3 dark:bg-white/[0.05]">
         <p className="font-semibold">{event.title}</p>

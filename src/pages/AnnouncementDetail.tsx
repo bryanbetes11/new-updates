@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, type Location } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { motion, AnimatePresence, useReducedMotion, type Variants } from 'framer-motion';
 import {
@@ -471,7 +471,16 @@ const blockItem: Variants = {
 export function AnnouncementDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const smartBack = useSmartBack('/announcements');
+  const backgroundLocation = (location.state as { backgroundLocation?: Location } | null)?.backgroundLocation;
+  const returnToAnnouncements = () => {
+    if (backgroundLocation?.pathname === '/announcements') {
+      navigate(`${backgroundLocation.pathname}${backgroundLocation.search}${backgroundLocation.hash}`, { replace: true });
+    } else {
+      smartBack();
+    }
+  };
   const { user } = useAuth();
   const { toast } = useToast();
   const prefersReducedMotion = useReducedMotion();
@@ -866,7 +875,7 @@ export function AnnouncementDetail() {
           <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">
             This update may have been removed, or it could not be loaded.
           </p>
-          <button type="button" onClick={smartBack} className="btn-primary mt-5 min-h-11">
+          <button type="button" onClick={returnToAnnouncements} className="btn-primary mt-5 min-h-11">
             Back to News
           </button>
         </div>
@@ -882,7 +891,7 @@ export function AnnouncementDetail() {
 
   const goBack = () => {
     setIsLeaving(true);
-    setTimeout(() => smartBack(), 300);
+    setTimeout(returnToAnnouncements, 300);
   };
 
   return (

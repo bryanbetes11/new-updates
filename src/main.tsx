@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import './desktop-workspace.css';
 import { registerAppServiceWorker } from './lib/serviceWorkerUpdate.ts';
 import { initializeDeviceLayout } from './lib/device.ts';
 import { capturePushNotificationOpen } from './lib/notificationOpenTracking';

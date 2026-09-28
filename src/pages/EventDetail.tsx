@@ -5,11 +5,11 @@ import { SONG_ROLE_GUIDE } from '../lib/songRoleGuide';
 import { ChartNavigation } from '../components/ChartNavigation';
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, type NavigateOptions, type To } from 'react-router-dom';
 import { addDays, format, parseISO, differenceInDays } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { animate, motion, useMotionValue, AnimatePresence, useReducedMotion, type PanInfo } from 'framer-motion';
-import { ArrowLeft, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, ListOrdered, Pause, Play, Settings2, MoreHorizontal, Upload, Calendar, CalendarOff, Loader2, BellRing, Eye, EyeOff, Lock, Wifi, WifiOff, Smile } from 'lucide-react';
+import { ArrowLeft, Clock, Users, Plus, Check, X, Music, Send, ThumbsUp, AlertCircle, Trash2, CheckCircle, AlertTriangle, CreditCard as Edit, ClipboardCheck, Timer, Sparkles, ChevronDown, ChevronRight, Search, GripVertical, ArrowUp, ArrowDown, MessageCircle, FileText, ListOrdered, Pause, Play, Settings2, MoreHorizontal, Upload, Calendar, CalendarOff, Loader2, BellRing, Eye, EyeOff, Lock, Wifi, WifiOff, Smile, Mic, Guitar, KeyboardMusic, Drum, Volume2, Lightbulb, Video, type LucideIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useLiveModeSession } from '../hooks/useLiveModeSession';
 import { LiveModeComms } from '../components/LiveModeComms';
@@ -81,10 +81,9 @@ interface EventAttendance {
   id: string;
   event_id: string;
   user_id: string;
-  status: 'present' | 'late' | 'absent';
+  status: 'present' | 'late' | 'absent' | 'excused';
   checked_in_at: string | null;
   is_assigned: boolean;
-  profiles?: { first_name: string; last_name: string; avatar_url: string | null };
 }
 
 interface SetlistRevisionComment {
@@ -147,6 +146,8 @@ interface EventTeamTemplate {
 }
 
 const MANILA_TIMEZONE = 'Asia/Manila';
+const ATTENDANCE_COUNTDOWN_DAYS = 7;
+const DESKTOP_SETLIST_COLUMNS = 'minmax(12rem, 2.3fr) minmax(6rem, 0.9fr) minmax(3.5rem, 0.55fr) minmax(7rem, 1.1fr) minmax(5rem, 0.75fr)';
 
 function getManilaTodayKey(date = new Date()) {
   return formatInTimeZone(date, MANILA_TIMEZONE, 'yyyy-MM-dd');
@@ -294,6 +295,36 @@ function getServingRoleLabel(roleName: string) {
 }
 
 const TECH_BOOTH_ROLE_NAMES = new Set(['audio', 'lights', 'visuals']);
+
+const EVENT_TEAM_GROUPS = [
+  { key: 'vocals', label: 'Vocals', Icon: Mic },
+  { key: 'instruments', label: 'Instrumentalists', Icon: Guitar },
+  { key: 'tech', label: 'Tech Team', Icon: Settings2 },
+  { key: 'other', label: 'Other Roles', Icon: Users },
+] as const;
+
+type EventTeamGroupKey = (typeof EVENT_TEAM_GROUPS)[number]['key'];
+
+function getEventTeamGroup(roleName: string | null | undefined): EventTeamGroupKey {
+  const role = roleName?.trim().toLowerCase() || '';
+  if (role === 'song leader' || /vocal|singer/.test(role)) return 'vocals';
+  if (/guitar|bass|keys|keyboard|piano|drum|percussion|instrument|band member/.test(role)) return 'instruments';
+  if (TECH_BOOTH_ROLE_NAMES.has(role) || /sound|lighting|projection|camera|media|tech/.test(role)) return 'tech';
+  return 'other';
+}
+
+function getEventTeamRoleIcon(roleName: string | null | undefined): LucideIcon {
+  const role = roleName?.trim().toLowerCase() || '';
+  if (role === 'song leader' || /vocal|singer/.test(role)) return Mic;
+  if (/keys|keyboard|piano/.test(role)) return KeyboardMusic;
+  if (/guitar|bass/.test(role)) return Guitar;
+  if (/drum|percussion/.test(role)) return Drum;
+  if (/audio|sound/.test(role)) return Volume2;
+  if (/light/.test(role)) return Lightbulb;
+  if (/visual|projection|camera|media/.test(role)) return Video;
+  if (/instrument|band member/.test(role)) return Music;
+  return Users;
+}
 
 type SetlistBuilderSong = {
   song_id: string;
@@ -569,10 +600,13 @@ function getEventReturnRoute(state: unknown) {
 
 const eventChatEnabled = MESSENGER_ENABLED;
 
-export function EventDetail() {
+export function EventDetail({ inDialog = false }: { inDialog?: boolean }) {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const navigateWithinEvent = useCallback((to: To, options?: NavigateOptions) => {
+    navigate(to, { ...options, state: location.state });
+  }, [location.state, navigate]);
   const returnRouteRef = useRef(getEventReturnRoute(location.state));
   const eventReturnRoute = returnRouteRef.current;
   const eventBackLabel = eventReturnRoute.startsWith('/my-assignments') ? 'Back to assignments' : 'Back to events';
@@ -756,6 +790,10 @@ export function EventDetail() {
   const [sundayServices, setSundayServices] = useState<Event[]>([]);
   const [attendance, setAttendance] = useState<EventAttendance | null>(null);
   const [allAttendance, setAllAttendance] = useState<EventAttendance[]>([]);
+  const [attendanceRosterState, setAttendanceRosterState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const attendanceFetchVersion = useRef(0);
+  const mobileHeroTitleRef = useRef<HTMLDivElement>(null);
+  const [showMobileEventHeader, setShowMobileEventHeader] = useState(false);
   const [cardView, setCardView] = useState<'setlist' | 'checking' | 'report'>('setlist');
   const [cardDir, setCardDir] = useState<'forward' | 'back'>('forward');
   const navigateCard = (view: 'setlist' | 'checking' | 'report', dir: 'forward' | 'back' = 'forward') => {
@@ -828,7 +866,7 @@ export function EventDetail() {
   const [artistPromptValue, setArtistPromptValue] = useState('');
   const [lyricsSearchResults, setLyricsSearchResults] = useState<LyricsSearchResult[]>([]);
   const [lyricsSearchNotice, setLyricsSearchNotice] = useState<{ type: 'info' | 'success' | 'error'; text: string } | null>(null);
-  const [countdownParts, setCountdownParts] = useState<{ hours: number; minutes: number; seconds: number }>({ hours: 0, minutes: 0, seconds: 0 });
+  const [countdownParts, setCountdownParts] = useState<{ days: number; hours: number; minutes: number; seconds: number }>({ days: 0, hours: 0, minutes: 0, seconds: 0 });
   const [serviceFormat, setServiceFormat] = useState<ServiceFormat | null>(null);
   const [isReordering, setIsReordering] = useState(false);
   const [setlistEditMode, setSetlistEditMode] = useState(false);
@@ -940,6 +978,26 @@ export function EventDetail() {
       window.clearTimeout(timer);
     };
   }, [loading, id, resetEventDetailScroll]);
+
+  const observedEventId = event?.id;
+  useEffect(() => {
+    const title = mobileHeroTitleRef.current;
+    if (loading || !observedEventId || !title) {
+      setShowMobileEventHeader(false);
+      return;
+    }
+    const update = () => {
+      setShowMobileEventHeader(window.matchMedia('(max-width: 1023px)').matches && title.getBoundingClientRect().bottom <= 56);
+    };
+    const observer = new IntersectionObserver(update, { rootMargin: '-56px 0px 0px 0px' });
+    observer.observe(title);
+    window.addEventListener('resize', update);
+    update();
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', update);
+    };
+  }, [observedEventId, loading]);
 
   useEffect(() => {
     if (!serviceModeActive) return;
@@ -1060,7 +1118,7 @@ export function EventDetail() {
         params.delete('song');
         params.delete('audience');
         const nextSearch = params.toString();
-        navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ''}`, { replace: true });
+        navigateWithinEvent(`${location.pathname}${nextSearch ? `?${nextSearch}` : ''}`, { replace: true });
       }
       return;
     }
@@ -1087,7 +1145,7 @@ export function EventDetail() {
 	setStageCommsView(canPreviewLiveMode ? (params.get('audience') === 'tech' || (!params.has('audience') && savedMode?.audience === 'tech') ? 'tech' : 'stage') : assignedLiveAudience);
     preloadSongNotes(profile?.org_id, user?.id, availableSongs.map(song => song.song_id));
     setServiceModeIndex(restoredIndex);
-  }, [authLoading, canUseServiceModePilot, canPreviewLiveMode, assignedLiveAudience, event?.event_type, id, linkedSetlistSongs, loading, location.pathname, location.search, navigate, serviceModeIndex, setlist?.status, setlistSongs, profile?.org_id, user?.id]);
+  }, [authLoading, canUseServiceModePilot, canPreviewLiveMode, assignedLiveAudience, event?.event_type, id, linkedSetlistSongs, loading, location.pathname, location.search, navigateWithinEvent, serviceModeIndex, setlist?.status, setlistSongs, profile?.org_id, user?.id]);
 
   const linkedReferenceSongs = useMemo(() => linkedSetlistSongs.filter((song):song is SetlistSong => !!song && typeof song === 'object').slice().sort((a,b)=>(a.position||0)-(b.position||0)),[linkedSetlistSongs]);
   const orderedSetlistSongs = useMemo(() => setlistSongs.filter((song):song is SetlistSong => !!song && typeof song === 'object').slice().sort((a,b)=>(a.position||0)-(b.position||0)),[setlistSongs]);
@@ -1117,8 +1175,8 @@ export function EventDetail() {
     const nextSearch = params.toString();
     const nextLocation = `${location.pathname}?${nextSearch}`;
     const currentLocation = `${location.pathname}${location.search}`;
-    if (nextLocation !== currentLocation) navigate(nextLocation, { replace: true });
-  }, [canUseServiceModePilot, event?.event_type, id, location.pathname, location.search, navigate, serviceModeIndex, stageCommsView, profile?.org_id, user?.id, serviceModeSongs]);
+    if (nextLocation !== currentLocation) navigateWithinEvent(nextLocation, { replace: true });
+  }, [canUseServiceModePilot, event?.event_type, id, location.pathname, location.search, navigateWithinEvent, serviceModeIndex, stageCommsView, profile?.org_id, user?.id, serviceModeSongs]);
 
 
   useEffect(() => {
@@ -1812,17 +1870,48 @@ export function EventDetail() {
 
   const fetchAttendance = useCallback(async () => {
     if (!id || !user) return;
+    const version = ++attendanceFetchVersion.current;
+    const requestedIdentity = activeDetailIdentity;
     const [myAttRes, allAttRes] = await Promise.all([
       supabase.from('event_attendance').select('*').eq('event_id', id).eq('user_id', user.id).maybeSingle(),
-      isLeader
-        ? supabase.from('event_attendance').select('*, profiles(first_name, last_name, avatar_url)').eq('event_id', id)
-        : Promise.resolve({ data: [] }),
+      (isLeader || isOrgAdmin)
+        ? supabase.from('event_attendance').select('id, event_id, user_id, status, checked_in_at, is_assigned').eq('event_id', id)
+        : Promise.resolve({ data: [], error: null }),
     ]);
+    if (version !== attendanceFetchVersion.current || requestedIdentity !== activeDetailRef.current) return;
     setAttendance(myAttRes.data);
-    setAllAttendance(allAttRes.data || []);
-  }, [id, user, isLeader]);
+    if (isLeader || isOrgAdmin) {
+      if (allAttRes.error) {
+        setAttendanceRosterState('error');
+      } else {
+        setAllAttendance(allAttRes.data || []);
+        setAttendanceRosterState('ready');
+      }
+    } else {
+      setAllAttendance([]);
+    }
+  }, [activeDetailIdentity, id, user, isLeader, isOrgAdmin]);
 
   useEffect(() => { fetchAttendance(); }, [fetchAttendance]);
+  useEffect(() => {
+    setAllAttendance([]);
+    setAttendanceRosterState('loading');
+  }, [id]);
+  useEffect(() => {
+    if (!(isLeader || isOrgAdmin) || new URLSearchParams(location.search).get('tab') !== 'attendance') return;
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible') void fetchAttendance();
+    };
+    refreshIfVisible();
+    const interval = window.setInterval(refreshIfVisible, 30_000);
+    window.addEventListener('focus', refreshIfVisible);
+    document.addEventListener('visibilitychange', refreshIfVisible);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refreshIfVisible);
+      document.removeEventListener('visibilitychange', refreshIfVisible);
+    };
+  }, [fetchAttendance, isLeader, isOrgAdmin, location.search]);
 
   const getAttendanceStatus = useCallback(() => {
     if (!event) return { canMark: false, reason: 'No event', windowOpen: false, isClosed: false };
@@ -1835,6 +1924,9 @@ export function EventDetail() {
     const daysDiff = Math.floor((eventDay.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
     if (daysDiff > 0) {
+      if (daysDiff <= ATTENDANCE_COUNTDOWN_DAYS && event.start_time) {
+        return { canMark: false, reason: 'Attendance is not open yet', windowOpen: false, isClosed: false, countdown: true };
+      }
       return { canMark: false, reason: 'Event is in the future', windowOpen: false, isClosed: false };
     }
 
@@ -1868,8 +1960,8 @@ export function EventDetail() {
       const eventDay = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
       const daysDiff = Math.floor((eventDay.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
-      if (daysDiff !== 0) {
-        setCountdownParts({ hours: 0, minutes: 0, seconds: 0 });
+      if (daysDiff < 0 || daysDiff > ATTENDANCE_COUNTDOWN_DAYS) {
+        setCountdownParts({ days: 0, hours: 0, minutes: 0, seconds: 0 });
         return;
       }
 
@@ -1878,15 +1970,16 @@ export function EventDetail() {
 
       const diffMs = windowOpenTime.getTime() - now.getTime();
       if (diffMs <= 0) {
-        setCountdownParts({ hours: 0, minutes: 0, seconds: 0 });
+        setCountdownParts({ days: 0, hours: 0, minutes: 0, seconds: 0 });
         return;
       }
 
-      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
       const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
       const diffSecs = Math.floor((diffMs % (1000 * 60)) / 1000);
 
-      setCountdownParts({ hours: diffHours, minutes: diffMins, seconds: diffSecs });
+      setCountdownParts({ days: diffDays, hours: diffHours, minutes: diffMins, seconds: diffSecs });
     };
 
     calculateCountdown();
@@ -2308,18 +2401,21 @@ export function EventDetail() {
     setSetlistBuilderDragIndex(null);
     setSetlistBuilderActive(true);
     setShowSetlist(true);
+    if (inDialog) return;
     const params = new URLSearchParams(location.search);
     params.set('view', 'setlist');
-    navigate({ pathname: location.pathname, search: params.toString() });
+    navigateWithinEvent({ pathname: location.pathname, search: params.toString() });
   };
 
   const closeSetlistBuilder = (force = false) => {
     if (savingSetlistBuilder && !force) return;
     setShowSetlist(false);
     setSetlistBuilderActive(false);
-    const params = new URLSearchParams(location.search);
-    params.delete('view');
-    navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
+    if (!inDialog) {
+      const params = new URLSearchParams(location.search);
+      params.delete('view');
+      navigateWithinEvent({ pathname: location.pathname, search: params.toString() }, { replace: true });
+    }
     setSetlistBuilderSongs([]);
     setSetlistBuilderDragIndex(null);
     setSongSearch('');
@@ -2431,20 +2527,10 @@ export function EventDetail() {
   const markSetlistNeedsReapproval = async () => {
     if (!setlist || setlist.status !== 'approved' || !event) return true;
 
-    // Read the saved edit, which may be newer than the current React state.
-    const { data: currentSongs, error: songsError } = await supabase.from('setlist_songs')
-      .select('songs(lyrics, chordpro_text)').eq('setlist_id', setlist.id);
-    if (songsError) { toast('error', 'Could not check the edited songs before requesting approval'); return false; }
-    const lyricsComplete = Boolean(currentSongs?.length) && currentSongs!.every(row => {
-      const song = Array.isArray(row.songs) ? row.songs[0] : row.songs;
-      return Boolean(getEffectiveSongLyrics(song));
-    });
-    const nextStatus = lyricsComplete ? 'pending_review' : 'draft';
-
     const { data, error } = await withSaveTimeout(
       supabase
         .from('setlists')
-        .update({ status: nextStatus })
+        .update({ status: 'draft', submitted_at: null })
         .eq('id', setlist.id)
         .select('id, status')
         .maybeSingle()
@@ -2455,8 +2541,9 @@ export function EventDetail() {
       return false;
     }
 
-    setSetlist(prev => prev ? { ...prev, status: nextStatus } : prev);
-    toast('info', lyricsComplete ? 'Setlist updated — re-approval required' : 'Edits saved as a draft. Add readable lyrics to every song before resubmitting.');
+    setSetlist(prev => prev ? { ...prev, status: 'draft', submitted_at: null } : prev);
+    setSetlistEditMode(false);
+    toast('info', 'Changes saved as a draft. Submit the setlist again for review.');
     return true;
   };
 
@@ -2518,13 +2605,17 @@ export function EventDetail() {
     }
 
     const insertedSong = data as SetlistSong;
-    setSetlist(targetSetlist);
+    if (targetSetlist.status === 'approved' && !(await markSetlistNeedsReapproval())) {
+      const { error: rollbackError } = await supabase.from('setlist_songs').delete().eq('id', insertedSong.id);
+      if (rollbackError) toast('error', 'The song was added, but the setlist could not return to Draft. Please contact a leader before using this setlist.');
+      await fetchAll(true);
+      return null;
+    }
+    setSetlist(targetSetlist.status === 'approved' ? { ...targetSetlist, status: 'draft', submitted_at: null } : targetSetlist);
     if (targetSetlist.service_format) setServiceFormat(targetSetlist.service_format as ServiceFormat);
     setSetlistSongs(prev => [...prev, insertedSong].sort((a, b) => a.position - b.position));
 
-    if (targetSetlist.status === 'approved') {
-      await markSetlistNeedsReapproval();
-    } else {
+    if (targetSetlist.status !== 'approved') {
       toast('success', 'Song added');
     }
 
@@ -2649,13 +2740,19 @@ export function EventDetail() {
       }
 
       const insertedSongs = data as SetlistSong[];
-      setSetlist(targetSetlist);
+      if (targetSetlist.status === 'approved' && !(await markSetlistNeedsReapproval())) {
+        const { error: rollbackError } = await supabase.from('setlist_songs').delete().in('id', insertedSongs.map(song => song.id));
+        setSetlistBuilderError(rollbackError
+          ? 'The songs were added, but the setlist could not return to Draft. Please contact a leader before using this setlist.'
+          : 'Could not return the setlist to Draft. The selected songs were not saved; please try again.');
+        await fetchAll(true);
+        return;
+      }
+      setSetlist(targetSetlist.status === 'approved' ? { ...targetSetlist, status: 'draft', submitted_at: null } : targetSetlist);
       if (targetSetlist.service_format) setServiceFormat(targetSetlist.service_format as ServiceFormat);
       setSetlistSongs(current => [...current, ...insertedSongs].sort((a, b) => a.position - b.position));
 
-      if (targetSetlist.status === 'approved') {
-        await markSetlistNeedsReapproval();
-      } else {
+      if (targetSetlist.status !== 'approved') {
         toast('success', insertedSongs.length === 1 ? 'Song added' : `${insertedSongs.length} songs added`);
       }
 
@@ -4081,11 +4178,11 @@ const openLyricsModal = (ss: SetlistSong) => {
     observationPromptHandledRef.current = true;
     setShowObservationModal(true);
     searchParams.delete('addObservation');
-    navigate({
+    navigateWithinEvent({
       pathname: location.pathname,
       search: searchParams.toString() ? `?${searchParams.toString()}` : '',
     }, { replace: true });
-  }, [event, lifecycleNow, location.pathname, location.search, navigate]);
+  }, [event, lifecycleNow, location.pathname, location.search, navigateWithinEvent]);
 
   if (loading || visibleDetailIdentity !== activeDetailIdentity) return <PageLoader />;
   if (!event) return (
@@ -4275,8 +4372,15 @@ const openLyricsModal = (ss: SetlistSong) => {
   const heroIsOverdue = heroDeadlineState === 'overdue';
   const heroIsDueSoon = heroDeadlineState === 'due_soon';
   const isApprovedSetlist = setlist?.status === 'approved';
+  // An assigned Song Leader may own the music without owning this setlist record.
+  // Approved edits must stay with someone who can also move it back to review.
+  const canEditApprovedSetlist = canEditSetlist || isSetlistCreator;
   const showSetlistEditControls = !isApprovedSetlist || setlistEditMode;
-  const canEditSetlistSongDetails = showSetlistEditControls && (canManageSetlist || canEditSetlist);
+  const canEditSetlistSongDetails = showSetlistEditControls && (isApprovedSetlist ? canEditApprovedSetlist : (canManageSetlist || canEditSetlist));
+  const hasDesktopSetlistActions = canEditSetlistSongDetails
+    || (showSetlistEditControls && ((canManageSetlist && !['approved', 'pending_review'].includes(setlist?.status || '')) || (isApprovedSetlist ? canEditApprovedSetlist : canEditSetlist)))
+    || setlistSongs.some(song => Boolean(song.youtube_url || song.songs?.youtube_url));
+  const desktopSetlistGridColumns = `${DESKTOP_SETLIST_COLUMNS}${hasDesktopSetlistActions ? ' minmax(7rem, 1.1fr)' : ''}`;
   const showLinkedSetlistReference = !setlist && event.event_type === 'Rehearsals' && !!event.linked_event_id && !!linkedSetlist;
   const linkedSetlistStatus = linkedSetlist?.status || 'draft';
   const canShowPrimaryModeButton = event.event_type === 'Rehearsals' || isApprovedSetlist;
@@ -4311,6 +4415,25 @@ const openLyricsModal = (ss: SetlistSong) => {
   const secondaryArtworkAmbientColor = eventArtworkAmbientColors[1] || primaryArtworkAmbientColor;
   const tertiaryArtworkAmbientColor = eventArtworkAmbientColors[2] || secondaryArtworkAmbientColor;
   const quaternaryArtworkAmbientColor = eventArtworkAmbientColors[3] || primaryArtworkAmbientColor;
+  const requestedEventTab = new URLSearchParams(location.search).get('tab');
+  const activeEventTab = requestedEventTab === 'team' || requestedEventTab === 'attendance' ? requestedEventTab : 'setlist';
+  const selectEventTab = (tab: 'setlist' | 'team' | 'attendance') => {
+    const params = new URLSearchParams(location.search);
+    params.set('tab', tab);
+    navigateWithinEvent({ pathname: location.pathname, search: params.toString() }, { replace: true, preventScrollReset: true });
+  };
+  const handleEventTabKeyDown = (keyboardEvent: React.KeyboardEvent<HTMLButtonElement>, currentTab: 'setlist' | 'team' | 'attendance') => {
+    const tabs = ['setlist', 'team', 'attendance'] as const;
+    const currentIndex = tabs.indexOf(currentTab);
+    const nextIndex = keyboardEvent.key === 'ArrowRight' ? (currentIndex + 1) % tabs.length
+      : keyboardEvent.key === 'ArrowLeft' ? (currentIndex + tabs.length - 1) % tabs.length
+        : keyboardEvent.key === 'Home' ? 0 : keyboardEvent.key === 'End' ? tabs.length - 1 : null;
+    if (nextIndex === null) return;
+    keyboardEvent.preventDefault();
+    const nextTab = tabs[nextIndex];
+    selectEventTab(nextTab);
+    requestAnimationFrame(() => document.getElementById(`event-tab-${nextTab}`)?.focus());
+  };
   const compactEventFacts = [
     format(parseISO(event.event_date), 'EEE, MMM dd'),
     formatTime12Hour(event.start_time || ''),
@@ -4514,7 +4637,7 @@ const openLyricsModal = (ss: SetlistSong) => {
     params.delete('song');
     params.delete('audience');
     const nextSearch = params.toString();
-    navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ''}`, { replace: true });
+    navigateWithinEvent(`${location.pathname}${nextSearch ? `?${nextSearch}` : ''}`, { replace: true });
 	window.setTimeout(() => serviceModeOpenerRef.current?.focus(), 0);
   };
 
@@ -4634,12 +4757,13 @@ const openLyricsModal = (ss: SetlistSong) => {
   };
 
   const heroEyebrow = heroIsPast
-    ? 'text-gray-400 dark:text-white/30'
+    ? 'text-[#62657b] dark:text-white/55'
     : heroIsOverdue
-    ? 'text-red-600 dark:text-red-400'
+    ? 'text-red-700 dark:text-red-300'
     : heroIsDueSoon
-    ? 'text-amber-600 dark:text-amber-400'
-    : 'text-emerald-600 dark:text-emerald-400/80';
+    ? 'text-amber-700 dark:text-amber-300'
+    : 'text-emerald-700 dark:text-emerald-300';
+  const heroActionTone = 'border-[#cfd1dc] bg-white/75 text-[#474a65] hover:bg-white hover:text-[#25283e] focus-visible:ring-emerald-500 dark:border-white/[0.1] dark:bg-white/[0.08] dark:text-white/75 dark:hover:bg-white/[0.14] dark:hover:text-white dark:focus-visible:ring-white/80';
 
   const goBack = () => {
     setIsLeaving(true);
@@ -4659,7 +4783,7 @@ const openLyricsModal = (ss: SetlistSong) => {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(255,255,255,0.055),transparent_30%),linear-gradient(180deg,rgba(5,5,5,0.2),#050505_82%)]" />
       </div>
 
-      <button
+      {!inDialog && <button
         type="button"
         onClick={goBack}
         className="absolute left-4 top-[calc(env(safe-area-inset-top)+1rem)] z-20 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/[0.09] bg-white/[0.05] text-white/70 backdrop-blur-xl transition-colors hover:bg-white/[0.1] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 sm:left-6 lg:left-10 lg:top-10"
@@ -4667,7 +4791,7 @@ const openLyricsModal = (ss: SetlistSong) => {
         title={eventBackLabel}
       >
         <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-      </button>
+      </button>}
 
       <div className="relative z-10 mx-auto w-full max-w-2xl text-center">
         <EventArtwork
@@ -4779,13 +4903,27 @@ const openLyricsModal = (ss: SetlistSong) => {
     : null;
 
   return (
-    <div className="page-container page-bottom-pad relative isolate overflow-x-clip bg-[#050505]">
+    <div className="event-detail-theme page-container page-bottom-pad relative isolate min-h-screen overflow-x-clip bg-[#f6f8fb] dark:bg-[#050505]">
+      <div
+        aria-hidden={!showMobileEventHeader}
+        className={`event-detail-mobile-header fixed inset-x-0 z-30 flex items-center gap-3 border-b border-[#d3d4dd] bg-[#f8f8fa] px-4 py-2.5 transition-opacity duration-200 motion-reduce:transition-none dark:border-white/[0.08] dark:bg-[#050505] lg:hidden ${showMobileEventHeader ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'}`}
+        style={{ top: 'max(env(safe-area-inset-top), var(--app-reminders-height, 0px))' }}
+      >
+        <div className="min-w-0 max-w-[48%] shrink-0">
+          <p className="truncate text-[9px] font-bold uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-400/75">{heroHasApprovedSetlist ? 'Setlist approved' : 'Event details'}</p>
+          <p className="truncate text-base font-black leading-tight text-[#474a65] dark:text-white">{eventDisplayTitle}</p>
+        </div>
+        <div className="min-w-0 flex-1 text-right">
+          <p className="truncate text-[10px] font-medium text-[#474a65] dark:text-white/60">{event.event_type} · {compactEventFacts[0]}</p>
+          <p className="truncate text-[10px] font-medium text-[#62657b] dark:text-white/40">{compactEventFacts[1]} · {compactEventFacts[2]}</p>
+        </div>
+      </div>
       <motion.div
         animate={isLeaving ? { opacity: 0, y: -12, filter: 'blur(8px)' } : { opacity: 1, y: 0, filter: 'blur(0px)' }}
         transition={{ duration: 0.28, ease: [0.4, 0, 1, 1] }}
         className={assignmentDetailsBlocked
           ? 'relative z-10 w-full'
-          : 'relative z-10 mx-auto w-full max-w-2xl space-y-4 px-4 pt-0 sm:px-6 sm:pt-5 md:max-w-none md:px-8 lg:max-w-6xl lg:pt-12 xl:max-w-[1560px]'}
+          : `relative z-10 mx-auto w-full max-w-2xl space-y-4 px-4 pt-0 sm:px-6 md:max-w-none md:px-8 lg:max-w-6xl xl:max-w-[1560px] ${inDialog ? 'sm:pt-0 lg:pt-0' : 'sm:pt-5 lg:pt-12'}`}
       >
         {fullScreenAssignmentGate}
 
@@ -4794,13 +4932,13 @@ const openLyricsModal = (ss: SetlistSong) => {
         {!assignmentDetailsBlocked && (
         <motion.div
           {...blurUp(0.08)}
-          className="relative isolate z-10 -mx-4 overflow-visible px-4 pb-[15px] pt-[calc(env(safe-area-inset-top)+0.75rem)] sm:-mx-6 sm:px-6 sm:pb-5 sm:pt-3 md:-mx-8 md:px-8 lg:mt-0"
+          className="event-detail-hero relative isolate z-10 -mx-4 overflow-visible px-4 pb-[15px] pt-[calc(env(safe-area-inset-top)+0.75rem)] sm:-mx-6 sm:px-6 sm:pb-5 sm:pt-3 md:-mx-8 md:px-8 lg:mt-0"
           style={{
             opacity: heroIsPast ? 0.85 : 1,
           }}
         >
           <div
-            className="pointer-events-none absolute left-1/2 inset-y-0 w-screen -translate-x-1/2 overflow-hidden lg:hidden"
+            className="pointer-events-none absolute left-1/2 inset-y-0 w-screen -translate-x-1/2 overflow-hidden bg-[#f8f8fa] dark:bg-[#050505]"
           >
             <div className="absolute inset-x-[-35%] top-[-9rem] flex justify-center">
               <EventArtwork
@@ -4808,7 +4946,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                 title={event.title}
                 songs={eventDetailArtworkSongs}
                 onArtworkUrlsChange={syncEventArtworkUrls}
-                className="h-80 w-80 scale-[2.45] rounded-[2rem] opacity-55 blur-3xl brightness-[1.22] saturate-[1.25]"
+                className="h-80 w-80 scale-[2.45] rounded-[2rem] opacity-25 blur-3xl brightness-[1.22] saturate-[1.25] dark:opacity-55 lg:scale-[4] lg:opacity-25 dark:lg:opacity-40"
               />
             </div>
             {primaryArtworkAmbientColor && (
@@ -4843,37 +4981,38 @@ const openLyricsModal = (ss: SetlistSong) => {
                 }}
               />
             )}
-            <div className="absolute -top-32 -left-24 h-52 w-[18rem] -rotate-[12deg] rounded-[46%] bg-[#050505] blur-[18px]" />
-            <div className="absolute -top-40 left-[24%] h-64 w-[15rem] rotate-[7deg] rounded-[48%] bg-[#050505] blur-[20px]" />
-            <div className="absolute -top-28 right-[-7rem] h-56 w-[18rem] rotate-[15deg] rounded-[48%] bg-[#050505] blur-[20px]" />
-            <div className="absolute -bottom-28 -left-24 h-52 w-[20rem] rotate-[9deg] rounded-[48%] bg-[#050505] blur-[20px]" />
-            <div className="absolute -bottom-36 left-[24%] h-64 w-[17rem] -rotate-[9deg] rounded-[46%] bg-[#050505] blur-[22px]" />
-            <div className="absolute -bottom-24 right-[-8rem] h-52 w-[19rem] -rotate-[14deg] rounded-[48%] bg-[#050505] blur-[20px]" />
+            <div className="absolute inset-0 bg-[#f8f8fa]/50 dark:hidden" />
+            <div className="absolute -top-32 -left-24 h-52 w-[18rem] -rotate-[12deg] rounded-[46%] bg-[#f8f8fa] blur-[18px] dark:bg-[#050505]" />
+            <div className="absolute -top-40 left-[24%] h-64 w-[15rem] rotate-[7deg] rounded-[48%] bg-[#f8f8fa] blur-[20px] dark:bg-[#050505]" />
+            <div className="absolute -top-28 right-[-7rem] h-56 w-[18rem] rotate-[15deg] rounded-[48%] bg-[#f8f8fa] blur-[20px] dark:bg-[#050505]" />
+            <div className="absolute -bottom-28 -left-24 h-52 w-[20rem] rotate-[9deg] rounded-[48%] bg-[#f8f8fa] blur-[20px] dark:bg-[#050505]" />
+            <div className="absolute -bottom-36 left-[24%] h-64 w-[17rem] -rotate-[9deg] rounded-[46%] bg-[#f8f8fa] blur-[22px] dark:bg-[#050505]" />
+            <div className="absolute -bottom-24 right-[-8rem] h-52 w-[19rem] -rotate-[14deg] rounded-[48%] bg-[#f8f8fa] blur-[20px] dark:bg-[#050505]" />
           </div>
           <div className="relative">
-            <button
+            {!inDialog && <button
               onClick={goBack}
-              className="absolute left-0 top-1 z-20 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-black/35 text-white/85 shadow-lg shadow-black/25 backdrop-blur-md transition-colors hover:bg-black/50 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:scale-95 lg:top-8"
+              className="absolute left-0 top-1 z-20 inline-flex h-11 w-11 items-center justify-center rounded-full border border-[#d3d4dd] bg-white/80 text-[#474a65] backdrop-blur-md transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 active:scale-95 dark:border-white/10 dark:bg-black/35 dark:text-white/85 dark:shadow-lg dark:shadow-black/25 dark:hover:bg-black/50 dark:hover:text-white dark:focus-visible:ring-white/80 lg:top-8"
               title={eventBackLabel}
               aria-label={eventBackLabel}
             >
               <ArrowLeft className="h-4 w-4" />
-            </button>
-            <div className="relative z-10 pt-3 lg:flex lg:items-end lg:gap-10 lg:pl-14 lg:pt-8 xl:gap-12">
+            </button>}
+            <div className={`relative z-10 pt-3 lg:flex lg:items-end lg:gap-10 xl:gap-12 ${inDialog ? 'lg:pt-2' : 'lg:pl-14 lg:pt-8'}`}>
               <EventArtwork
                 eventType={event.event_type}
                 title={event.title}
                 songs={eventDetailArtworkSongs}
                 onArtworkUrlsChange={syncEventArtworkUrls}
-                className="mx-auto h-56 w-56 shrink-0 rounded-md shadow-[0_22px_60px_-30px_rgba(0,0,0,0.9)] sm:h-60 sm:w-60 lg:mx-0 lg:h-64 lg:w-64 xl:h-72 xl:w-72"
+                className="mx-auto h-56 w-56 shrink-0 rounded-md sm:h-60 sm:w-60 lg:mx-0 lg:h-64 lg:w-64 xl:h-72 xl:w-72 dark:shadow-[0_22px_60px_-30px_rgba(0,0,0,0.9)]"
               />
 
-              <div className="mt-6 min-w-0 lg:mt-0 lg:flex-1 lg:pb-5">
+              <div ref={mobileHeroTitleRef} className="mt-6 min-w-0 lg:mt-0 lg:flex-1 lg:pb-5">
                 <p className={`mb-1 text-[10px] font-mono font-medium uppercase tracking-[0.22em] ${heroEyebrow}`}>
                   {heroIsPast ? 'Past event' : heroIsOverdue ? 'Setlist overdue' : heroIsDueSoon ? (heroDaysUntilDue === 0 ? 'Due within 24h' : `Due in ${heroDaysUntilDue}d`) : heroHasApprovedSetlist ? 'Setlist approved' : 'Schedule'}
                 </p>
                 <div className="flex flex-col items-start gap-3 sm:flex-row">
-                  <h1 className="min-w-0 flex-1 text-[1.75rem] font-black leading-[1.04] text-white sm:text-[2.5rem] lg:text-[4.5rem] xl:text-[5.5rem]" style={{ letterSpacing: '-0.04em' }}>
+                  <h1 className="min-w-0 flex-1 text-[1.75rem] font-black leading-[1.04] text-[#474a65] dark:text-white sm:text-[2.5rem] lg:text-[4.5rem] xl:text-[5.5rem]" style={{ letterSpacing: '-0.04em' }}>
                     {eventDisplayTitle}
                   </h1>
                   {!assignmentDetailsBlocked && (
@@ -4893,8 +5032,8 @@ const openLyricsModal = (ss: SetlistSong) => {
                           }}
                           className={`inline-flex h-11 items-center justify-center gap-2 rounded-full border px-3 text-[11px] font-black backdrop-blur-md transition-colors focus-visible:outline-none focus-visible:ring-2 active:scale-95 ${
                             isViewingAsSongLeader
-                              ? 'border-amber-300/35 bg-amber-400/[0.16] text-amber-100 hover:bg-amber-400/[0.22] focus-visible:ring-amber-300/80'
-                              : 'border-white/[0.1] bg-white/[0.08] text-white/75 hover:bg-white/[0.14] hover:text-white focus-visible:ring-white/80'
+                              ? 'border-amber-300 bg-amber-100 text-amber-800 hover:bg-amber-200 focus-visible:ring-amber-500 dark:border-amber-300/35 dark:bg-amber-400/[0.16] dark:text-amber-100 dark:hover:bg-amber-400/[0.22] dark:focus-visible:ring-amber-300/80'
+                              : heroActionTone
                           }`}
                           title={isViewingAsSongLeader ? 'Exit Song Leader view' : 'View this event as Song Leader'}
                           aria-label={isViewingAsSongLeader ? 'Exit Song Leader view' : 'View this event as Song Leader'}
@@ -4909,7 +5048,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                       <button
                         onClick={handleShareEvent}
                         disabled={sharingEvent}
-                        className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full px-3 border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:scale-95 disabled:cursor-wait disabled:opacity-60"
+                        className={`inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border px-3 backdrop-blur-md transition-colors focus-visible:outline-none focus-visible:ring-2 active:scale-95 disabled:cursor-wait disabled:opacity-60 ${heroActionTone}`}
                         title="Share event"
                         aria-label="Share event"
                       >
@@ -4918,7 +5057,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                       {myAssignment && myAssignment.status !== 'declined' && !isAttendanceAssignment(myAssignment) && (
                         <button
                           onClick={() => setShowSwapModal(true)}
-                          className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full px-3 border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:scale-95"
+                          className={`inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border px-3 backdrop-blur-md transition-colors focus-visible:outline-none focus-visible:ring-2 active:scale-95 ${heroActionTone}`}
                           title={myAssignment.roles?.name === 'Song Leader' ? 'Request schedule swap' : 'Find a sub for your spot'}
                           aria-label={myAssignment.roles?.name === 'Song Leader' ? 'Request schedule swap' : 'Find a sub for your spot'}
                         >
@@ -4928,7 +5067,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                       {eventChatEnabled && (eventConversationId === undefined ? (
                         <button
                           disabled
-                          className="inline-flex h-11 w-11 cursor-wait items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md"
+                          className={`inline-flex h-11 w-11 cursor-wait items-center justify-center rounded-full border backdrop-blur-md ${heroActionTone}`}
                           title="Loading event chat"
                           aria-label="Loading event chat"
                         >
@@ -4941,7 +5080,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                               if (isOrgAdmin || isAdmin || isPlatformOwner) setShowCreateChatModal(true);
                               else navigate(`/messages/${eventConversationId}`);
                             }}
-                            className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full px-3 border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:scale-95"
+                            className={`inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border px-3 backdrop-blur-md transition-colors focus-visible:outline-none focus-visible:ring-2 active:scale-95 ${heroActionTone}`}
                             title={(isOrgAdmin || isAdmin || isPlatformOwner) ? 'Choose event chat' : 'Open group chat'}
                             aria-label={(isOrgAdmin || isAdmin || isPlatformOwner) ? 'Choose event chat' : 'Open group chat'}
                           >
@@ -4950,7 +5089,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                         ) : (
                           <button
                             onClick={() => setShowCreateChatModal(true)}
-                            className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full px-3 border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:scale-95"
+                            className={`inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border px-3 backdrop-blur-md transition-colors focus-visible:outline-none focus-visible:ring-2 active:scale-95 ${heroActionTone}`}
                             title="Create group chat for this event"
                             aria-label="Create group chat for this event"
                           >
@@ -4962,7 +5101,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                         <div className="relative shrink-0">
                           <button
                             onClick={() => setShowEventActionsMenu((open) => !open)}
-                            className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full px-3 border border-white/[0.1] bg-white/[0.08] text-white/70 backdrop-blur-md transition-colors hover:bg-white/[0.14] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:scale-95"
+                            className={`inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border px-3 backdrop-blur-md transition-colors focus-visible:outline-none focus-visible:ring-2 active:scale-95 ${heroActionTone}`}
                             title="Event actions"
                             aria-label="Event actions"
                             aria-haspopup="menu"
@@ -5037,29 +5176,29 @@ const openLyricsModal = (ss: SetlistSong) => {
                     </div>
                   )}
                 </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] font-medium text-white/60">
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] font-medium text-[#62657b] dark:text-white/60">
                   <span className="badge-blue text-[10px]">{event.event_type}</span>
                   {heroIsPast && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.09] px-2 py-1 text-[10px] font-black text-white/68">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-[#e6e7ef] px-2 py-1 text-[10px] font-black text-[#474a65] dark:bg-white/[0.09] dark:text-white/70">
                       <CheckCircle className="h-3 w-3" /> Completed
                     </span>
                   )}
                   {!heroIsPast && heroScheduleEnded && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/[0.12] px-2 py-1 text-[10px] font-black text-amber-300">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800 dark:bg-amber-400/[0.12] dark:text-amber-300">
                       <Clock className="h-3 w-3" /> Finished
                     </span>
                   )}
                   {songLeaderName && <span>{songLeaderName}</span>}
                   {compactEventFacts.map(fact => (
                     <span key={fact} className="flex items-center gap-2">
-                      <span className="h-1 w-1 rounded-full bg-white/35" />
+                      <span className="h-1 w-1 rounded-full bg-[#9698aa] dark:bg-white/35" />
                       {fact}
                     </span>
                   ))}
                 </div>
 
                 {event.description && !assignmentDetailsBlocked && (
-                  <p className="mt-4 max-w-3xl break-words border-t border-white/[0.08] pt-3 text-[12px] leading-relaxed text-white/55">{event.description}</p>
+                  <p className="mt-4 max-w-3xl break-words border-t border-[#d3d4dd] pt-3 text-[12px] leading-relaxed text-[#62657b] dark:border-white/[0.08] dark:text-white/55">{event.description}</p>
                 )}
               </div>
             </div>
@@ -5095,12 +5234,47 @@ const openLyricsModal = (ss: SetlistSong) => {
           <div id="past-event-details" className="contents">
         {pendingAssignmentPanel}
 
+        <div role="tablist" aria-label="Event details" className="grid grid-cols-3 border-b border-gray-200/70 dark:border-white/[0.12]">
+          {(['setlist', 'team', 'attendance'] as const).map((tab) => (
+            <button
+              key={tab}
+              id={`event-tab-${tab}`}
+              type="button"
+              role="tab"
+              aria-selected={activeEventTab === tab}
+              aria-controls={`event-panel-${tab}`}
+              tabIndex={activeEventTab === tab ? 0 : -1}
+              onClick={() => selectEventTab(tab)}
+              onKeyDown={(keyboardEvent) => handleEventTabKeyDown(keyboardEvent, tab)}
+              className={`min-h-12 border-b-2 px-2 py-3 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 sm:px-5 ${activeEventTab === tab ? 'border-emerald-400 text-emerald-700 dark:text-emerald-300' : 'border-transparent text-gray-500 hover:text-gray-900 dark:text-white/45 dark:hover:text-white/80'}`}
+            >
+              {tab === 'setlist' ? 'Setlist' : tab === 'team' ? 'Team' : 'Attendance'}
+            </button>
+          ))}
+        </div>
+
+        <div id="event-panel-attendance" role="tabpanel" aria-labelledby="event-tab-attendance" hidden={activeEventTab !== 'attendance'} className="pt-4">
+
         {(() => {
           const attendanceStatus = getAttendanceStatus();
           const isAssigned = assignments.some(a => a.user_id === user?.id && a.status !== 'declined');
-          const showAttendance = attendanceStatus.windowOpen || attendanceStatus.isClosed || attendanceStatus.countdown;
-
-          if (!showAttendance) return null;
+          const canViewTeamCheckIns = isLeader || isOrgAdmin;
+          const rosterByUser = new Map<string, { assignment?: EventAssignment; record?: EventAttendance }>();
+          for (const assignment of assignments) {
+            const existing = rosterByUser.get(assignment.user_id);
+            if (!existing || (existing.assignment?.status !== 'confirmed' && assignment.status === 'confirmed')) {
+              rosterByUser.set(assignment.user_id, { ...existing, assignment });
+            }
+          }
+          for (const record of allAttendance) {
+            if (rosterByUser.has(record.user_id)) {
+              rosterByUser.set(record.user_id, { ...rosterByUser.get(record.user_id), record });
+            }
+          }
+          const attendanceRoster = [...rosterByUser.entries()]
+            .map(([userId, entry]) => ({ userId, ...entry }))
+            .sort((a, b) => Number(!!b.record) - Number(!!a.record)
+              || `${a.assignment?.profiles?.first_name || ''} ${a.assignment?.profiles?.last_name || ''}`.localeCompare(`${b.assignment?.profiles?.first_name || ''} ${b.assignment?.profiles?.last_name || ''}`));
 
           return (
             <div className="animate-slide-up border-t border-gray-200/70 pt-4 dark:border-white/[0.08]" style={{ animationDelay: '100ms' }}>
@@ -5116,74 +5290,54 @@ const openLyricsModal = (ss: SetlistSong) => {
                     <p className="text-sm text-gray-500 dark:text-gray-400">Attendance is closed</p>
                     {attendance ? (
                       <p className="text-xs text-gray-400 mt-1">
-                        You were marked as <span className={attendance.status === 'present' ? 'text-green-600' : attendance.status === 'late' ? 'text-amber-600' : 'text-red-600'}>{attendance.status}</span>
+                        You were marked as <span className={attendance.status === 'present' ? 'text-green-600' : attendance.status === 'late' ? 'text-amber-600' : attendance.status === 'excused' ? 'text-sky-600' : 'text-red-600'}>{attendance.status}</span>
                         {attendance.checked_in_at && ` at ${format(parseISO(attendance.checked_in_at), 'h:mm a')}`}
                       </p>
                     ) : (
-                      <p className="text-xs text-red-500 mt-1">You were marked absent (no attendance submitted)</p>
+                      <p className="text-xs text-red-500 mt-1">No attendance submitted</p>
                     )}
                   </div>
                 ) : attendanceStatus.countdown ? (
                   <div className="py-6 text-center">
-                    <div className="flex items-center justify-center gap-3 mb-4">
-                      {countdownParts.hours > 0 && (
-                        <div className="flex flex-col items-center">
-                          <div className="relative">
-                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-600 dark:from-brand-600 dark:to-brand-700 flex items-center justify-center shadow-lg shadow-brand-500/20">
-                              <span className="text-2xl font-bold text-white tabular-nums">{String(countdownParts.hours).padStart(2, '0')}</span>
-                            </div>
-                            <div className="absolute -inset-1 rounded-2xl bg-brand-500/20 dark:bg-brand-400/10 blur-sm -z-10 animate-pulse"></div>
+                    <div className="mb-4 flex items-center justify-center gap-2 sm:gap-3">
+                      {[
+                        ...(countdownParts.days > 0 ? [{ label: 'Days', value: countdownParts.days }] : []),
+                        { label: 'Hours', value: countdownParts.hours },
+                        { label: 'Minutes', value: countdownParts.minutes },
+                        { label: 'Seconds', value: countdownParts.seconds },
+                      ].map(part => (
+                        <div key={part.label} className="flex flex-col items-center">
+                          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-emerald-600 text-xl font-bold tabular-nums text-white sm:h-16 sm:w-16 sm:text-2xl">
+                            {String(part.value).padStart(2, '0')}
                           </div>
-                          <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400 mt-1.5 uppercase tracking-wider">Hours</span>
+                          <span className="mt-1.5 text-[10px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{part.label}</span>
                         </div>
-                      )}
-                      {countdownParts.hours > 0 && (
-                        <div className="flex flex-col gap-1.5 pb-5">
-                          <div className="w-1.5 h-1.5 rounded-full bg-brand-400 animate-pulse"></div>
-                          <div className="w-1.5 h-1.5 rounded-full bg-brand-400 animate-pulse" style={{ animationDelay: '0.5s' }}></div>
-                        </div>
-                      )}
-                      <div className="flex flex-col items-center">
-                        <div className="relative">
-                          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-600 dark:from-brand-600 dark:to-brand-700 flex items-center justify-center shadow-lg shadow-brand-500/20">
-                            <span className="text-2xl font-bold text-white tabular-nums">{String(countdownParts.minutes).padStart(2, '0')}</span>
-                          </div>
-                          <div className="absolute -inset-1 rounded-2xl bg-brand-500/20 dark:bg-brand-400/10 blur-sm -z-10 animate-pulse"></div>
-                        </div>
-                        <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400 mt-1.5 uppercase tracking-wider">Minutes</span>
-                      </div>
-                      <div className="flex flex-col gap-1.5 pb-5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-brand-400 animate-pulse"></div>
-                        <div className="w-1.5 h-1.5 rounded-full bg-brand-400 animate-pulse" style={{ animationDelay: '0.5s' }}></div>
-                      </div>
-                      <div className="flex flex-col items-center">
-                        <div className="relative">
-                          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-600 dark:from-brand-600 dark:to-brand-700 flex items-center justify-center shadow-lg shadow-brand-500/20 overflow-hidden">
-                            <span className="text-2xl font-bold text-white tabular-nums transition-all duration-300">{String(countdownParts.seconds).padStart(2, '0')}</span>
-                          </div>
-                          <div className="absolute -inset-1 rounded-2xl bg-brand-500/20 dark:bg-brand-400/10 blur-sm -z-10 animate-pulse"></div>
-                        </div>
-                        <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400 mt-1.5 uppercase tracking-wider">Seconds</span>
-                      </div>
+                      ))}
                     </div>
                     <div className="flex items-center justify-center gap-2 text-brand-600 dark:text-brand-400">
-                      <Timer className="h-4 w-4 animate-pulse" />
-                      <p className="text-sm font-medium">Attendance opens soon</p>
+                      <Timer className="h-4 w-4" />
+                      <p className="text-sm font-medium">Attendance opens in</p>
                     </div>
-                    <p className="text-xs text-gray-400 mt-1">30 minutes before the event</p>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Check-in opens 30 minutes before the event</p>
+                  </div>
+                ) : !attendanceStatus.windowOpen ? (
+                  <div className="py-6 text-center">
+                    <p className="text-sm font-semibold text-gray-700 dark:text-white/75">Check-in opens 30 minutes before the event</p>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-white/45">The countdown starts seven days before the event.</p>
                   </div>
                 ) : attendance ? (
                   <div className="group flex items-center gap-3 rounded-xl px-1.5 py-2 transition-colors hover:bg-white/[0.04]">
                     <div className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full ring-1 ${
                       attendance.status === 'present' ? 'bg-emerald-500/10 text-emerald-300 ring-emerald-400/20' :
                       attendance.status === 'late' ? 'bg-amber-500/10 text-amber-300 ring-amber-400/20' :
+                      attendance.status === 'excused' ? 'bg-sky-500/10 text-sky-300 ring-sky-400/20' :
                       'bg-red-500/10 text-red-300 ring-red-400/20'
                     }`}>
-                      {attendance.status === 'present' ? <CheckCircle className="h-5 w-5" /> : attendance.status === 'late' ? <Clock className="h-5 w-5" /> : <X className="h-5 w-5" />}
+                      {attendance.status === 'present' ? <CheckCircle className="h-5 w-5" /> : attendance.status === 'late' ? <Clock className="h-5 w-5" /> : attendance.status === 'excused' ? <ClipboardCheck className="h-5 w-5" /> : <X className="h-5 w-5" />}
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                        {attendance.status === 'present' ? 'Present' : attendance.status === 'late' ? 'Late' : 'Absent'}
+                        {attendance.status === 'present' ? 'Present' : attendance.status === 'late' ? 'Late' : attendance.status === 'excused' ? 'Excused' : 'Absent'}
                       </p>
                       {attendance.checked_in_at && (
                         <p className="truncate text-xs text-gray-400">Checked in at {format(parseISO(attendance.checked_in_at), 'h:mm a')}</p>
@@ -5192,61 +5346,94 @@ const openLyricsModal = (ss: SetlistSong) => {
                     <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
                       attendance.status === 'present' ? 'bg-emerald-500/10 text-emerald-300' :
                       attendance.status === 'late' ? 'bg-amber-500/10 text-amber-300' :
+                      attendance.status === 'excused' ? 'bg-sky-500/10 text-sky-300' :
                       'bg-red-500/10 text-red-300'
                     }`}>
                       {attendance.status === 'present' ? 'Checked in' : attendance.status}
                     </span>
                   </div>
                 ) : (
-                  <div className="rounded-2xl border border-white/[0.06] bg-white/[0.035] px-3 py-3">
+                  <div className="rounded-2xl border border-[#d3d4dd] bg-white px-3 py-3 dark:border-white/[0.06] dark:bg-white/[0.035]">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/12 text-emerald-300">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/12 text-emerald-700 dark:text-emerald-300">
                         <ClipboardCheck className="h-4.5 w-4.5" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-white">
+                        <p className="truncate text-sm font-semibold text-[#25283e] dark:text-white">
                           {isAssigned ? 'Scan the church QR to check in' : 'Attendance is QR-only'}
                         </p>
-                        <p className="mt-0.5 text-[12px] leading-relaxed text-white/45">
+                        <p className="mt-0.5 text-[12px] leading-relaxed text-[#62657b] dark:text-white/45">
                           {event?.start_time ? `${formatTime12Hour(event.start_time)} start · opens 30 minutes before · 5-minute grace` : 'Use the scanner in the top-right corner when you are at church.'}
                         </p>
                       </div>
                     </div>
-                    <div className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-amber-300/75">
+                    <div className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-amber-800 dark:text-amber-300/75">
                       <AlertTriangle className="h-3 w-3 shrink-0" />
                       <span className="leading-relaxed">Scanning alone does not record attendance. Tap Check In after your scheduled event appears.</span>
                     </div>
                   </div>
                 )}
 
-                {isLeader && allAttendance.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-3">Team Attendance</p>
-                    <div className="space-y-2">
-                      {allAttendance.map(att => (
-                        <div key={att.id} className="flex items-center gap-3">
-                          <Avatar
-                            src={att.profiles?.avatar_url}
-                            firstName={att.profiles?.first_name || '?'}
-                            lastName={att.profiles?.last_name}
-                            size="sm"
-                          />
-                          <span className="text-sm text-gray-700 dark:text-gray-300 flex-1">
-                            {att.profiles?.first_name} {att.profiles?.last_name}
-                          </span>
-                          <span className={`badge ${att.status === 'present' ? 'badge-green' : att.status === 'late' ? 'badge-yellow' : 'badge-red'}`}>
-                            {att.status}
-                          </span>
-                        </div>
-                      ))}
+                <section className="mt-5 border-t border-gray-100 pt-4 dark:border-white/[0.08]" aria-label="Team attendance">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-bold text-gray-900 dark:text-white">Team Attendance</h3>
+                        <p className="mt-0.5 text-xs text-gray-500 dark:text-white/45">{attendanceRoster.filter(({ assignment }) => assignment?.status === 'confirmed').length} confirmed assignments · team members appear before check-in opens.</p>
+                      </div>
+                      {canViewTeamCheckIns && attendanceRosterState === 'ready' && (
+                        <span className="shrink-0 text-xs text-gray-500 dark:text-white/45">{allAttendance.filter(att => att.status === 'present' || att.status === 'late').length} checked in</span>
+                      )}
                     </div>
-                  </div>
-                )}
+                    {canViewTeamCheckIns && attendanceRosterState === 'error' && (
+                      <div className="flex flex-wrap items-center gap-3 py-3 text-sm text-amber-600 dark:text-amber-300">
+                        <span>Check-in statuses could not load. Confirmed assignments are still shown.</span>
+                        <button type="button" onClick={() => void fetchAttendance()} className="font-bold underline underline-offset-4">Retry</button>
+                      </div>
+                    )}
+                    {attendanceRoster.length === 0 ? (
+                      <p className="py-4 text-sm text-gray-500 dark:text-white/45">No team members assigned yet.</p>
+                    ) : (
+                      <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 19rem), 1fr))' }}>
+                        {attendanceRoster.map(({ userId, assignment, record }) => {
+                          const member = assignment?.profiles;
+                          const checkInStatusKnown = canViewTeamCheckIns && attendanceRosterState === 'ready';
+                          const label = !checkInStatusKnown ? assignment?.status === 'confirmed' ? 'Confirmed'
+                            : assignment?.status === 'declined' ? 'Declined' : 'Awaiting response'
+                            : record?.status === 'present' ? 'Present'
+                            : record?.status === 'late' ? 'Late'
+                              : record?.status === 'excused' ? 'Excused'
+                              : record?.status === 'absent' ? 'Absent'
+                                : assignment?.status === 'declined' ? 'Declined'
+                                  : attendanceStatus.isClosed ? isOrgAdmin ? 'No check-in' : 'Status unavailable'
+                                    : attendanceStatus.windowOpen ? isOrgAdmin ? 'Not checked in' : 'Status unavailable' : 'Awaiting check-in';
+                          const tone = !checkInStatusKnown ? assignment?.status === 'confirmed' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-white/[0.06] dark:text-white/55'
+                            : record?.status === 'present' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                            : record?.status === 'late' ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                              : record?.status === 'excused' ? 'bg-sky-500/10 text-sky-700 dark:text-sky-300'
+                              : record?.status === 'absent' || assignment?.status === 'declined' ? 'bg-red-500/10 text-red-700 dark:text-red-300'
+                                : 'bg-slate-100 text-slate-600 dark:bg-white/[0.06] dark:text-white/55';
+                          return (
+                            <div key={userId} className="flex min-w-0 items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-white/[0.07] dark:bg-white/[0.025]">
+                              <Avatar src={member?.avatar_url} firstName={member?.first_name || '?'} lastName={member?.last_name} size="sm" />
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{member?.first_name || 'Member'} {member?.last_name || ''}</p>
+                                {checkInStatusKnown && record?.checked_in_at ? <p className="text-[11px] text-gray-500 dark:text-white/45">Checked in at {format(parseISO(record.checked_in_at), 'h:mm a')}</p>
+                                  : assignment?.status === 'confirmed' && <p className="text-[11px] text-gray-500 dark:text-white/45">Confirmed assignment</p>}
+                              </div>
+                              <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold ${tone}`}>{label}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                </section>
               </div>
             </div>
           );
         })()}
+        </div>
 
+        <div id="event-panel-setlist" role="tabpanel" aria-labelledby="event-tab-setlist" hidden={activeEventTab !== 'setlist'} className="pt-4">
         {linkedServiceEvent && (
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-emerald-500/10 px-3.5 py-3 text-xs text-emerald-800 dark:text-emerald-200">
             <span>Shared setlist with Sunday Service · {format(parseISO(linkedServiceEvent.event_date), 'MMM d')}. Songs, revisions and approval stay the same on both events.</span>
@@ -5808,7 +5995,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                         <Clock className="h-3 w-3" /> {pendingReviewMessage}
                       </span>
                     )}
-                    {isApprovedSetlist && (canManageSetlist || canEditSetlist) && (
+                    {isApprovedSetlist && canEditApprovedSetlist && (
                       <button
                         onClick={() => setSetlistEditMode(value => !value)}
                         className={`ml-auto inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-black transition ${
@@ -5845,7 +6032,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                         ))}
                       </select>
                     )}
-                    {showSetlistEditControls && (canManageSetlist || canEditSetlist) && setlistSongs.length > 1 && !isReordering && (
+                    {showSetlistEditControls && (isApprovedSetlist ? canEditApprovedSetlist : (canManageSetlist || canEditSetlist)) && setlistSongs.length > 1 && !isReordering && (
                       <button
                         onClick={enterReorderMode}
                         className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-500 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 shrink-0"
@@ -5884,7 +6071,16 @@ const openLyricsModal = (ss: SetlistSong) => {
                         <span className="relative">{serviceModeLabel}</span>
                       </button>
                     )}
-                    {isApprovedSetlist && (canManageSetlist || canEditSetlist) && (
+                    {isApprovedSetlist && canEditApprovedSetlist && (
+                      <button
+                        type="button"
+                        onClick={openSetlistBuilder}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800 transition-colors hover:border-emerald-500 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200 dark:hover:bg-emerald-500/20"
+                      >
+                        <Plus className="h-3.5 w-3.5" /> Add Song
+                      </button>
+                    )}
+                    {isApprovedSetlist && canEditApprovedSetlist && (
                       <button
                         onClick={() => setSetlistEditMode(value => !value)}
                         className={`inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-black transition ${
@@ -5896,7 +6092,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                         <Edit className="h-3.5 w-3.5" /> {setlistEditMode ? 'Done' : 'Edit'}
                       </button>
                     )}
-                    {showSetlistEditControls && (canManageSetlist || canEditSetlist) && setlistSongs.length > 1 && !isReordering && (
+                    {showSetlistEditControls && (isApprovedSetlist ? canEditApprovedSetlist : (canManageSetlist || canEditSetlist)) && setlistSongs.length > 1 && !isReordering && (
                       <button
                         onClick={enterReorderMode}
                         className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-500 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors px-2 py-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
@@ -5975,6 +6171,17 @@ const openLyricsModal = (ss: SetlistSong) => {
                     <p className="px-5 py-6 text-center text-sm text-gray-400">No songs added yet</p>
                   ) : (
                     <div className="space-y-1">
+                      <div
+                        className="hidden items-center gap-4 border-b border-gray-200/70 px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-gray-500 dark:border-white/[0.08] dark:text-white/40 lg:grid xl:gap-6"
+                        style={{ gridTemplateColumns: desktopSetlistGridColumns }}
+                      >
+                        <span>Title</span>
+                        <span>Type</span>
+                        <span>Key</span>
+                        <span>Meets</span>
+                        <span>Chart</span>
+                        {hasDesktopSetlistActions && <span>Actions</span>}
+                      </div>
                       {setlistSongs.sort((a, b) => a.position - b.position).map((ss, i) => {
                         const usage = songUsage[ss.song_id];
                         const proposalConflict = canReviewSetlist ? songProposalConflicts[ss.song_id] : undefined;
@@ -5984,50 +6191,40 @@ const openLyricsModal = (ss: SetlistSong) => {
                         const keyChanged = ss.performed_key && ss.songs?.song_key && ss.performed_key !== ss.songs.song_key;
                         const lyricsSource = getSongLyricsSource(ss.songs);
                         const lyricsMissing = lyricsSource === 'missing';
+                        const hasChart = !!getSetlistSongChartText(ss);
                         const videoUrl = ss.youtube_url || ss.songs?.youtube_url || '';
                         const keyBadgeClass = `text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${keyChanged ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'}`;
                         const editableKeyBadgeClass = `inline-flex items-center gap-1 text-[10px] font-black px-1.5 py-0.5 rounded-full shrink-0 transition-colors ${keyChanged ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/45' : 'bg-brand-50 text-brand-700 ring-1 ring-brand-200/70 hover:bg-brand-100 dark:bg-brand-950/40 dark:text-brand-300 dark:ring-brand-700/40 dark:hover:bg-brand-950/60'}`;
                         return (
-                          <div key={ss.id} className="px-4 py-2.5">
-                            {/* Desktop: original single-row layout */}
-                            <div className="hidden lg:flex lg:items-center lg:gap-3">
-                              <span className="flex items-center justify-center h-7 w-7 rounded-lg bg-gray-100 dark:bg-gray-800 text-xs font-medium text-gray-500 dark:text-gray-400 shrink-0">{i + 1}</span>
-                              <SongArtwork song={ss.songs} youtubeUrl={ss.youtube_url || ss.songs?.youtube_url} className="h-10 w-10 rounded-lg" />
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-1.5 min-w-0">
-                                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{ss.songs?.title}</p>
-                                  {ss.song_category && <span className="badge-blue text-[10px] shrink-0">{ss.song_category}</span>}
+                          <div key={ss.id} className="px-4 py-2.5 lg:border-b lg:border-gray-200/50 lg:transition-colors lg:hover:bg-gray-50/60 dark:lg:border-white/[0.05] dark:lg:hover:bg-white/[0.025]">
+                            {/* Desktop: aligned columns for quick setlist scanning. */}
+                            <div className="hidden items-center gap-4 lg:grid xl:gap-6" style={{ gridTemplateColumns: desktopSetlistGridColumns }}>
+                              <div className="flex min-w-0 items-center gap-3">
+                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-xs font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">{i + 1}</span>
+                                <SongArtwork song={ss.songs} youtubeUrl={ss.youtube_url || ss.songs?.youtube_url} className="h-10 w-10 shrink-0 rounded-lg" />
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex min-w-0 items-center gap-1.5">
+                                    <p className="truncate text-sm font-medium text-gray-900 dark:text-white">{ss.songs?.title}</p>
                                   {lyricsMissing && (
                                     <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200/70 dark:bg-amber-950/60 dark:text-amber-400 dark:ring-amber-700/40 shrink-0">
                                       <AlertCircle className="h-3 w-3" />
                                       Lyrics needed
                                     </span>
                                   )}
-                                  {displayKey && (canEditSetlistSongDetails ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => openEditSong(ss)}
-                                      className={editableKeyBadgeClass}
-                                      aria-label={`Edit key for ${ss.songs?.title || 'song'}`}
-                                      title="Edit key"
-                                    >
-                                      <span>{displayKey}</span>
-                                      <span className="font-semibold">Edit</span>
-                                    </button>
-                                  ) : (
-                                    <span className={keyBadgeClass}>{displayKey}</span>
-                                  ))}
-                                </div>
-                                <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
-                                  <p className="shrink-0 truncate text-xs text-gray-500 dark:text-gray-400">{ss.songs?.artist || 'No artist listed'}</p>
-                                  {proposalConflict && <SongProposalConflictBadge conflict={proposalConflict} onOpen={() => setSelectedSongProposals({ songTitle: ss.songs?.title || 'Song', conflict: proposalConflict })} />}
+                                  </div>
+                                  <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+                                    <p className="truncate text-xs text-gray-500 dark:text-gray-400">{ss.songs?.artist || 'No artist listed'}</p>
+                                    {proposalConflict && <SongProposalConflictBadge conflict={proposalConflict} onOpen={() => setSelectedSongProposals({ songTitle: ss.songs?.title || 'Song', conflict: proposalConflict })} />}
+                                  </div>
                                 </div>
                               </div>
-                              {videoUrl && (
-                                <a href={videoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 transition-colors shrink-0" title="Open video" aria-label={`Open video for ${ss.songs?.title || 'song'}`}>
-                                  <Play className="h-3 w-3" /> Video
-                                </a>
-                              )}
+                              <div className="min-w-0">{ss.song_category ? <span className="badge-blue text-[10px]">{ss.song_category}</span> : <span className="text-xs text-gray-400 dark:text-white/30">—</span>}</div>
+                              <div>{displayKey ? (canEditSetlistSongDetails ? (
+                                <button type="button" onClick={() => openEditSong(ss)} className={`${editableKeyBadgeClass} w-14 justify-center`} aria-label={`Edit key for ${ss.songs?.title || 'song'}`} title="Edit key">
+                                  <span>{displayKey}</span>
+                                  <span className="font-semibold">Edit</span>
+                                </button>
+                              ) : <span className={`${keyBadgeClass} inline-flex w-14 justify-center`}>{displayKey}</span>) : <span className="text-xs text-gray-400 dark:text-white/30">—</span>}</div>
                               {canSeeEventSongReadiness && <button
                                 type="button"
                                 onClick={() => {
@@ -6039,17 +6236,44 @@ const openLyricsModal = (ss: SetlistSong) => {
                                     youtubeUrl: ss.youtube_url || ss.songs.youtube_url || null,
                                   });
                                 }}
-                                className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold ring-1 shrink-0 transition-[filter,transform] hover:brightness-110 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 ${readiness.className}`}
+                                className={`inline-flex w-28 items-center justify-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold ring-1 transition-[filter,transform] hover:brightness-110 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 ${readiness.className}`}
                                 title={`${readiness.title}${usage ? `; last approved use ${format(parseISO(usage.lastDate), 'MMM d, yyyy')}` : ''}`}
                                 aria-label={`Open readiness details for ${ss.songs?.title || 'song'}: ${readiness.label}`}
                               >
                                 <ReadinessIcon className="h-3.5 w-3.5" />
                                 <span>{readiness.label}</span>
                               </button>}
+                              {!canSeeEventSongReadiness && <span className="text-xs text-gray-400 dark:text-white/30">—</span>}
+                              <div>
+                              {hasChart || canEditSetlistSongDetails ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openChartModal(ss)}
+                                  title={hasChart ? 'Open chart' : 'No chart yet — add chart'}
+                                  aria-label={`${hasChart ? 'Open chart' : 'No chart yet. Add chart'} for ${ss.songs?.title || 'song'}`}
+                                  className={`inline-flex w-[4.5rem] items-center justify-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold ring-1 transition-colors ${hasChart
+                                    ? 'bg-emerald-50 text-emerald-600 ring-emerald-200/70 hover:text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 dark:ring-emerald-700/40 dark:hover:text-emerald-300'
+                                    : 'bg-gray-50 text-gray-500 ring-gray-200/70 hover:text-gray-700 dark:bg-white/[0.04] dark:text-white/45 dark:ring-white/[0.07] dark:hover:text-white/70'}`}
+                                >
+                                  {hasChart ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
+                                  <span>Chart</span>
+                                </button>
+                              ) : (
+                                <span title="No chart available" aria-label={`No chart available for ${ss.songs?.title || 'song'}`} className="inline-flex w-[4.5rem] items-center justify-center gap-1 rounded-full bg-gray-50 px-2 py-1 text-[10px] font-semibold text-gray-500 ring-1 ring-gray-200/70 dark:bg-white/[0.04] dark:text-white/45 dark:ring-white/[0.07]">
+                                  <X className="h-3.5 w-3.5" /> Chart
+                                </span>
+                              )}
+                              </div>
+                              {hasDesktopSetlistActions && <div className="flex flex-wrap items-center gap-1.5">
+                              {videoUrl && (
+                                <a href={videoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-7 w-[6.25rem] items-center justify-center gap-1 rounded-full bg-red-50 px-2 py-1 text-[10px] font-medium text-red-600 transition-colors hover:bg-red-100 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50" title="Open video" aria-label={`Open video for ${ss.songs?.title || 'song'}`}>
+                                  <Play className="h-3 w-3" /> Video
+                                </a>
+                              )}
                               {canEditSetlistSongDetails && <button
                                 onClick={() => openLyricsModal(ss)}
                                  title={lyricsSource === 'saved' ? 'Edit lyrics' : lyricsSource === 'chart' ? 'Lyrics are available from the chord chart' : 'Add lyrics'}
-                                 className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold transition-colors shrink-0 ${
+                                 className={`inline-flex min-h-7 w-[6.25rem] shrink-0 items-center justify-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold transition-colors ${
                                    lyricsSource !== 'missing'
                                      ? 'bg-green-50 text-green-600 hover:text-green-700 ring-1 ring-green-200/70 dark:bg-green-950/60 dark:text-green-400 dark:hover:text-green-300 dark:ring-green-700/40'
                                      : 'bg-amber-50 text-amber-600 hover:text-amber-700 ring-1 ring-amber-200/70 dark:bg-amber-950/60 dark:text-amber-400 dark:hover:text-amber-300 dark:ring-amber-700/40'
@@ -6058,18 +6282,6 @@ const openLyricsModal = (ss: SetlistSong) => {
                                  <FileText className="h-4 w-4" />
                                  <span>{lyricsSource === 'saved' ? 'Edit Lyrics' : lyricsSource === 'chart' ? 'Chart Lyrics' : 'Add Lyrics'}</span>
                                </button>}
-                              {(canEditSetlistSongDetails || !!getSetlistSongChartText(ss)) && <button
-                                onClick={() => openChartModal(ss)}
-                                title={getSetlistSongChartText(ss) ? 'Open chart' : 'Add chart'}
-                                className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold transition-colors shrink-0 ${
-                                  getSetlistSongChartText(ss)
-                                    ? 'bg-emerald-50 text-emerald-600 hover:text-emerald-700 ring-1 ring-emerald-200/70 dark:bg-emerald-950/60 dark:text-emerald-400 dark:hover:text-emerald-300 dark:ring-emerald-700/40'
-                                    : 'bg-gray-50 text-gray-500 hover:text-gray-700 ring-1 ring-gray-200/70 dark:bg-white/[0.04] dark:text-white/45 dark:hover:text-white/70 dark:ring-white/[0.07]'
-                                }`}
-                              >
-                                <Music className="h-4 w-4" />
-                                <span>{ss.arrangement_section_order?.length ? 'Arranged' : getSetlistSongChartText(ss) ? 'Chart' : 'Add Chart'}</span>
-                              </button>}
                               {canEditSetlistSongDetails && (
                                 <button
                                   type="button"
@@ -6081,7 +6293,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                   <Edit className="h-4 w-4" />
                                 </button>
                               )}
-                              {showSetlistEditControls && ((canManageSetlist && !['approved', 'pending_review'].includes(setlist.status)) || (canEditSetlist)) ? (
+                              {showSetlistEditControls && ((canManageSetlist && !['approved', 'pending_review'].includes(setlist.status)) || (isApprovedSetlist ? canEditApprovedSetlist : canEditSetlist)) ? (
                                 <button
                                   type="button"
                                   onClick={() => handleRemoveSongFromSetlist(ss.id)}
@@ -6092,6 +6304,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                   <Trash2 className="h-4 w-4" />
                                 </button>
                               ) : null}
+                              </div>}
                             </div>
 
                             {/* Mobile: playlist-style track row */}
@@ -6115,6 +6328,27 @@ const openLyricsModal = (ss: SetlistSong) => {
                                     </span>
                                   )}
                                   <div className="mt-1 flex min-w-0 flex-wrap gap-1">
+                                    {hasChart || canEditSetlistSongDetails ? (
+                                      <button
+                                        type="button"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          openChartModal(ss);
+                                        }}
+                                        title={hasChart ? 'Open chart' : 'No chart yet — add chart'}
+                                        aria-label={`${hasChart ? 'Open chart' : 'No chart yet. Add chart'} for ${ss.songs?.title || 'song'}`}
+                                        className={`inline-flex w-fit items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${hasChart
+                                          ? 'bg-emerald-50 text-emerald-600 ring-emerald-200/70 dark:bg-emerald-950/60 dark:text-emerald-400 dark:ring-emerald-700/40'
+                                          : 'bg-gray-50 text-gray-500 ring-gray-200/70 dark:bg-white/[0.04] dark:text-white/45 dark:ring-white/[0.07]'}`}
+                                      >
+                                        {hasChart ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                                        Chart
+                                      </button>
+                                    ) : (
+                                      <span title="No chart available" aria-label={`No chart available for ${ss.songs?.title || 'song'}`} className="inline-flex w-fit items-center gap-1 rounded-full bg-gray-50 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500 ring-1 ring-gray-200/70 dark:bg-white/[0.04] dark:text-white/45 dark:ring-white/[0.07]">
+                                        <X className="h-3 w-3" /> Chart
+                                      </span>
+                                    )}
                                     {canSeeEventSongReadiness && <button
                                       type="button"
                                       onClick={(event) => {
@@ -6187,10 +6421,10 @@ const openLyricsModal = (ss: SetlistSong) => {
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {/* Song editing — creator/editor when not finalized */}
-                      {showSetlistEditControls && ((canManageSetlist && !['approved', 'rejected'].includes(setlist.status)) || (canEditSetlist && setlist.status === 'approved')) ? (
+                      {showSetlistEditControls && ((canManageSetlist && !['approved', 'rejected'].includes(setlist.status)) || (canEditApprovedSetlist && setlist.status === 'approved')) ? (
                         <>
                           {setlist.status === 'approved' && (
-                            <button onClick={openSetlistBuilder} className="btn-secondary text-xs">
+                            <button onClick={openSetlistBuilder} className="btn-secondary text-xs lg:hidden">
                               <Plus className="h-3.5 w-3.5" /> Add Song
                             </button>
                           )}
@@ -6315,6 +6549,7 @@ const openLyricsModal = (ss: SetlistSong) => {
           </div>
         </div>
         )}
+        </div>
 
           </div>
         )}
@@ -6593,7 +6828,7 @@ const openLyricsModal = (ss: SetlistSong) => {
         )}
 
         {!assignmentDetailsBlocked && (!postEventFeedbackOpen || showPastEventDetails) && (
-        <div className="animate-slide-up border-t border-gray-200/70 pt-4 dark:border-white/[0.08]" style={{ animationDelay: '150ms' }}>
+        <div id="event-panel-team" role="tabpanel" aria-labelledby="event-tab-team" hidden={activeEventTab !== 'team'} className="animate-slide-up pt-4" style={{ animationDelay: '150ms' }}>
           <div>
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <h2 className="flex min-w-0 items-center gap-2 text-lg font-black text-gray-900 dark:text-white">
@@ -6605,7 +6840,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                 {isLeader && (
                   <button
                     onClick={openAssignModal}
-                    className="inline-flex h-11 items-center justify-center gap-1.5 rounded-full bg-white/[0.08] px-4 text-[11px] font-bold text-white/85 ring-1 ring-white/[0.08] transition-colors hover:bg-white/[0.13] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] active:scale-[0.97]"
+                    className="inline-flex h-11 items-center justify-center gap-1.5 rounded-full bg-white px-4 text-[11px] font-bold text-slate-700 ring-1 ring-slate-200 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] active:scale-[0.97] dark:bg-white/[0.08] dark:text-white/85 dark:ring-white/[0.08] dark:hover:bg-white/[0.13]"
                   >
                     <Plus className="h-3.5 w-3.5" /> Assign
                   </button>
@@ -6637,8 +6872,19 @@ const openLyricsModal = (ss: SetlistSong) => {
             {assignments.length === 0 ? (
               <p className="py-4 text-center text-sm text-gray-400">No team members assigned yet</p>
             ) : (
-              <div className="space-y-1">
-                {[...assignments]
+              <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 22rem), 1fr))' }}>
+                {EVENT_TEAM_GROUPS.map(({ key, label, Icon }) => {
+                  const groupAssignments = assignments.filter(a => getEventTeamGroup(a.roles?.name) === key);
+                  if (groupAssignments.length === 0) return null;
+                  return (
+                  <section key={key} aria-label={label} className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3.5 dark:border-white/[0.07] dark:bg-white/[0.025]">
+                    <div className="mb-2 flex items-center gap-2 border-b border-slate-200 pb-2.5 dark:border-white/[0.07]">
+                      <Icon className="h-4 w-4 text-slate-500 dark:text-white/55" aria-hidden="true" />
+                      <h3 className="text-xs font-bold text-slate-800 dark:text-white/85">{label}</h3>
+                      <span className="ml-auto text-[11px] font-semibold text-slate-500 dark:text-white/35">{groupAssignments.length}</span>
+                    </div>
+                    <div className="space-y-1">
+                {[...groupAssignments]
                   .sort((a, b) => {
                     const aIsSongLeader = a.roles?.name === 'Song Leader';
                     const bIsSongLeader = b.roles?.name === 'Song Leader';
@@ -6648,11 +6894,12 @@ const openLyricsModal = (ss: SetlistSong) => {
                   })
                   .map(a => {
                     const isSongLeaderRole = a.roles?.name === 'Song Leader';
+                    const RoleIcon = getEventTeamRoleIcon(a.roles?.name);
                     const declineNoteOpen = expandedDeclineNotes.has(a.id);
                     const isOutForEvent = outMemberIds.has(a.user_id);
                     return (
                       <div key={a.id}>
-                        <div className="group flex items-center gap-3 rounded-xl px-1.5 py-2 transition-colors hover:bg-white/[0.04]">
+                        <div className="group flex items-center gap-3 rounded-xl px-1.5 py-2 transition-colors hover:bg-slate-50 dark:hover:bg-white/[0.04]">
                           <Avatar
                             src={a.profiles?.avatar_url}
                             firstName={a.profiles?.first_name || '?'}
@@ -6671,7 +6918,12 @@ const openLyricsModal = (ss: SetlistSong) => {
                                 </span>
                               )}
                             </div>
-                            {a.roles && <RoleBadge role={isAttendanceAssignment(a) ? { ...a.roles, name: 'Participant' } : a.roles} size="sm" />}
+                            {a.roles && (
+                              <div className="mt-0.5 flex items-center gap-1.5">
+                                <RoleIcon className="h-3.5 w-3.5 shrink-0 text-slate-500 dark:text-white/45" aria-hidden="true" />
+                                <RoleBadge role={isAttendanceAssignment(a) ? { ...a.roles, name: 'Participant' } : a.roles} size="sm" />
+                              </div>
+                            )}
                             {a.status === 'declined' && a.decline_reason && (
                               <button
                                 type="button"
@@ -6694,7 +6946,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                               </button>
                             )}
                           </div>
-                          <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${a.status === 'confirmed' ? 'bg-emerald-500/10 text-emerald-300' : a.status === 'declined' ? 'bg-red-500/10 text-red-300' : 'bg-amber-500/10 text-amber-300'}`}>{a.status}</span>
+                          <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${a.status === 'confirmed' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : a.status === 'declined' ? 'bg-red-500/10 text-red-700 dark:text-red-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'}`}>{a.status}</span>
                           {isLeader && (
                             <button
                               onClick={() => handleRemoveAssignment(a.id)}
@@ -6726,6 +6978,10 @@ const openLyricsModal = (ss: SetlistSong) => {
                       </div>
                     );
                   })}
+                    </div>
+                  </section>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -7346,7 +7602,7 @@ const openLyricsModal = (ss: SetlistSong) => {
           </div>
         </Modal>
 
-        {showSetlist && (canManageSetlist || canEditSetlist) && <SetlistBuilderPage
+        {showSetlist && (isApprovedSetlist ? canEditApprovedSetlist : (canManageSetlist || canEditSetlist)) && <SetlistBuilderPage
           title={setlist ? 'Add Songs to Setlist' : 'Build Setlist'}
           onBack={requestSetlistBuilderClose}
           error={setlistBuilderError}
@@ -8515,7 +8771,7 @@ const openLyricsModal = (ss: SetlistSong) => {
 						<div className="flex items-start justify-between gap-3">
 						  <div>
 							<p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-300">Rehearsal handoff</p>
-							<h2 id="rehearsal-summary-title" className="mt-1 text-xl font-black">Ready for Live Mode?</h2>
+							<h2 id="rehearsal-summary-title" className="mt-1 text-xl font-black">Ready For Live Mode?</h2>
 							<p className="mt-1 text-xs font-semibold text-gray-500 dark:text-white/50">{rehearsalReadyCount} ready · {rehearsalNeedsWorkCount} need work · {serviceModeSongs.length - rehearsalReadyCount - rehearsalNeedsWorkCount} not rehearsed</p>
 						  </div>
 						  <button type="button" onClick={() => setShowRehearsalSummary(false)} aria-label="Close rehearsal summary" className="rounded-full p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-white/[0.08]"><X className="h-5 w-5" /></button>
@@ -8783,7 +9039,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                   </a>
                 )}
 
-                {showSetlistEditControls && ((canManageSetlist && !['approved', 'pending_review'].includes(setlist?.status || '')) || (canEditSetlist)) && (
+                {showSetlistEditControls && ((canManageSetlist && !['approved', 'pending_review'].includes(setlist?.status || '')) || (isApprovedSetlist ? canEditApprovedSetlist : canEditSetlist)) && (
                   <button
                     type="button"
                     onClick={() => {

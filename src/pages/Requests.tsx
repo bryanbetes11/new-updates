@@ -159,7 +159,7 @@ function LeaveConflictWarning({
           <span>Coverage warning</span>
           <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-200/80 px-1 text-[10px] text-amber-900 dark:bg-amber-400/20 dark:text-amber-100">{conflictCount}</span>
         </button>
-        <Modal open={open} onClose={() => setOpen(false)} title="Coverage warning" size="sm">
+        <Modal open={open} onClose={() => setOpen(false)} title="Coverage Warning" size="sm">
           <div className="space-y-3">
             <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-500/25 dark:bg-amber-500/[0.1]">
               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
@@ -388,13 +388,13 @@ export function Requests({ embedded }: RequestsProps = {}) {
 
   const content = (
     <>
-    <div className={embedded ? 'space-y-5' : 'space-y-5 sm:space-y-6'}>
+    <div className={embedded ? 'desktop-leave-directory space-y-5' : 'desktop-leave-directory space-y-5 sm:space-y-6'}>
         {!embedded && (
           <LeadershipHeroCard
             tone="amber"
             icon={ClipboardCheck}
             eyebrow="Pending Review"
-            title="Leave Requests."
+            title="Leave Requests"
             description="Review member leave requests and respond quickly so the team can plan ahead."
             action={(
               <button

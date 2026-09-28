@@ -432,13 +432,13 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
   }
 
   const content = (
-    <div className={embedded ? 'space-y-5' : 'space-y-5 sm:space-y-6'}>
+    <div className={embedded ? 'desktop-team-directory space-y-5' : 'desktop-team-directory space-y-5 sm:space-y-6'}>
       {!embedded && (
         <LeadershipHeroCard
           tone="emerald"
           icon={Users}
           eyebrow="Roles & Roster"
-          title="Team."
+          title="Team"
           description="Manage your member roster, ministry roles, and account access from one shared leadership workspace."
         />
       )}
@@ -447,7 +447,7 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className="grid grid-cols-3 gap-2.5"
+            className="desktop-team-stats grid grid-cols-3 gap-2.5"
           >
             {[
               { label: 'Members', value: stats.total, icon: Users, dot: '#22c55e', dotDark: '#22c55e', tone: 'bg-emerald-50 dark:bg-emerald-500/[0.10] text-emerald-600 dark:text-emerald-400' },
@@ -492,7 +492,7 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
             <p role="status">{appAccessStatus === 'loading' ? 'Loading app access…' : appAccessStatus === 'error' ? 'App access is unavailable. Member details are still available.' : 'App access shows observed usage. Expand a member for last-seen details.'}</p>
             <button type="button" disabled={appAccessStatus === 'loading'} onClick={() => setAppAccessRefresh(value => value + 1)} className="min-h-11 rounded-xl px-3 font-semibold text-emerald-700 disabled:opacity-50 dark:text-emerald-300">Refresh app access</button>
           </div>}
-          <div className="space-y-2.5">
+          <div className="desktop-team-roster space-y-2.5">
             {filtered.length === 0 && (
               <div className="rounded-3xl bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] p-12 text-center" style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -12px rgba(15,23,42,0.10)' }}>
                 <div className="relative h-14 w-14 rounded-2xl bg-gray-100 dark:bg-white/[0.06] flex items-center justify-center mx-auto mb-4">

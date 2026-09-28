@@ -111,9 +111,9 @@ export function Notifications() {
   if (loading) return <div className="page-container"><NotificationsSkeleton /></div>;
 
   return (
-    <div className="page-container page-bottom-pad relative min-h-screen overflow-hidden bg-[#050505] text-white">
-      <div className="pointer-events-none fixed inset-0 -z-10 bg-[#050505] [background-image:radial-gradient(circle_at_18%_0%,rgba(34,197,94,0.12),transparent_28%),radial-gradient(circle_at_88%_6%,rgba(255,255,255,0.05),transparent_20%),linear-gradient(180deg,#121212_0%,#050505_26%,#050505_100%)]" />
-      <div className="mx-auto max-w-2xl space-y-5 px-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] pt-5 sm:max-w-3xl sm:px-6 sm:pt-6 lg:max-w-4xl lg:px-8 lg:pb-24 xl:max-w-5xl">
+    <div className="theme-adaptive-page page-container page-bottom-pad relative min-h-screen overflow-hidden bg-[#f6f8fb] text-slate-900 dark:bg-[#050505] dark:text-white">
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-[#f6f8fb] dark:bg-[#050505] dark:[background-image:radial-gradient(circle_at_18%_0%,rgba(34,197,94,0.12),transparent_28%),radial-gradient(circle_at_88%_6%,rgba(255,255,255,0.05),transparent_20%),linear-gradient(180deg,#121212_0%,#050505_26%,#050505_100%)]" />
+      <div className="desktop-notifications-page mx-auto max-w-2xl space-y-5 px-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] pt-5 sm:max-w-3xl sm:px-6 sm:pt-6 lg:max-w-4xl lg:px-8 lg:pb-24 xl:max-w-5xl">
         <div className="animate-fade-in border-b border-white/[0.08] pb-5">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
@@ -151,13 +151,13 @@ export function Notifications() {
               <span className="absolute h-14 w-14 bg-[radial-gradient(circle_at_28%_22%,rgba(255,255,255,0.34),transparent_32%)]" />
               <Bell className="relative h-6 w-6 text-white/90" />
             </div>
-            <h2 className="mt-5 text-[20px] font-black text-white">No notifications</h2>
+            <h2 className="mt-5 text-[20px] font-black text-white">No Notifications</h2>
             <p className="mx-auto mt-2 max-w-[280px] text-[13px] font-semibold leading-6 text-white/45">
               You're all caught up. New team activity will show here.
             </p>
           </div>
         ) : (
-          <div className="overflow-hidden border-y border-white/[0.08]">
+          <div className="desktop-notification-list overflow-hidden border-y border-white/[0.08]">
             {notifications.map((n, i) => (
               <button key={n.id} type="button" onClick={() => handleClick(n)} style={{ animationDelay: `${i * 20}ms` }} className={`flex w-full items-start gap-3 border-b border-white/[0.075] px-4 py-3.5 text-left transition-colors last:border-b-0 hover:bg-white/[0.035] animate-notif-slide ${!n.is_read ? 'bg-[#22c55e]/[0.035]' : ''}`} aria-label={`${n.is_read ? '' : 'Unread: '}${n.title}`}>
                 <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.is_read ? 'bg-white/15' : 'bg-[#22c55e] shadow-[0_0_10px_rgba(34,197,94,0.7)]'}`} aria-hidden="true" />

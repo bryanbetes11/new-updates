@@ -87,7 +87,7 @@ export function EventSetlistReminder({ event, status, submittedAt, recipientId, 
       </div>
       <button type="button" disabled={sending} onClick={() => { setError(''); setOpen(true); }} className="min-h-11 rounded-xl bg-amber-400 px-4 text-xs font-bold text-gray-950 disabled:opacity-50">Remind song leader</button>
     </div>
-    <Modal open={open} onClose={() => !sending && setOpen(false)} title="Send setlist reminder" size="sm" instantOpen closeOnEscape={!sending} closeOnBackdrop={!sending}>
+    <Modal open={open} onClose={() => !sending && setOpen(false)} title="Send Setlist Reminder" size="sm" instantOpen closeOnEscape={!sending} closeOnBackdrop={!sending}>
       <p className="text-sm text-gray-700 dark:text-white/75">Send a setlist submission reminder to <strong>{name}</strong> for {event.title}?</p>
       <p className="mt-3 text-sm text-gray-600 dark:text-white/60">{state === 'overdue' ? 'Overdue' : 'Due soon'} · {dueLabel}. The reminder will link directly to this event.</p>
       {error && <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-300">{error}</p>}

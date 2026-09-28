@@ -71,7 +71,7 @@ export function LeadershipHeroCard({
       initial={{ opacity: 0, y: 14, filter: 'blur(6px)' }}
       animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
       transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-      className={`relative overflow-hidden rounded-[1.9rem] border p-5 shadow-[0_24px_80px_-46px_rgba(15,23,42,0.38)] sm:p-6 ${styles.border} ${styles.background}`}
+      className={`leadership-page-hero relative overflow-hidden rounded-[1.9rem] border p-5 shadow-[0_24px_80px_-46px_rgba(15,23,42,0.38)] sm:p-6 ${styles.border} ${styles.background}`}
     >
       <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/90 to-transparent dark:via-white/[0.09]" />
 

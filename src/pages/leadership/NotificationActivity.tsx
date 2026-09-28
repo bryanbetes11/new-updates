@@ -147,7 +147,7 @@ export function NotificationActivityView({ groups, selected, recipients, loading
           <span className="mt-2 block text-sm text-gray-600 dark:text-white/70">{group.recipient_count} recipients · {group.opened_count} opened · {group.recipient_count - group.opened_count} without an open</span></span>
         <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
       </button>)}<p className="text-xs text-gray-500 dark:text-white/40">Identical alerts created together are grouped. Separately sent or personalized alerts may appear separately.</p></div>
-      : <div className="card px-6 py-12 text-center"><Users className="mx-auto h-9 w-9 text-emerald-500" /><h2 className="mt-4 text-lg font-bold">No notifications match this selection</h2><p className="mx-auto mt-2 max-w-md text-sm text-gray-500 dark:text-white/50">Try another period or filter. New tracked notifications appear here when you refresh.</p></div>}
+      : <div className="card px-6 py-12 text-center"><Users className="mx-auto h-9 w-9 text-emerald-500" /><h2 className="mt-4 text-lg font-bold">No Notifications Match This Selection</h2><p className="mx-auto mt-2 max-w-md text-sm text-gray-500 dark:text-white/50">Try another period or filter. New tracked notifications appear here when you refresh.</p></div>}
     {!loading && !error && (page > 0 || canNext) && <nav aria-label="Activity pages" className="flex items-center justify-between gap-3"><button type="button" disabled={page === 0} onClick={() => onPage(page - 1)} className="btn-secondary">Previous</button><span className="text-sm">Page {page + 1}</span><button type="button" disabled={!canNext} onClick={() => onPage(page + 1)} className="btn-secondary">Next</button></nav>}
   </div>;
 }

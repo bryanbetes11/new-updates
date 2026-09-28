@@ -97,27 +97,27 @@ export function CalendarGrid({ events, calendarEntries, songLeaderMap, setlistSt
   }, [events, onEventDateChange]);
 
   return (
-    <div className="overflow-hidden rounded-[0.9rem] border border-white/[0.08] bg-[#121212] shadow-[0_24px_72px_-60px_rgba(0,0,0,0.95)]">
-      <div className="flex items-center justify-between border-b border-white/[0.08] px-5 py-4">
+    <div className="overflow-hidden rounded-[0.9rem] border border-[#d3d4dd] bg-white shadow-none dark:border-white/[0.08] dark:bg-[#121212] dark:shadow-[0_24px_72px_-60px_rgba(0,0,0,0.95)]">
+      <div className="flex items-center justify-between border-b border-[#d3d4dd] px-5 py-4 dark:border-white/[0.08]">
         <button
           onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-          className="rounded-full p-2 text-white/58 transition-colors hover:bg-white/[0.08] hover:text-white"
+          className="rounded-full p-2 text-[#62657b] transition-colors hover:bg-[#e6e7ef] hover:text-[#474a65] dark:text-white/[0.58] dark:hover:bg-white/[0.08] dark:hover:text-white"
           aria-label="Previous month"
         >
           <ChevronLeft className="h-5 w-5" />
         </button>
         <div className="text-center">
           <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#22c55e]">Calendar view</p>
-          <h2 className="mt-1 text-[20px] font-black leading-none text-white" style={{ letterSpacing: '-0.025em' }}>
+          <h2 className="mt-1 text-[20px] font-black leading-none text-[#474a65] dark:text-white" style={{ letterSpacing: '-0.025em' }}>
             {format(currentMonth, 'MMMM yyyy')}
           </h2>
           {onEventDateChange && (
-            <p className="mt-1 text-[11px] font-semibold text-white/40">Drag an event to reschedule it</p>
+            <p className="mt-1 text-[11px] font-semibold text-[#62657b] dark:text-white/40">Drag an event to reschedule it</p>
           )}
         </div>
         <button
           onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-          className="rounded-full p-2 text-white/58 transition-colors hover:bg-white/[0.08] hover:text-white"
+          className="rounded-full p-2 text-[#62657b] transition-colors hover:bg-[#e6e7ef] hover:text-[#474a65] dark:text-white/[0.58] dark:hover:bg-white/[0.08] dark:hover:text-white"
           aria-label="Next month"
         >
           <ChevronRight className="h-5 w-5" />
@@ -126,7 +126,7 @@ export function CalendarGrid({ events, calendarEntries, songLeaderMap, setlistSt
 
       <div className="grid grid-cols-7">
         {WEEKDAYS.map(day => (
-          <div key={day} className="border-b border-white/[0.08] px-2 py-3 text-center text-[10px] font-black uppercase tracking-[0.16em] text-white/36">
+          <div key={day} className="border-b border-[#d3d4dd] bg-[#f8f8fa] px-2 py-3 text-center text-[10px] font-black uppercase tracking-[0.16em] text-[#62657b] dark:border-white/[0.08] dark:bg-transparent dark:text-white/[0.36]">
             {day}
           </div>
         ))}
@@ -144,11 +144,11 @@ export function CalendarGrid({ events, calendarEntries, songLeaderMap, setlistSt
           return (
             <div
               key={idx}
-              className={`min-h-[128px] border-b border-r border-white/[0.06] p-2 transition-colors ${
-                !inMonth ? 'bg-black/20' : 'bg-[#161616]'
+              className={`min-h-[128px] border-b border-r border-[#e6e7ef] p-2 transition-colors dark:border-white/[0.06] ${
+                !inMonth ? 'bg-[#f8f8fa] dark:bg-black/20' : 'bg-white dark:bg-[#161616]'
               } ${idx % 7 === 0 ? 'border-l-0' : ''} ${
-                onCreateEvent && inMonth ? 'cursor-pointer hover:bg-[#1f1f1f]' : ''
-              } ${isDragOver ? 'bg-[#12331f] ring-2 ring-inset ring-[#22c55e]' : ''}`}
+                onCreateEvent && inMonth ? 'cursor-pointer hover:bg-[#f1f2f6] dark:hover:bg-[#1f1f1f]' : ''
+              } ${isDragOver ? 'bg-[#e3f5eb] ring-2 ring-inset ring-[#22c55e] dark:bg-[#12331f]' : ''}`}
               onClick={() => {
                 if (onCreateEvent && inMonth) onCreateEvent(dateStr);
               }}
@@ -161,8 +161,8 @@ export function CalendarGrid({ events, calendarEntries, songLeaderMap, setlistSt
                   today
                     ? 'bg-[#22c55e] text-black'
                     : inMonth
-                      ? 'text-white'
-                      : 'text-white/22'
+                      ? 'text-[#474a65] dark:text-white'
+                      : 'text-[#9698aa] dark:text-white/[0.22]'
                 }`}>
                   {format(day, 'd')}
                 </span>
@@ -199,19 +199,19 @@ export function CalendarGrid({ events, calendarEntries, songLeaderMap, setlistSt
                       onClick={(e) => { e.stopPropagation(); onEventClick(event.id); }}
                       className={`group w-full rounded-md px-1.5 py-1 text-left text-[11px] font-bold transition-colors ${
                         isPastEvent
-                          ? 'bg-white/[0.035] text-white/30 hover:bg-white/[0.055] hover:text-white/42'
-                          : 'bg-white/[0.08] text-white/82 hover:bg-white/[0.13]'
+                          ? 'bg-[#f1f2f6] text-[#62657b] hover:bg-[#e6e7ef] hover:text-[#474a65] dark:bg-white/[0.035] dark:text-white/30 dark:hover:bg-white/[0.055] dark:hover:text-white/[0.42]'
+                          : 'bg-[#e6e7ef] text-[#474a65] hover:bg-[#d3d4dd] dark:bg-white/[0.08] dark:text-white/[0.82] dark:hover:bg-white/[0.13]'
                       } ${
                         canDrag ? 'cursor-grab active:cursor-grabbing' : ''
                       }`}
                       title={isPastEvent ? `${songLeader || event.title} (past event)` : songLeader || event.title}
                     >
-                      {canDrag && <GripVertical className={`inline h-3 w-3 mr-0.5 opacity-0 group-hover:opacity-50 -ml-0.5 align-text-bottom ${isPastEvent ? 'text-white/30' : ''}`} />}
+                      {canDrag && <GripVertical className={`inline h-3 w-3 mr-0.5 opacity-0 group-hover:opacity-50 -ml-0.5 align-text-bottom ${isPastEvent ? 'text-[#62657b] dark:text-white/30' : ''}`} />}
                       {songLeader || event.title}
                       {(hasApprovedSetlist || showDueIndicator) && (
                         <span
                           className={`inline-block ml-1 h-1.5 w-1.5 rounded-full ${
-                            isPastEvent ? 'bg-white/24' :
+                            isPastEvent ? 'bg-[#9698aa] dark:bg-white/[0.24]' :
                             hasApprovedSetlist && !wasSubmittedLate ? 'bg-green-500' :
                             wasSubmittedLate ? 'bg-green-500' :
                             isOverdue ? 'bg-red-500' : 'bg-amber-500'
@@ -236,8 +236,8 @@ export function CalendarGrid({ events, calendarEntries, songLeaderMap, setlistSt
                     key={i}
                     className={`flex items-center gap-0.5 truncate rounded-md px-1 py-0.5 text-[10px] font-semibold ${
                       entry.type === 'birthday'
-                        ? 'bg-pink-500/16 text-pink-200'
-                        : 'bg-orange-500/16 text-orange-200'
+                        ? 'bg-pink-50 text-pink-700 dark:bg-pink-500/[0.16] dark:text-pink-200'
+                        : 'bg-orange-50 text-orange-700 dark:bg-orange-500/[0.16] dark:text-orange-200'
                     }`}
                   >
                     {entry.type === 'birthday' ? <Cake className="h-2.5 w-2.5 shrink-0" /> : <CalendarOff className="h-2.5 w-2.5 shrink-0" />}
@@ -245,7 +245,7 @@ export function CalendarGrid({ events, calendarEntries, songLeaderMap, setlistSt
                   </div>
                 ))}
                 {dayEntries.length > 2 && (
-                  <span className="px-1 text-[10px] font-semibold text-white/36">+{dayEntries.length - 2} more</span>
+                  <span className="px-1 text-[10px] font-semibold text-[#62657b] dark:text-white/[0.36]">+{dayEntries.length - 2} more</span>
                 )}
               </div>
             </div>

@@ -390,12 +390,12 @@ export function SetlistDeadlines() {
   }
 
   const content = (
-    <div className="touch-action-pan-y space-y-5 sm:space-y-6">
+    <div className="desktop-setlist-deadlines touch-action-pan-y space-y-5 sm:space-y-6">
       <LeadershipHeroCard
         tone="emerald"
         icon={ListMusic}
         eyebrow="Setlist Oversight"
-        title="Setlist Deadlines."
+        title="Setlist Deadlines"
         description="Track proposal deadlines, follow overdue setlists, and send reminders before each service slips."
         action={(
           <button
@@ -424,7 +424,7 @@ export function SetlistDeadlines() {
               <button
                 key={stat.key}
                 onClick={() => setFilter(filter === stat.key as StatusFilter ? 'all' : stat.key as StatusFilter)}
-                className={`touch-action-pan-y relative rounded-3xl p-4 text-left bg-white dark:bg-white/[0.025] border transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.98] overflow-hidden ${
+                className={`desktop-deadline-stat touch-action-pan-y relative rounded-3xl p-4 text-left bg-white dark:bg-white/[0.025] border transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.98] overflow-hidden ${
                   active ? 'border-current/40' : 'border-gray-200/80 dark:border-white/[0.06]'
                 } ${active ? stat.tone : ''}`}
                 style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 4px 14px -8px rgba(15,23,42,0.08)' }}
@@ -475,7 +475,7 @@ export function SetlistDeadlines() {
             return (
               <div
                 key={event.id}
-                className={`touch-action-pan-y relative rounded-3xl overflow-hidden bg-white dark:bg-white/[0.025] border p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 transition-all duration-200 hover:-translate-y-0.5 ${
+                className={`desktop-deadline-row touch-action-pan-y relative rounded-3xl overflow-hidden bg-white dark:bg-white/[0.025] border p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 transition-all duration-200 hover:-translate-y-0.5 ${
                   isOverdueEvent ? 'border-red-200 dark:border-red-500/25' : isDueTodayEvent ? 'border-amber-200 dark:border-amber-500/25' : 'border-gray-200/80 dark:border-white/[0.06]'
                 }`}
                 style={{

@@ -201,7 +201,7 @@ export function AttendanceQrPilot() {
             <section className="card p-5">
               <div className="flex items-center gap-3">
                 <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-500"><CalendarClock className="h-5 w-5" /></span>
-                <div><h2 className="font-bold">Create a test event</h2><p className="text-xs text-gray-500">Set it to now so it appears after scanning.</p></div>
+                <div><h2 className="font-bold">Create A Test Event</h2><p className="text-xs text-gray-500">Set it to now so it appears after scanning.</p></div>
               </div>
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
                 <label className="sm:col-span-2 text-sm font-semibold">Event name
@@ -219,7 +219,7 @@ export function AttendanceQrPilot() {
               </button>
 
               <div className="mt-6 border-t border-gray-200 pt-4 dark:border-gray-800">
-                <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-bold">Pilot events</h3><button type="button" className="btn-secondary !min-h-9 !px-3" onClick={() => void loadPilot()}><RefreshCw className="h-4 w-4" /> Refresh</button></div>
+                <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-bold">Pilot Events</h3><button type="button" className="btn-secondary !min-h-9 !px-3" onClick={() => void loadPilot()}><RefreshCw className="h-4 w-4" /> Refresh</button></div>
                 <div className="mt-3 space-y-2">
                   {pilotState?.events.length ? pilotState.events.map((event) => (
                     <div key={event.id} className="rounded-xl border border-gray-200 p-3 dark:border-gray-800">
@@ -233,7 +233,7 @@ export function AttendanceQrPilot() {
             <div className="space-y-5">
               <section className="card border-emerald-500/20 p-5 text-center">
                 <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-500"><ShieldCheck className="h-6 w-6" /></div>
-                <h2 className="mt-3 font-bold">Live reusable church QR</h2>
+                <h2 className="mt-3 font-bold">Live Reusable Church QR</h2>
                 <p className="mt-1 text-xs text-gray-500">This writes to official attendance. Members see only events they are scheduled for.</p>
                 {liveProjectorQrImage && <ProjectorQrPreview image={liveProjectorQrImage} mode="live" />}
                 {liveProjectorQrImage && (
@@ -252,7 +252,7 @@ export function AttendanceQrPilot() {
 
               <section className="card p-5 text-center">
                 <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 text-amber-500"><QrCode className="h-6 w-6" /></div>
-                <h2 className="mt-3 font-bold">Isolated test QR</h2>
+                <h2 className="mt-3 font-bold">Isolated Test QR</h2>
                 <p className="mt-1 text-xs text-gray-500">Use this only with the test events on the left.</p>
                 {projectorQrImage && <ProjectorQrPreview image={projectorQrImage} mode="test" />}
                 {projectorQrImage && (

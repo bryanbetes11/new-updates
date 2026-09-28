@@ -1419,8 +1419,9 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
     <Modal
       open={selectedChartSong !== null}
       onClose={closeChartSong}
-      title="Song details"
+      title="Song Details"
       size="lg"
+      instantOpen={false}
       hideHeader
       bodyClassName="!overflow-hidden !p-0"
     >
@@ -1431,7 +1432,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
               <Music2 className="h-5 w-5" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-300">Song library</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-300">Song Library</p>
               <h2 className="truncate text-2xl font-black tracking-[-0.04em]">{selectedChartSong.title}</h2>
               <p className="mt-0.5 truncate text-sm text-gray-500 dark:text-white/55">
                 {selectedChartSong.artist || 'No artist'}{selectedChartSong.song_key ? ` · Key ${selectedChartSong.song_key}` : ''}
@@ -1590,7 +1591,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                   }}
                   aria-label="Search approved sets"
                   placeholder={showMySongLeaderSets ? 'Search my sets by song, event, artist…' : 'Search sets by song, leader, event, artist…'}
-                  className="w-full h-12 pl-10 pr-9 rounded-full text-[13px] bg-white/[0.055] border border-white/[0.08] text-white placeholder-white/30 outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/50 transition-all"
+                  className="w-full h-12 pl-10 pr-9 rounded-full text-[13px] border border-slate-200 bg-white text-slate-900 placeholder-slate-500 outline-none transition-all focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/30 dark:border-white/[0.08] dark:bg-white/[0.055] dark:text-white dark:placeholder-white/30"
                 />
                 {search && (
                   <button
@@ -1689,7 +1690,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
               variants={containerVariants}
               initial="hidden"
               animate="show"
-              className="overflow-hidden border-y border-white/[0.08]"
+              className="desktop-sets-list overflow-hidden border-y border-white/[0.08]"
             >
               {sortedSetlists.length === 0 ? (
                 <div className="px-5 py-10 text-center">
@@ -1810,13 +1811,13 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                     </div>
 
                     {isExpanded && sl.setlist_songs && (
-                      <div id={`setlist-songs-${sl.id}`} className="border-t border-white/[0.055] bg-black/10">
+                      <div id={`setlist-songs-${sl.id}`} className="border-t border-[#d3d4dd] bg-white dark:border-white/[0.055] dark:bg-black/10">
                         <div className="px-4 pt-3 pb-1 flex items-center gap-2">
                           <Music2 className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
-                          <span className="text-[10px] font-black text-gray-500 dark:text-white/45 uppercase tracking-[0.14em]">Songs in order</span>
-                          <span className="ml-auto text-[10px] font-mono font-semibold text-gray-400 dark:text-white/30">{songCount} total</span>
+                          <span className="text-[10px] font-black text-gray-500 dark:text-white/45 uppercase tracking-[0.14em]">Songs In Order</span>
+                          <span className="ml-auto text-[10px] font-mono font-semibold text-[#62657b] dark:text-white/30">{songCount} total</span>
                         </div>
-                        <div className="divide-y divide-black/[0.03] dark:divide-white/[0.04] pb-2">
+                        <div className="divide-y divide-[#e6e7ef] pb-2 dark:divide-white/[0.04]">
                           {sl.setlist_songs
                             .slice()
                             .sort((a, b) => a.position - b.position)
@@ -1833,7 +1834,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
 		                                  aria-label={`Open lyrics and chord chart for ${ss.songs?.title || 'song'}`}
 		                                  className="group/song flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-black/[0.025] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-400/70 disabled:cursor-default dark:hover:bg-white/[0.045]"
 		                                >
-	                                  <span className="flex items-center justify-center h-6 w-6 rounded-lg bg-gray-100 dark:bg-white/[0.05] text-[10px] font-black text-gray-400 dark:text-white/35 shrink-0 tabular-nums">{i + 1}</span>
+	                                  <span className="flex items-center justify-center h-6 w-6 rounded-lg bg-[#f1f2f6] text-[10px] font-black text-[#62657b] dark:bg-white/[0.05] dark:text-white/35 shrink-0 tabular-nums">{i + 1}</span>
 	                                  <SongArtwork
 	                                    song={ss.songs}
 	                                    youtubeUrl={ss.youtube_url || ss.songs?.youtube_url}
@@ -1849,9 +1850,9 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                                       )}
                                     </div>
                                     {ss.songs?.artist && (
-                                      <p className="text-[11px] text-gray-400 dark:text-white/30 mt-0.5">
+                                      <p className="mt-0.5 text-[11px] text-[#62657b] dark:text-white/30">
                                         {ss.songs.artist}
-                                        {keyChanged && <span className="ml-1 text-gray-300 dark:text-white/20">(orig: {ss.songs.song_key})</span>}
+                                        {keyChanged && <span className="ml-1 text-[#7c7f93] dark:text-white/20">(orig: {ss.songs.song_key})</span>}
                                       </p>
                                     )}
                                   </div>
@@ -2154,7 +2155,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
-        className="divide-y divide-white/[0.07]"
+        className="desktop-songs-list divide-y divide-white/[0.07]"
       >
         {filteredSongs.length === 0 ? (
           <p className="rounded-[0.75rem] bg-[#181818] px-5 py-12 text-center text-sm text-gray-400 dark:text-white/30">No songs found</p>
@@ -2682,7 +2683,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
         </div>
       </Modal>
 
-      <Modal open={editingLibrarySong !== null} onClose={closeEditLibrarySong} title="Edit song details" size="md">
+      <Modal open={editingLibrarySong !== null} onClose={closeEditLibrarySong} title="Edit Song Details" size="md">
         {editingLibrarySong && (() => {
           const canRenameSong = editingLibrarySong.created_by === user?.id || canManageSongLibrary;
           return (

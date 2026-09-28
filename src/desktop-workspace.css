@@ -1,0 +1,684 @@
+/* Desktop adaptation of the IOTask reference: quiet chrome, compact rows,
+   clear type hierarchy, and restrained status color. Mobile remains untouched. */
+@media (min-width: 1024px) {
+  .desktop-workspace {
+    --workspace-canvas: #f7f8fb;
+    --workspace-surface: #fff;
+    --workspace-border: #e3e8f0;
+    --workspace-ink: #242d40;
+    --workspace-muted: #69778c;
+    --workspace-soft: #f3f6fb;
+    --workspace-selected: #eef3ff;
+    --workspace-accent: #3969db;
+    background: var(--workspace-canvas) !important;
+    color: var(--workspace-ink);
+  }
+  html.dark .desktop-workspace {
+    --workspace-canvas: #0c0d10;
+    --workspace-surface: #15171b;
+    --workspace-border: #2a2e35;
+    --workspace-ink: #f0f2f6;
+    --workspace-muted: #a4abb8;
+    --workspace-soft: #1b1e24;
+    --workspace-selected: #1c2945;
+    --workspace-accent: #a9c0ff;
+  }
+
+  .desktop-workspace .desktop-top-bar {
+    height: 64px;
+    padding-inline: clamp(24px, 2vw, 38px);
+    gap: 18px;
+  }
+  .desktop-workspace .desktop-sidebar-main {
+    transition: padding-left 240ms cubic-bezier(.22, 1, .36, 1);
+  }
+  .desktop-workspace .desktop-sidebar {
+    transition: width 240ms cubic-bezier(.22, 1, .36, 1);
+  }
+  .desktop-workspace .desktop-page-heading { width: auto; min-width: 150px; }
+  .desktop-workspace .desktop-page-heading > span:first-child {
+    color: var(--workspace-muted) !important;
+    font-size: 9px;
+    letter-spacing: .08em;
+  }
+  .desktop-workspace .desktop-page-heading > span:last-child { font-size: 15px; font-weight: 680; }
+  .desktop-workspace .desktop-global-search {
+    margin-left: auto;
+    max-width: 360px;
+    height: 36px;
+    border-radius: 6px;
+    background: var(--workspace-canvas) !important;
+  }
+  .desktop-workspace .desktop-top-bar > div:last-child { margin-left: 0; gap: 6px; }
+  .desktop-workspace .desktop-top-bar > div:last-child > button { width: 36px; height: 36px; border-radius: 7px; }
+  .desktop-workspace .desktop-top-bar > div:last-child > button[aria-label="Open profile menu"] {
+    width: auto;
+    height: 40px;
+    border-radius: 9999px;
+  }
+  .desktop-workspace .desktop-top-bar > div:last-child > button,
+  .desktop-workspace .desktop-global-search {
+    transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+  }
+  .desktop-workspace .desktop-top-bar > div:last-child > button:hover { background: var(--workspace-soft); }
+  .desktop-workspace .desktop-global-search:hover { border-color: var(--workspace-accent); }
+  .desktop-workspace .desktop-global-search:focus-within {
+    border-color: var(--workspace-muted) !important;
+    background: var(--workspace-surface) !important;
+  }
+  .desktop-workspace .desktop-global-search input:focus-visible {
+    outline: none;
+  }
+
+  .desktop-workspace .desktop-sidebar-scroll { padding: 20px 11px 12px; }
+  .desktop-workspace .desktop-sidebar-brand { height: 64px; padding-inline: 19px; }
+  .desktop-workspace .desktop-sidebar-scroll .desktop-nav-link,
+  .desktop-workspace .desktop-sidebar-scroll .desktop-library-link {
+    position: relative;
+    min-height: 36px;
+    height: 36px;
+    margin-bottom: 0;
+    padding-inline: 8px;
+    border: 0 !important;
+    border-radius: 5px;
+    font-size: 12px;
+    transition: background-color 160ms ease, color 160ms ease;
+  }
+  .desktop-workspace .desktop-sidebar-scroll :is(.desktop-nav-link, .desktop-library-link):hover {
+    background: var(--workspace-soft) !important;
+    color: var(--workspace-ink) !important;
+  }
+  .desktop-workspace .desktop-sidebar-scroll .desktop-nav-link > span:first-of-type,
+  .desktop-workspace .desktop-sidebar-scroll .desktop-library-link > span:first-of-type {
+    width: 27px; height: 27px;
+  }
+  .desktop-workspace .desktop-sidebar-scroll .desktop-nav-link[aria-current="page"],
+  .desktop-workspace .desktop-sidebar-scroll .desktop-library-link[aria-current="page"] {
+    background: var(--workspace-selected) !important;
+    box-shadow: none !important;
+    color: var(--workspace-accent) !important;
+  }
+  .desktop-workspace .desktop-sidebar-scroll :is(.desktop-nav-link, .desktop-library-link)[aria-current="page"]::before {
+    content: "";
+    position: absolute;
+    top: 6px; bottom: 6px; left: -11px;
+    width: 3px; border-radius: 0 3px 3px 0;
+    background: #4775e8;
+  }
+  .desktop-workspace .desktop-sidebar-scroll :is(.desktop-nav-link, .desktop-library-link)[aria-current="page"]:hover {
+    background: var(--workspace-selected) !important;
+    color: var(--workspace-accent) !important;
+  }
+  .desktop-workspace .desktop-sidebar p[class*="uppercase"] {
+    font-size: 9px !important;
+    font-weight: 700 !important;
+    letter-spacing: .09em !important;
+  }
+  .desktop-workspace .desktop-sidebar > div > div:last-child {
+    background: var(--workspace-surface) !important;
+  }
+
+  .desktop-workspace .desktop-content-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin: 0 0 21px; }
+  .desktop-workspace .desktop-content-heading > div:first-child { min-width: 0; }
+  .desktop-workspace .desktop-content-heading-action { flex: none; }
+  .desktop-workspace .desktop-content-heading p {
+    color: var(--workspace-accent);
+    font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  }
+  .desktop-workspace .desktop-content-heading h1 {
+    margin-top: 5px; color: var(--workspace-ink);
+    font-size: 26px; font-weight: 700; letter-spacing: -.035em; line-height: 1.15;
+  }
+  .desktop-workspace .desktop-content-heading span {
+    display: block; margin-top: 7px; color: var(--workspace-muted); font-size: 12px;
+  }
+  .desktop-workspace :is(.events-desktop-content, .desktop-announcements-page, .desktop-library-page .app-content-shell) {
+    max-width: 1500px; padding: 32px clamp(24px, 3vw, 48px) 64px;
+  }
+
+  /* Home follows the reference dashboard: one overview strip and quiet work lists. */
+  .desktop-workspace .desktop-home-intro h1 { font-size: clamp(25px, 2.1vw, 31px); font-weight: 710; }
+  .desktop-workspace .desktop-home-subtitle { margin-top: 6px; }
+  .desktop-workspace .desktop-home-filters { margin-top: 20px; border-radius: 6px; padding: 3px; }
+  .desktop-workspace .desktop-home-filters button { border-radius: 4px; padding: 6px 12px; }
+  .desktop-workspace .desktop-home-metrics {
+    gap: 16px; margin-top: 18px; overflow: visible;
+    border: 0; border-radius: 0; background: transparent;
+  }
+  .desktop-workspace .desktop-home-metrics > button {
+    position: relative; min-height: 94px; overflow: hidden;
+    border: 1px solid var(--workspace-border); border-radius: 9px;
+    padding: 17px 20px; gap: 15px; background: var(--workspace-surface);
+    transition: background-color 160ms ease, border-color 160ms ease;
+  }
+  .desktop-workspace .desktop-home-metrics > button::before {
+    content: ""; position: absolute; inset: 0 auto 0 0; width: 3px;
+    background: var(--metric-accent);
+  }
+  .desktop-workspace .desktop-home-metrics > button:nth-child(1) {
+    --metric-accent: #4778e6; border-color: #dbe5fc; background: #f3f7ff;
+  }
+  .desktop-workspace .desktop-home-metrics > button:nth-child(2) {
+    --metric-accent: #159b67; border-color: #d5ede1; background: #f0faf4;
+  }
+  .desktop-workspace .desktop-home-metrics > button:nth-child(3) {
+    --metric-accent: #c7881f; border-color: #f3e4ca; background: #fff9ed;
+  }
+  .desktop-workspace .desktop-home-metrics > button:hover { border-color: var(--metric-accent); }
+  html.dark .desktop-workspace .desktop-home-metrics > button:nth-child(1) { border-color: #2b426c; background: #17243a; }
+  html.dark .desktop-workspace .desktop-home-metrics > button:nth-child(2) { border-color: #214a38; background: #142a20; }
+  html.dark .desktop-workspace .desktop-home-metrics > button:nth-child(3) { border-color: #5d4722; background: #302617; }
+  .desktop-workspace .desktop-home-metric-icon {
+    width: 38px; height: 38px; border-radius: 8px;
+  }
+  .desktop-workspace .desktop-home-metric-icon svg { width: 18px; height: 18px; }
+  .desktop-workspace .desktop-home-metrics strong { font-size: 26px; font-weight: 700; }
+  .desktop-workspace .desktop-home-metrics small { margin-top: 5px; font-weight: 500; }
+  .desktop-workspace .desktop-home-columns { margin-top: 28px; gap: 24px; }
+  .desktop-workspace .desktop-home-main-column,
+  .desktop-workspace .desktop-home-side-column { gap: 26px; }
+  .desktop-workspace .desktop-home-side-column { display: block; }
+  .desktop-workspace .desktop-home-section { min-width: 0; }
+  .desktop-workspace .desktop-home-section .desktop-home-eyebrow { display: none; }
+  .desktop-workspace .desktop-home-card { border-radius: 7px; }
+  .desktop-workspace .desktop-home-card-header {
+    min-height: 32px; padding: 0 1px 10px; border: 0;
+    background: transparent;
+  }
+  .desktop-workspace .desktop-home-card-header > button {
+    min-height: 28px; padding: 3px 5px; border-radius: 4px;
+    transition: background-color 160ms ease, color 160ms ease;
+  }
+  .desktop-workspace .desktop-home-card-header > button:hover { background: var(--workspace-selected); }
+  .desktop-workspace .desktop-home-card-header h2 { margin-top: 0; font-size: 17px; font-weight: 700; }
+  .desktop-workspace .desktop-home-eyebrow { font-size: 9px; letter-spacing: .08em; }
+  .desktop-workspace .desktop-home-event { min-height: 75px; }
+  .desktop-workspace :is(.desktop-home-event, .desktop-home-plain-list > button, .desktop-home-compact-list > button) {
+    border-radius: 4px;
+    transition: background-color 160ms ease, color 160ms ease;
+  }
+  .desktop-workspace :is(.desktop-home-event, .desktop-home-plain-list > button, .desktop-home-compact-list > button):hover {
+    background: var(--workspace-selected);
+  }
+  .desktop-workspace .desktop-home-list-icon { background: transparent; }
+  .desktop-workspace .desktop-home-songs {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 0;
+  }
+  .desktop-workspace .desktop-home-song {
+    display: flex; align-items: center; gap: 12px; min-height: 76px;
+    padding: 12px 16px; border-bottom: 1px solid var(--workspace-border);
+    text-decoration: none; transition: background-color 160ms ease;
+  }
+  .desktop-workspace .desktop-home-song:nth-child(odd) { border-right: 1px solid var(--workspace-border); }
+  .desktop-workspace .desktop-home-song:nth-last-child(-n+2) { border-bottom: 0; }
+  .desktop-workspace .desktop-home-song:hover { background: var(--workspace-selected); }
+  .desktop-workspace .desktop-home-song > span { min-width: 0; flex: 1; }
+  .desktop-workspace .desktop-home-song strong,
+  .desktop-workspace .desktop-home-song small {
+    display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .desktop-workspace .desktop-home-song strong { color: var(--workspace-ink); font-size: 12px; font-weight: 700; }
+  .desktop-workspace .desktop-home-song small { margin-top: 4px; color: var(--workspace-muted); font-size: 11px; }
+  .desktop-workspace .desktop-home-song > svg { color: var(--workspace-muted); }
+  .desktop-workspace .desktop-home-side-panel {
+    overflow: hidden; border: 1px solid var(--workspace-border); border-radius: 9px;
+    background: var(--workspace-surface);
+  }
+  .desktop-workspace .desktop-home-side-panel-heading {
+    padding: 19px 20px 17px; border-bottom: 1px solid var(--workspace-border);
+    background: #f2f6ff;
+  }
+  html.dark .desktop-workspace .desktop-home-side-panel-heading { background: #1b253a; }
+  .desktop-workspace .desktop-home-side-panel-heading h2 {
+    color: var(--workspace-ink); font-size: 17px; font-weight: 720; line-height: 1.2;
+  }
+  .desktop-workspace .desktop-home-side-panel-heading p {
+    margin-top: 5px; color: var(--workspace-muted); font-size: 11px; line-height: 1.4;
+  }
+  .desktop-workspace .desktop-home-side-panel > .desktop-home-section {
+    padding: 16px 18px 10px; border-bottom: 1px solid var(--workspace-border);
+  }
+  .desktop-workspace .desktop-home-side-panel > .desktop-home-section:last-child { border-bottom: 0; }
+  .desktop-workspace .desktop-home-side-panel .desktop-home-card-header {
+    min-height: 27px; padding: 0 0 6px;
+  }
+  .desktop-workspace .desktop-home-side-panel .desktop-home-card-header h2 { font-size: 13px; }
+  .desktop-workspace .desktop-home-side-panel .desktop-home-card-header > button { font-size: 11px; }
+  .desktop-workspace .desktop-home-side-panel .desktop-home-card {
+    overflow: visible; border: 0; border-radius: 0; background: transparent;
+  }
+  .desktop-workspace .desktop-home-side-panel .desktop-home-compact-list { padding-inline: 0; }
+  .desktop-workspace .desktop-home-side-panel .desktop-home-compact-list > button { min-height: 52px; padding-block: 7px; }
+  .desktop-workspace .desktop-home-side-panel .desktop-home-empty.compact { min-height: 52px; padding: 8px 0; }
+
+  /* Events uses a directory/agenda instead of four oversized poster cards. */
+  .desktop-workspace .events-desktop-toolbar {
+    display: flex !important; flex-direction: row; flex-wrap: wrap; align-items: center;
+    gap: 12px; padding: 12px 14px; border-radius: 7px;
+  }
+  .desktop-workspace .events-desktop-toolbar > div:first-child { flex: 1; }
+  .desktop-workspace .events-desktop-toolbar > div:nth-child(2) { flex: 0 1 460px; }
+  .desktop-workspace .events-desktop-toolbar [aria-label="Event timeframe"] :is(button,span) {
+    height: 34px; border-radius: 5px; font-weight: 650;
+  }
+  .desktop-workspace .events-desktop-toolbar [aria-label="Event timeframe"] button > span {
+    display: inline-flex;
+    height: 20px;
+    min-width: 22px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 5px;
+    line-height: 1;
+  }
+  .desktop-workspace .events-desktop-toolbar input[aria-label="Search events"] { height: 36px; border-radius: 5px; }
+  .desktop-workspace .desktop-event-directory { display: grid; gap: 25px; }
+  .desktop-workspace .desktop-event-month {
+    min-width: 0; border: 0; border-radius: 0; background: transparent;
+  }
+  .desktop-workspace .desktop-event-month-heading {
+    min-height: 43px; padding: 0 1px 10px; border: 0;
+  }
+  .desktop-workspace .desktop-event-month-heading h2 { color: var(--workspace-ink) !important; font-size: 16px; font-weight: 700; }
+  .desktop-workspace .desktop-event-month-heading span { background: var(--workspace-soft) !important; color: var(--workspace-muted) !important; }
+  .desktop-workspace .desktop-event-month-heading::before {
+    content: ""; width: 8px; height: 8px; flex: none; border-radius: 50%;
+    background: #5e7de8;
+  }
+  .desktop-workspace .desktop-event-month-body {
+    overflow: hidden; border: 1px solid var(--workspace-border); border-radius: 8px;
+    background: var(--workspace-surface);
+  }
+  .desktop-workspace .desktop-event-column-head {
+    display: grid; grid-template-columns: minmax(210px,1.15fr) minmax(145px,.75fr) minmax(145px,.72fr) minmax(115px,.6fr) 120px; gap: 14px;
+    padding: 11px 18px; color: var(--workspace-muted); background: var(--workspace-surface);
+    border-bottom: 1px solid var(--workspace-border); font-size: 10px;
+    font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  }
+  .desktop-workspace .desktop-event-column-head span:last-child { text-align: right; }
+  .desktop-workspace .desktop-event-rows { border: 0 !important; }
+  .desktop-workspace .desktop-event-row {
+    --event-accent: #5e7de8;
+    --event-tint: #eef3ff;
+    position: relative; padding-inline: 18px; border-color: var(--workspace-border) !important;
+    background: var(--workspace-surface) !important;
+    transition: background-color 160ms ease;
+  }
+  .desktop-workspace .desktop-event-row[data-event-type*="sunday"] { --event-accent: #326bdd; --event-tint: #edf3ff; }
+  .desktop-workspace .desktop-event-row[data-event-type*="prayer"] { --event-accent: #845bc7; --event-tint: #f5effd; }
+  .desktop-workspace .desktop-event-row[data-event-type*="midweek"] { --event-accent: #128d78; --event-tint: #eaf8f4; }
+  .desktop-workspace .desktop-event-row[data-event-type*="rehearsal"] { --event-accent: #bd7937; --event-tint: #fff4e8; }
+  .desktop-workspace .desktop-event-row-birthday { --event-accent: #d65d92; --event-tint: #fff0f6; }
+  .desktop-workspace .desktop-event-row:last-child { border-bottom: 0; }
+  .desktop-workspace .desktop-event-row:hover,
+  .desktop-workspace .desktop-event-row:focus-within { background: var(--workspace-selected) !important; }
+  .desktop-workspace .desktop-event-row > div > button {
+    min-height: 62px; padding-block: 6px; background: transparent !important;
+  }
+  .desktop-workspace .desktop-event-row > div > button:has(> .desktop-event-directory-identity) {
+    display: grid; grid-template-columns: minmax(210px,1.15fr) minmax(145px,.75fr) minmax(145px,.72fr) minmax(115px,.6fr) 120px;
+    gap: 14px; align-items: center;
+  }
+  .desktop-workspace .desktop-event-availability-action {
+    grid-template-columns: minmax(210px,1.15fr) minmax(145px,.75fr) minmax(145px,.72fr) minmax(115px,.6fr) 120px;
+    gap: 14px;
+  }
+  .desktop-workspace .desktop-event-directory-identity p { font-size: 14px; }
+  .desktop-workspace .desktop-event-directory-type > span { font-size: 12px; font-weight: 700; }
+  .desktop-workspace .desktop-event-birthday-directory {
+    grid-template-columns: minmax(210px,1.15fr) minmax(145px,.75fr) minmax(145px,.72fr) minmax(115px,.6fr) 120px;
+    gap: 14px;
+  }
+  .desktop-workspace .desktop-event-directory-status { text-align: left; }
+  .desktop-workspace .desktop-event-row > div > button:has(> .desktop-event-directory-identity) > .desktop-event-directory-date { justify-self: end; }
+  .desktop-workspace .desktop-event-row-birthday > div { min-height: 62px; padding-block: 6px; }
+  .desktop-workspace .desktop-event-row-birthday > div:not(.desktop-event-birthday-directory) > div:first-child {
+    border-color: #f6d6e4 !important; background: #fff0f6 !important;
+  }
+  .desktop-workspace .desktop-event-row-birthday > div:not(.desktop-event-birthday-directory) > div:first-child > div { display: none; }
+  .desktop-workspace .desktop-event-row-birthday > div:not(.desktop-event-birthday-directory) > div:first-child > svg { color: #c84783 !important; }
+  html.dark .desktop-workspace .desktop-event-row-birthday > div:not(.desktop-event-birthday-directory) > div:first-child {
+    border-color: #673551 !important; background: #321d2a !important;
+  }
+  .desktop-workspace .desktop-event-row > div > button > div:last-child > div:last-child {
+    width: 48px; height: 48px;
+  }
+  .desktop-workspace .desktop-event-row > div > button > div:last-child > div:last-child > span:nth-child(2) {
+    font-size: 15px;
+  }
+  .desktop-workspace .desktop-event-row > div > button > div:last-child > div:last-child > span:last-child {
+    font-size: 20px;
+  }
+  .desktop-workspace .desktop-event-row > div > button:not(:has(> .desktop-event-directory-identity)) > div:nth-child(2):has(> span[role="button"]) {
+    display: grid; grid-template-columns: minmax(0,1fr) max-content; column-gap: 12px;
+    align-items: center;
+  }
+  .desktop-workspace .desktop-event-row > div > button:not(:has(> .desktop-event-directory-identity)) > div:nth-child(2):has(> span[role="button"]) > div:first-child {
+    grid-column: 1; grid-row: 1;
+  }
+  .desktop-workspace .desktop-event-row > div > button:not(:has(> .desktop-event-directory-identity)) > div:nth-child(2):has(> span[role="button"]) > div:nth-child(2) {
+    grid-column: 1; grid-row: 2;
+  }
+  .desktop-workspace .desktop-event-row > div > button:not(:has(> .desktop-event-directory-identity)) > div:nth-child(2) > span[role="button"] {
+    grid-column: 2; grid-row: 1 / 3; align-self: center; margin: 0;
+  }
+  .desktop-workspace .desktop-event-row .event-list-artwork { border-radius: 5px; }
+  .desktop-workspace .desktop-event-row .event-list-artwork * { box-shadow: none !important; }
+  .desktop-workspace .desktop-event-row .event-list-artwork > div:has(> svg) {
+    border-color: color-mix(in srgb, var(--event-accent) 22%, transparent) !important;
+    background: var(--event-tint) !important;
+  }
+  .desktop-workspace .desktop-event-row .event-list-artwork > div:has(> svg) > div { display: none; }
+  .desktop-workspace .desktop-event-row .event-list-artwork > div:has(> svg) > svg { color: var(--event-accent) !important; }
+  html.dark .desktop-workspace .desktop-event-row .event-list-artwork > div:has(> svg) {
+    background: color-mix(in srgb, var(--event-accent) 18%, var(--workspace-surface)) !important;
+  }
+  .desktop-workspace .desktop-event-row .text-white { color: var(--workspace-ink) !important; }
+  .desktop-workspace .desktop-event-row [class*="text-white/"] { color: var(--workspace-muted) !important; }
+  .desktop-workspace .desktop-event-birthday-directory .text-white { color: var(--workspace-ink) !important; }
+  .desktop-workspace .desktop-event-birthday-directory [class*="text-white/"] { color: var(--workspace-muted) !important; }
+  .desktop-workspace .desktop-event-row [class*="border-white/"] { border-color: var(--workspace-border) !important; }
+  .desktop-workspace .desktop-event-row .event-list-artwork :is(.text-white,[class*="text-white/"]) { color: white !important; }
+  .desktop-workspace .events-theme .events-desktop-content > div:has(.desktop-event-directory) { min-width: 0; }
+
+  /* The calendar keeps the reference's paper grid and restrained event color. */
+  .desktop-workspace .events-theme .desktop-event-calendar,
+  .desktop-workspace .events-theme .desktop-event-calendar > div { border-radius: 7px; box-shadow: none !important; }
+  .desktop-workspace .events-theme .desktop-event-calendar button,
+  .desktop-workspace .events-theme .desktop-event-calendar [class*="bg-"] { box-shadow: none !important; }
+
+  /* Announcements and notifications take their rhythm from the inbox pages. */
+  .desktop-workspace .desktop-announcements-page .announcements-desktop-toolbar {
+    padding: 10px 13px; border-radius: 7px;
+  }
+  .desktop-workspace .desktop-announcements-page .announcements-desktop-toolbar button { height: 34px; border-radius: 5px; font-size: 11px; font-weight: 650; }
+  .desktop-workspace .desktop-announcements-page > div:has(> [data-announcement-card]) {
+    overflow: visible; padding: 0; border: 1px solid var(--workspace-border);
+    border-radius: 7px; background: var(--workspace-surface);
+  }
+  .desktop-workspace .desktop-announcement-column-head {
+    grid-template-columns: minmax(0,1fr) 228px; align-items: center;
+    min-height: 38px; border-bottom: 1px solid var(--workspace-border);
+    color: var(--workspace-muted); background: var(--workspace-surface);
+    font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  }
+  .desktop-workspace .desktop-announcement-column-head > span { padding-left: 14px; }
+  .desktop-workspace .desktop-announcement-field-grid,
+  .desktop-workspace .desktop-announcement-summary {
+    grid-template-columns: minmax(160px,1fr) 92px minmax(120px,.55fr) 104px 68px;
+    gap: 18px; align-items: center;
+  }
+  .desktop-workspace .desktop-announcement-field-grid { display: grid; padding: 0 18px; }
+  .desktop-workspace .desktop-announcements-page [data-announcement-card] {
+    margin: 0; overflow: visible; border: 0 !important; border-bottom: 1px solid var(--workspace-border) !important;
+    border-radius: 0 !important; background: var(--workspace-surface) !important;
+    box-shadow: none !important; transform: none !important;
+    transition: background-color 160ms ease;
+  }
+  .desktop-workspace .desktop-announcements-page [data-announcement-card]:last-child { border-bottom: 0 !important; }
+  .desktop-workspace .desktop-announcements-page [data-announcement-card]:has(button[aria-label="Add a reaction"][aria-expanded="true"]) { z-index: 30; }
+  .desktop-workspace .desktop-announcements-page [data-announcement-card]:is(:hover,:focus-within) { background: var(--workspace-soft) !important; }
+  .desktop-workspace .desktop-announcements-page [data-announcement-card] > div.relative {
+    display: grid; grid-template-columns: minmax(0,1fr) 228px; align-items: stretch;
+  }
+  .desktop-workspace .desktop-announcement-summary {
+    min-height: 78px; padding: 11px 18px; color: var(--workspace-ink);
+    transition: background-color 160ms ease;
+  }
+  .desktop-workspace .desktop-announcement-summary:is(:hover,:focus-visible) { background: var(--workspace-soft); }
+  .desktop-workspace .desktop-announcement-title strong { display: block; font-size: 13px; font-weight: 700; }
+  .desktop-workspace .desktop-announcement-title p { margin-top: 4px; color: var(--workspace-muted); font-size: 11px; }
+  .desktop-workspace .desktop-announcement-urgency { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+  .desktop-workspace .desktop-announcement-priority { border-radius: 5px; text-transform: none; }
+  .desktop-workspace .desktop-announcement-normal { color: var(--workspace-muted); font-size: 11px; font-weight: 600; }
+  .desktop-workspace .desktop-announcement-leaders { display: inline-flex; align-items: center; gap: 4px; color: var(--workspace-muted); font-size: 10px; }
+  .desktop-workspace .desktop-announcement-author { display: flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 650; }
+  .desktop-workspace .desktop-announcement-author > div { flex: none; }
+  .desktop-workspace .desktop-announcement-date { color: var(--workspace-muted); font-size: 11px; font-weight: 600; }
+  .desktop-workspace .desktop-announcement-comments { color: var(--workspace-muted); font-size: 11px; font-weight: 650; }
+  .desktop-workspace .desktop-announcements-page [data-announcement-card] .announcement-reaction-bar {
+    display: flex; flex-wrap: wrap; align-content: center; justify-content: flex-start;
+    gap: 5px; min-width: 0; overflow: visible; border-top: 0; border-left: 1px solid var(--workspace-border);
+    padding: 9px 12px;
+  }
+  .desktop-workspace .desktop-announcements-page .announcement-reaction-bar > div.ml-auto { margin-left: 0; padding-left: 0; }
+  .desktop-workspace .desktop-announcements-page .announcement-reaction-bar :is(button,span[data-reaction-emoji]) { min-height: 28px; height: 28px; border-radius: 5px; padding-inline: 8px; }
+  .desktop-workspace .desktop-announcements-page .announcement-reaction-bar button[aria-label="Add a reaction"] { width: 28px; padding: 0; }
+  .desktop-workspace .desktop-announcements-page .announcement-reaction-picker {
+    top: calc(100% - 4px); right: 12px; bottom: auto; left: auto;
+    transform-origin: top right;
+  }
+  .desktop-workspace .desktop-announcements-page [data-announcement-card] p.text-white,
+  .desktop-workspace .desktop-announcements-page [data-announcement-card] [class*="text-white/"] {
+    color: var(--workspace-ink) !important;
+  }
+  .desktop-workspace .desktop-announcements-page [data-announcement-card] p[class*="text-white/"],
+  .desktop-workspace .desktop-announcements-page [data-announcement-card] span[class*="text-white/"] {
+    color: var(--workspace-muted) !important;
+  }
+  .desktop-workspace .desktop-announcements-page [data-announcement-card] [class*="bg-white/"] { background: var(--workspace-soft) !important; }
+  .desktop-workspace .desktop-announcements-page [data-announcement-card] [class*="border-white/"] { border-color: var(--workspace-border) !important; }
+  .desktop-workspace .desktop-notifications-page { max-width: 1200px; padding: 32px clamp(24px,3vw,48px) 64px; }
+  .desktop-workspace .desktop-notifications-page h1 { color: var(--workspace-ink) !important; font-size: 27px; font-weight: 710; }
+  .desktop-workspace .desktop-notifications-page p[class*="text-white/"] { color: var(--workspace-muted) !important; }
+  .desktop-workspace .desktop-notification-list {
+    overflow: hidden; border: 1px solid var(--workspace-border); border-radius: 7px;
+    background: var(--workspace-surface);
+  }
+  .desktop-workspace .desktop-notification-list > button {
+    border-color: var(--workspace-border) !important; padding: 16px 18px;
+    transition: background-color 160ms ease;
+  }
+  .desktop-workspace .desktop-notification-list > button:hover { background: var(--workspace-soft); }
+  .desktop-workspace .desktop-notification-list :is(.text-white,[class*="text-white/"]) { color: var(--workspace-ink) !important; }
+  .desktop-workspace .desktop-notification-list :is(p,span)[class*="text-white/"] { color: var(--workspace-muted) !important; }
+
+  /* The three library routes share the reference file directory's plain toolbar/list. */
+  .desktop-workspace .desktop-library-page .app-content-shell { max-width: 1500px; }
+  .desktop-workspace .desktop-library-page [aria-label="Song availability filters"] button,
+  .desktop-workspace .desktop-library-page .desktop-video-filters button { height: 34px; border-radius: 5px; font-size: 11px; font-weight: 650; }
+  .desktop-workspace .desktop-library-page input[placeholder^="Search"] { height: 38px; border-radius: 6px; }
+  .desktop-workspace .desktop-library-page .desktop-songs-list,
+  .desktop-workspace .desktop-library-page .desktop-sets-list {
+    overflow: hidden; padding: 0; border: 1px solid var(--workspace-border) !important;
+    border-radius: 7px; background: var(--workspace-surface);
+  }
+  .desktop-workspace .desktop-library-page .desktop-songs-list > div,
+  .desktop-workspace .desktop-library-page .desktop-sets-list > div {
+    padding-inline: 18px; border-color: var(--workspace-border) !important;
+    transition: background-color 160ms ease;
+  }
+  .desktop-workspace .desktop-library-page .desktop-songs-list > div:hover,
+  .desktop-workspace .desktop-library-page .desktop-sets-list > div:hover { background: var(--workspace-soft); }
+  .desktop-workspace .desktop-library-page :is(.desktop-songs-list, .desktop-sets-list) > div:focus-within {
+    background: var(--workspace-soft);
+  }
+  .desktop-workspace .desktop-library-page .desktop-video-card { border-radius: 7px !important; }
+  .desktop-workspace .desktop-library-page .desktop-video-card img { transform: none !important; }
+  .desktop-workspace .desktop-library-page .desktop-video-overlay { display: none; }
+  .desktop-workspace .desktop-library-page .desktop-video-card [class*="shadow-"] { box-shadow: none !important; }
+
+  /* Chat, profile and settings retain their controls, with the same flat frame. */
+  .desktop-workspace .desktop-chat-workspace {
+    padding: 20px !important;
+    padding-top: calc(72px + var(--desktop-safe-area-top, 0px) + var(--app-reminders-height, 0px) + 20px) !important;
+    background: var(--workspace-canvas) !important;
+  }
+  .desktop-workspace .desktop-setlist-deadlines :is(.desktop-deadline-stat,.desktop-deadline-row) {
+    border-radius: 8px;
+    box-shadow: none !important;
+    background-image: none !important;
+    transform: none !important;
+  }
+  .desktop-workspace .desktop-setlist-deadlines .desktop-deadline-row:hover {
+    border-color: var(--workspace-accent);
+    background: var(--workspace-selected);
+  }
+  .desktop-workspace .desktop-setlist-deadlines .desktop-deadline-stat:hover {
+    border-color: var(--workspace-accent);
+  }
+  .desktop-workspace .desktop-chat-workspace > div:first-child {
+    border: 1px solid var(--workspace-border); border-radius: 7px;
+    background: var(--workspace-surface); box-shadow: none !important; --tw-ring-shadow: 0 0 #0000 !important;
+  }
+  .desktop-workspace .desktop-chat-workspace > div:first-child > div:first-child { display: none; }
+  .desktop-workspace .desktop-chat-workspace [class*="backdrop-blur"] { backdrop-filter: none; }
+  .desktop-workspace .desktop-profile-page > div:first-child { display: none; }
+  .desktop-workspace .desktop-profile-page section [class*="shadow-"] { box-shadow: none !important; }
+  .desktop-workspace .desktop-profile-page section [class*="bg-[radial-gradient"] { background-image: none !important; }
+  .desktop-workspace .desktop-admin-settings { max-width: 1300px; padding: 32px clamp(24px,3vw,48px) 64px; }
+  .desktop-workspace .desktop-admin-settings > section {
+    padding: 18px 24px 26px; border: 1px solid var(--workspace-border);
+    border-radius: 7px; background: var(--workspace-surface);
+  }
+  .desktop-workspace .desktop-admin-settings > section:first-child { padding-block: 22px; }
+  .desktop-workspace .desktop-admin-settings h1 { font-weight: 710; }
+  .desktop-workspace .desktop-admin-settings :is(button,input,select) { box-shadow: none !important; }
+
+  /* The management reference uses a persistent local rail next to focused content. */
+  .desktop-workspace .desktop-leadership-content {
+    display: grid; grid-template-columns: 210px minmax(0,1fr);
+    align-items: start; gap: 20px; max-width: 1500px;
+    padding: 32px clamp(24px,3vw,48px) 64px;
+  }
+  .desktop-workspace .desktop-leadership-content > :first-child {
+    grid-column: 1 / -1; margin: 0; padding: 22px 26px;
+    border: 1px solid var(--workspace-border); border-radius: 7px;
+    background: var(--workspace-surface); box-shadow: none !important;
+  }
+  .desktop-workspace .desktop-leadership-content > :first-child > div:first-child { display: none; }
+  .desktop-workspace .desktop-leadership-content > :first-child h1 {
+    margin-top: 6px; font-size: 27px; font-weight: 710; letter-spacing: -.035em !important;
+  }
+  .desktop-workspace .desktop-leadership-content > :first-child [class*="shadow-"] { box-shadow: none !important; }
+  .desktop-workspace .desktop-leadership-content > :first-child [class*="rounded-2xl"] {
+    border-color: var(--workspace-border); border-radius: 5px; background: var(--workspace-canvas);
+  }
+  .desktop-workspace .desktop-leadership-content > :nth-child(2) {
+    grid-column: 1; margin: 0; padding: 7px;
+    border: 1px solid var(--workspace-border); border-radius: 7px;
+    background: var(--workspace-surface); box-shadow: none !important;
+    backdrop-filter: none;
+  }
+  .desktop-workspace .desktop-leadership-content > :nth-child(2) > div {
+    display: flex; flex-direction: column; overflow: visible;
+    background: transparent !important; padding: 0;
+  }
+  .desktop-workspace .desktop-leadership-content > :nth-child(2) button {
+    flex: none; justify-content: flex-start; min-height: 36px;
+    border-radius: 5px; box-shadow: none !important;
+    transition: background-color 160ms ease, color 160ms ease;
+  }
+  .desktop-workspace .desktop-leadership-content > :nth-child(2) button:hover {
+    background: var(--workspace-soft) !important;
+  }
+  .desktop-workspace .desktop-leadership-content > :nth-child(2) button[class*="bg-white"] {
+    background: var(--workspace-selected) !important; color: var(--workspace-accent) !important;
+  }
+  .desktop-workspace .desktop-leadership-content > :nth-child(3) { grid-column: 2; min-width: 0; margin: 0; }
+  .desktop-workspace .leadership-page-hero {
+    padding: 21px 25px; border-color: var(--workspace-border) !important;
+    border-radius: 7px; background: var(--workspace-surface) !important;
+    box-shadow: none !important;
+  }
+  .desktop-workspace .leadership-page-hero > div:first-child { display: none; }
+  .desktop-workspace .leadership-page-hero > div:nth-child(2) > div:first-child > div:first-child > div:first-child { display: none; }
+  .desktop-workspace .leadership-page-hero > div:nth-child(2) > div:first-child > div:first-child > div:nth-child(2) {
+    width: 38px; height: 38px; border-radius: 6px;
+    background: var(--workspace-selected) !important; box-shadow: none !important;
+    color: var(--workspace-accent);
+  }
+  .desktop-workspace .leadership-page-hero > div:nth-child(2) > div:first-child > div:first-child > div:nth-child(2) svg { color: var(--workspace-accent) !important; }
+  .desktop-workspace .leadership-page-hero h1 { font-size: 26px; font-weight: 710; letter-spacing: -.035em !important; }
+  .desktop-workspace .leadership-page-hero [class*="shadow-"] { box-shadow: none !important; }
+  .desktop-workspace .desktop-team-stats {
+    gap: 0; overflow: hidden; border: 1px solid var(--workspace-border);
+    border-radius: 7px; background: var(--workspace-surface);
+  }
+  .desktop-workspace .desktop-team-stats > div {
+    border: 0; border-right: 1px solid var(--workspace-border); border-radius: 0;
+    background: transparent !important; box-shadow: none !important;
+  }
+  .desktop-workspace .desktop-team-stats > div:last-child { border-right: 0; }
+  .desktop-workspace .desktop-team-stats > div > div:first-child { display: none; }
+  .desktop-workspace .desktop-team-directory input#team-member-search { height: 38px; border-radius: 6px; }
+  .desktop-workspace .desktop-team-roster {
+    overflow: hidden; border: 1px solid var(--workspace-border); border-radius: 7px;
+    background: var(--workspace-surface); gap: 0;
+  }
+  .desktop-workspace .desktop-team-roster > div {
+    margin: 0; border: 0 !important; border-bottom: 1px solid var(--workspace-border) !important;
+    border-radius: 0 !important; background: transparent !important;
+    box-shadow: none !important;
+  }
+  .desktop-workspace .desktop-team-roster > div:last-child { border-bottom: 0 !important; }
+  .desktop-workspace .desktop-team-roster > div > div:first-child { display: none; }
+  .desktop-workspace .desktop-team-roster > div > button { transition: background-color 160ms ease; }
+  .desktop-workspace .desktop-team-roster > div > button:hover { background: var(--workspace-soft); }
+  .desktop-workspace .desktop-leave-directory [class*="rounded-3xl"],
+  .desktop-workspace .desktop-swap-directory [class*="rounded-3xl"] {
+    border-color: var(--workspace-border); border-radius: 7px;
+    background-color: var(--workspace-surface); box-shadow: none !important;
+  }
+  .desktop-workspace .desktop-leave-directory [class*="shadow-"],
+  .desktop-workspace .desktop-swap-directory [class*="shadow-"] { box-shadow: none !important; }
+  .desktop-workspace .desktop-leave-directory [class*="bg-gradient"],
+  .desktop-workspace .desktop-swap-directory [class*="bg-gradient"] { background-image: none !important; }
+
+  /* Event detail takes the project's quiet header and data-tab treatment. */
+  .desktop-workspace .event-detail-theme > div:nth-of-type(2) { max-width: 1500px; }
+  .desktop-workspace .event-detail-hero {
+    margin: 0; padding: 18px 24px 22px; border: 1px solid var(--workspace-border);
+    border-radius: 7px; background: var(--workspace-surface);
+  }
+  .desktop-workspace .event-detail-hero > div:first-child { display: none; }
+  .desktop-workspace .event-detail-hero h1 { font-size: clamp(31px,3vw,47px); font-weight: 700; }
+  .desktop-workspace .event-detail-hero [class*="shadow-"] { box-shadow: none !important; }
+  .desktop-workspace .event-detail-hero [class*="backdrop-blur"] { backdrop-filter: none; }
+  .desktop-workspace .event-detail-hero [class*="rounded-full"] { border-radius: 6px; }
+  .desktop-workspace .event-detail-theme [role="tablist"][aria-label="Event details"] {
+    margin-top: 8px; border: 1px solid var(--workspace-border); border-radius: 7px;
+    background: var(--workspace-surface);
+  }
+  .desktop-workspace .event-detail-theme [role="tablist"][aria-label="Event details"] button {
+    min-height: 45px; font-weight: 650;
+  }
+
+  .desktop-workspace .desktop-profile-page > div:nth-child(2) { max-width: 1300px; padding-top: 32px; }
+  .desktop-workspace .desktop-profile-page > div:nth-child(2) > section:first-of-type > div {
+    border-color: var(--workspace-border); border-radius: 7px;
+    background: var(--workspace-surface); box-shadow: none !important;
+  }
+  .desktop-workspace .desktop-profile-page > div:nth-child(2) > section:first-of-type > div > div:first-child { display: none; }
+  .desktop-workspace .desktop-profile-page > div:nth-child(2) > section:first-of-type h1 { font-size: 38px; font-weight: 700; }
+  .desktop-workspace .desktop-profile-page > div:nth-child(2) > section:first-of-type [class*="rounded-2xl"] { border-radius: 5px; }
+
+  .desktop-workspace :is(.desktop-home-card, .desktop-event-month, .desktop-sets-list, .desktop-songs-list, .desktop-video-card, .desktop-notification-list) { box-shadow: none !important; }
+  .desktop-workspace :is(button,a,input,select):focus-visible { outline: 2px solid #4775e8; outline-offset: 2px; }
+}
+
+@media (min-width: 1024px) and (max-width: 1199px) {
+  .desktop-workspace .desktop-event-column-head,
+  .desktop-workspace .desktop-event-row > div > button:has(> .desktop-event-directory-identity),
+  .desktop-workspace .desktop-event-availability-action,
+  .desktop-workspace .desktop-event-birthday-directory { grid-template-columns: minmax(150px,1fr) minmax(105px,.72fr) minmax(110px,.68fr) minmax(82px,.55fr) 108px; gap: 8px; }
+  .desktop-workspace .desktop-announcements-page [data-announcement-card] > div.relative,
+  .desktop-workspace .desktop-announcement-column-head { grid-template-columns: minmax(0,1fr) 168px; }
+  .desktop-workspace .desktop-announcement-field-grid { display: block; }
+  .desktop-workspace .desktop-announcement-field-grid span:not(:first-child) { display: none; }
+  .desktop-workspace .desktop-announcement-summary {
+    grid-template-columns: minmax(0,1fr) 110px 80px; grid-template-rows: auto auto;
+    gap: 8px 10px; min-height: 90px;
+  }
+  .desktop-workspace .desktop-announcement-title { grid-column: 1 / 3; grid-row: 1; }
+  .desktop-workspace .desktop-announcement-urgency { grid-column: 3; grid-row: 1; }
+  .desktop-workspace .desktop-announcement-author { grid-column: 1; grid-row: 2; }
+  .desktop-workspace .desktop-announcement-date { grid-column: 2; grid-row: 2; }
+  .desktop-workspace .desktop-announcement-comments { grid-column: 3; grid-row: 2; }
+}
+
+@media (prefers-reduced-motion: reduce) and (min-width: 1024px) {
+  .desktop-workspace :is(button,a,input,select,.desktop-event-row,[data-announcement-card],.desktop-sidebar,.desktop-sidebar-main,.desktop-top-bar) {
+    transition: none !important;
+    animation: none !important;
+  }
+}

@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { format, formatDistanceToNow, parseISO } from 'date-fns';
 import { motion, type Variants } from 'framer-motion';
-import { Calendar, Music, ChevronRight, Megaphone, Trash2, ListChecks, ArrowLeftRight, Check, X, RefreshCw, Heart, MoreHorizontal, Upload, UserPlus, MessageCircle, UserX, ClipboardCheck, Shield, AlertCircle, CheckCircle2, type LucideIcon } from 'lucide-react';
+import { Calendar, Music, ChevronRight, Megaphone, Trash2, ListChecks, ArrowLeftRight, Check, X, RefreshCw, Heart, MoreHorizontal, Upload, UserPlus, MessageCircle, UserX, Shield, AlertCircle, CheckCircle2, type LucideIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -22,15 +22,6 @@ import { isSetlistMeaningfullyCreated } from '../lib/setlistPersistence';
 import { describeSetlistReviewAge } from '../lib/setlistReviewAge';
 import type { Event, EventAssignment, Setlist, Announcement, UserAvailability, SwapRequest } from '../types';
 
-const verses = [
-  { text: 'Shout with joy to the Lord, all the earth!', ref: 'Psalm 100:1 NLT' },
-  { text: 'Sing a new song of praise to him; play skillfully on the harp, and sing with joy.', ref: 'Psalm 33:3 NLT' },
-  { text: 'Let everything that breathes sing praises to the Lord! Praise the Lord!', ref: 'Psalm 150:6 NLT' },
-  { text: 'Singing psalms and hymns and spiritual songs among yourselves, and making music to the Lord in your hearts.', ref: 'Ephesians 5:19 NLT' },
-  { text: 'I will sing to the Lord as long as I live. I will praise my God to my last breath!', ref: 'Psalm 104:33 NLT' },
-  { text: 'Come, let us sing to the Lord! Let us shout joyfully to the Rock of our salvation.', ref: 'Psalm 95:1 NLT' },
-  { text: 'Worship the Lord with gladness. Come before him, singing with joy.', ref: 'Psalm 100:2 NLT' },
-];
 
 const container: Variants = {
   initial: {},
@@ -254,11 +245,10 @@ export function DashboardAttentionPanel({
   className?: string;
 }) {
   return (
-    <section className={`relative overflow-hidden rounded-2xl border border-white/[0.09] bg-[linear-gradient(135deg,rgba(20,29,27,0.98),rgba(24,24,24,0.98)_58%,rgba(17,24,22,0.98))] p-4 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)] ${className}`}>
-      <div className="pointer-events-none absolute -right-10 -top-12 h-32 w-32 rounded-full bg-[#22c55e]/[0.09] blur-3xl" />
+    <section className={`dashboard-panel rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-[#15191a] ${className}`}>
       <div className="relative mb-3.5 flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2.5">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#67e8a4]/15 bg-[#22c55e]/10 text-[#67e8a4] shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center text-emerald-700 dark:text-emerald-400">
             <AlertCircle className="h-4 w-4" />
           </span>
           <div className="min-w-0">
@@ -276,16 +266,16 @@ export function DashboardAttentionPanel({
                 key={attentionItem.id}
                 type="button"
                 onClick={() => onNavigate(attentionItem.path)}
-                className="group flex min-h-14 w-full items-center gap-3 rounded-xl border border-white/[0.07] bg-black/15 px-3 py-2.5 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] transition duration-200 hover:-translate-y-px hover:border-white/[0.13] hover:bg-white/[0.055] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e]"
+                className="group flex min-h-14 w-full items-center gap-3 border-t border-slate-100 py-2.5 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-white/10 dark:hover:bg-white/[0.04]"
               >
-                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${attentionItem.urgent ? 'border-amber-300/15 bg-amber-300/[0.09] text-amber-200' : 'border-[#67e8a4]/15 bg-[#22c55e]/10 text-[#67e8a4]'}`}>
+                <span className={`flex h-8 w-8 shrink-0 items-center justify-center ${attentionItem.urgent ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-400'}`}>
                   <Icon className="h-4 w-4" />
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[12px] font-black text-white">{attentionItem.title}</span>
                   <span className="mt-0.5 block truncate text-[10px] font-semibold text-white/48">{attentionItem.detail}</span>
                 </span>
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.055] text-white/50 transition-colors group-hover:bg-white/[0.09] group-hover:text-white/80">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center text-slate-400 dark:text-slate-500">
                   <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                 </span>
               </button>
@@ -293,7 +283,7 @@ export function DashboardAttentionPanel({
           })}
         </div>
       ) : (
-        <div className="relative rounded-xl border border-white/[0.07] bg-black/15">
+        <div className="relative border-t border-slate-100 dark:border-white/10">
           <DashboardEmptyState
             icon={CheckCircle2}
             title="You're all caught up"
@@ -524,7 +514,6 @@ function AccountDashboard() {
   const pullRefreshDistanceRef = useRef(0);
   const refreshInFlightRef = useRef(false);
 
-  const todayVerse = verses[new Date().getDay() % verses.length];
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(id);
@@ -1224,17 +1213,9 @@ function AccountDashboard() {
     return getEventPreparationHighlight(event, source);
   };
   const preparationTone = (tone: EventPreparationHighlight['tone']) => {
-    if (tone === 'danger') return 'text-rose-200';
-    return 'text-amber-200';
+    if (tone === 'danger') return 'text-rose-700 dark:text-rose-300';
+    return 'text-amber-800 dark:text-amber-300';
   };
-  const quickActions = [
-    { label: 'Create Set', icon: ListChecks, path: '/sets', modal: 'create-set' },
-    { label: 'Schedule Event', icon: Calendar, path: '/events', modal: 'schedule-event' },
-    { label: 'Add Song', icon: Music, path: '/songs', modal: 'add-song' },
-    { label: 'Upload Video', icon: Upload, path: '/videos', modal: 'upload-video' },
-    { label: 'Announce', icon: Megaphone, path: '/announcements', modal: 'announce' },
-    { label: 'Invite People', icon: UserPlus, path: '/leadership/church', modal: 'invite-people' },
-  ];
   const hubFilters: { id: DashboardHubFilter; label: string }[] = [
     { id: 'all', label: 'All' },
     { id: 'week', label: 'This Week' },
@@ -1244,49 +1225,60 @@ function AccountDashboard() {
   const quickTileGroups: Record<DashboardHubFilter, {
     title: string;
     subtitle: string;
-    tone: string;
     path: string;
     icon?: typeof Heart;
   }[]> = {
     all: [
-      { title: 'My Assignments', subtitle: `${stats.total} upcoming`, tone: 'from-emerald-400 via-green-700 to-black', path: '/my-assignments', icon: Check },
-      { title: 'Upcoming Events', subtitle: `Next ${displayEvents.length} events`, tone: 'from-blue-500 via-blue-900 to-slate-950', path: '/events', icon: Calendar },
-      { title: 'Team Chat', subtitle: 'Messages', tone: 'from-zinc-200 via-zinc-700 to-black', path: '/messages', icon: MessageCircle },
-      { title: 'My Sets', subtitle: 'Setlists', tone: 'from-indigo-400 via-violet-500 to-emerald-300', path: '/sets', icon: ListChecks },
-      { title: 'Request Leave', subtitle: 'Availability', tone: 'from-yellow-400 via-amber-800 to-black', path: '/request-leave', icon: UserX },
-      { title: 'Announcements', subtitle: `${announcementRows.length} latest`, tone: 'from-sky-400 via-violet-700 to-black', path: '/announcements', icon: Megaphone },
+      { title: 'My Assignments', subtitle: `${stats.total} upcoming`, path: '/my-assignments', icon: Check },
+      { title: 'Upcoming Events', subtitle: `Next ${displayEvents.length} events`, path: '/events', icon: Calendar },
+      { title: 'Team Chat', subtitle: 'Messages', path: '/messages', icon: MessageCircle },
+      { title: 'My Sets', subtitle: 'Setlists', path: '/sets', icon: ListChecks },
+      { title: 'Request Leave', subtitle: 'Availability', path: '/request-leave', icon: UserX },
+      { title: 'Announcements', subtitle: `${announcementRows.length} latest`, path: '/announcements', icon: Megaphone },
     ],
     week: [
-      { title: 'This Week', subtitle: `${filteredDisplayEvents.length} events`, tone: 'from-blue-500 via-blue-900 to-slate-950', path: '/events', icon: Calendar },
-      { title: 'My Assignments', subtitle: `${filteredAssignments.length} scheduled`, tone: 'from-emerald-400 via-green-700 to-black', path: '/my-assignments', icon: Check },
-      { title: 'Service Updates', subtitle: `${announcementRows.length} updates`, tone: 'from-sky-400 via-violet-700 to-black', path: '/announcements', icon: Megaphone },
-      { title: 'Team Availability', subtitle: `${teamAvailabilityRows.length} upcoming`, tone: 'from-yellow-400 via-amber-800 to-black', path: '/request-leave', icon: UserX },
-      { title: 'Songs to Learn', subtitle: 'Library', tone: 'from-orange-200 via-stone-700 to-black', path: '/songs', icon: Music },
-      { title: 'Service Recordings', subtitle: 'Videos', tone: 'from-zinc-300 via-zinc-700 to-black', path: '/videos', icon: Upload },
+      { title: 'This Week', subtitle: `${filteredDisplayEvents.length} events`, path: '/events', icon: Calendar },
+      { title: 'My Assignments', subtitle: `${filteredAssignments.length} scheduled`, path: '/my-assignments', icon: Check },
+      { title: 'Service Updates', subtitle: `${announcementRows.length} updates`, path: '/announcements', icon: Megaphone },
+      { title: 'Team Availability', subtitle: `${teamAvailabilityRows.length} upcoming`, path: '/request-leave', icon: UserX },
+      { title: 'Songs to Learn', subtitle: 'Library', path: '/songs', icon: Music },
+      { title: 'Service Recordings', subtitle: 'Videos', path: '/videos', icon: Upload },
     ],
     serving: [
-      { title: 'Confirm Status', subtitle: `${filteredAssignments.filter(a => a.status === 'confirmed').length}/${filteredAssignments.length} confirmed`, tone: 'from-emerald-400 via-green-700 to-black', path: '/my-assignments', icon: Check },
-      { title: 'My Service Sets', subtitle: `${reviewSets.length} in review`, tone: 'from-indigo-400 via-violet-500 to-emerald-300', path: '/sets', icon: ListChecks },
-      { title: 'Find a Sub', subtitle: 'Swap or cover', tone: 'from-cyan-400 via-blue-800 to-black', path: '/my-assignments', icon: ArrowLeftRight },
-      { title: 'Team Chat', subtitle: 'Coordinate', tone: 'from-zinc-200 via-zinc-700 to-black', path: '/messages', icon: MessageCircle },
-      { title: 'Request Leave', subtitle: 'Update availability', tone: 'from-yellow-400 via-amber-800 to-black', path: '/request-leave', icon: UserX },
-      { title: 'Service Videos', subtitle: 'Review media', tone: 'from-sky-400 via-violet-700 to-black', path: '/videos', icon: Upload },
+      { title: 'Confirm Status', subtitle: `${filteredAssignments.filter(a => a.status === 'confirmed').length}/${filteredAssignments.length} confirmed`, path: '/my-assignments', icon: Check },
+      { title: 'My Service Sets', subtitle: `${reviewSets.length} in review`, path: '/sets', icon: ListChecks },
+      { title: 'Find a Sub', subtitle: 'Swap or cover', path: '/my-assignments', icon: ArrowLeftRight },
+      { title: 'Team Chat', subtitle: 'Coordinate', path: '/messages', icon: MessageCircle },
+      { title: 'Request Leave', subtitle: 'Update availability', path: '/request-leave', icon: UserX },
+      { title: 'Service Videos', subtitle: 'Review media', path: '/videos', icon: Upload },
     ],
     team: [
-      { title: 'Team Chat', subtitle: 'Messages', tone: 'from-zinc-200 via-zinc-700 to-black', path: '/messages', icon: MessageCircle },
-      { title: 'Announcements', subtitle: 'Updates', tone: 'from-sky-400 via-violet-700 to-black', path: '/announcements', icon: Megaphone },
-      { title: 'Team Availability', subtitle: `${teamAvailabilityRows.length} away soon`, tone: 'from-yellow-400 via-amber-800 to-black', path: '/request-leave', icon: UserX },
-      { title: 'People', subtitle: isLeader || isProductionDirector ? 'Team roster' : 'Profile', tone: 'from-emerald-400 via-green-700 to-black', path: isLeader || isProductionDirector ? '/leadership/team' : '/profile', icon: UserPlus },
-      { title: 'Songs', subtitle: 'Shared library', tone: 'from-orange-200 via-stone-700 to-black', path: '/songs', icon: Music },
-      { title: 'Setlists', subtitle: 'Shared plans', tone: 'from-indigo-400 via-violet-500 to-emerald-300', path: '/sets', icon: ListChecks },
+      { title: 'Team Chat', subtitle: 'Messages', path: '/messages', icon: MessageCircle },
+      { title: 'Announcements', subtitle: 'Updates', path: '/announcements', icon: Megaphone },
+      { title: 'Team Availability', subtitle: `${teamAvailabilityRows.length} away soon`, path: '/request-leave', icon: UserX },
+      { title: 'People', subtitle: isLeader || isProductionDirector ? 'Team roster' : 'Profile', path: isLeader || isProductionDirector ? '/leadership/team' : '/profile', icon: UserPlus },
+      { title: 'Songs', subtitle: 'Shared library', path: '/songs', icon: Music },
+      { title: 'Setlists', subtitle: 'Shared plans', path: '/sets', icon: ListChecks },
     ],
   };
   const quickTiles = quickTileGroups[activeHubFilter].filter(tile => MESSENGER_ENABLED || tile.path !== '/messages');
+  const flatTileTones = [
+    'bg-[#1d5d45]', 'bg-[#254b78]', 'bg-[#484a65]',
+    'bg-[#66528d]', 'bg-[#75572d]', 'bg-[#265b68]',
+  ];
+  const quickTileGradients = [
+    'bg-[linear-gradient(115deg,#1d5d45_0%,#287255_100%)]',
+    'bg-[linear-gradient(115deg,#254b78_0%,#315f91_100%)]',
+    'bg-[linear-gradient(115deg,#484a65_0%,#5b5d7b_100%)]',
+    'bg-[linear-gradient(115deg,#66528d_0%,#7b62a1_100%)]',
+    'bg-[linear-gradient(115deg,#75572d_0%,#8b6737_100%)]',
+    'bg-[linear-gradient(115deg,#265b68_0%,#31707a_100%)]',
+  ];
 
   return (
-    <div className="dark page-container page-bottom-pad relative overflow-hidden bg-[#050505] text-white">
+    <div className="dashboard-theme dashboard-flat page-container page-bottom-pad relative overflow-hidden bg-[#f6f8fb] text-slate-900 dark:bg-[#050505] dark:text-white">
       <div
-        className="pointer-events-none fixed inset-0 -z-10 bg-[#050505] [background-image:radial-gradient(circle_at_top_right,rgba(255,255,255,0.035),transparent_18%),linear-gradient(180deg,#101010_0%,#050505_24%,#050505_100%)]"
+        className="pointer-events-none fixed inset-0 -z-10 bg-[#f8f8fa] dark:bg-[#050505]"
       />
       {createPortal(
         <motion.div
@@ -1299,7 +1291,7 @@ function AccountDashboard() {
           }}
           transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
         >
-          <div className="flex items-center gap-2 rounded-full border border-black/[0.08] bg-white/92 px-3 py-2 text-[12px] font-bold text-gray-900 shadow-[0_18px_45px_-24px_rgba(15,23,42,0.22)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#222222]/92 dark:text-white dark:shadow-[0_18px_45px_-24px_rgba(0,0,0,0.65)]">
+          <div className="flex items-center gap-2 rounded-full border border-[#d3d4dd] bg-[#f8f8fa] px-3 py-2 text-[12px] font-bold text-[#474a65] dark:border-white/10 dark:bg-[#222222] dark:text-white">
             <RefreshCw className={`h-3.5 w-3.5 ${isRefreshingApp ? 'animate-spin' : ''}`} />
             <span>{isRefreshingApp ? 'Refreshing...' : pullRefreshDistance >= 108 ? 'Release to refresh' : 'Pull to refresh'}</span>
           </div>
@@ -1310,12 +1302,121 @@ function AccountDashboard() {
         variants={container}
         initial="initial"
         animate="animate"
-        className="relative mx-auto w-full max-w-2xl space-y-5 px-4 pt-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:px-6 sm:pt-5 sm:space-y-6 md:max-w-[860px] md:px-8 lg:max-w-6xl lg:pb-24 xl:max-w-[1560px]"
+        className="dashboard-desktop-content relative mx-auto w-full max-w-2xl space-y-5 px-4 pt-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:space-y-6 sm:px-6 sm:pt-5 md:max-w-[860px] md:px-8 lg:max-w-6xl lg:pb-24 xl:max-w-[1560px]"
       >
 
         <HomeAppUpdateCard />
 
-        <motion.section variants={item} className="space-y-4">
+        <section className="desktop-home hidden lg:block" aria-label="Home workspace">
+          <div className="desktop-home-intro">
+            <div>
+              <p className="desktop-home-eyebrow">Your workspace</p>
+              <h1>{greeting}, {displayName}</h1>
+              <p className="desktop-home-subtitle">Your schedule, team, and ministry updates in one place.</p>
+            </div>
+            <button type="button" className="desktop-home-primary" onClick={() => navigate('/events')}>View calendar <ChevronRight className="h-4 w-4" /></button>
+          </div>
+
+          <div className="desktop-home-filters" role="group" aria-label="Dashboard filters">
+            {hubFilters.map((filter) => <button key={filter.id} type="button" aria-pressed={activeHubFilter === filter.id} onClick={() => setActiveHubFilter(filter.id)}>{filter.label}</button>)}
+          </div>
+
+          <div className="desktop-home-metrics">
+            <button type="button" onClick={() => navigate('/events')}>
+              <span className="desktop-home-metric-icon blue"><Calendar className="h-5 w-5" /></span>
+              <span><strong>{filteredDisplayEvents.length}</strong><small>Upcoming Events</small></span>
+              <ChevronRight className="h-4 w-4 desktop-home-metric-arrow" />
+            </button>
+            <button type="button" onClick={() => navigate('/my-assignments')}>
+              <span className="desktop-home-metric-icon green"><Check className="h-5 w-5" /></span>
+              <span><strong>{filteredAssignments.length}</strong><small>My Assignments</small></span>
+              <ChevronRight className="h-4 w-4 desktop-home-metric-arrow" />
+            </button>
+            <button type="button" onClick={() => navigate('/my-assignments?status=pending')}>
+              <span className="desktop-home-metric-icon amber"><AlertCircle className="h-5 w-5" /></span>
+              <span><strong>{pendingAssignmentCount}</strong><small>Awaiting Response</small></span>
+              <ChevronRight className="h-4 w-4 desktop-home-metric-arrow" />
+            </button>
+          </div>
+
+          <div className="desktop-home-columns">
+            <div className="desktop-home-main-column">
+              <section className="desktop-home-section">
+                <div className="desktop-home-card-header"><div><p className="desktop-home-eyebrow">Schedule</p><h2>Upcoming Events</h2></div><button type="button" onClick={() => navigate('/events')}>View all <ChevronRight className="h-4 w-4" /></button></div>
+                <div className="desktop-home-card">
+                {dashboardUpcomingEvents.length > 0 ? <div className="desktop-home-event-list">
+                  {dashboardUpcomingEvents.map((event) => {
+                    const preparation = getPreparationForEvent(event);
+                    return <button type="button" key={event.id} onClick={() => navigate(`/events/${event.id}`)} className="desktop-home-event">
+                      <div className="desktop-home-date"><span>{format(parseISO(event.event_date), 'MMM')}</span><strong>{format(parseISO(event.event_date), 'd')}</strong><span>{format(parseISO(event.event_date), 'EEE')}</span></div>
+                      <EventArtwork eventType={event.event_type} title={event.title} artworkUrls={eventArtworkMap[event.id] || []} songs={eventArtworkSongsMap[event.id] || []} className="h-12 w-12 shrink-0 rounded-lg" />
+                      <span className="desktop-home-event-info"><strong>{eventLeaderMap[event.id] || event.title}</strong><small>{event.event_type} · {event.start_time ? formatTime12Hour(event.start_time) : 'Time TBA'}{preparation ? ` · ${preparation.label}` : ''}</small></span>
+                      <span className={`desktop-home-status ${assignedEventIds.has(event.id) ? 'serving' : ''}`}>{assignedEventIds.has(event.id) ? 'Serving' : 'View details'}</span>
+                      <ChevronRight className="h-4 w-4 desktop-home-row-arrow" />
+                    </button>;
+                  })}
+                </div> : <div className="desktop-home-empty"><Calendar className="h-5 w-5" /><span>{dashboardLoadIssues.has('events') ? 'Events could not be loaded.' : 'No upcoming events match this view.'}</span><button type="button" onClick={dashboardLoadIssues.has('events') ? () => loadDashboardData() : () => setActiveHubFilter('all')}>{dashboardLoadIssues.has('events') ? 'Try again' : 'Show all'}</button></div>}
+                </div>
+              </section>
+
+              <section className="desktop-home-section">
+                <div className="desktop-home-card-header"><div><p className="desktop-home-eyebrow">Communication</p><h2>Recent Announcements</h2></div><button type="button" onClick={() => navigate('/announcements')}>View all <ChevronRight className="h-4 w-4" /></button></div>
+                <div className="desktop-home-card">
+                {announcementRows.length > 0 ? <div className="desktop-home-plain-list">{announcementRows.map((announcement) => <button key={announcement.id} type="button" onClick={() => navigate(`/announcements/${announcement.id}`)}><span className="desktop-home-list-icon"><Megaphone className="h-4 w-4" /></span><span className="desktop-home-list-copy"><strong>{announcement.title}</strong><small>{announcement.content}</small></span><span className="desktop-home-list-time">{formatDistanceToNow(parseISO(announcement.created_at), { addSuffix: true })}</span></button>)}</div> : <div className="desktop-home-empty"><Megaphone className="h-5 w-5" /><span>{dashboardLoadIssues.has('announcements') ? 'Announcements could not be loaded.' : 'No announcements match this view.'}</span><button type="button" onClick={dashboardLoadIssues.has('announcements') ? () => loadDashboardData() : () => navigate('/announcements')}>{dashboardLoadIssues.has('announcements') ? 'Try again' : 'Open announcements'}</button></div>}
+                </div>
+              </section>
+
+              {weekSongs.length > 0 && <section className="desktop-home-section desktop-home-songs-section">
+                <div className="desktop-home-card-header"><div><p className="desktop-home-eyebrow">This Week</p><h2>Songs In Rotation</h2></div><button type="button" onClick={() => navigate('/songs')}>See library <ChevronRight className="h-4 w-4" /></button></div>
+                <div className="desktop-home-card desktop-home-songs">
+                  {weekSongs.slice(0, 4).map((song) => <a key={song.key} href={getSongListenUrl(song.song)} target="_blank" rel="noopener noreferrer" className="desktop-home-song">
+                    <SongArtwork song={getDashboardArtworkSong(song.song) || song.song} youtubeUrl={song.youtubeUrl} className="h-12 w-12 shrink-0 rounded-md" />
+                    <span><strong>{song.title}</strong><small>{song.artist}</small></span>
+                    <ChevronRight className="h-4 w-4" />
+                  </a>)}
+                </div>
+              </section>}
+            </div>
+
+            <aside className="desktop-home-side-column" aria-label="Your workspace details">
+              <div className="desktop-home-side-panel">
+              <div className="desktop-home-side-panel-heading">
+                <h2>For You</h2>
+                <p>Responses, assignments, and team updates.</p>
+              </div>
+              <section className="desktop-home-section">
+                <div className="desktop-home-card-header"><div><p className="desktop-home-eyebrow">Next Steps</p><h2>Needs Your Attention</h2></div></div>
+                <div className="desktop-home-card">
+                {attentionItems.length > 0 ? <div className="desktop-home-compact-list">{attentionItems.map((attention) => <button key={attention.id} type="button" onClick={() => navigate(attention.path)}><span className="desktop-home-list-icon amber"><attention.icon className="h-4 w-4" /></span><span><strong>{attention.title}</strong><small>{attention.detail}</small></span><ChevronRight className="h-4 w-4" /></button>)}</div> : <div className="desktop-home-empty compact"><CheckCircle2 className="h-5 w-5" /><span>You're all caught up.</span></div>}
+                </div>
+              </section>
+              <section className="desktop-home-section">
+                <div className="desktop-home-card-header"><div><p className="desktop-home-eyebrow">For You</p><h2>My Assignments</h2></div><button type="button" onClick={() => navigate('/my-assignments')}>View all <ChevronRight className="h-4 w-4" /></button></div>
+                <div className="desktop-home-card">
+                {assignmentRows.length > 0 ? <div className="desktop-home-compact-list">{assignmentRows.map((assignment) => <button key={assignment.id} type="button" onClick={() => navigate(`/events/${assignment.event_id}`)}><span className={`desktop-home-assignment-dot ${assignment.status}`} /><span><strong>{assignment.events?.title || 'Upcoming service'}</strong><small>{assignment.roles?.name || 'Team'}{assignment.events?.event_date ? ` · ${format(parseISO(assignment.events.event_date), 'MMM d')}` : ''}</small></span><ChevronRight className="h-4 w-4" /></button>)}</div> : <div className="desktop-home-empty compact"><CheckCircle2 className="h-5 w-5" /><span>{dashboardLoadIssues.has('assignments') ? 'Assignments could not be loaded.' : 'No current assignments.'}</span></div>}
+                </div>
+              </section>
+
+              {(reviewSets.length > 0 || dashboardLoadIssues.has('setlists')) && <section className="desktop-home-section">
+                <div className="desktop-home-card-header"><div><p className="desktop-home-eyebrow">Leadership</p><h2>Setlists For Review</h2></div><button type="button" onClick={() => navigate('/leadership/setlists')}>View all <ChevronRight className="h-4 w-4" /></button></div>
+                <div className="desktop-home-card">
+                {reviewSets.length > 0 ? <div className="desktop-home-compact-list">{reviewSets.map((set) => <button key={set.id} type="button" onClick={() => navigate(set.events?.id || set.event_id ? `/events/${set.events?.id || set.event_id}` : '/leadership/setlists')}><span className="desktop-home-list-icon"><ListChecks className="h-4 w-4" /></span><span><strong>{set.events?.title || 'Submitted setlist'}</strong><small>{set.events?.event_date ? format(parseISO(set.events.event_date), 'MMM d, yyyy') : 'Ready for review'}</small></span><ChevronRight className="h-4 w-4" /></button>)}</div> : <div className="desktop-home-empty compact"><AlertCircle className="h-5 w-5" /><span>Setlists could not be loaded.</span><button type="button" onClick={() => loadDashboardData()}>Try again</button></div>}
+                </div>
+              </section>}
+
+              <section className="desktop-home-section">
+                <div className="desktop-home-card-header"><div><p className="desktop-home-eyebrow">Team</p><h2>Availability</h2></div><button type="button" onClick={() => navigate('/request-leave')}>Open <ChevronRight className="h-4 w-4" /></button></div>
+                <div className="desktop-home-card">
+                {teamAvailabilityRows.length > 0 ? <div className="desktop-home-compact-list">{teamAvailabilityRows.map((member) => <button key={member.id} type="button" onClick={() => setSelectedUnavailability(member)}><Avatar src={member.profiles?.avatar_url} firstName={member.profiles?.first_name || member.profiles?.nickname || 'Team'} lastName={member.profiles?.last_name} size="sm" /><span><strong>{`${member.profiles?.first_name || ''} ${member.profiles?.last_name || ''}`.trim() || member.profiles?.nickname || 'Team member'}</strong><small>{member.unavailable_date || member.start_date ? format(parseISO(member.unavailable_date || member.start_date || ''), 'MMM d') : 'Upcoming'}{member.reason ? ` · ${member.reason}` : ''}</small></span><ChevronRight className="h-4 w-4" /></button>)}</div> : <div className="desktop-home-empty compact"><CheckCircle2 className="h-5 w-5" /><span>{dashboardLoadIssues.has('availability') ? 'Availability could not be loaded.' : 'Everyone is currently available.'}</span></div>}
+                </div>
+              </section>
+
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <motion.section variants={item} className="dashboard-desktop-overview space-y-4 lg:hidden">
             <div className="hidden items-center lg:flex">
               <h1 className="text-[2.4rem] font-black leading-none text-white" style={{ letterSpacing: '-0.055em' }}>
                 {greeting}, {displayName}
@@ -1331,10 +1432,10 @@ function AccountDashboard() {
                 type="button"
                 onClick={() => setActiveHubFilter(chip.id)}
                 aria-pressed={active}
-                className={`h-11 shrink-0 rounded-full px-4 text-[12px] font-black transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] focus-visible:ring-offset-2 focus-visible:ring-offset-[#050505] ${
+                className={`h-11 shrink-0 rounded-full px-4 text-[12px] font-black transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                   active
                     ? 'bg-[#22c55e] text-black'
-                    : 'bg-[#2a2a2a] text-white hover:bg-[#353535]'
+                    : 'bg-[#e6e7ef] text-[#474a65] hover:bg-[#d3d4dd] dark:bg-[#2a2a2a] dark:text-white dark:hover:bg-[#353535]'
                 }`}
               >
                 {chip.label}
@@ -1348,20 +1449,15 @@ function AccountDashboard() {
               <button
                 key={tile.title}
                 onClick={() => navigate(tile.path)}
-                className={`group h-[68px] min-w-0 items-center overflow-hidden rounded-[0.5rem] border border-white/[0.08] bg-[#2a2a2a] text-left shadow-[0_18px_46px_-34px_rgba(0,0,0,0.9)] transition-all hover:-translate-y-0.5 hover:bg-[#343434] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e] lg:h-[88px] ${index < 4 ? 'flex' : 'hidden md:flex'}`}
+                className={`dashboard-shortcut group h-[68px] min-w-0 items-center overflow-hidden rounded-lg border border-slate-200 bg-white text-left transition-colors hover:border-[#9698aa] hover:bg-[#f8f8fa] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-white/10 dark:bg-[#202020] dark:hover:border-white/25 dark:hover:bg-[#282828] lg:h-[88px] ${index < 4 ? 'flex' : 'hidden md:flex'}`}
               >
-                <div className={`relative flex h-full w-[68px] shrink-0 items-center justify-center bg-gradient-to-br ${tile.tone} lg:w-[72px]`}>
-                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_25%,rgba(255,255,255,0.24),transparent_28%)]" />
-                  {'icon' in tile && tile.icon ? (
-                    <span className="relative flex h-10 w-10 items-center justify-center rounded-full border border-white/60 bg-black/50 text-white shadow-[0_10px_24px_-14px_rgba(0,0,0,0.95),0_0_0_3px_rgba(255,255,255,0.10),inset_0_1px_0_rgba(255,255,255,0.26)] ring-1 ring-black/40 backdrop-blur-sm">
-                      <tile.icon className="h-5 w-5" strokeWidth={2.5} />
-                    </span>
-                  ) : null}
-                </div>
-                <div className="min-w-0 flex-1 px-3">
-                  <p className="line-clamp-2 text-[11px] font-black leading-tight text-white sm:text-[13px] xl:text-[12px]">{tile.title}</p>
-                  <p className="mt-0.5 truncate text-[10px] font-semibold text-white/45">{tile.subtitle}</p>
-                </div>
+                <span className={`keep-white flex h-full w-[68px] shrink-0 items-center justify-center text-white lg:w-[72px] ${quickTileGradients[index % quickTileGradients.length]}`}>
+                  {tile.icon ? <tile.icon className="h-6 w-6" strokeWidth={1.8} /> : null}
+                </span>
+                <span className="min-w-0 flex-1 px-3">
+                  <span className="block line-clamp-2 text-[11px] font-black leading-tight text-[#474a65] dark:text-white sm:text-[13px] xl:text-[12px]">{tile.title}</span>
+                  <span className="mt-0.5 block truncate text-[10px] font-semibold text-[#62657b] dark:text-white/50">{tile.subtitle}</span>
+                </span>
               </button>
             ))}
             </div>
@@ -1400,7 +1496,6 @@ function AccountDashboard() {
                     className="relative overflow-hidden rounded-[1rem] border border-white/[0.08] bg-[#181818]"
                     style={{ boxShadow: '0 22px 70px -42px rgba(0,0,0,0.95)' }}
                   >
-                    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_0%,rgba(29,185,84,0.24),transparent_34%),linear-gradient(135deg,rgba(29,185,84,0.09),transparent_50%)]" />
                     <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[#1DB954]/45" />
                     <div className="relative px-4 py-4 sm:px-5">
                       <div className="mb-3 flex items-center gap-2">
@@ -1497,7 +1592,6 @@ function AccountDashboard() {
                     className="relative overflow-hidden rounded-[1rem] border border-white/[0.08] bg-[#181818]"
                     style={{ boxShadow: '0 22px 70px -42px rgba(0,0,0,0.95)' }}
                   >
-                    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_0%,rgba(29,185,84,0.28),transparent_34%),linear-gradient(135deg,rgba(29,185,84,0.11),transparent_50%)]" />
                     <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[#1DB954]/45" />
                     <div className="relative px-4 py-4 sm:px-5">
                       <div className="mb-3 flex items-center gap-2">
@@ -1575,7 +1669,6 @@ function AccountDashboard() {
                     className="relative overflow-hidden rounded-[1rem] border border-white/[0.08] bg-[#181818]"
                     style={{ boxShadow: '0 22px 70px -42px rgba(0,0,0,0.95)' }}
                   >
-                    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_0%,rgba(29,185,84,0.28),transparent_34%),linear-gradient(135deg,rgba(29,185,84,0.11),transparent_50%)]" />
                     <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[#1DB954]/45" />
                     <div className="relative px-4 py-4 sm:px-5">
                       <div className="flex items-center gap-2 mb-3">
@@ -1648,8 +1741,8 @@ function AccountDashboard() {
           </motion.section>
         )}
 
-        <motion.section variants={item} className="grid min-w-0 gap-5 xl:grid-cols-[1.95fr_1fr]">
-              <section className="min-w-0 self-start lg:flex lg:flex-col lg:rounded-[0.75rem] lg:border lg:border-white/[0.08] lg:bg-[#181818] lg:p-4 lg:shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)]">
+        <motion.section variants={item} className={`dashboard-events-section grid min-w-0 gap-5 lg:hidden ${reviewSets.length > 0 || dashboardLoadIssues.has('setlists') ? 'xl:grid-cols-[1.95fr_1fr]' : ''}`}>
+                <section className="dashboard-panel min-w-0 self-start lg:flex lg:flex-col lg:rounded-xl lg:border lg:border-slate-200 lg:bg-white lg:p-4 dark:lg:border-white/10 dark:lg:bg-[#181818]">
                 <div className="mb-3 flex items-center justify-between">
                   <h2 className="text-[18px] font-black text-white">Upcoming Events</h2>
                   <button onClick={() => navigate('/events')} className="-mr-2 inline-flex min-h-11 items-center px-2 text-[12px] font-bold text-[#22c55e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e]">See all</button>
@@ -1683,26 +1776,15 @@ function AccountDashboard() {
                             title={event.title}
                             artworkUrls={artworkUrls}
                             songs={artworkSongs}
-                            className="aspect-square w-full rounded-[0.45rem]"
+                            className="aspect-square w-full rounded-md"
                           />
-                          <span className="absolute left-2 top-2 rounded bg-white px-1.5 py-0.5 text-[7px] font-black uppercase text-black">
+                          <span className="absolute left-2 top-2 rounded bg-white px-1.5 py-0.5 text-[8px] font-bold uppercase text-[#474a65]">
                             {format(parseISO(event.event_date), 'MMM dd')}
                           </span>
-                          {preparation ? (
-                            <span
-                              className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/70 to-transparent px-2 pb-1.5 pt-5"
-                              title={preparation.detail}
-                            >
-                              <span className={`block truncate text-[8px] font-bold ${preparationTone(preparation.tone)}`}>
-                                {preparation.label}
-                              </span>
-                            </span>
-                          ) : null}
+                          {preparation ? <span className="keep-white absolute inset-x-0 bottom-0 truncate bg-black/80 px-2 py-1 text-[8px] font-semibold text-white" title={preparation.detail}>{preparation.label}</span> : null}
                         </div>
-                        <p className="mt-2 line-clamp-2 text-[12px] font-bold leading-tight text-white">{eventTitle}</p>
-                        <p className="mt-0.5 truncate text-[11px] font-semibold text-white/50">
-                          {event.event_type} · {event.start_time ? formatTime12Hour(event.start_time) : 'TBA'}
-                        </p>
+                        <p className="mt-2 line-clamp-2 text-[12px] font-semibold leading-tight text-slate-900 dark:text-white">{eventTitle}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-slate-600 dark:text-slate-400">{event.event_type} · {event.start_time ? formatTime12Hour(event.start_time) : 'TBA'}</p>
                       </button>
                     );
                   })}
@@ -1728,14 +1810,14 @@ function AccountDashboard() {
                     <button
                       key={event.id}
                       onClick={() => navigate(`/events/${event.id}`)}
-                      className="group flex w-full items-center gap-3 rounded-[0.55rem] bg-[#242424] p-2.5 text-left transition-colors hover:bg-[#2d2d2d]"
+                      className="group flex w-full items-center gap-3 rounded-lg border border-[#e6e7ef] bg-white p-2.5 text-left transition-colors hover:border-[#b9bbc9] hover:bg-[#f8f8fa] dark:border-white/[0.06] dark:bg-[#242424] dark:hover:border-white/[0.14] dark:hover:bg-[#2d2d2d]"
                     >
                       <EventArtwork
                         eventType={event.event_type}
                         title={event.title}
                         artworkUrls={artworkUrls}
                         songs={artworkSongs}
-                        className="h-16 w-16 rounded-[0.35rem]"
+                        className="h-16 w-16 rounded-md"
                       />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-[14px] font-black text-white">{eventTitle}</p>
@@ -1759,7 +1841,7 @@ function AccountDashboard() {
                 </div>
               </section>
 
-              <section aria-label="Setlists awaiting approval" className={`${reviewSets.length === 0 ? 'hidden lg:block' : ''} w-full min-w-0 max-w-full overflow-hidden rounded-[0.75rem] border p-3 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)] sm:p-4 ${reviewSets.length > 0 && canReviewSetlists ? 'border-amber-400/50 bg-gradient-to-br from-[#322411] via-[#201c17] to-[#181818] shadow-[0_18px_42px_-30px_rgba(245,158,11,0.45)]' : reviewSets.length > 0 ? 'border-sky-400/25 bg-gradient-to-br from-[#17232a] to-[#181818]' : 'border-white/[0.08] bg-[#181818]'}`}>
+              <section aria-label="Setlists awaiting approval" className={`dashboard-panel ${reviewSets.length === 0 && !dashboardLoadIssues.has('setlists') ? 'hidden' : ''} w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-[#181818]`}>
                 <div className="mb-3 flex items-center gap-2">
                   <div className="flex min-w-0 items-center gap-2">
                     {reviewSets.length > 0 && <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${canReviewSetlists ? 'bg-amber-400/20 text-amber-300' : 'bg-sky-400/15 text-sky-300'}`}><ListChecks className="h-4 w-4" /></span>}
@@ -1825,8 +1907,8 @@ function AccountDashboard() {
           <DashboardAttentionPanel items={attentionItems} onNavigate={navigate} />
         </motion.section>
 
-        <motion.section variants={item} className="dashboard-summary-grid hidden grid-cols-2 gap-5 md:grid lg:grid-cols-4">
-          <section className="rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-4 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)]">
+        <motion.section variants={item} className="dashboard-summary-grid hidden grid-cols-2 gap-5 md:grid lg:hidden">
+          <section className="dashboard-panel rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-[#15191a]">
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Music className="h-4 w-4 text-[#22c55e]" />
@@ -1866,7 +1948,7 @@ function AccountDashboard() {
             )}
           </section>
 
-          <section className="rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-4 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)]">
+          <section className="dashboard-panel rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-[#15191a]">
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <UserX className="h-4 w-4 text-[#22c55e]" />
@@ -1915,17 +1997,6 @@ function AccountDashboard() {
           </section>
 
           <DashboardAttentionPanel items={attentionItems} onNavigate={navigate} />
-
-          <section className="rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-4 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)]">
-            <div className="mb-4 flex items-center gap-2">
-              <ClipboardCheck className="h-4 w-4 text-[#22c55e]" />
-              <h2 className="text-[15px] font-black text-white">Daily Verse</h2>
-            </div>
-            <div className="flex min-h-[104px] flex-col justify-center rounded-[0.55rem] bg-white/[0.045] px-3 py-3">
-              <p className="line-clamp-4 text-[13px] font-bold leading-relaxed text-white/88">"{todayVerse.text}"</p>
-              <p className="mt-3 text-[10px] font-black uppercase tracking-[0.14em] text-[#22c55e]">{todayVerse.ref}</p>
-            </div>
-          </section>
         </motion.section>
 
         <motion.section variants={item} className="md:hidden">
@@ -1961,8 +2032,8 @@ function AccountDashboard() {
           </div>
         </motion.section>
 
-        <div className="grid min-w-0 gap-5 md:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.75fr)] lg:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.75fr)] xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,0.8fr)]">
-          <motion.section variants={item} className="min-w-0 overflow-hidden rounded-[0.75rem] border border-white/[0.08] bg-[#181818] p-3 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.95)] sm:p-4 lg:rounded-[1rem]">
+        <div className="dashboard-announcements-section min-w-0 lg:hidden">
+          <motion.section variants={item} className="dashboard-panel min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-[#181818] sm:p-4">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-[18px] font-black text-white">Recent Announcements</h2>
               <button onClick={() => navigate('/announcements')} className="-mr-2 inline-flex min-h-11 items-center px-2 text-[12px] font-bold text-[#22c55e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22c55e]">See all</button>
@@ -1982,11 +2053,8 @@ function AccountDashboard() {
                   onClick={() => navigate(`/announcements/${a.id}`)}
                   className="group flex w-full min-w-0 items-center gap-3 py-3 text-left"
                 >
-                  <span className={`relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[0.55rem] bg-gradient-to-br ${index === 0 ? 'from-emerald-400 via-green-800 to-black text-[#22c55e]' : index === 1 ? 'from-violet-300 via-violet-800 to-black text-violet-200' : 'from-sky-300 via-sky-800 to-black text-sky-100'}`}>
-                    <span className="absolute inset-0 bg-[radial-gradient(circle_at_30%_24%,rgba(255,255,255,0.30),transparent_30%)]" />
-                    <span className="relative flex h-8 w-8 items-center justify-center rounded-full border border-white/60 bg-black/48 shadow-[0_10px_24px_-14px_rgba(0,0,0,0.95),0_0_0_3px_rgba(255,255,255,0.10),inset_0_1px_0_rgba(255,255,255,0.26)] ring-1 ring-black/40 backdrop-blur-sm">
-                      {index === 0 ? <Megaphone className="h-4 w-4" strokeWidth={2.5} /> : index === 1 ? <Calendar className="h-4 w-4" strokeWidth={2.5} /> : <MessageCircle className="h-4 w-4" strokeWidth={2.5} />}
-                    </span>
+                  <span className={`keep-white flex h-12 w-12 shrink-0 items-center justify-center rounded-lg text-white ${flatTileTones[index % flatTileTones.length]}`}>
+                    {index === 0 ? <Megaphone className="h-5 w-5" strokeWidth={1.8} /> : index === 1 ? <Calendar className="h-5 w-5" strokeWidth={1.8} /> : <MessageCircle className="h-5 w-5" strokeWidth={1.8} />}
                   </span>
                   <span className="min-w-0 flex-1 overflow-hidden">
                     <span className="block truncate text-[13px] font-black text-white">{a.title}</span>
@@ -1999,43 +2067,31 @@ function AccountDashboard() {
             </div>
           </motion.section>
 
-          <motion.section variants={item} className="hidden min-w-0 rounded-[1rem] border border-white/[0.08] bg-[#181818] p-4 md:block">
-            <h2 className="mb-4 text-[18px] font-black text-white">Quick Actions</h2>
-            <div className="grid grid-cols-2 gap-2">
-              {quickActions.map((action) => {
-                const Icon = action.icon;
-                return (
-                  <button
-                    key={action.label}
-                    onClick={() => navigate(action.path, { state: { openModal: action.modal } })}
-                    className="flex h-20 flex-col items-center justify-center gap-2 rounded-[0.55rem] border border-white/[0.06] bg-[#242424] text-center transition-colors hover:bg-[#303030]"
-                  >
-                    <Icon className="h-6 w-6 text-[#22c55e]" />
-                    <span className="text-[12px] font-black text-white">{action.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </motion.section>
         </div>
 
       </motion.div>
 
-      {/* Modals — unchanged */}
-      <Modal open={!!selectedUnavailability} onClose={() => setSelectedUnavailability(null)} title="Unavailability Details">
+      <Modal open={!!selectedUnavailability} onClose={() => setSelectedUnavailability(null)} title="Team Availability" size="md" headerIcon={<Calendar className="h-4 w-4" />} bodyClassName="!p-0">
         {selectedUnavailability && (
-          <>
-            <div className="space-y-4">
-              <div><label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Team Member</label><p className="text-sm font-semibold text-gray-900 dark:text-white">{selectedUnavailability.profiles?.first_name} {selectedUnavailability.profiles?.last_name}</p></div>
-              <div><label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Date</label><p className="text-sm text-gray-900 dark:text-white">{selectedUnavailability.leave_type === 'range' && selectedUnavailability.start_date && selectedUnavailability.end_date ? `${format(parseISO(selectedUnavailability.start_date), 'MMM d')} – ${format(parseISO(selectedUnavailability.end_date), 'MMMM d, yyyy')}` : selectedUnavailability.unavailable_date ? format(parseISO(selectedUnavailability.unavailable_date), 'EEEE, MMMM d, yyyy') : '—'}</p></div>
-              <div><label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Reason</label><p className="text-sm text-gray-700 dark:text-gray-300">{selectedUnavailability.reason || 'No reason provided'}</p></div>
-              <div><label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Status</label><span className="badge-green">{selectedUnavailability.status}</span></div>
-              {selectedUnavailability.reviewed_at && <div><label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Reviewed At</label><p className="text-sm text-gray-700 dark:text-gray-300">{format(parseISO(selectedUnavailability.reviewed_at), 'MMMM d, yyyy h:mm a')}</p></div>}
+          <div className="p-5 sm:p-6">
+            <div className="flex items-start gap-3 border-b border-slate-200 pb-5 dark:border-white/[0.09]">
+              <Avatar src={selectedUnavailability.profiles?.avatar_url} firstName={selectedUnavailability.profiles?.first_name || '?'} lastName={selectedUnavailability.profiles?.last_name} size="md" className="!h-12 !w-12 shrink-0 ring-1 ring-slate-200 dark:ring-white/[0.12]" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">Team member</p>
+                <p className="mt-1 truncate text-lg font-extrabold text-slate-950 dark:text-white">{selectedUnavailability.profiles?.first_name} {selectedUnavailability.profiles?.last_name}</p>
+              </div>
+              <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold capitalize ${selectedUnavailability.status === 'approved' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'}`}>{selectedUnavailability.status}</span>
             </div>
-            <div className="mt-6 flex gap-3 justify-end">
-              {isProductionDirector ? (<><button onClick={() => setSelectedUnavailability(null)} className="btn-secondary">Close</button><button onClick={() => setShowDeleteConfirm(true)} className="btn-danger flex items-center gap-2"><Trash2 className="h-4 w-4" />Delete</button></>) : (<button onClick={() => setSelectedUnavailability(null)} className="btn-secondary">Close</button>)}
+            <div className="grid gap-5 py-5 sm:grid-cols-2">
+              <div><p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">Unavailable on</p><p className="mt-1.5 text-sm font-semibold leading-relaxed text-slate-900 dark:text-white">{selectedUnavailability.leave_type === 'range' && selectedUnavailability.start_date && selectedUnavailability.end_date ? `${format(parseISO(selectedUnavailability.start_date), 'MMM d')} – ${format(parseISO(selectedUnavailability.end_date), 'MMMM d, yyyy')}` : selectedUnavailability.unavailable_date ? format(parseISO(selectedUnavailability.unavailable_date), 'EEEE, MMMM d, yyyy') : '—'}</p></div>
+              {selectedUnavailability.reviewed_at && <div><p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">Reviewed</p><p className="mt-1.5 text-sm font-semibold leading-relaxed text-slate-900 dark:text-white">{format(parseISO(selectedUnavailability.reviewed_at), 'MMM d, yyyy · h:mm a')}</p></div>}
             </div>
-          </>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/[0.09] dark:bg-white/[0.04]"><p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">Reason</p><p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-800 dark:text-slate-200">{selectedUnavailability.reason || 'No reason provided'}</p></div>
+            <div className="mt-5 flex justify-end gap-2 border-t border-slate-200 pt-5 dark:border-white/[0.09]">
+              <button onClick={() => setSelectedUnavailability(null)} className="btn-secondary">Close</button>
+              {isProductionDirector && <button onClick={() => setShowDeleteConfirm(true)} className="btn-danger flex items-center gap-2"><Trash2 className="h-4 w-4" />Delete</button>}
+            </div>
+          </div>
         )}
       </Modal>
 

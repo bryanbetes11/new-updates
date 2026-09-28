@@ -67,7 +67,7 @@ export function AppSettings() {
         )}
         <section aria-labelledby="app-updates-title" className="space-y-4 rounded-3xl border border-gray-200/80 bg-white p-5 dark:border-white/[0.07] dark:bg-white/[0.025] sm:p-6">
           <div>
-            <h2 id="app-updates-title" className="text-base font-bold text-gray-950 dark:text-white">App updates</h2>
+            <h2 id="app-updates-title" className="text-base font-bold text-gray-950 dark:text-white">App Updates</h2>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">ServeSync {installed ? `v${installed.version}` : APP_VERSION_LABEL}</p>
           </div>
           <button type="button" onClick={() => void check()} disabled={checking} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50">
@@ -79,7 +79,7 @@ export function AppSettings() {
         </section>
         <DeviceCacheSetting />
         <section className="rounded-3xl border border-gray-200/80 bg-white p-5 dark:border-white/[0.07] dark:bg-white/[0.025] sm:p-6">
-          <h2 className="text-base font-bold text-gray-950 dark:text-white">Privacy and help</h2>
+          <h2 className="text-base font-bold text-gray-950 dark:text-white">Privacy And Help</h2>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Your church admin handles church records first. ServeSync can help with a privacy, account, or security request.</p>
           <div className="mt-3 flex flex-wrap gap-4 text-sm font-semibold text-emerald-700 dark:text-emerald-300">
             <a href="/privacy.html" target="_blank" rel="noopener noreferrer">Privacy notice</a>

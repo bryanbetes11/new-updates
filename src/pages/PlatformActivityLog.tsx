@@ -385,7 +385,7 @@ export function PlatformActivityLog() {
               <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-50 text-sky-600 dark:bg-sky-500/[0.12] dark:text-sky-300">
                 <Activity className="h-5 w-5" />
               </div>
-              <h2 className="text-base font-black text-gray-900 dark:text-white">No activity found</h2>
+              <h2 className="text-base font-black text-gray-900 dark:text-white">No Activity Found</h2>
               <p className="mt-1 text-sm text-gray-500 dark:text-white/40">Try another filter or check again after new activity happens.</p>
             </div>
           )}

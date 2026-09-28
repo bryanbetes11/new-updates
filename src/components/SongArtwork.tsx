@@ -174,12 +174,10 @@ export function SongArtwork({ song, youtubeUrl, className = 'h-10 w-10 rounded-l
           }}
         />
       ) : (
-        <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_35%_25%,rgba(34,197,94,0.42),transparent_34%),linear-gradient(135deg,rgba(255,255,255,0.14),rgba(0,0,0,0.92))]">
-          <Music className="h-4 w-4 text-white/70" />
+        <div className="flex h-full w-full items-center justify-center bg-[#365776]">
+          <Music className="keep-white h-4 w-4 text-white" />
         </div>
       )}
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.10),rgba(0,0,0,0.30))]" />
-      <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10" />
     </div>
   );
 }

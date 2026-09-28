@@ -17,7 +17,7 @@ export function Accountability() {
             tone="amber"
             icon={ClipboardCheck}
             eyebrow="Attendance & Conduct"
-            title="Accountability."
+            title="Accountability"
             description="Review quarterly attendance, identify policy thresholds, and manage conduct follow-up from one leadership workspace."
           />
 

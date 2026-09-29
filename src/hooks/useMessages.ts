@@ -28,6 +28,7 @@ export interface Message {
   sender: MessageSender;
   reactions: MessageReaction[];
   reply_preview: { content: string; sender_name: string } | null;
+  delivery_state?: 'sending' | 'sent';
 }
 
 export interface TypingUser {
@@ -83,7 +84,7 @@ function getPayloadSenderId(payload: unknown): string | null {
 }
 
 export function useMessages(conversationId: string | null) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
@@ -152,7 +153,7 @@ export function useMessages(conversationId: string | null) {
     }
 
     if (requestId !== fetchRequestRef.current) return;
-    setMessages(messageRows.map(message => ({
+    const serverMessages: Message[] = messageRows.map(message => ({
       id: message.id,
       conversation_id: message.conversation_id,
       sender_id: message.sender_id,
@@ -163,7 +164,21 @@ export function useMessages(conversationId: string | null) {
       sender: message.profiles ?? { first_name: null, last_name: null, nickname: null, avatar_url: null },
       reactions: message.message_reactions ?? [],
       reply_preview: message.reply_to ? (replyMap[message.reply_to] ?? null) : null,
-    })));
+    }));
+    setMessages(current => {
+      const localById = new Map(current.map(message => [message.id, message]));
+      const serverIds = new Set(serverMessages.map(message => message.id));
+      const merged = serverMessages.map(message => ({
+        ...message,
+        delivery_state: localById.get(message.id)?.delivery_state,
+      }));
+      const stillSending = current.filter(message => (
+        message.delivery_state === 'sending' && !serverIds.has(message.id)
+      ));
+      return [...merged, ...stillSending].sort((left, right) => (
+        new Date(left.created_at).getTime() - new Date(right.created_at).getTime()
+      ));
+    });
     loadedConversationRef.current = conversationId;
     setLoading(false);
   }, [conversationId]);
@@ -282,18 +297,54 @@ export function useMessages(conversationId: string | null) {
 
   const sendMessage = useCallback(async (content: string, replyTo?: string, clientMessageId: string = crypto.randomUUID()) => {
     if (!conversationId || !user || !content.trim()) return { message: 'Conversation unavailable' };
+    const trimmedContent = content.trim();
+    const repliedMessage = replyTo ? messages.find(message => message.id === replyTo) : null;
+    const optimisticMessage: Message = {
+      id: clientMessageId,
+      conversation_id: conversationId,
+      sender_id: user.id,
+      content: trimmedContent,
+      created_at: new Date().toISOString(),
+      is_pinned: false,
+      reply_to: replyTo || null,
+      sender: {
+        first_name: profile?.first_name ?? null,
+        last_name: profile?.last_name ?? null,
+        nickname: profile?.nickname ?? null,
+        avatar_url: profile?.avatar_url ?? null,
+      },
+      reactions: [],
+      reply_preview: repliedMessage
+        ? { content: repliedMessage.content, sender_name: getFullName(repliedMessage.sender) }
+        : null,
+      delivery_state: 'sending',
+    };
+    setMessages(current => {
+      const existing = current.find(message => message.id === clientMessageId);
+      if (existing) {
+        return current.map(message => message.id === clientMessageId
+          ? { ...message, delivery_state: 'sending' }
+          : message);
+      }
+      return [...current, optimisticMessage];
+    });
     const error = await acknowledgeMessage({
       id: clientMessageId, conversation_id: conversationId, sender_id: user.id,
-      content: content.trim(), reply_to: replyTo || null,
+      content: trimmedContent, reply_to: replyTo || null,
     }, message => supabase.from('messages').insert(message),
     messageId => supabase.from('messages').select('content, reply_to').eq('id', messageId).eq('conversation_id', conversationId).eq('sender_id', user.id).maybeSingle());
     if (!error) {
+      setMessages(current => current.map(message => message.id === clientMessageId
+        ? { ...message, delivery_state: 'sent' }
+        : message));
       void fetchMessages();
       markRead();
       dispatchMessagingRefresh();
+    } else {
+      setMessages(current => current.filter(message => message.id !== clientMessageId));
     }
     return error;
-  }, [conversationId, user, markRead, fetchMessages]);
+  }, [conversationId, user, profile, messages, markRead, fetchMessages]);
 
   const pinMessage = useCallback(async (messageId: string, pinned: boolean) => {
     if (!user) return false;

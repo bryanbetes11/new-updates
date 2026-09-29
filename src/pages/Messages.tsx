@@ -159,8 +159,10 @@ interface MessageActionAnchorRect {
   bottom: number;
   width: number;
   height: number;
-  menuOverlap?: number;
-  horizontalNudge?: number;
+  boundaryLeft?: number;
+  boundaryTop?: number;
+  boundaryRight?: number;
+  boundaryBottom?: number;
 }
 
 type MessageReactionFlight = ReactionFlightPath & {
@@ -188,17 +190,64 @@ interface MessageActionPlacement {
   top: number;
   width: number;
   opensAbove: boolean;
-  pointerLeft: number;
+  opensFromRight: boolean;
+}
+
+interface MessageActionViewport {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
 }
 
 const MESSAGE_ACTION_MARGIN = 12;
-const MESSAGE_ACTION_GAP = 12;
+const MESSAGE_ACTION_GAP = 6;
+const MESSAGE_POPOVER_CHROME_CLASS = 'border border-slate-200 bg-white text-slate-900 shadow-[0_10px_28px_-12px_rgba(15,23,42,0.28)] dark:border-white/[0.1] dark:bg-[#202124] dark:text-white dark:shadow-[0_12px_32px_-14px_rgba(0,0,0,0.72)]';
+const MESSAGE_GROUP_WINDOW_MS = 5 * 60 * 1000;
+
+function messagesBelongToSameGroup(previous: Message | undefined, current: Message | undefined) {
+  if (!previous || !current || previous.sender_id !== current.sender_id) return false;
+
+  const previousDate = new Date(previous.created_at);
+  const currentDate = new Date(current.created_at);
+  return previousDate.toDateString() === currentDate.toDateString()
+    && currentDate.getTime() - previousDate.getTime() <= MESSAGE_GROUP_WINDOW_MS;
+}
+
+function getMessageBubbleShapeClass({
+  isMine,
+  joinsPrevious,
+  joinsNext,
+}: {
+  isMine: boolean;
+  joinsPrevious: boolean;
+  joinsNext: boolean;
+}) {
+  const joinedTopCorner = joinsPrevious
+    ? isMine ? 'rounded-tr-[5px]' : 'rounded-tl-[5px]'
+    : '';
+  const joinedBottomCorner = joinsNext
+    ? isMine ? 'rounded-br-[5px]' : 'rounded-bl-[5px]'
+    : '';
+
+  return `${joinedTopCorner} ${joinedBottomCorner}`;
+}
 
 function clampToViewport(value: number, minimum: number, maximum: number) {
   return Math.min(Math.max(value, minimum), Math.max(minimum, maximum));
 }
 
-const MESSAGE_FOCUS_BACKDROP_CLASS = 'pointer-events-auto fixed bg-black/20 animate-fade-in dark:bg-black/45';
+function readMessageActionViewport(): MessageActionViewport {
+  const visualViewport = window.visualViewport;
+  return visualViewport
+    ? {
+        left: visualViewport.offsetLeft,
+        top: visualViewport.offsetTop,
+        width: visualViewport.width,
+        height: visualViewport.height,
+      }
+    : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+}
 
 function MessageActionOverlay({
   open,
@@ -216,7 +265,8 @@ function MessageActionOverlay({
 }: MessageActionOverlayProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
-  const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
+  const prefersReducedMotion = useReducedMotion();
+  const [viewport, setViewport] = useState(readMessageActionViewport);
   const [placement, setPlacement] = useState<MessageActionPlacement | null>(null);
 
   useEffect(() => {
@@ -248,66 +298,73 @@ function MessageActionOverlay({
         first.focus();
       }
     };
-    const handleResize = () => setViewport({ width: window.innerWidth, height: window.innerHeight });
+    const handleResize = () => setViewport(readMessageActionViewport());
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('resize', handleResize);
-    dialogRef.current?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true });
+    window.visualViewport?.addEventListener('resize', handleResize);
+    window.visualViewport?.addEventListener('scroll', handleResize);
+    dialogRef.current?.focus({ preventScroll: true });
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('resize', handleResize);
+      window.visualViewport?.removeEventListener('resize', handleResize);
+      window.visualViewport?.removeEventListener('scroll', handleResize);
       document.documentElement.style.overflow = previousHtmlOverflow;
       document.body.style.overflow = previousBodyOverflow;
     };
   }, [open]);
 
   useLayoutEffect(() => {
-    if (!open || !anchorRect) {
+    if (!anchorRect) {
       setPlacement(null);
       return;
     }
-    const dialogHeight = dialogRef.current?.getBoundingClientRect().height || 330;
-    const width = Math.min(212, Math.max(196, Math.min(anchorRect.width, viewport.width - (MESSAGE_ACTION_MARGIN * 2))));
-    const menuAnchorBottom = anchorRect.bottom - (anchorRect.menuOverlap || 0);
-    const roomBelow = viewport.height - menuAnchorBottom - MESSAGE_ACTION_MARGIN;
-    const roomAbove = anchorRect.top - MESSAGE_ACTION_MARGIN;
+    if (!open) return;
+    const dialogHeight = dialogRef.current?.getBoundingClientRect().height || 220;
+    const viewportRight = viewport.left + viewport.width;
+    const viewportBottom = viewport.top + viewport.height;
+    const boundaryLeft = Math.max(viewport.left, anchorRect.boundaryLeft ?? viewport.left) + MESSAGE_ACTION_MARGIN;
+    const boundaryTop = Math.max(viewport.top, anchorRect.boundaryTop ?? viewport.top) + MESSAGE_ACTION_MARGIN;
+    const boundaryRight = Math.min(viewportRight, anchorRect.boundaryRight ?? viewportRight) - MESSAGE_ACTION_MARGIN;
+    const boundaryBottom = Math.min(viewportBottom, anchorRect.boundaryBottom ?? viewportBottom) - MESSAGE_ACTION_MARGIN;
+    const width = Math.min(200, boundaryRight - boundaryLeft);
+    const roomBelow = boundaryBottom - anchorRect.bottom;
+    const roomAbove = anchorRect.top - boundaryTop;
     const opensAbove = roomBelow < dialogHeight + MESSAGE_ACTION_GAP && roomAbove > roomBelow;
-    const centeredLeft = anchorRect.left + ((anchorRect.width - width) / 2) - (opensAbove ? 0 : (anchorRect.horizontalNudge || 0));
-    const left = clampToViewport(centeredLeft, MESSAGE_ACTION_MARGIN, viewport.width - width - MESSAGE_ACTION_MARGIN);
+    const opensFromRight = (anchorRect.left + (anchorRect.width / 2)) > ((boundaryLeft + boundaryRight) / 2);
+    const preferredLeft = opensFromRight ? anchorRect.right - width : anchorRect.left;
+    const left = clampToViewport(preferredLeft, boundaryLeft, boundaryRight - width);
     const preferredTop = opensAbove
       ? anchorRect.top - dialogHeight - MESSAGE_ACTION_GAP
-      : menuAnchorBottom + MESSAGE_ACTION_GAP;
-    const top = clampToViewport(preferredTop, MESSAGE_ACTION_MARGIN, viewport.height - dialogHeight - MESSAGE_ACTION_MARGIN);
-    const pointerLeft = clampToViewport((anchorRect.left + (anchorRect.width / 2)) - left, 28, width - 28);
-    setPlacement({ left, top, width, opensAbove, pointerLeft });
+      : anchorRect.bottom + MESSAGE_ACTION_GAP;
+    const top = clampToViewport(preferredTop, boundaryTop, boundaryBottom - dialogHeight);
+    setPlacement({ left, top, width, opensAbove, opensFromRight });
   }, [anchorRect, canCopy, isMine, open, viewport]);
 
-  if (!open || !anchorRect) return null;
+  if (!anchorRect) return null;
 
-  const halo = {
-    left: clampToViewport(anchorRect.left - 5, 0, viewport.width),
-    top: clampToViewport(anchorRect.top - 5, 0, viewport.height),
-    right: clampToViewport(anchorRect.right + 5, 0, viewport.width),
-    bottom: clampToViewport(anchorRect.bottom + 5, 0, viewport.height),
-  };
-  const actionClass = 'flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-[13px] font-bold text-white/72 transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400';
+  const actionClass = 'flex h-10 w-full items-center gap-2.5 rounded-lg bg-transparent px-3 text-left text-sm font-medium text-slate-700 transition-[background-color,color,transform] duration-150 hover:bg-slate-100 active:scale-[0.985] focus-visible:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 dark:text-white/75 dark:hover:bg-white/[0.07] dark:focus-visible:bg-white/[0.07]';
+  const replyActionClass = `${actionClass} hover:!bg-emerald-50 hover:!text-emerald-700 focus-visible:!bg-emerald-50 focus-visible:!text-emerald-700 dark:hover:!bg-emerald-400/10 dark:hover:!text-emerald-200 dark:focus-visible:!bg-emerald-400/10 dark:focus-visible:!text-emerald-200`;
+  const destructiveActionClass = `${actionClass} !text-red-600 hover:!bg-red-50 hover:!text-red-700 focus-visible:!bg-red-50 focus-visible:!text-red-700 dark:!text-red-300 dark:hover:!bg-red-500/10 dark:hover:!text-red-200 dark:focus-visible:!bg-red-500/10 dark:focus-visible:!text-red-200`;
 
   return createPortal(
-    <div className="pointer-events-none fixed inset-0 z-[2147483647]" role="presentation" data-app-nonselect="true">
-      <div aria-hidden="true" onClick={onClose} className={MESSAGE_FOCUS_BACKDROP_CLASS} style={{ inset: '0 0 auto 0', height: halo.top }} />
-      <div aria-hidden="true" onClick={onClose} className={MESSAGE_FOCUS_BACKDROP_CLASS} style={{ inset: `${halo.bottom}px 0 0 0` }} />
-      <div aria-hidden="true" onClick={onClose} className={MESSAGE_FOCUS_BACKDROP_CLASS} style={{ left: 0, top: halo.top, width: halo.left, height: halo.bottom - halo.top }} />
-      <div aria-hidden="true" onClick={onClose} className={MESSAGE_FOCUS_BACKDROP_CLASS} style={{ left: halo.right, right: 0, top: halo.top, height: halo.bottom - halo.top }} />
-
-      <div
-        aria-hidden="true"
-        onClick={onClose}
-        className="pointer-events-auto fixed bg-transparent"
-        style={{ left: halo.left, top: halo.top, width: halo.right - halo.left, height: halo.bottom - halo.top }}
-      />
+    <AnimatePresence>
+    {open && <motion.div
+      key="message-action-overlay"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: prefersReducedMotion ? 0.06 : 0.1, ease: 'easeOut' }}
+      className="pointer-events-none fixed inset-0 z-[2147483647]"
+      role="presentation"
+      data-app-nonselect="true"
+    >
+      <div aria-hidden="true" onClick={onClose} className="pointer-events-auto fixed inset-0 bg-transparent" />
 
       <div
         ref={dialogRef}
+        tabIndex={-1}
         className="pointer-events-auto fixed"
         style={placement ? {
           left: placement.left,
@@ -317,39 +374,27 @@ function MessageActionOverlay({
         onClick={event => event.stopPropagation()}
       >
         <motion.div
-          role="dialog"
-          aria-modal="true"
+          role="menu"
           aria-label="Message options"
-          initial={false}
+          initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.97, y: placement?.opensAbove ? 2 : -2 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          transition={{ type: 'spring', stiffness: 470, damping: 30, mass: 0.72 }}
-          className="relative overflow-hidden rounded-[1.35rem] border border-white/[0.07] bg-[#222326]/95 text-white shadow-[0_28px_80px_-24px_rgba(0,0,0,0.95)] ring-1 ring-white/[0.015] backdrop-blur-xl"
-          style={{ transformOrigin: placement?.opensAbove ? 'bottom center' : 'top center' }}
+          exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.98, y: placement?.opensAbove ? 1 : -1 }}
+          transition={{ duration: prefersReducedMotion ? 0.06 : 0.14, ease: [0.22, 1, 0.36, 1] }}
+          className={`overflow-hidden rounded-xl ${MESSAGE_POPOVER_CHROME_CLASS}`}
+          style={{ transformOrigin: `${placement?.opensAbove ? 'bottom' : 'top'} ${placement?.opensFromRight ? 'right' : 'left'}` }}
         >
-          {placement && (
-            <span
-              aria-hidden="true"
-              className={`absolute h-3 w-3 rotate-45 border-white/[0.07] bg-[#222326]/95 ${placement.opensAbove ? '-bottom-1.5 border-b border-r' : '-top-1.5 border-l border-t'}`}
-              style={{ left: placement.pointerLeft - 6 }}
-            />
-          )}
-
-          <motion.div
-            initial="closed"
-            animate="open"
-            variants={{ open: { transition: { delayChildren: 0.04, staggerChildren: 0.025 } }, closed: {} }}
-            className="flex flex-col gap-0.5 px-5 py-2.5"
-          >
-            <motion.button variants={{ closed: { opacity: 0, y: 9, scale: 0.96 }, open: { opacity: 1, y: 0, scale: 1 } }} type="button" onClick={onReply} className={actionClass}><CornerUpLeft className="h-4 w-4 text-emerald-300" /> Reply</motion.button>
-            <motion.button variants={{ closed: { opacity: 0, y: 9, scale: 0.96 }, open: { opacity: 1, y: 0, scale: 1 } }} type="button" onClick={onReact} className={actionClass}><span className="text-[15px] leading-none">😊</span> React</motion.button>
-            {canCopy && <motion.button variants={{ closed: { opacity: 0, y: 9, scale: 0.96 }, open: { opacity: 1, y: 0, scale: 1 } }} type="button" onClick={onCopy} className={actionClass}><Copy className="h-4 w-4 text-sky-300" /> Copy</motion.button>}
-            <motion.button variants={{ closed: { opacity: 0, y: 9, scale: 0.96 }, open: { opacity: 1, y: 0, scale: 1 } }} type="button" onClick={onTogglePin} className={actionClass}><Pin className="h-4 w-4 text-amber-300" /> {isPinned ? 'Unpin' : 'Pin'}</motion.button>
-            {!isMine && <motion.button variants={{ closed: { opacity: 0, y: 9, scale: 0.96 }, open: { opacity: 1, y: 0, scale: 1 } }} type="button" onClick={onReport} className={actionClass}><Flag className="h-4 w-4 text-amber-300" /> Report message</motion.button>}
-            {isMine && <motion.button variants={{ closed: { opacity: 0, y: 9, scale: 0.96 }, open: { opacity: 1, y: 0, scale: 1 } }} type="button" onClick={onDelete} className={`${actionClass} text-red-300 hover:bg-red-500/10`}><Trash2 className="h-4 w-4" /> Delete message</motion.button>}
-          </motion.div>
+          <div className="flex flex-col py-1.5 px-1.5">
+            <button type="button" onClick={onReply} className={replyActionClass}><CornerUpLeft className="h-[18px] w-[18px]" /> Reply</button>
+            <button type="button" onClick={onReact} className={actionClass}><span className="flex h-[18px] w-[18px] items-center justify-center text-[16px] leading-none">😊</span> React</button>
+            {canCopy && <button type="button" onClick={onCopy} className={actionClass}><Copy className="h-[18px] w-[18px]" /> Copy</button>}
+            <button type="button" onClick={onTogglePin} className={actionClass}><Pin className="h-[18px] w-[18px]" /> {isPinned ? 'Unpin' : 'Pin'}</button>
+            {!isMine && <button type="button" onClick={onReport} className={destructiveActionClass}><Flag className="h-[18px] w-[18px]" /> Report Message</button>}
+            {isMine && <button type="button" onClick={onDelete} className={destructiveActionClass}><Trash2 className="h-[18px] w-[18px]" /> Delete Message</button>}
+          </div>
         </motion.div>
       </div>
-    </div>,
+    </motion.div>}
+    </AnimatePresence>,
     document.body,
   );
 }
@@ -654,6 +699,74 @@ function replyPreviewContent(content: string): string {
   return humanizeMentions(parsed.text);
 }
 
+function ReplyQuotedPreview({
+  content,
+  senderName,
+  isMine,
+  canJump,
+  onJump,
+}: {
+  content: string;
+  senderName: string;
+  isMine: boolean;
+  canJump: boolean;
+  onJump: () => void;
+}) {
+  const parsed = parseContent(content);
+  const isVideoFile = parsed.type === 'file' && /\.(mp4|mov|m4v|webm)$/i.test(parsed.name);
+  const media = parsed.type === 'image'
+    ? <img src={parsed.url} alt="" className="h-9 w-9 shrink-0 rounded-lg object-cover" />
+    : parsed.type === 'file'
+      ? (
+          <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${isMine ? 'bg-white/15' : 'bg-white/80 dark:bg-white/10'}`}>
+            {isVideoFile ? <PlayCircle className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
+          </span>
+        )
+      : parsed.type === 'event_reference'
+        ? (
+            <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${isMine ? 'bg-white/15' : 'bg-white/80 dark:bg-white/10'}`}>
+              {parsed.reference === 'song' || parsed.reference === 'setlist'
+                ? <Music2 className="h-4 w-4" />
+                : <CalendarDays className="h-4 w-4" />}
+            </span>
+          )
+        : null;
+  const preview = parsed.type === 'image'
+    ? 'Photo'
+    : isVideoFile
+      ? 'Video'
+      : replyPreviewContent(content);
+
+  return (
+    <button
+      type="button"
+      disabled={!canJump}
+      aria-label={canJump ? `Go to original message from ${senderName}` : `Original message from ${senderName} is unavailable`}
+      onClick={event => {
+        event.stopPropagation();
+        if (canJump) onJump();
+      }}
+      className={`group/quote block w-0 min-w-full max-w-full overflow-hidden rounded-xl border-l-[3px] px-2.5 py-2 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 disabled:cursor-default ${
+        isMine
+          ? 'border-l-emerald-100/90 bg-emerald-950/15 hover:bg-emerald-950/20'
+          : 'border-l-slate-400 bg-slate-200/75 hover:bg-slate-200 dark:border-l-slate-400 dark:bg-white/[0.08] dark:hover:bg-white/[0.11]'
+      }`}
+    >
+      <span className="flex min-w-0 items-center gap-2">
+        {media}
+        <span className="min-w-0 flex-1">
+          <span className={`block truncate text-[11px] font-bold leading-tight ${isMine ? 'text-white' : 'text-slate-800 dark:text-white/85'}`}>
+            {senderName}
+          </span>
+          <span className={`mt-0.5 block truncate text-[12px] leading-snug ${isMine ? 'text-white/75' : 'text-slate-600 dark:text-white/55'}`}>
+            {preview}
+          </span>
+        </span>
+      </span>
+    </button>
+  );
+}
+
 function formatTypingUsers(users: Array<{ name: string }>): string {
   if (users.length === 0) return '';
   if (users.length === 1) return `${users[0].name} is typing`;
@@ -662,13 +775,13 @@ function formatTypingUsers(users: Array<{ name: string }>): string {
 }
 
 const QUICK_REACTIONS = [
-  { emoji: '👍', label: 'Like', surface: 'from-sky-400/30 to-sky-500/10 ring-sky-300/25' },
-  { emoji: '❤️', label: 'Love', surface: 'from-rose-400/30 to-rose-500/10 ring-rose-300/25' },
-  { emoji: '😂', label: 'Haha', surface: 'from-amber-300/25 to-yellow-400/10 ring-amber-200/25' },
-  { emoji: '😊', label: 'Yay', surface: 'from-amber-300/25 to-orange-400/10 ring-amber-200/25' },
-  { emoji: '😮', label: 'Wow', surface: 'from-amber-300/25 to-yellow-400/10 ring-amber-200/25' },
-  { emoji: '😢', label: 'Sad', surface: 'from-sky-300/25 to-blue-400/10 ring-sky-200/25' },
-  { emoji: '😠', label: 'Angry', surface: 'from-red-400/30 to-orange-500/10 ring-red-300/25' },
+  { emoji: '👍', label: 'Like' },
+  { emoji: '❤️', label: 'Love' },
+  { emoji: '😂', label: 'Haha' },
+  { emoji: '😊', label: 'Yay' },
+  { emoji: '😮', label: 'Wow' },
+  { emoji: '😢', label: 'Sad' },
+  { emoji: '😠', label: 'Angry' },
 ] as const;
 const mobilePanelTransition = { type: 'spring' as const, stiffness: 380, damping: 36, mass: 0.88 };
 const mobilePanelShadow = '0 24px 70px -34px rgba(15, 23, 42, 0.65)';
@@ -676,81 +789,84 @@ const REPLY_DRAG_THRESHOLD = 56;
 
 // ─── Emoji Picker ────────────────────────────────────────────────────────────
 
-function EmojiPicker({ onPick }: { onPick: (emoji: string, sourceElement: HTMLElement) => void }) {
+function EmojiPicker({
+  onPick,
+  selectedEmojis,
+}: {
+  onPick: (emoji: string, sourceElement: HTMLElement) => void;
+  selectedEmojis: string[];
+}) {
   const prefersReducedMotion = useReducedMotion();
 
   return (
-    <motion.div
+    <div
       data-app-nonselect="true"
-      initial={prefersReducedMotion ? false : 'closed'}
-      animate="open"
-      variants={{
-        closed: {},
-        open: { transition: { delayChildren: 0.04, staggerChildren: 0.025 } },
-      }}
-      className="grid w-full grid-cols-7 gap-1 rounded-[1.3rem] border border-gray-200/80 bg-white p-2 shadow-[0_24px_70px_-24px_rgba(0,0,0,0.72),0_0_32px_-18px_rgba(52,211,153,0.7)] ring-1 ring-emerald-400/10 dark:border-white/[0.10] dark:bg-[#18181b] dark:ring-emerald-300/10"
+      className={`grid w-full auto-cols-fr grid-flow-col grid-cols-7 items-center gap-0.5 overflow-x-auto overflow-y-visible rounded-2xl p-1 sm:gap-1 sm:p-1.5 ${MESSAGE_POPOVER_CHROME_CLASS}`}
     >
-      {QUICK_REACTIONS.map(reaction => (
+      {QUICK_REACTIONS.map(reaction => {
+        const isSelected = selectedEmojis.includes(reaction.emoji);
+        return (
         <motion.button
           key={reaction.emoji}
           type="button"
           onClick={event => onPick(reaction.emoji, event.currentTarget)}
           aria-label={`React with ${reaction.label}`}
-          variants={prefersReducedMotion ? undefined : {
-            closed: { opacity: 0, y: -10, scale: 0.76 },
-            open: { opacity: 1, y: 0, scale: 1 },
-          }}
-          transition={prefersReducedMotion ? { duration: 0.1 } : { type: 'spring', stiffness: 590, damping: 30, mass: 0.48 }}
-          whileHover={{ y: -4, scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          className="group/reaction flex min-w-0 flex-col items-center gap-1 rounded-xl py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70"
+          aria-pressed={isSelected}
+          title={reaction.label}
+          transition={{ duration: prefersReducedMotion ? 0.08 : 0.14, ease: 'easeOut' }}
+          whileHover={prefersReducedMotion ? undefined : { y: -1.5, scale: 1.15 }}
+          whileTap={prefersReducedMotion ? undefined : { scale: 0.94 }}
+          className={`group/reaction flex h-11 min-w-10 items-center justify-center rounded-full bg-transparent text-[26px] leading-none transition-[background-color,box-shadow] duration-150 sm:h-10 sm:w-10 ${
+            isSelected
+              ? 'bg-emerald-50 ring-1 ring-inset ring-emerald-300/80 dark:bg-emerald-400/12 dark:ring-emerald-300/35'
+              : 'hover:bg-emerald-50/70 focus-visible:bg-emerald-50/70 dark:hover:bg-emerald-400/10 dark:focus-visible:bg-emerald-400/10'
+          } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70`}
+          style={{ fontFamily: '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif' }}
         >
-          <span
-            className={`flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br text-[23px] shadow-sm ring-1 ${reaction.surface} transition-[filter,box-shadow] group-hover/reaction:brightness-110 group-hover/reaction:shadow-md`}
-            style={{ fontFamily: '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif' }}
-          >
-            {reaction.emoji}
-          </span>
-          <span className="truncate text-[8px] font-bold tracking-[-0.01em] text-gray-400 dark:text-white/38 sm:text-[9px]">{reaction.label}</span>
+          {reaction.emoji}
         </motion.button>
-      ))}
-    </motion.div>
+      );})}
+    </div>
   );
 }
 
 function EmojiReactionPopover({
   open,
   anchorRect,
-  boundaryTop,
   onClose,
   onPick,
+  selectedEmojis,
 }: {
   open: boolean;
   anchorRect: MessageActionAnchorRect | null;
-  boundaryTop: number;
   onClose: () => void;
   onPick: (emoji: string, sourceElement: HTMLElement) => void;
+  selectedEmojis: string[];
 }) {
   const popoverRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
-  const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
+  const [viewport, setViewport] = useState(readMessageActionViewport);
   const [style, setStyle] = useState<{ key: string; left: number; top: number; width: number; opacity: number; transformOrigin: string } | null>(null);
   const anchorKey = anchorRect
-    ? [anchorRect.left, anchorRect.top, anchorRect.right, anchorRect.bottom, boundaryTop, viewport.width, viewport.height].join(':')
+    ? [anchorRect.left, anchorRect.top, anchorRect.right, anchorRect.bottom, anchorRect.boundaryLeft, anchorRect.boundaryTop, anchorRect.boundaryRight, anchorRect.boundaryBottom, viewport.left, viewport.top, viewport.width, viewport.height].join(':')
     : '';
   const positionedStyle = style?.key === anchorKey ? style : null;
 
   useEffect(() => {
     if (!open) return;
-    const handleResize = () => setViewport({ width: window.innerWidth, height: window.innerHeight });
+    const handleResize = () => setViewport(readMessageActionViewport());
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
     };
     window.addEventListener('resize', handleResize);
     window.addEventListener('keydown', handleKeyDown);
+    window.visualViewport?.addEventListener('resize', handleResize);
+    window.visualViewport?.addEventListener('scroll', handleResize);
     return () => {
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('keydown', handleKeyDown);
+      window.visualViewport?.removeEventListener('resize', handleResize);
+      window.visualViewport?.removeEventListener('scroll', handleResize);
     };
   }, [onClose, open]);
 
@@ -761,27 +877,25 @@ function EmojiReactionPopover({
     }
     if (style?.key === anchorKey) return;
     const popover = popoverRef.current?.getBoundingClientRect();
-    const width = Math.min(390, viewport.width - 24);
-    const height = popover?.height || 70;
-    const lowerTopBound = Math.max(12, boundaryTop + 8);
-    const roomAbove = anchorRect.top - lowerTopBound;
-    const roomBelow = viewport.height - anchorRect.bottom - 12;
-    const opensAbove = roomAbove >= height + 10 || roomBelow < height + 10;
-    const preferredTop = opensAbove ? anchorRect.top - height - 10 : anchorRect.bottom + 10;
-    const top = clampToViewport(preferredTop, lowerTopBound, viewport.height - height - 12);
+    const viewportRight = viewport.left + viewport.width;
+    const viewportBottom = viewport.top + viewport.height;
+    const boundaryLeft = Math.max(viewport.left, anchorRect.boundaryLeft ?? viewport.left) + 8;
+    const boundaryTop = Math.max(viewport.top, anchorRect.boundaryTop ?? viewport.top) + 8;
+    const boundaryRight = Math.min(viewportRight, anchorRect.boundaryRight ?? viewportRight) - 8;
+    const boundaryBottom = Math.min(viewportBottom, anchorRect.boundaryBottom ?? viewportBottom) - 8;
+    const width = Math.min(312, boundaryRight - boundaryLeft);
+    const height = popover?.height || 56;
+    const roomAbove = anchorRect.top - boundaryTop;
+    const roomBelow = boundaryBottom - anchorRect.bottom;
+    const opensAbove = roomAbove >= height + 8 || roomBelow < height + 8;
+    const preferredTop = opensAbove ? anchorRect.top - height - 8 : anchorRect.bottom + 8;
+    const top = clampToViewport(preferredTop, boundaryTop, boundaryBottom - height);
     const centeredLeft = anchorRect.left + ((anchorRect.width - width) / 2);
-    const left = clampToViewport(centeredLeft, 12, viewport.width - width - 12);
+    const left = clampToViewport(centeredLeft, boundaryLeft, boundaryRight - width);
     setStyle({ key: anchorKey, left, top, width, opacity: 1, transformOrigin: opensAbove ? 'bottom center' : 'top center' });
-  }, [anchorKey, anchorRect, boundaryTop, open, style?.key, viewport.height, viewport.width]);
+  }, [anchorKey, anchorRect, open, style?.key, viewport]);
 
   if (!open || !anchorRect) return null;
-
-  const focusArea = {
-    left: clampToViewport(anchorRect.left - 7, 0, viewport.width),
-    top: clampToViewport(anchorRect.top - 7, 0, viewport.height),
-    right: clampToViewport(anchorRect.right + 7, 0, viewport.width),
-    bottom: clampToViewport(anchorRect.bottom + 7, 0, viewport.height),
-  };
 
   if (!positionedStyle) {
     return createPortal(
@@ -789,9 +903,9 @@ function EmojiReactionPopover({
         ref={popoverRef}
         aria-hidden="true"
         className="pointer-events-none fixed invisible"
-        style={{ left: 12, top: anchorRect.bottom + 10, width: Math.min(390, viewport.width - 24) }}
+        style={{ left: 8, top: anchorRect.bottom + 8, width: Math.min(312, viewport.width - 16) }}
       >
-        <EmojiPicker onPick={onPick} />
+        <EmojiPicker onPick={onPick} selectedEmojis={selectedEmojis} />
       </div>,
       document.body,
     );
@@ -799,30 +913,19 @@ function EmojiReactionPopover({
 
   return createPortal(
     <div className="pointer-events-none fixed inset-0 z-[2147483647]" role="presentation" data-app-nonselect="true">
-      <div aria-hidden="true" onClick={onClose} className={MESSAGE_FOCUS_BACKDROP_CLASS} style={{ inset: '0 0 auto 0', height: focusArea.top }} />
-      <div aria-hidden="true" onClick={onClose} className={MESSAGE_FOCUS_BACKDROP_CLASS} style={{ inset: `${focusArea.bottom}px 0 0 0` }} />
-      <div aria-hidden="true" onClick={onClose} className={MESSAGE_FOCUS_BACKDROP_CLASS} style={{ left: 0, top: focusArea.top, width: focusArea.left, height: focusArea.bottom - focusArea.top }} />
-      <div aria-hidden="true" onClick={onClose} className={MESSAGE_FOCUS_BACKDROP_CLASS} style={{ left: focusArea.right, right: 0, top: focusArea.top, height: focusArea.bottom - focusArea.top }} />
-      <div
-        aria-hidden="true"
-        onClick={onClose}
-        className="pointer-events-auto fixed bg-transparent"
-        style={{ left: focusArea.left, top: focusArea.top, width: focusArea.right - focusArea.left, height: focusArea.bottom - focusArea.top }}
-      />
+      <div aria-hidden="true" onClick={onClose} className="pointer-events-auto fixed inset-0 bg-transparent" />
       <motion.div
-        initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.94, y: 8 }}
+        initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.97, y: 2 }}
         animate={prefersReducedMotion
           ? { opacity: positionedStyle.opacity }
           : { opacity: positionedStyle.opacity, scale: 1, y: 0 }}
-        exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: 4 }}
-        transition={prefersReducedMotion
-          ? { duration: 0.12 }
-          : { type: 'spring', stiffness: 510, damping: 35, mass: 0.68 }}
+        exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.98, y: 1 }}
+        transition={{ duration: prefersReducedMotion ? 0.08 : 0.14, ease: [0.22, 1, 0.36, 1] }}
         className="pointer-events-auto fixed"
         style={positionedStyle}
         onClick={event => event.stopPropagation()}
       >
-        <EmojiPicker onPick={onPick} />
+        <EmojiPicker onPick={onPick} selectedEmojis={selectedEmojis} />
       </motion.div>
     </div>,
     document.body,
@@ -1747,18 +1850,23 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
       }
     }
     onTyping(false);
-    const ok = await sendPayload(outgoing);
-    if (!ok || latestTextRef.current !== draftAtSend || loadedDraftIdentityRef.current !== identityAtSend || readMessageDraft(user?.id ?? '', conversationId) !== draftAtSend) return;
     setText('');
-    if (editableRef.current) {
-      editableRef.current.textContent = '';
-    }
+    if (editableRef.current) editableRef.current.textContent = '';
     setShowEditableMentionDropdown(false);
     setEditableMentionStart(null);
     setEditableMentionQuery('');
     setShowSongPicker(false);
     setSelectedSongs([]);
     requestAnimationFrame(resizeComposer);
+    const ok = await sendPayload(outgoing);
+    if (!ok) {
+      if (latestTextRef.current === '' && loadedDraftIdentityRef.current === identityAtSend) {
+        setText(draftAtSend);
+        if (editableRef.current) editableRef.current.textContent = draftAtSend;
+        requestAnimationFrame(resizeComposer);
+      }
+      return;
+    }
   };
 
   const handleComposerKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -2454,9 +2562,11 @@ function ConvInfoPanel({
   const [removingPhoto, setRemovingPhoto] = useState(false);
   const [changingBlock, setChangingBlock] = useState(false);
   const [infoView, setInfoView] = useState<'main' | 'media' | 'files' | 'links'>('main');
+  const [searchOpen, setSearchOpen] = useState(false);
   const [leaveGroupConfirm, setLeaveGroupConfirm] = useState(false);
   const [leavingGroup, setLeavingGroup] = useState(false);
   const groupPhotoInputRef = useRef<HTMLInputElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const otherMember = conv.type === 'personal' ? conv.members.find(m => m.user_id !== myUserId) : null;
   const p = otherMember?.profile;
@@ -2479,7 +2589,7 @@ function ConvInfoPanel({
 
   const mediaItems = messages.filter(m => parseContent(m.content).type === 'image');
   const fileItems = messages.filter(m => parseContent(m.content).type === 'file');
-  const latestMediaItem = mediaItems[mediaItems.length - 1] ?? null;
+  const recentMediaItems = mediaItems.slice(-4).reverse();
   const latestFileItem = fileItems[fileItems.length - 1] ?? null;
 
   const linkRegex = /https?:\/\/[^\s<>"]+/g;
@@ -2499,6 +2609,12 @@ function ConvInfoPanel({
         return c.type === 'text' && c.text.toLowerCase().includes(search.toLowerCase());
       })
     : [];
+
+  useEffect(() => {
+    if (!searchOpen) return;
+    const frame = window.requestAnimationFrame(() => searchInputRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [searchOpen]);
 
   const handleDeleteChat = async () => {
     if (!user) return;
@@ -2672,9 +2788,9 @@ function ConvInfoPanel({
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#f5f5f7] dark:bg-[#0d0d0f]">
+    <div className="flex h-full flex-col bg-[#f7f8fa] dark:bg-[#0d0d0f]">
       {/* Header */}
-      <div className="relative z-20 shrink-0 flex items-center gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+10px)] sm:pt-[calc(env(safe-area-inset-top)+12px)] bg-white dark:bg-[#111013] border-b border-gray-100 dark:border-white/[0.06] lg:bg-white/96 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96 lg:pt-4">
+      <div className="relative z-20 flex shrink-0 items-center gap-2 border-b border-gray-200/80 bg-white px-4 pb-3 pt-[calc(env(safe-area-inset-top)+10px)] dark:border-white/[0.06] dark:bg-[#111013] sm:pt-[calc(env(safe-area-inset-top)+12px)] lg:bg-white/96 lg:pt-4 lg:backdrop-blur-xl dark:lg:bg-[#111013]/96">
         <button
           onClick={() => {
             if (infoView !== 'main') {
@@ -2687,8 +2803,8 @@ function ConvInfoPanel({
         >
           <ArrowLeft style={{ width: '18px', height: '18px' }} />
         </button>
-        <h2 className="text-[15px] font-bold text-gray-900 dark:text-white">
-          {infoView === 'main' ? 'Info' : infoView === 'media' ? 'Media' : infoView === 'files' ? 'Files' : 'Links'}
+        <h2 className="text-[15px] font-extrabold text-gray-950 dark:text-white">
+          {infoView === 'main' ? 'Chat Info' : infoView === 'media' ? 'Media' : infoView === 'files' ? 'Files' : 'Links'}
         </h2>
       </div>
 
@@ -2800,20 +2916,22 @@ function ConvInfoPanel({
         )}
 
         {infoView === 'main' && (
-          <>
+          <div className="mx-auto w-full max-w-[700px] space-y-3 px-4 py-5 sm:py-6">
         {/* Profile card */}
-        <div className="mx-4 mt-4 flex flex-col items-center border-b border-gray-100 px-4 py-6 dark:border-white/[0.06]">
+        <section className="flex flex-col items-center px-4 pb-2 pt-1 text-center">
           {getConversationAvatarSrc(conv, myUserId) ? (
-            <img src={getConversationAvatarSrc(conv, myUserId)} alt={displayName} className="h-20 w-20 rounded-full object-cover mb-3" />
+            <img src={getConversationAvatarSrc(conv, myUserId)} alt={displayName} className="mb-3 h-20 w-20 rounded-full object-cover ring-4 ring-white shadow-sm dark:ring-white/[0.08]" />
           ) : (
-            <div className="h-20 w-20 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-emerald-700 dark:text-emerald-300 font-bold text-3xl mb-3">
+            <div className="mb-3 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 text-3xl font-bold text-emerald-700 ring-4 ring-white shadow-sm dark:bg-emerald-900/40 dark:text-emerald-300 dark:ring-white/[0.08]">
               {(convAvatarName.firstName[0] || displayName[0] || '?').toUpperCase()}
             </div>
           )}
-          <p className="text-[16px] font-bold text-gray-900 dark:text-white">{displayName}</p>
-          <p className="text-[12px] text-gray-400 dark:text-white/30 mt-0.5">
-            {conv.members.length} {conv.members.length === 1 ? 'member' : 'members'}
-          </p>
+          <p className="text-[18px] font-extrabold tracking-[-0.01em] text-gray-950 dark:text-white">{displayName}</p>
+          {(conv.type === 'group' || conv.type === 'event') && (
+            <p className="mt-0.5 text-[12px] font-medium text-gray-400 dark:text-white/35">
+              {conv.members.length} {conv.members.length === 1 ? 'member' : 'members'}
+            </p>
+          )}
           {conv.type === 'group' && (
             <>
               <input
@@ -2845,10 +2963,32 @@ function ConvInfoPanel({
               </div>
             </>
           )}
-        </div>
+          <div className="mt-4 flex items-start justify-center gap-7">
+            <button
+              type="button"
+              onClick={onClose}
+              className="group flex min-w-14 flex-col items-center gap-1.5 text-[11px] font-semibold text-gray-600 dark:text-white/55"
+            >
+              <span className="flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 bg-white text-emerald-600 shadow-sm transition-colors group-hover:border-emerald-200 group-hover:bg-emerald-50 dark:border-white/[0.1] dark:bg-[#171719] dark:text-emerald-400 dark:group-hover:bg-emerald-500/10">
+                <MessageCircle className="h-[19px] w-[19px]" />
+              </span>
+              Message
+            </button>
+            <button
+              type="button"
+              onClick={() => setSearchOpen(true)}
+              className="group flex min-w-14 flex-col items-center gap-1.5 text-[11px] font-semibold text-gray-600 dark:text-white/55"
+            >
+              <span className="flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 bg-white text-emerald-600 shadow-sm transition-colors group-hover:border-emerald-200 group-hover:bg-emerald-50 dark:border-white/[0.1] dark:bg-[#171719] dark:text-emerald-400 dark:group-hover:bg-emerald-500/10">
+                <Search className="h-[19px] w-[19px]" />
+              </span>
+              Search
+            </button>
+          </div>
+        </section>
 
         {conv.type === 'group' && (
-          <div className="mx-4 border-b border-gray-100 px-0 py-4 dark:border-white/[0.06]">
+          <section className="rounded-2xl border border-gray-200/80 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.02)] dark:border-white/[0.07] dark:bg-[#151517]">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[12px] font-semibold text-gray-500 dark:text-white/35">Group name</p>
@@ -2890,14 +3030,14 @@ function ConvInfoPanel({
                 </button>
               </div>
             )}
-          </div>
+          </section>
         )}
 
         {(conv.type === 'group' || conv.type === 'event') && (
-          <div className="mx-4 border-b border-gray-100 dark:border-white/[0.06]">
+          <section className="overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.02)] dark:border-white/[0.07] dark:bg-[#151517]">
             <button
               onClick={() => setShowMembersModal(true)}
-              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-white/[0.03] transition-colors"
+              className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
             >
               <div className="min-w-0">
                 <p className="text-[13px] font-semibold text-gray-900 dark:text-white">Members</p>
@@ -2905,14 +3045,16 @@ function ConvInfoPanel({
               </div>
               <ChevronRight className="h-4 w-4 shrink-0 text-gray-300 dark:text-white/20" />
             </button>
-          </div>
+          </section>
         )}
 
         {/* Search card */}
-        <div className="mx-4 border-b border-gray-100 dark:border-white/[0.06]">
-          <div className="flex items-center gap-2 py-3">
+        {searchOpen && (
+        <section className="overflow-hidden rounded-2xl border border-emerald-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.02)] dark:border-emerald-400/20 dark:bg-[#151517]">
+          <div className="flex items-center gap-2 px-4 py-3">
             <Search className="h-3.5 w-3.5 text-gray-400 dark:text-white/30 shrink-0" />
             <input
+              ref={searchInputRef}
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search in chat…"
@@ -2923,6 +3065,14 @@ function ConvInfoPanel({
                 <X className="h-3.5 w-3.5" />
               </button>
             )}
+            <button
+              type="button"
+              aria-label="Close conversation search"
+              onClick={() => { setSearch(''); setSearchOpen(false); }}
+              className="ml-1 flex h-7 w-7 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/[0.07] dark:hover:text-white"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           </div>
           {!search ? (
             <p className="text-center text-[12px] text-gray-400 dark:text-white/25 py-4">Type to search messages</p>
@@ -2950,54 +3100,74 @@ function ConvInfoPanel({
               })}
             </div>
           )}
-        </div>
+        </section>
+        )}
 
         {/* Media card */}
-        <div className="mx-4 border-b border-gray-100 dark:border-white/[0.06]">
-          <div className="flex items-center justify-between py-3">
-            <span className="text-[13px] font-semibold text-gray-900 dark:text-white">Media</span>
-            <span className="text-[12px] text-gray-400 dark:text-white/30">{mediaItems.length}</span>
-          </div>
+        <section className="overflow-hidden rounded-2xl border border-gray-200/80 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.02)] dark:border-white/[0.07] dark:bg-[#151517]">
+          <button type="button" onClick={() => setInfoView('media')} className="flex w-full items-center justify-between text-left">
+            <span className="flex items-center gap-2 text-[13px] font-bold text-gray-900 dark:text-white">
+              <ImageIcon className="h-4 w-4 text-gray-500 dark:text-white/45" /> Media
+            </span>
+            <span className="flex items-center gap-1 text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">
+              View All ({mediaItems.length}) <ChevronRight className="h-3.5 w-3.5" />
+            </span>
+          </button>
           {mediaItems.length === 0 ? (
-            <p className="text-center text-[12px] text-gray-400 dark:text-white/25 py-5">No photos yet</p>
+            <div className="flex flex-col items-center py-5 text-center">
+              <ImageIcon className="h-7 w-7 text-gray-300 dark:text-white/20" />
+              <p className="mt-2 text-[12px] font-semibold text-gray-500 dark:text-white/45">No media yet</p>
+              <p className="mt-0.5 text-[11px] text-gray-400 dark:text-white/30">Shared photos will appear here.</p>
+            </div>
           ) : (
-            <div className="p-3">
-              <div className="flex items-center gap-3">
-                {latestMediaItem && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {recentMediaItems.map(item => {
+                const media = parseContent(item.content) as { type: 'image'; url: string };
+                return (
                   <button
-                    onClick={() => { onScrollToMessage(latestMediaItem.id); onClose(); }}
-                    className="h-16 w-16 shrink-0 overflow-hidden rounded-xl"
+                    key={item.id}
+                    type="button"
+                    onClick={() => { onScrollToMessage(item.id); onClose(); }}
+                    className="relative h-20 w-20 overflow-hidden rounded-xl bg-gray-100 ring-1 ring-black/[0.04] transition-opacity hover:opacity-90 dark:bg-white/[0.04] dark:ring-white/[0.06] sm:h-24 sm:w-24"
                   >
-                    <img src={(parseContent(latestMediaItem.content) as { type: 'image'; url: string }).url} alt="latest media" className="h-full w-full object-cover" />
+                    <span className="absolute inset-0 flex items-center justify-center text-gray-300 dark:text-white/20" aria-hidden="true">
+                      <ImageIcon className="h-6 w-6" />
+                    </span>
+                    <img
+                      src={media.url}
+                      alt="Shared media"
+                      onError={event => { event.currentTarget.style.display = 'none'; }}
+                      className="relative z-[1] h-full w-full object-cover"
+                    />
                   </button>
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="text-[13px] font-medium text-gray-900 dark:text-white">Latest photo</p>
-                  <p className="mt-0.5 text-[11px] text-gray-400 dark:text-white/30">{latestMediaItem ? formatMsgTime(latestMediaItem.created_at) : ''}</p>
-                </div>
-                <button
-                  onClick={() => setInfoView('media')}
-                  className="shrink-0 text-[12px] font-semibold text-emerald-600 dark:text-emerald-400"
-                >
-                  View All
-                </button>
-              </div>
+                );
+              })}
             </div>
           )}
-        </div>
+        </section>
 
         {/* Files card */}
-        <div className="mx-4 border-b border-gray-100 dark:border-white/[0.06]">
-          <div className="flex items-center justify-between py-3">
-            <span className="text-[13px] font-semibold text-gray-900 dark:text-white">Files</span>
-            <span className="text-[12px] text-gray-400 dark:text-white/30">{fileItems.length}</span>
-          </div>
+        <section className="overflow-hidden rounded-2xl border border-gray-200/80 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.02)] dark:border-white/[0.07] dark:bg-[#151517]">
+          <button type="button" onClick={() => setInfoView('files')} className="flex w-full items-center justify-between text-left">
+            <span className="flex items-center gap-2 text-[13px] font-bold text-gray-900 dark:text-white">
+              <FileText className="h-4 w-4 text-gray-500 dark:text-white/45" /> Files
+            </span>
+            <span className="flex items-center gap-1 text-[12px] font-medium text-gray-400 dark:text-white/35">
+              {fileItems.length} <ChevronRight className="h-3.5 w-3.5" />
+            </span>
+          </button>
           {fileItems.length === 0 ? (
-            <p className="text-center text-[12px] text-gray-400 dark:text-white/25 py-5">No files yet</p>
+            <div className="flex flex-col items-center py-5 text-center">
+              <FileText className="h-7 w-7 text-gray-300 dark:text-white/20" />
+              <p className="mt-2 text-[12px] font-semibold text-gray-500 dark:text-white/45">No files yet</p>
+              <p className="mt-0.5 text-[11px] text-gray-400 dark:text-white/30">Shared files will appear here.</p>
+            </div>
           ) : (
-            <div className="p-3">
+            <div className="mt-3 rounded-xl bg-gray-50 p-3 dark:bg-white/[0.035]">
               <div className="flex items-center gap-3">
-                <FileText className="h-10 w-10 shrink-0 text-gray-400 dark:text-white/30" />
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-gray-500 shadow-sm dark:bg-white/[0.06] dark:text-white/45">
+                  <FileText className="h-4 w-4" />
+                </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[13px] font-medium text-gray-900 dark:text-white">
                     {latestFileItem ? (parseContent(latestFileItem.content) as { type: 'file'; name: string }).name : 'Latest file'}
@@ -3010,25 +3180,35 @@ function ConvInfoPanel({
                   onClick={() => setInfoView('files')}
                   className="shrink-0 text-[12px] font-semibold text-emerald-600 dark:text-emerald-400"
                 >
-                  View All
+                  View
                 </button>
               </div>
             </div>
           )}
-        </div>
+        </section>
 
         {/* Links card */}
-        <div className="mx-4 border-b border-gray-100 dark:border-white/[0.06]">
-          <div className="flex items-center justify-between py-3">
-            <span className="text-[13px] font-semibold text-gray-900 dark:text-white">Links</span>
-            <span className="text-[12px] text-gray-400 dark:text-white/30">{linkItems.length}</span>
-          </div>
+        <section className="overflow-hidden rounded-2xl border border-gray-200/80 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.02)] dark:border-white/[0.07] dark:bg-[#151517]">
+          <button type="button" onClick={() => setInfoView('links')} className="flex w-full items-center justify-between text-left">
+            <span className="flex items-center gap-2 text-[13px] font-bold text-gray-900 dark:text-white">
+              <ExternalLink className="h-4 w-4 text-gray-500 dark:text-white/45" /> Links
+            </span>
+            <span className="flex items-center gap-1 text-[12px] font-medium text-gray-400 dark:text-white/35">
+              {linkItems.length} <ChevronRight className="h-3.5 w-3.5" />
+            </span>
+          </button>
           {linkItems.length === 0 ? (
-            <p className="text-center text-[12px] text-gray-400 dark:text-white/25 py-5">No links yet</p>
+            <div className="flex flex-col items-center py-5 text-center">
+              <ExternalLink className="h-7 w-7 text-gray-300 dark:text-white/20" />
+              <p className="mt-2 text-[12px] font-semibold text-gray-500 dark:text-white/45">No links yet</p>
+              <p className="mt-0.5 text-[11px] text-gray-400 dark:text-white/30">Shared links will appear here.</p>
+            </div>
           ) : (
-            <div className="p-3">
+            <div className="mt-3 rounded-xl bg-gray-50 p-3 dark:bg-white/[0.035]">
               <div className="flex items-center gap-3">
-                <ExternalLink className="h-10 w-10 shrink-0 text-gray-400 dark:text-white/30" />
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-gray-500 shadow-sm dark:bg-white/[0.06] dark:text-white/45">
+                  <ExternalLink className="h-4 w-4" />
+                </span>
                 <div className="min-w-0 flex-1">
                   <a
                     href={latestLinkItem?.url}
@@ -3044,25 +3224,25 @@ function ConvInfoPanel({
                   onClick={() => setInfoView('links')}
                   className="shrink-0 text-[12px] font-semibold text-emerald-600 dark:text-emerald-400"
                 >
-                  View All
+                  View
                 </button>
               </div>
             </div>
           )}
-        </div>
+        </section>
 
         {/* Leave / Delete card */}
-        <div className="mx-4 mb-6 space-y-2 pt-4">
+        <div className="space-y-2 pb-6 pt-2">
 
           {conv.type === 'personal' && otherMember && (
             <>
-              <button type="button" onClick={() => onReportUser(otherMember.user_id, displayName)} className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-amber-200 bg-white text-[13px] font-semibold text-amber-700 dark:border-amber-500/20 dark:bg-[#111013] dark:text-amber-300">
-                <Flag className="h-4 w-4" /> Report person
+              <button type="button" onClick={() => onReportUser(otherMember.user_id, displayName)} className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-amber-200 bg-white text-[13px] font-semibold text-amber-700 transition-colors hover:bg-amber-50 dark:border-amber-500/20 dark:bg-[#151517] dark:text-amber-300 dark:hover:bg-amber-500/[0.08]">
+                <Flag className="h-4 w-4" /> Report Person
               </button>
-              <button type="button" onClick={() => void toggleBlock()} disabled={changingBlock} className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white text-[13px] font-semibold text-gray-700 disabled:opacity-50 dark:border-white/10 dark:bg-[#111013] dark:text-white/80">
-                <UserX className="h-4 w-4" /> {changingBlock ? 'Working…' : isBlocked ? 'Unblock direct messages' : 'Block direct messages'}
+              <button type="button" onClick={() => void toggleBlock()} disabled={changingBlock} className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white text-[13px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:bg-[#151517] dark:text-white/80 dark:hover:bg-white/[0.04]">
+                <UserX className="h-4 w-4" /> {changingBlock ? 'Working…' : isBlocked ? 'Unblock Direct Messages' : 'Block Direct Messages'}
               </button>
-              <p className="px-2 text-center text-[11px] text-gray-500 dark:text-white/45">Blocking stops one-to-one messages. Group chats and church updates remain available.</p>
+              <p className="px-3 text-center text-[10px] leading-relaxed text-gray-400 dark:text-white/35">Blocking stops one-to-one messages. Group chats and church updates remain available.</p>
             </>
           )}
 
@@ -3071,7 +3251,7 @@ function ConvInfoPanel({
             <button
               onClick={() => setLeaveGroupConfirm(true)}
               disabled={leavingGroup}
-              className="w-full h-11 flex items-center justify-center gap-2 rounded-2xl text-[13px] font-semibold text-amber-600 dark:text-amber-400 bg-white dark:bg-[#111013] border border-amber-200 dark:border-amber-500/20 hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-colors disabled:opacity-45"
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-amber-200 bg-white text-[13px] font-semibold text-amber-600 transition-colors hover:bg-amber-50 disabled:opacity-45 dark:border-amber-500/20 dark:bg-[#151517] dark:text-amber-400 dark:hover:bg-amber-950/20"
             >
               <LogOut className="h-4 w-4" />
               Leave Group
@@ -3106,7 +3286,7 @@ function ConvInfoPanel({
           {canDelete && !leaveConfirm && !leaveGroupConfirm && (
             <button
               onClick={() => setLeaveConfirm(true)}
-              className="w-full h-11 flex items-center justify-center gap-2 rounded-2xl text-[13px] font-semibold text-red-500 bg-white dark:bg-[#111013] border border-red-200 dark:border-red-500/20 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-white text-[13px] font-semibold text-red-500 transition-colors hover:bg-red-50 dark:border-red-500/20 dark:bg-[#151517] dark:hover:bg-red-950/20"
             >
               <Trash2 className="h-4 w-4" />
               Delete Chat
@@ -3139,7 +3319,7 @@ function ConvInfoPanel({
             </div>
           )}
         </div>
-          </>
+          </div>
         )}
       </div>
 
@@ -3832,7 +4012,6 @@ function ChatWindow({
   const [messageActionAnchorRect, setMessageActionAnchorRect] = useState<MessageActionAnchorRect | null>(null);
   const [emojiMsgId, setEmojiMsgId] = useState<string | null>(null);
   const [emojiAnchorRect, setEmojiAnchorRect] = useState<MessageActionAnchorRect | null>(null);
-  const [emojiBoundaryTop, setEmojiBoundaryTop] = useState(0);
   const [tappedMsgId, setTappedMsgId] = useState<string | null>(null);
   const [showInfo, setShowInfo] = useState(false);
   const [showEventDetail, setShowEventDetail] = useState(false);
@@ -3870,6 +4049,7 @@ function ChatWindow({
   const forceStickToLatestRef = useRef(false);
   const suppressLatestScrollRef = useRef(false);
   const releaseLatestScrollTimerRef = useRef<number | null>(null);
+  const messageActionCloseTimerRef = useRef<number | null>(null);
   const typingThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingRef = useRef(false);
@@ -3962,21 +4142,14 @@ function ChatWindow({
   useEffect(() => clearMessageLongPress, [clearMessageLongPress]);
 
   const openMessageActions = useCallback((messageId: string, anchor?: HTMLElement | null, withFeedback = false) => {
-    const messageBubble = messageBubbleRefs.current[messageId] || anchor;
-    const bubbleRect = messageBubble?.getBoundingClientRect();
-    if (!bubbleRect) return;
-    const reactionBar = messageBubble?.querySelector<HTMLElement>('[data-message-reaction-bar="true"]');
-    const reactionBarRect = reactionBar?.getBoundingClientRect();
-    const anchorRect = reactionBarRect
-      ? {
-          left: Math.min(bubbleRect.left, reactionBarRect.left),
-          top: Math.min(bubbleRect.top, reactionBarRect.top),
-          right: Math.max(bubbleRect.right, reactionBarRect.right),
-          bottom: Math.max(bubbleRect.bottom, reactionBarRect.bottom),
-          width: Math.max(bubbleRect.right, reactionBarRect.right) - Math.min(bubbleRect.left, reactionBarRect.left),
-          height: Math.max(bubbleRect.bottom, reactionBarRect.bottom) - Math.min(bubbleRect.top, reactionBarRect.top),
-        }
-      : bubbleRect;
+    if (messageActionCloseTimerRef.current) {
+      window.clearTimeout(messageActionCloseTimerRef.current);
+      messageActionCloseTimerRef.current = null;
+    }
+    const actionAnchor = anchor || messageBubbleRefs.current[messageId];
+    const anchorRect = actionAnchor?.getBoundingClientRect();
+    const boundaryRect = scrollRef.current?.getBoundingClientRect();
+    if (!anchorRect || !boundaryRect) return;
     const preservedScrollTop = scrollRef.current?.scrollTop;
     if (releaseLatestScrollTimerRef.current) {
       window.clearTimeout(releaseLatestScrollTimerRef.current);
@@ -3992,8 +4165,10 @@ function ChatWindow({
       bottom: anchorRect.bottom,
       width: anchorRect.width,
       height: anchorRect.height,
-      menuOverlap: reactionBarRect ? Math.max(0, reactionBarRect.bottom - bubbleRect.bottom) : 0,
-      horizontalNudge: reactionBarRect ? 24 : 0,
+      boundaryLeft: boundaryRect.left,
+      boundaryTop: boundaryRect.top,
+      boundaryRight: boundaryRect.right,
+      boundaryBottom: boundaryRect.bottom,
     });
     setActiveMsg(messageId);
     setEmojiMsgId(null);
@@ -4012,7 +4187,11 @@ function ChatWindow({
 
   const closeMessageActions = useCallback(() => {
     setActiveMsg(null);
-    setMessageActionAnchorRect(null);
+    if (messageActionCloseTimerRef.current) window.clearTimeout(messageActionCloseTimerRef.current);
+    messageActionCloseTimerRef.current = window.setTimeout(() => {
+      setMessageActionAnchorRect(null);
+      messageActionCloseTimerRef.current = null;
+    }, 140);
     if (releaseLatestScrollTimerRef.current) window.clearTimeout(releaseLatestScrollTimerRef.current);
     releaseLatestScrollTimerRef.current = window.setTimeout(() => {
       suppressLatestScrollRef.current = false;
@@ -4022,6 +4201,7 @@ function ChatWindow({
 
   useEffect(() => () => {
     if (releaseLatestScrollTimerRef.current) window.clearTimeout(releaseLatestScrollTimerRef.current);
+    if (messageActionCloseTimerRef.current) window.clearTimeout(messageActionCloseTimerRef.current);
   }, []);
 
   const closeEmojiPicker = useCallback(() => {
@@ -4029,23 +4209,15 @@ function ChatWindow({
     setEmojiAnchorRect(null);
   }, []);
 
-  const openEmojiPicker = useCallback((messageId: string) => {
+  const openEmojiPicker = useCallback((
+    messageId: string,
+    anchor?: HTMLElement | MessageActionAnchorRect | null,
+  ) => {
     const messageBubble = messageBubbleRefs.current[messageId];
     const bubbleRect = messageBubble?.getBoundingClientRect();
-    if (!bubbleRect) return;
-    const reactionBarRect = messageBubble
-      ?.querySelector<HTMLElement>('[data-message-reaction-bar]')
-      ?.getBoundingClientRect();
-    const anchorRect = reactionBarRect
-      ? {
-          left: Math.min(bubbleRect.left, reactionBarRect.left),
-          top: Math.min(bubbleRect.top, reactionBarRect.top),
-          right: Math.max(bubbleRect.right, reactionBarRect.right),
-          bottom: Math.max(bubbleRect.bottom, reactionBarRect.bottom),
-          width: Math.max(bubbleRect.right, reactionBarRect.right) - Math.min(bubbleRect.left, reactionBarRect.left),
-          height: Math.max(bubbleRect.bottom, reactionBarRect.bottom) - Math.min(bubbleRect.top, reactionBarRect.top),
-        }
-      : bubbleRect;
+    const anchorRect = anchor instanceof HTMLElement ? anchor.getBoundingClientRect() : anchor || bubbleRect;
+    const boundaryRect = scrollRef.current?.getBoundingClientRect();
+    if (!anchorRect || !boundaryRect) return;
     setEmojiAnchorRect({
       left: anchorRect.left,
       top: anchorRect.top,
@@ -4053,8 +4225,11 @@ function ChatWindow({
       bottom: anchorRect.bottom,
       width: anchorRect.width,
       height: anchorRect.height,
+      boundaryLeft: boundaryRect.left,
+      boundaryTop: boundaryRect.top,
+      boundaryRight: boundaryRect.right,
+      boundaryBottom: boundaryRect.bottom,
     });
-    setEmojiBoundaryTop(chatHeaderRef.current?.getBoundingClientRect().bottom ?? 0);
     setEmojiMsgId(messageId);
     setTappedMsgId(null);
     playInteractionSound('reactionOpen');
@@ -4418,18 +4593,35 @@ function ChatWindow({
     }
   }, [seenDetailsMessage, seenDetailsMessageId, seenDetailsSeers.length]);
 
-  // Keep consecutive messages from one sender visually stacked. A date divider
-  // always starts a fresh group, but elapsed time alone should not create a
-  // large visual break between adjacent bubbles.
+  // Keep nearby consecutive messages from one sender visually stacked. Date
+  // boundaries and meaningful pauses both start a fresh conversation group.
   const grouped = useMemo(() => {
     return messages.map((msg, i) => {
       const prev = messages[i - 1];
+      const next = messages[i + 1];
       const showDateDivider = !prev ||
         new Date(msg.created_at).toDateString() !== new Date(prev.created_at).toDateString();
-      const isGrouped = Boolean(prev && !showDateDivider && prev.sender_id === msg.sender_id);
-      return { msg, isGrouped, showDateDivider };
+      const isSystemBoundary = parseContent(msg.content).type === 'delete_request';
+      const previousIsSystemBoundary = prev && parseContent(prev.content).type === 'delete_request';
+      const nextIsSystemBoundary = next && parseContent(next.content).type === 'delete_request';
+      const isGrouped = !showDateDivider
+        && !isSystemBoundary
+        && !previousIsSystemBoundary
+        && messagesBelongToSameGroup(prev, msg);
+      const joinsNext = !isSystemBoundary
+        && !nextIsSystemBoundary
+        && messagesBelongToSameGroup(msg, next);
+      return { msg, isGrouped, joinsNext, showDateDivider };
     });
   }, [messages]);
+
+  const latestOwnDeliveryMessageId = useMemo(() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (message.sender_id === myUserId && message.delivery_state) return message.id;
+    }
+    return null;
+  }, [messages, myUserId]);
 
   const isGroupChat = conv.type === 'group' || conv.type === 'event';
   const activeMessage = activeMsg ? messages.find(message => message.id === activeMsg) ?? null : null;
@@ -4558,7 +4750,7 @@ function ChatWindow({
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="messages-scroll-area flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 pt-4 space-y-0.5 sm:px-4"
+        className="messages-scroll-area flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 pt-4 sm:px-4"
       >
         {loading && (
           <div className="flex justify-center pt-8">
@@ -4583,14 +4775,19 @@ function ChatWindow({
           </div>
         )}
 
-        {!loadError && grouped.map(({ msg, isGrouped, showDateDivider }, i) => {
+        {!loadError && grouped.map(({ msg, isGrouped, joinsNext, showDateDivider }, i) => {
           const isMe = msg.sender_id === myUserId;
           const content = parseContent(msg.content);
           const seers = seenByMessage[msg.id] || [];
           // Exclude the message sender from the seers list (they trivially "see" their own message)
           const displaySeers = seers.filter(s => s.userId !== msg.sender_id);
           const latestSeenAt = displaySeers.length > 0 ? displaySeers.map(s => s.readAt).sort()[displaySeers.length - 1] : '';
-          const showAvatar = !isMe && (!isGrouped || i === 0);
+          const hasBeenSeen = isMe && memberReadTimes.some(member => (
+            member.user_id !== msg.sender_id
+            && Boolean(member.last_read_at)
+            && new Date(member.last_read_at as string).getTime() >= new Date(msg.created_at).getTime()
+          ));
+          const showAvatar = !isMe && !joinsNext;
           const needsReactionClearance = !showDateDivider && (messages[i - 1]?.reactions.length ?? 0) > 0;
           const isActionsOpen = activeMsg === msg.id;
           const isEmojiOpen = emojiMsgId === msg.id;
@@ -4612,12 +4809,21 @@ function ChatWindow({
           const isSingleReactionBadge = visibleReactions.length + Number(needsLandingPlaceholder) === 1
             && Object.keys(visibleReactionCounts).length + Number(needsLandingPlaceholder) === 1;
           const hasReplyPreview = Boolean(msg.reply_preview);
+          const replyOriginalAvailable = Boolean(msg.reply_to && messages.some(message => message.id === msg.reply_to));
           const isBareMessage = content.type === 'image' || (content.type === 'event_reference' && !content.messageText);
+          const bubbleShapeClass = getMessageBubbleShapeClass({
+            isMine: isMe,
+            joinsPrevious: isGrouped,
+            joinsNext,
+          });
           const bubbleSurfaceClass = isBareMessage
             ? 'px-0 py-0 bg-transparent border-0 shadow-none rounded-none'
             : isMe
-              ? 'px-3.5 py-2 rounded-2xl bg-emerald-500 text-white rounded-br-md'
-              : 'px-3.5 py-2 rounded-2xl bg-gray-100 dark:bg-white/[0.07] text-gray-900 dark:text-white rounded-bl-md border border-gray-200/80 dark:border-white/[0.06]';
+              ? `px-3.5 py-2 rounded-2xl bg-emerald-500 text-white ${bubbleShapeClass}`
+              : `px-3.5 py-2 rounded-2xl bg-gray-100 dark:bg-white/[0.07] text-gray-900 dark:text-white border border-gray-200/80 dark:border-white/[0.06] ${bubbleShapeClass}`;
+          const unifiedReplySurfaceClass = isMe
+            ? `px-3 py-2.5 rounded-2xl bg-emerald-500 text-white ${bubbleShapeClass}`
+            : `px-3 py-2.5 rounded-2xl border border-gray-200/80 bg-gray-100 text-gray-900 dark:border-white/[0.06] dark:bg-[#222224] dark:text-white ${bubbleShapeClass}`;
           const deleteRequesterName = content.type === 'delete_request'
             ? getFullName(
                 conv.members.find(member => member.user_id === content.requestedBy)?.profile,
@@ -4645,7 +4851,7 @@ function ChatWindow({
                 />
               ) : (
               <>
-              <div className={`flex items-end gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'} ${needsReactionClearance ? 'mt-2' : isGrouped && !showDateDivider ? '-mt-4' : 'mt-3'}`}>
+              <div className={`flex items-end gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'} ${needsReactionClearance ? 'mt-0' : isGrouped && !showDateDivider ? '-mt-[14px]' : 'mt-0'}`}>
                 {/* Avatar spacer */}
                 {!isMe && (
                   <div className="shrink-0 w-7">
@@ -4672,13 +4878,13 @@ function ChatWindow({
                   <div className={`flex max-w-full items-end gap-1.5 ${isMe ? 'self-end' : 'self-start'}`}>
                     {/* Hover actions (my side) */}
                     {isMe && (
-                      <div className="hidden sm:flex opacity-0 group-hover:opacity-100 transition-opacity items-center gap-0.5 mb-1">
+                      <div className="pointer-events-none hidden translate-y-0.5 items-center gap-0.5 opacity-0 transition-[opacity,transform] duration-150 ease-out group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-y-0 group-focus-within:opacity-100 sm:flex mb-1">
                         <button
                           aria-label={`React to: ${previewContent(msg.content)}`}
                           onClick={e => {
                             e.stopPropagation();
                             if (isEmojiOpen) closeEmojiPicker();
-                            else openEmojiPicker(msg.id);
+                            else openEmojiPicker(msg.id, e.currentTarget);
                             closeMessageActions();
                           }}
                           className="h-7 w-7 flex items-center justify-center rounded-full text-gray-400 dark:text-white/25 hover:bg-gray-100 dark:hover:bg-white/[0.07] hover:text-gray-600 dark:hover:text-white/60 transition-colors"
@@ -4702,6 +4908,13 @@ function ChatWindow({
                     {/* Message bubble */}
                     <motion.div
                       ref={el => { messageBubbleRefs.current[msg.id] = el; }}
+                      initial={msg.delivery_state === 'sending' && !prefersReducedMotion
+                        ? { opacity: 0, scale: 0.92, y: 8 }
+                        : false}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      transition={msg.delivery_state === 'sending' && !prefersReducedMotion
+                        ? { type: 'spring', stiffness: 520, damping: 34, mass: 0.68 }
+                        : { duration: 0.12 }}
                       drag="x"
                       dragDirectionLock
                       dragSnapToOrigin
@@ -4743,59 +4956,26 @@ function ChatWindow({
                       onContextMenu={e => {
                         e.preventDefault();
                         e.stopPropagation();
-                        openMessageActions(msg.id, e.currentTarget);
                       }}
                       data-app-nonselect="true"
-                      className={`relative mb-0.5 leading-relaxed cursor-default select-none ${
-                        hasReplyPreview ? 'bg-transparent' : bubbleSurfaceClass
-                      } ${!hasReplyPreview && msg.is_pinned ? 'ring-1 ring-amber-400/50' : ''}`}
+                      className={`relative mb-0.5 cursor-default select-none leading-relaxed ${
+                        hasReplyPreview
+                          ? `inline-flex min-w-[9.5rem] max-w-full flex-col ${unifiedReplySurfaceClass}`
+                          : bubbleSurfaceClass
+                      } ${msg.is_pinned ? 'ring-1 ring-amber-400/50' : ''}`}
                     >
                       {msg.reply_preview && (
-                        <div className={`relative z-0 min-w-0 pb-3 ${isMe ? 'mr-3' : 'ml-3'}`}>
-                          <div className={`mb-1 flex min-w-0 items-center gap-1 px-1 text-[10px] font-semibold leading-none ${
-                            isMe ? 'text-emerald-600 dark:text-emerald-300/75' : 'text-gray-600 dark:text-white/[0.72]'
-                          }`}>
-                            <CornerUpLeft className="h-3 w-3 shrink-0" />
-                            <span className="truncate">
-                              {isMe ? 'You' : getSenderName(msg.sender)} replied to {msg.reply_preview.sender_name}
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            aria-label={`Go to original message from ${msg.reply_preview.sender_name}`}
-                            className={`relative z-[1] block w-full min-w-0 rounded-[14px] px-3 py-2 text-left text-[12px] leading-snug transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 ${
-                              isMe
-                                ? 'bg-emerald-500/12 text-emerald-950/55 hover:bg-emerald-500/18 dark:bg-emerald-400/10 dark:text-white/50 dark:hover:bg-emerald-400/15'
-                                : 'bg-gray-200/85 text-gray-500 hover:bg-gray-200 dark:bg-white/[0.10] dark:text-white/[0.64] dark:hover:bg-white/[0.13]'
-                            }`}
-                            onClick={event => {
-                              event.stopPropagation();
-                              if (msg.reply_to) scrollToMessage(msg.reply_to);
-                            }}
-                          >
-                            <span
-                              className="overflow-hidden whitespace-pre-wrap break-words"
-                              style={{
-                                overflowWrap: 'anywhere',
-                                display: '-webkit-box',
-                                WebkitLineClamp: 2,
-                                WebkitBoxOrient: 'vertical',
-                              }}
-                            >
-                              {replyPreviewContent(msg.reply_preview.content)}
-                            </span>
-                          </button>
-                          <div
-                            aria-hidden="true"
-                            className={`pointer-events-none absolute bottom-0 z-0 h-4 rounded-b-[12px] ${
-                              isMe
-                                ? 'left-3 right-1 bg-emerald-500/12 dark:bg-emerald-400/10'
-                                : 'left-1 right-3 bg-gray-200/85 dark:bg-white/[0.10]'
-                            }`}
-                          />
-                        </div>
+                        <ReplyQuotedPreview
+                          content={msg.reply_preview.content}
+                          senderName={msg.reply_preview.sender_name}
+                          isMine={isMe}
+                          canJump={replyOriginalAvailable}
+                          onJump={() => {
+                            if (msg.reply_to) scrollToMessage(msg.reply_to);
+                          }}
+                        />
                       )}
-                      <div className={hasReplyPreview ? `relative z-[1] -mt-4 ${bubbleSurfaceClass} ${!isMe && !isBareMessage ? 'dark:!bg-[#222224]' : ''} ${msg.is_pinned ? 'ring-1 ring-amber-400/50' : ''}` : ''}>
+                      <div className={hasReplyPreview ? 'relative mt-2 min-w-0' : ''}>
                       {content.type === 'image' ? (
                         content.url ? <img
                           src={content.url}
@@ -4869,11 +5049,11 @@ function ChatWindow({
                       )}
                       </div>
 
-                      {/* Reactions — sitting just below the bubble's bottom-right corner */}
+                      {/* Reactions overlap the bubble's lower inner edge without touching the next message. */}
                       {hasVisibleReactionBadge && (
                         <div
                           data-message-reaction-bar="true"
-                          className={`absolute -bottom-3 -right-1 -mb-2 z-10 flex h-[26px] items-center justify-center gap-px rounded-full border border-gray-100 bg-white py-0 shadow-md dark:border-white/[0.1] dark:bg-[#1c1c1e] ${
+                          className={`absolute -bottom-2 -mb-2 z-10 flex h-[26px] items-center justify-center gap-px rounded-full border border-gray-100 bg-white py-0 shadow-md dark:border-white/[0.1] dark:bg-[#1c1c1e] ${isMe ? 'left-1' : '-right-1'} ${
                             isSingleReactionBadge ? 'w-[26px] px-0' : 'min-w-[51px] px-1.5'
                           }`}
                           onClick={e => e.stopPropagation()}
@@ -4923,13 +5103,13 @@ function ChatWindow({
 
                     {/* Hover actions (other side) */}
                     {!isMe && (
-                      <div className="hidden sm:flex opacity-0 group-hover:opacity-100 transition-opacity items-center gap-0.5 mb-1">
+                      <div className="pointer-events-none hidden translate-y-0.5 items-center gap-0.5 opacity-0 transition-[opacity,transform] duration-150 ease-out group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-y-0 group-focus-within:opacity-100 sm:flex mb-1">
                         <button
                           aria-label={`React to: ${previewContent(msg.content)}`}
                           onClick={e => {
                             e.stopPropagation();
                             if (isEmojiOpen) closeEmojiPicker();
-                            else openEmojiPicker(msg.id);
+                            else openEmojiPicker(msg.id, e.currentTarget);
                             closeMessageActions();
                           }}
                           className="h-7 w-7 flex items-center justify-center rounded-full text-gray-400 dark:text-white/25 hover:bg-gray-100 dark:hover:bg-white/[0.07] hover:text-gray-600 dark:hover:text-white/60 transition-colors"
@@ -4967,18 +5147,34 @@ function ChatWindow({
                     )}
                   </AnimatePresence>
 
+                  <AnimatePresence initial={false}>
+                    {isMe && msg.id === latestOwnDeliveryMessageId && msg.delivery_state && (msg.delivery_state === 'sending' || !hasBeenSeen) && (
+                      <motion.span
+                        key={msg.delivery_state}
+                        initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -2 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -2 }}
+                        transition={{ duration: 0.14, ease: 'easeOut' }}
+                        className="mx-1 mt-0.5 block text-[10px] font-medium text-gray-400 dark:text-white/35"
+                        aria-live="polite"
+                      >
+                        {msg.delivery_state === 'sending' ? 'Sending…' : 'Sent'}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+
                 </div>
               </div>
 
               {/* Seen receipts — shown under my messages for all, and under others' messages in group chats */}
-              {displaySeers.length > 0 && (isMe || isGroupChat) && (
+              {displaySeers.length > 0 && !joinsNext && (isMe || isGroupChat) && (
                 <button
                   type="button"
                   onClick={event => {
                     event.stopPropagation();
                     setSeenDetailsMessageId(msg.id);
                   }}
-                  className={`flex items-center gap-1.5 mt-2 rounded-full transition-[margin,opacity] active:opacity-70 ${isMe ? `ml-auto justify-end ${hasVisibleReactionBadge ? 'mr-16' : 'mr-1.5'}` : 'ml-8 justify-start'}`}
+                  className={`flex items-center gap-1.5 mt-2 rounded-full transition-[margin,opacity] active:opacity-70 ${isMe ? 'ml-auto mr-1.5 justify-end' : 'ml-8 justify-start'}`}
                   aria-label={`Show seen details for ${displaySeers.length} ${displaySeers.length === 1 ? 'person' : 'people'}`}
                 >
                   {displaySeers.map(seer => {
@@ -5055,7 +5251,7 @@ function ChatWindow({
           closeMessageActions();
         }}
         onReact={() => {
-          if (activeMessage) openEmojiPicker(activeMessage.id);
+          if (activeMessage) openEmojiPicker(activeMessage.id, messageActionAnchorRect);
           closeMessageActions();
         }}
         onTogglePin={() => {
@@ -5077,8 +5273,13 @@ function ChatWindow({
       <EmojiReactionPopover
         open={Boolean(emojiMsgId && emojiAnchorRect)}
         anchorRect={emojiAnchorRect}
-        boundaryTop={emojiBoundaryTop}
         onClose={closeEmojiPicker}
+        selectedEmojis={emojiMsgId
+          ? messages
+              .find(message => message.id === emojiMsgId)
+              ?.reactions.filter(reaction => reaction.user_id === myUserId)
+              .map(reaction => reaction.emoji) || []
+          : []}
         onPick={(emoji, sourceElement) => {
           if (emojiMsgId) void handleMessageReaction(emojiMsgId, emoji, sourceElement);
         }}
@@ -5602,7 +5803,7 @@ export function Messages() {
 
   return (
     <div
-      className="desktop-chat-workspace relative flex h-full min-h-0 w-full overflow-hidden bg-white dark:bg-[#111013] lg:bg-[#f5f5f7] lg:dark:bg-[#0d0d0f] lg:p-4"
+      className="desktop-chat-workspace relative flex h-full min-h-0 w-full overflow-hidden bg-white dark:bg-[#101010] lg:bg-[#f5f5f7] lg:dark:bg-[#0d0d0f] lg:p-4"
       style={isDesktop ? { paddingTop: 'calc(72px + var(--desktop-safe-area-top, 0px) + var(--app-reminders-height, 0px) + 1rem)' } : undefined}
     >
       <div className="contents lg:relative lg:flex lg:h-full lg:flex-1 lg:min-h-0 lg:overflow-hidden lg:rounded-[2rem] lg:border lg:border-black/[0.06] lg:bg-white lg:shadow-[0_24px_80px_-52px_rgba(15,23,42,0.85)] lg:ring-1 lg:ring-white/70 dark:lg:border-white/[0.07] dark:lg:bg-[#111013] dark:lg:ring-white/[0.04]">
@@ -5613,7 +5814,7 @@ export function Messages() {
         {showConversationList && (
         <motion.div
           key="conversation-list"
-          className={`relative z-[1] flex min-h-0 flex-col bg-white dark:bg-[#111013] lg:border-r lg:border-gray-100 dark:lg:border-white/[0.06] lg:bg-white/96 dark:lg:bg-[#111013]/96 ${
+          className={`relative z-[1] flex min-h-0 flex-col bg-white dark:bg-[#101010] lg:border-r lg:border-gray-100 dark:lg:border-white/[0.06] lg:bg-white/96 dark:lg:bg-[#111013]/96 ${
             isDesktop ? 'h-full w-[320px] min-w-[320px] shrink-0 relative' : 'fixed inset-0 z-10 h-[100svh] h-[100dvh] w-[100dvw] max-w-none will-change-transform'
           }`}
           style={isDesktop ? undefined : { paddingTop: 'var(--app-reminders-height, 0px)' }}
@@ -5650,7 +5851,7 @@ export function Messages() {
         </div>
 
         {/* Conversations */}
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain bg-white px-2 space-y-0.5 dark:bg-[#111013]" style={{ paddingBottom: 'calc(64px + env(safe-area-inset-bottom) + 1rem)' }}>
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain bg-white px-2 space-y-0.5 dark:bg-[#101010] lg:dark:bg-[#111013]" style={{ paddingBottom: 'calc(64px + env(safe-area-inset-bottom) + 1rem)' }}>
           {convsLoading && (
             <div className="flex justify-center py-8" role="status" aria-label="Loading conversations">
               <span className="h-5 w-5 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />

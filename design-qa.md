@@ -52,6 +52,273 @@ final result: passed
 
 ---
 
+# Chat Info Redesign Design QA
+
+## Evidence
+
+- Source visual direction: the user-provided Chat Info redesign reference for desktop and mobile.
+- Implementation proof: `.codex-audits/chat-info-redesign-final.png` from the authenticated local conversation.
+- Verified states: desktop light, desktop dark, mobile light at 430 x 932, opened Search, and the lower safety-action region.
+
+## Full-view comparison evidence
+
+- Chat Info now uses a centered 700px desktop column and a full-width mobile surface with consistent 16px side padding.
+- The identity area uses an 80px avatar, the real conversation name, and no misleading member count for a direct conversation.
+- Only working quick actions are shown: Message returns to the conversation and Search reveals and focuses the existing in-chat search.
+- Media, Files, and Links share the same compact card language, counts, empty states, borders, spacing, and dark-mode treatment.
+- Report, direct-message blocking, and deletion remain visually separate and continue to use the existing underlying behavior and confirmations.
+
+## Required fidelity surfaces
+
+- Fonts and typography: existing ServeSync type styles remain in place with a clearer name, card-title, count, and helper-text hierarchy.
+- Spacing and layout rhythm: cards use restrained 14–16px padding, compact 12–16px radii, and light borders without heavy elevation.
+- Colors and visual tokens: the existing emerald accent, neutral light surfaces, charcoal dark surfaces, and contextual amber/red safety colors are reused.
+- Image quality and asset fidelity: real profile and conversation media are used; no decorative replacement assets were introduced.
+- Behavior: group rename/photo/member controls, message search, media navigation, report, block, leave, and delete behavior remain connected to the existing handlers.
+
+## Findings
+
+- No actionable P0, P1, or P2 visual differences remain for the requested Chat Info structure.
+- Desktop and mobile layouts stay within their viewports, the direct-chat metadata is accurate, and light/dark surfaces remain readable.
+
+## Implementation checklist
+
+- [x] Replace the generic Info header with Chat Info.
+- [x] Use a centered responsive content column and compact card sections.
+- [x] Keep only functional Message and Search quick actions.
+- [x] Organize real Media, Files, and Links content with useful empty states.
+- [x] Preserve group-management and safety workflows.
+- [x] Verify desktop light, desktop dark, and mobile layouts.
+
+final result: passed
+
+---
+
+# Tail-free Chat Bubble Grouping Design QA
+
+## Evidence
+
+- Source visual truth: the supplied ServeSync message-bubble reference and the follow-up request to make no-reaction bubbles even closer.
+- Implementation screenshot: `.codex-audits/chat-bubble-grouping-no-tail-final.png`, captured at a 430 x 932 mobile viewport.
+- States reviewed: received and sent messages, consecutive same-sender messages, embedded reply, reaction chip, final received avatar, desktop light mode, desktop dark mode, and mobile light mode.
+
+## Visual result
+
+- Removed every message-tail component and tail style; bubbles now use rounded corners only.
+- Consecutive same-sender bubbles connect through restrained 5px sender-facing corners while their outside corners remain fully rounded.
+- Same-sender bubbles without a reaction use an approximately 2px visual gap. A reaction-bearing message keeps dedicated clearance so its chip does not touch the following bubble.
+- Received avatars remain aligned in a reserved column and appear only beside the last message in a visual group.
+- Reaction chips overlap the lower inner edge of the bubble: lower-right for received messages and lower-left for sent messages.
+- Reply bubbles use the same outer grouping rules; the quoted preview remains contained inside the message surface.
+
+## Findings
+
+- No visible tail, triangle, detached shape, reaction collision, or unintended two-line group gap remains in the reviewed states.
+- Light and dark surfaces preserve the existing ServeSync colors and contrast.
+- The 430px mobile view retains the composer and viewport boundaries with no horizontal overflow.
+
+## Checks
+
+- [x] Same-sender/no-reaction gap tightened to approximately 2px.
+- [x] Reaction-bearing message keeps separate clearance.
+- [x] Group boundaries remain larger for sender, date, time, and system-message changes.
+- [x] Final received message owns the avatar.
+- [x] Desktop light and dark modes visually reviewed.
+- [x] Mobile light mode visually reviewed at 430 x 932.
+- [x] All project tests, focused lint, scoped diff validation, and production build passed.
+
+final result: passed
+
+---
+
+# Chat Bubble Tails and Grouping Design QA
+
+## Evidence
+
+- Source visual truth: the user-provided “Chat Bubble Design” reference, including basic sent/received tails, grouped messages, reply messages, reactions, media, and mobile examples.
+- Implementation surface: authenticated direct-message conversation at `http://127.0.0.1:5174/messages/d9c0dd81-874f-4667-8aa8-7d411a22565e`.
+- Final verification image: `.codex-audits/chat-bubble-tails-final.png`.
+- Viewports and themes: browser-reviewed at the 430 x 932 mobile viewport in both light and dark appearance; desktop behavior remains driven by the same shared renderer and grouping state.
+
+## Full-view comparison evidence
+
+- Sent bubbles use a small curved emerald tail at the bottom-right; received bubbles inherit their exact light/dark surface into a matching bottom-left tail.
+- Only the final bubble in a nearby same-sender group receives the tail. Earlier group bubbles use subtly tightened connecting corners and a compact 4px effective vertical gap.
+- Different senders, date boundaries, and pauses longer than five minutes start a new group with the existing larger conversation rhythm.
+- Received avatars now align with the final bubble in their group while earlier bubbles retain the same horizontal message alignment.
+
+## Focused region comparison evidence
+
+- The reply preview remains entirely inside the outer bubble; only the outer sent reply receives a tail.
+- The latest sent reply's reaction chip was shifted inward so it does not overlap the tail, timestamp, seen receipt, or action controls.
+- Standalone image/event-reference surfaces remain borderless and unchanged; surfaced text, file, and reply messages use the new shared tail treatment without adding image assets.
+- The curved tail is a 12 x 10px inherited-surface shape using a reusable renderer and a smooth path rather than a sharp CSS triangle.
+
+## Required fidelity surfaces
+
+- Fonts and typography: unchanged.
+- Colors and visual tokens: existing emerald, gray, border, and dark surfaces are preserved; the tail inherits the active bubble surface exactly.
+- Message behavior: reply, reactions, timestamps, read receipts, sending states, swipe/long-press, hover actions, and message content rendering are unchanged.
+- Responsive behavior: verified at the mobile viewport; the shared component and relative positioning contain no per-message coordinates.
+
+## Findings
+
+- No actionable P0, P1, or P2 visual differences remain for the requested tail, grouping, avatar, and reaction-clearance behavior.
+- Light and dark renders show no tail seams, avatar jumps, or reaction overlap in the inspected conversation states.
+
+## Implementation checklist
+
+- [x] Add reusable curved left/right bubble tails.
+- [x] Show tails only on final messages in nearby same-sender groups.
+- [x] Tighten within-group spacing and connecting corners.
+- [x] Move received avatars to the final message in each group.
+- [x] Keep reply content and reaction chips clear of the tail.
+- [x] Verify light/dark mobile rendering, TypeScript, all tests, focused lint, scoped diff validation, and the production build.
+
+final result: passed
+
+---
+
+# Compact Chat Reaction Picker Design QA
+
+## Evidence
+
+- Source target: the user's compact horizontal reaction-bar specification for the existing seven ServeSync message reactions.
+- Implementation state: authenticated desktop conversation in light mode at 1638 x 1244, using existing messages and reactions without changing conversation data.
+- Reviewed states: picker opened from the inline reaction control, picker opened through React in the message-actions menu, received-message placement, sent-message/right-edge placement, existing-reaction selection, and outside dismissal.
+
+## Comparison findings
+
+- The previous two-row reaction card is now a single slim horizontal bar with no persistent text labels, colored emoji circles, green outline, staggered entrance, or page-dimming backdrop.
+- All seven existing stored reaction values remain available: Like, Love, Haha, Yay, Wow, Sad, and Angry.
+- The picker and message-actions menu share the same white/charcoal surface token, neutral border, restrained shadow, compact scale/fade motion, and viewport-aware placement language.
+- Emoji controls use transparent defaults, 26px emoji artwork, 40px desktop targets, 44px mobile-height targets, 2–4px gaps, restrained 140ms hover/tap feedback, native hover titles, and a subtle green selected state.
+- The picker anchors to the inline reaction control or the original three-dot control when opened from the vertical menu. It prefers an 8px gap above, flips below when needed, and clamps to the message scroller on every side.
+
+## Interaction preservation
+
+- Selecting an emoji still closes the picker immediately and uses the existing optimistic toggle/remove and reaction-flight system.
+- Outside click, Escape, opening another picker, opening message actions, scrolling, and starting a reply/drag continue to dismiss the picker through the existing shared state.
+- No message bubble, stored reaction value, reaction counter, notification path, or database behavior was redesigned.
+
+## Findings
+
+- No actionable P0, P1, or P2 visual differences remain for the requested compact reaction-picker treatment.
+- Browser verification confirmed both opening paths use the same rendered component and that a previously selected heart receives the subtle selected treatment.
+- The 7-column no-wrap layout fits the normal mobile width by reducing padding and gaps first; horizontal overflow remains only as a safety fallback for unusually narrow viewports.
+
+final result: passed
+
+---
+
+# Chat Reply and Message Actions Design QA
+
+## Evidence
+
+- Source visual truth: the supplied desktop/mobile action-menu reference and reply-message reference images, plus the clarified two-state interaction specification.
+- Implementation state: authenticated desktop conversation at 1638 x 1244 in light mode, using existing messages without sending test content.
+- Reviewed states: normal message, inline hover controls, received-message popover, sent-message popover near the lower-right edge, unified outgoing reply, and latest-only delivery status.
+
+## Comparison findings
+
+- Hover and menu are separate: hovering exposes only the compact reaction and three-dot controls; the full popover is button-triggered. Mobile long-press remains available and desktop right-click no longer opens the action menu.
+- The popover is a 200px white menu with a 12px radius, neutral border, restrained shadow, 40px rows, neutral default actions, green Reply hover/focus, and red Report/Delete hover/focus.
+- The gray page dimmer and speech-bubble pointer were removed. The menu anchors to the three-dot control and clamps to the chat scroll region, flipping above and toward the left for a sent message near the lower-right edge.
+- Replies render as one adaptive sent/received bubble with an embedded quoted section, sender, truncated context, media labels/thumbnails, and the existing jump-to-original highlight behavior.
+- Only the latest unviewed outgoing message can show Sending or Sent; seen messages continue to use the existing seen receipt.
+
+## Required fidelity surfaces
+
+- Typography and spacing: 14px action labels, 16–18px icons, 10px gaps, 12px row padding, and 6px menu padding match the requested compact rhythm.
+- Color and hierarchy: light mode uses a clean white surface; dark mode retains the existing charcoal treatment; destructive actions are muted red rather than competing bright icon colors.
+- Motion: inline controls use a restrained 150ms fade/translate; the popover uses a 140ms opacity/scale/tiny-translate transition with placement-aware transform origin and reduced-motion handling.
+- Interaction preservation: reactions, pins, reports/deletes, timestamps, attachments, read receipts, long-press actions, and reply-to-original navigation remain available.
+
+## Findings
+
+- No actionable P0, P1, or P2 visual differences remain for the clarified desktop action flow or unified reply presentation.
+- Browser verification confirmed that a received-message menu opens below/right of its three-dot control without dimming the page, while a sent-message menu near the lower-right edge flips above/left and stays clear of the composer.
+- Mobile long-press and compact viewport collision behavior are covered by the shared implementation and source contract; physical Android touch timing was not rerun in this browser-only pass.
+
+final result: passed
+
+---
+
+# Chat Delivery Feedback Design QA
+
+## Evidence
+
+- Source visual truth: the authenticated ServeSync conversation at `/messages/d9c0dd81-874f-4667-8aa8-7d411a22565e` in the local preview.
+- Implementation state: desktop conversation with a newly confirmed outgoing bubble displaying the compact “Sent” label beneath it.
+- Interaction constraint: verification did not send another real message to a third party solely for testing.
+
+## Required behavior
+
+- The composer clears immediately and the outgoing bubble is inserted before the server request completes.
+- A new bubble enters with a short spring pop; reduced-motion users receive no scale movement.
+- Delivery copy progresses from “Sending…” to “Sent.”
+- “Sent” disappears once another participant's recorded read time reaches the message, allowing the existing seen receipt to remain the final state.
+- The same client-generated message ID is retained through acknowledgement and retry, preventing duplicate bubbles.
+- A failed send removes the temporary bubble and restores the draft.
+
+## Findings
+
+- The rendered “Sent” label is compact, aligned with the outgoing bubble, and does not overlap the composer or adjacent messages.
+- Source-level regression checks cover optimistic insertion order, confirmation, rollback, immediate composer clearing, delivery labels, seen-state hiding, and reduced-motion behavior.
+- No actionable layout or contrast issue remains in the inspected confirmed state.
+- The live transition timing remains unverified against another account because doing so would send an actual message.
+
+## Implementation checklist
+
+- [x] Show the outgoing bubble before the network round trip.
+- [x] Add a smooth, reduced-motion-safe bubble entrance.
+- [x] Show Sending and Sent states.
+- [x] Remove Sent after another participant sees the message.
+- [x] Preserve draft recovery and stable-ID retry behavior.
+- [x] Pass TypeScript, focused lint, all tests, production build, and scoped diff validation.
+
+final result: passed with live multi-user timing unverified
+
+---
+
+# Team Roster Access and Layout Design QA
+
+## Evidence
+
+- Source visual truth: Browser Comment 1 attachment, 1699 x 1244 pixels, authenticated `/leadership/team?section=roster` screen in light theme.
+- Implementation evidence: live authenticated local preview at the same desktop route plus a 430 x 932 responsive viewport.
+- State: expanded Administrator member with access, roles, attendance-team, and leader-attendance controls visible.
+
+## Full-view comparison evidence
+
+- Roles and Attendance Team now occupy one balanced two-column desktop row instead of leaving most of the row empty.
+- At mobile width the same shared layout stacks into two full-width panels without horizontal overflow.
+- Existing member data, role actions, attendance assignment behavior, and surrounding roster table remain unchanged.
+
+## Focused region comparison evidence
+
+- Both sections use the same border, surface, padding, heading hierarchy, description treatment, and compact control height.
+- Leader attendance access remains visually attached to Attendance Team beneath a subtle internal divider.
+- Administrator access now explicitly explains that it includes every management permission and renders the effective capability switches checked and disabled, removing the apparent contradiction with the sidebar.
+
+## Findings
+
+- No actionable visual difference remains for the requested Roles and Attendance Team organization.
+- Desktop and mobile render without horizontal overflow, and no browser console errors were recorded.
+- A separate permission audit found authorization inconsistencies for delegated non-admin capabilities; those are behavior and database-policy concerns, not hidden by this visual fix.
+
+## Implementation checklist
+
+- [x] Balance Roles and Attendance Team across the available desktop width.
+- [x] Keep both sections grouped and readable at mobile width.
+- [x] Clarify effective Administrator permissions without changing saved capability data.
+- [x] Preserve role and attendance interactions.
+- [x] Verify desktop, mobile, overflow, and console state.
+
+final result: passed
+
+---
+
 # Android Dark Status Bar Design QA
 
 ## Evidence

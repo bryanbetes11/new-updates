@@ -8,6 +8,6 @@ for (const changed of [{ android: false }, { standalone: false }, { native: true
 }
 assert.ok(ANDROID_TEST_RELEASE.url.startsWith('https://github.com/bryanbetes11/new-updates/releases/download/'));
 assert.ok(ANDROID_TEST_RELEASE.url.endsWith('/' + ANDROID_TEST_RELEASE.filename));
-assert.equal(ANDROID_TEST_RELEASE.filename, 'ServeSync-1.4.12.apk');
-assert.equal(ANDROID_TEST_RELEASE.build, 31);
-assert.ok(ANDROID_TEST_RELEASE.url.includes('/android-v1.4.12-build31/'));
+assert.equal(ANDROID_TEST_RELEASE.filename, 'ServeSync-1.4.15.apk');
+assert.equal(ANDROID_TEST_RELEASE.build, 36);
+assert.ok(ANDROID_TEST_RELEASE.url.includes('/android-v1.4.15-build36/'));

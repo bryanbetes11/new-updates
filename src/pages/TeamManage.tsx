@@ -810,15 +810,20 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                             {(isOrgAdmin || isPlatformOwner) && (
                               <div className="rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.035] p-4">
                                 <div className="flex items-start justify-between gap-4">
-                                  <div><p className="text-xs font-black uppercase tracking-[0.12em] text-emerald-600 dark:text-emerald-400">Access & inclusion</p><p className="mt-1 text-xs text-gray-500 dark:text-white/45">Control what this member can manage and where they appear.</p></div>
+                                  <div><p className="text-xs font-black uppercase tracking-[0.12em] text-emerald-600 dark:text-emerald-400">Access & inclusion</p><p className="mt-1 text-xs text-gray-500 dark:text-white/45">Assign additional management access and choose where this member appears.</p></div>
                                   <button type="button" onClick={() => saveMemberAccess(member)} disabled={savingSettingsId === member.id} className="btn-primary min-h-10 shrink-0 text-xs"><Save className="h-3.5 w-3.5" /> Save</button>
                                 </div>
                                 <label className="mt-4 flex items-center justify-between rounded-xl border border-amber-400/20 bg-amber-400/[0.06] p-3">
                                   <span><span className="block text-sm font-black text-gray-900 dark:text-white">Administrator</span><span className="mt-0.5 block text-xs text-gray-500 dark:text-white/45">Full organization access</span></span>
                                   <input type="checkbox" checked={member.is_org_admin} disabled={member.id === user?.id || savingSettingsId === member.id} onChange={event => setAdministrator(member, event.target.checked)} className="h-5 w-5 accent-amber-500" />
                                 </label>
+                                {member.is_org_admin && (
+                                  <p className="mt-3 rounded-xl border border-amber-300/30 bg-amber-50/70 px-3 py-2 text-xs leading-relaxed text-amber-800 dark:border-amber-400/15 dark:bg-amber-400/[0.07] dark:text-amber-200/80">
+                                    Administrator access already includes every management permission below. These individual permissions only apply if administrator access is removed.
+                                  </p>
+                                )}
                                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                                  {capabilityOptions.map(([key, label]) => <label key={key} className="flex items-center justify-between rounded-xl bg-white/70 px-3 py-2.5 text-xs font-bold text-gray-700 dark:bg-white/[0.04] dark:text-white/75"><span>{label}</span><input type="checkbox" checked={Boolean(accessSettings.capabilities[key])} onChange={event => patchMemberSettings(member, { capabilities: { ...accessSettings.capabilities, [key]: event.target.checked } })} className="h-4 w-4 accent-emerald-500" /></label>)}
+                                  {capabilityOptions.map(([key, label]) => <label key={key} className={`flex items-center justify-between rounded-xl bg-white/70 px-3 py-2.5 text-xs font-bold dark:bg-white/[0.04] ${member.is_org_admin ? 'cursor-not-allowed text-gray-400 dark:text-white/35' : 'text-gray-700 dark:text-white/75'}`}><span>{label}</span><input type="checkbox" checked={member.is_org_admin || Boolean(accessSettings.capabilities[key])} disabled={member.is_org_admin || savingSettingsId === member.id} onChange={event => patchMemberSettings(member, { capabilities: { ...accessSettings.capabilities, [key]: event.target.checked } })} className="h-4 w-4 accent-emerald-500 disabled:cursor-not-allowed" /></label>)}
                                 </div>
                                 <p className="mt-4 text-[10px] font-black uppercase tracking-[0.12em] text-gray-400">Included in</p>
                                 <div className="mt-2 grid grid-cols-3 gap-2">
@@ -830,89 +835,98 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
 
                           </div>
 
-                          <div>
-                            <div className="flex items-center justify-between mb-2">
-                              <p className="text-[10px] font-black text-gray-400 uppercase tracking-wide">Roles</p>
-                              {canManageChurchMembers && (
-                                <button
-                                  onClick={() => { setShowRoleModal(member.id); setSelectedRole(''); }}
-                                  className="btn-ghost min-h-11 text-xs"
-                                >
-                                  <Plus className="h-3 w-3" /> Add
-                                </button>
-                              )}
-                            </div>
-                            <div className="flex flex-wrap gap-1.5">
-                              {memberRoles.map(ur => ur.roles && (
-                                <span
-                                  key={ur.id}
-                                  className={`inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-bold ${
-                                    ur.roles.is_leadership
-                                      ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 ring-1 ring-amber-200/60 dark:ring-amber-800/40'
-                                      : 'bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 ring-1 ring-brand-200/60 dark:ring-brand-800/40'
-                                  }`}
-                                >
-                                  {ur.roles.is_leadership && <Crown className="h-3 w-3" />}
-                                  {ur.roles.name}
-                                  {member.id !== user?.id && canManageChurchMembers && (!ur.roles.is_leadership || isOrgAdmin) && (
-                                    <button onClick={() => removeRole(ur.id)} className="hover:text-red-500 transition-colors ml-0.5">
-                                      <X className="h-3 w-3" />
-                                    </button>
-                                  )}
-                                </span>
-                              ))}
-                              {memberRoles.length === 0 && (
-                                <span className="text-xs text-gray-400 italic">No roles assigned</span>
-                              )}
-                            </div>
-                          </div>
-
-                          <div>
-                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-wide mb-2">Attendance team</p>
-                            {attendanceTeamsReady && attendanceAccessActive !== true && (
-                              <p className="mb-2 text-xs text-amber-600">{attendanceAccessActive === false
-                                ? 'Setup stage: save team and leader assignments now. Current attendance permissions remain in effect until the access rules are activated.'
-                                : 'Could not confirm whether attendance access rules are active. Saved assignments alone do not confirm restricted access.'}</p>
-                            )}
-                            {attendanceTeamsReady ? (
-                              <div className="flex flex-wrap gap-2">
-                                {attendanceTeams.map(team => {
-                                  const assigned = Boolean(attendanceTeamByMember[member.id]?.includes(team.value));
-                                  return <button
-                                    key={team.value}
-                                    type="button"
-                                    aria-pressed={assigned}
-                                    disabled={!isOrgAdmin || savingAttendanceTeam === member.id}
-                                    onClick={() => toggleAttendanceTeam(member, team.value)}
-                                    className={`min-h-11 rounded-xl px-3 text-xs font-bold ring-1 ${assigned ? 'bg-emerald-50 text-emerald-700 ring-emerald-300 dark:bg-emerald-900/20 dark:text-emerald-300' : 'bg-gray-50 text-gray-500 ring-gray-200 dark:bg-white/[0.04] dark:text-white/45 dark:ring-white/10'}`}
-                                  >{assigned ? '✓ ' : ''}{team.label}</button>;
-                                })}
+                          <div className="grid gap-3 lg:grid-cols-2">
+                            <section className="rounded-2xl border border-gray-200/80 bg-gray-50/70 p-4 dark:border-white/[0.07] dark:bg-white/[0.025]">
+                              <div className="flex min-h-11 items-center justify-between gap-3">
+                                <div>
+                                  <p className="text-[10px] font-black uppercase tracking-wide text-gray-400">Roles</p>
+                                  <p className="mt-1 text-xs text-gray-500 dark:text-white/40">Ministry and leadership responsibilities.</p>
+                                </div>
+                                {canManageChurchMembers && (
+                                  <button
+                                    onClick={() => { setShowRoleModal(member.id); setSelectedRole(''); }}
+                                    className="btn-ghost min-h-10 shrink-0 text-xs"
+                                  >
+                                    <Plus className="h-3 w-3" /> Add
+                                  </button>
+                                )}
                               </div>
-                            ) : <p className="text-xs text-amber-600">Attendance teams are unavailable until the database update is applied.</p>}
-                            {attendanceTeamsReady && !attendanceTeamByMember[member.id]?.length && (
-                              <p className="mt-2 text-xs text-amber-600">Unassigned: {attendanceAccessActive === true ? 'only this member and church admins can view their attendance.' : 'once access rules are active, only this member and church admins will see their attendance.'}</p>
-                            )}
-                          </div>
-                          {(isOrgAdmin && (member.is_org_admin || memberRoles.some(ur => ur.roles?.is_leadership))) && (
-                            <div>
-                              <p className="text-[10px] font-black text-gray-400 uppercase tracking-wide mb-2">Leader attendance access</p>
-                              {member.is_org_admin ? <p className="text-xs text-gray-500">Church admins can manage attendance for everyone in this church.</p> : <>
-                                <p className="mb-2 text-xs text-gray-500">Choose the groups this leader may view and manage. This is separate from the team they serve in.</p>
-                                {leaderScopesReady ? <div className="flex flex-wrap gap-2">
+                              <div className="mt-3 flex flex-wrap gap-1.5">
+                                {memberRoles.map(ur => ur.roles && (
+                                  <span
+                                    key={ur.id}
+                                    className={`inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-bold ${
+                                      ur.roles.is_leadership
+                                        ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 ring-1 ring-amber-200/60 dark:ring-amber-800/40'
+                                        : 'bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 ring-1 ring-brand-200/60 dark:ring-brand-800/40'
+                                    }`}
+                                  >
+                                    {ur.roles.is_leadership && <Crown className="h-3 w-3" />}
+                                    {ur.roles.name}
+                                    {member.id !== user?.id && canManageChurchMembers && (!ur.roles.is_leadership || isOrgAdmin) && (
+                                      <button onClick={() => removeRole(ur.id)} className="ml-0.5 transition-colors hover:text-red-500" aria-label={`Remove ${ur.roles.name} role`}>
+                                        <X className="h-3 w-3" />
+                                      </button>
+                                    )}
+                                  </span>
+                                ))}
+                                {memberRoles.length === 0 && (
+                                  <span className="text-xs italic text-gray-400">No roles assigned</span>
+                                )}
+                              </div>
+                            </section>
+
+                            <section className="rounded-2xl border border-gray-200/80 bg-gray-50/70 p-4 dark:border-white/[0.07] dark:bg-white/[0.025]">
+                              <div>
+                                <p className="text-[10px] font-black uppercase tracking-wide text-gray-400">Attendance team</p>
+                                <p className="mt-1 text-xs text-gray-500 dark:text-white/40">The group this member serves with.</p>
+                              </div>
+                              {attendanceTeamsReady && attendanceAccessActive !== true && (
+                                <p className="mt-2 text-xs text-amber-600">{attendanceAccessActive === false
+                                  ? 'Setup stage: save team and leader assignments now. Current attendance permissions remain in effect until the access rules are activated.'
+                                  : 'Could not confirm whether attendance access rules are active. Saved assignments alone do not confirm restricted access.'}</p>
+                              )}
+                              {attendanceTeamsReady ? (
+                                <div className="mt-3 flex flex-wrap gap-2">
                                   {attendanceTeams.map(team => {
-                                    const assigned = Boolean(leaderScopes[member.id]?.includes(team.value));
-                                    return <button key={team.value} type="button" aria-pressed={assigned}
-                                      aria-label={`${team.label} attendance access for ${member.first_name} ${member.last_name}`}
-                                      disabled={savingLeaderScope !== null}
-                                      onClick={() => toggleLeaderScope(member, team.value)}
-                                      className={`min-h-11 rounded-xl px-3 text-xs font-bold ring-1 ${assigned ? 'bg-emerald-50 text-emerald-700 ring-emerald-300 dark:bg-emerald-900/20 dark:text-emerald-300' : 'bg-gray-50 text-gray-500 ring-gray-200 dark:bg-white/[0.04] dark:text-white/45'}`}
+                                    const assigned = Boolean(attendanceTeamByMember[member.id]?.includes(team.value));
+                                    return <button
+                                      key={team.value}
+                                      type="button"
+                                      aria-pressed={assigned}
+                                      disabled={!isOrgAdmin || savingAttendanceTeam === member.id}
+                                      onClick={() => toggleAttendanceTeam(member, team.value)}
+                                      className={`min-h-10 rounded-xl px-3 text-xs font-bold ring-1 ${assigned ? 'bg-emerald-50 text-emerald-700 ring-emerald-300 dark:bg-emerald-900/20 dark:text-emerald-300' : 'bg-white text-gray-500 ring-gray-200 dark:bg-white/[0.04] dark:text-white/45 dark:ring-white/10'}`}
                                     >{assigned ? '✓ ' : ''}{team.label}</button>;
                                   })}
-                                </div> : <p className="text-xs text-amber-600">Leader access settings are unavailable until the database update is applied.</p>}
-                                {leaderScopesReady && !leaderScopes[member.id]?.length && <p className="mt-2 text-xs text-amber-600">No groups selected: {attendanceAccessActive === true ? 'this leader can only view their own attendance.' : 'once access rules are active, this leader will only see their own attendance.'}</p>}
-                              </>}
-                            </div>
-                          )}
+                                </div>
+                              ) : <p className="mt-3 text-xs text-amber-600">Attendance teams are unavailable until the database update is applied.</p>}
+                              {attendanceTeamsReady && !attendanceTeamByMember[member.id]?.length && (
+                                <p className="mt-2 text-xs text-amber-600">Unassigned: {attendanceAccessActive === true ? 'only this member and church admins can view their attendance.' : 'once access rules are active, only this member and church admins will see their attendance.'}</p>
+                              )}
+
+                              {(isOrgAdmin && (member.is_org_admin || memberRoles.some(ur => ur.roles?.is_leadership))) && (
+                                <div className="mt-4 border-t border-gray-200/80 pt-4 dark:border-white/[0.07]">
+                                  <p className="text-[10px] font-black uppercase tracking-wide text-gray-400">Leader attendance access</p>
+                                  {member.is_org_admin ? <p className="mt-1 text-xs text-gray-500 dark:text-white/40">Church admins can manage attendance for every team in this church.</p> : <>
+                                    <p className="mt-1 text-xs text-gray-500 dark:text-white/40">Choose the groups this leader may view and manage. This is separate from the team they serve in.</p>
+                                    {leaderScopesReady ? <div className="mt-3 flex flex-wrap gap-2">
+                                      {attendanceTeams.map(team => {
+                                        const assigned = Boolean(leaderScopes[member.id]?.includes(team.value));
+                                        return <button key={team.value} type="button" aria-pressed={assigned}
+                                          aria-label={`${team.label} attendance access for ${member.first_name} ${member.last_name}`}
+                                          disabled={savingLeaderScope !== null}
+                                          onClick={() => toggleLeaderScope(member, team.value)}
+                                          className={`min-h-10 rounded-xl px-3 text-xs font-bold ring-1 ${assigned ? 'bg-emerald-50 text-emerald-700 ring-emerald-300 dark:bg-emerald-900/20 dark:text-emerald-300' : 'bg-white text-gray-500 ring-gray-200 dark:bg-white/[0.04] dark:text-white/45'}`}
+                                        >{assigned ? '✓ ' : ''}{team.label}</button>;
+                                      })}
+                                    </div> : <p className="mt-2 text-xs text-amber-600">Leader access settings are unavailable until the database update is applied.</p>}
+                                    {leaderScopesReady && !leaderScopes[member.id]?.length && <p className="mt-2 text-xs text-amber-600">No groups selected: {attendanceAccessActive === true ? 'this leader can only view their own attendance.' : 'once access rules are active, this leader will only see their own attendance.'}</p>}
+                                  </>}
+                                </div>
+                              )}
+                            </section>
+                          </div>
                         </>
                       )}
                     </div>

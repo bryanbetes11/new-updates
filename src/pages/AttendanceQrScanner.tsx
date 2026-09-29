@@ -85,7 +85,7 @@ export function AttendanceQrScanner() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const scannerRef = useRef<QrScanner | null>(null);
   const processingRef = useRef(false);
-  const scannerAudioReadyRef = useRef<Promise<boolean> | null>(null);
+  const acceptedTokenRef = useRef('');
   const [cameraError, setCameraError] = useState('');
   const [scanning, setScanning] = useState(false);
   const [validating, setValidating] = useState(false);
@@ -116,6 +116,13 @@ export function AttendanceQrScanner() {
     }
 
     processingRef.current = true;
+    acceptedTokenRef.current = token;
+    // Stop decoding as soon as a valid ServeSync payload is found. Android
+    // WebView otherwise keeps processing camera frames while the server and
+    // optional artwork requests are running, which makes the scanner feel
+    // choppy after it has already locked on to the code.
+    void scannerRef.current?.pause(true);
+    setScanning(false);
     setValidating(true);
     const liveResult = await supabase.rpc('validate_qr_attendance_checkpoint', { p_token: token });
     let data = liveResult.data as { session_token?: string; events?: EligibleAttendanceEvent[] } | null;
@@ -131,52 +138,62 @@ export function AttendanceQrScanner() {
     setValidating(false);
     processingRef.current = false;
     if (error) {
-      toast('error', error.message || 'This QR code is not active');
+      const message = error.message || 'This QR code is not active';
+      acceptedTokenRef.current = '';
+      stopScanner();
+      setCameraError(message);
+      toast('error', message);
       return;
     }
 
     const scannedEvents = data?.events || [];
-    let enrichedEvents = scannedEvents;
-    if (scannedEvents.length > 0) {
-      const { data: artworkRows } = await supabase
-        .from('events')
-        .select('id, event_type, setlists(status, created_at, setlist_songs(position, youtube_url, songs(title, artist, youtube_url)))')
-        .in('id', scannedEvents.map((event) => event.id));
-      const artworkByEventId = new Map(
-        ((artworkRows || []) as AttendanceEventArtworkRow[]).map((event) => [event.id, event]),
-      );
-      enrichedEvents = scannedEvents.map((event) => {
-        const artwork = artworkByEventId.get(event.id);
-        return artwork
-          ? { ...event, event_type: artwork.event_type, artwork_songs: getPreferredArtworkSongs(artwork) }
-          : event;
-      });
-    }
-
     stopScanner();
     setScanToken(token);
     setSessionToken(data?.session_token || '');
     setScanMode(mode);
-    setEvents(enrichedEvents);
-    // Camera callbacks run asynchronously, so wait for the audio context that
-    // was unlocked while the person opened or touched the scanner.
-    await (scannerAudioReadyRef.current ?? primeInteractionSounds());
-    // Confirm that the church QR itself was accepted. This intentionally does
-    // not fire for invalid codes or for the later attendance-recording action.
-    playInteractionSound('scanSuccess');
+    setEvents(scannedEvents);
     setShowScanSuccess(true);
+
+    // Artwork is decorative, so load it after the verified schedule is already
+    // visible instead of keeping the user on the camera while another request
+    // completes.
+    if (scannedEvents.length > 0) {
+      void supabase
+        .from('events')
+        .select('id, event_type, setlists(status, created_at, setlist_songs(position, youtube_url, songs(title, artist, youtube_url)))')
+        .in('id', scannedEvents.map((event) => event.id))
+        .then(({ data: artworkRows }) => {
+          if (acceptedTokenRef.current !== token) return;
+          const artworkByEventId = new Map(
+            ((artworkRows || []) as AttendanceEventArtworkRow[]).map((event) => [event.id, event]),
+          );
+          setEvents(scannedEvents.map((event) => {
+            const artwork = artworkByEventId.get(event.id);
+            return artwork
+              ? { ...event, event_type: artwork.event_type, artwork_songs: getPreferredArtworkSongs(artwork) }
+              : event;
+          }));
+        });
+    }
   }, [canUsePilot, stopScanner, toast]);
 
   const startScanner = useCallback(async () => {
     if (!user || !videoRef.current || scannerRef.current) return;
-    // Camera scanning callbacks are not treated as a user gesture by mobile
-    // browsers, so prepare the audio context while entering the scanner.
-    scannerAudioReadyRef.current = primeInteractionSounds();
     setCameraError('');
     const scanner = new QrScanner(
       videoRef.current,
       (scanResult) => { void validateScan(scanResult.data); },
-      { preferredCamera: 'environment', highlightScanRegion: true, highlightCodeOutline: true, returnDetailedScanResult: true },
+      {
+        preferredCamera: 'environment',
+        // Ten attempts per second stays responsive for a stationary printed QR
+        // while avoiding the default 25 decodes per second in Android WebView.
+        maxScansPerSecond: 10,
+        // The page already draws its own scan frame. Disabling the library's
+        // duplicate overlays avoids per-frame DOM and SVG work on the APK.
+        highlightScanRegion: false,
+        highlightCodeOutline: false,
+        returnDetailedScanResult: true,
+      },
     );
     scannerRef.current = scanner;
     try {
@@ -205,7 +222,7 @@ export function AttendanceQrScanner() {
     if (!showScanSuccess) return;
     const timeout = window.setTimeout(
       () => setShowScanSuccess(false),
-      prefersReducedMotion ? 450 : 1400,
+      prefersReducedMotion ? 1800 : 2400,
     );
     return () => window.clearTimeout(timeout);
   }, [prefersReducedMotion, showScanSuccess]);
@@ -239,6 +256,8 @@ export function AttendanceQrScanner() {
   };
 
   const reset = () => {
+    acceptedTokenRef.current = '';
+    processingRef.current = false;
     setShowScanSuccess(false);
     setResult(null);
     setScanToken('');
@@ -263,61 +282,19 @@ export function AttendanceQrScanner() {
               <motion.div
                 role="status"
                 aria-live="polite"
-                className="fixed inset-0 z-[120] flex min-h-[100dvh] items-center justify-center overflow-hidden bg-[#020403]/95 px-6 text-white"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
+                className="pointer-events-none fixed inset-x-4 top-[calc(env(safe-area-inset-top)+1rem)] z-[120] mx-auto flex max-w-sm items-start gap-3 rounded-2xl border border-emerald-400/25 bg-[#151817]/95 p-4 text-white shadow-2xl shadow-black/45 backdrop-blur-xl"
+                initial={prefersReducedMotion ? { opacity: 0 } : { y: -12, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={prefersReducedMotion ? { opacity: 0 } : { y: -8, opacity: 0 }}
                 transition={{ duration: prefersReducedMotion ? 0.08 : 0.2 }}
               >
-                <motion.div
-                  className="pointer-events-none absolute h-72 w-72 rounded-full bg-emerald-400/20 blur-3xl"
-                  initial={prefersReducedMotion ? false : { scale: 0.35, opacity: 0 }}
-                  animate={{ scale: prefersReducedMotion ? 1 : 1.35, opacity: [0, 0.9, 0.5] }}
-                  transition={{ duration: prefersReducedMotion ? 0.1 : 1.15, ease: 'easeOut' }}
-                />
-                <div className="relative flex flex-col items-center text-center">
-                  <div className="relative flex h-32 w-32 items-center justify-center">
-                    {!prefersReducedMotion && (
-                      <motion.span
-                        className="absolute inset-0 rounded-full border border-emerald-300/55"
-                        initial={{ scale: 0.55, opacity: 0.9 }}
-                        animate={{ scale: 1.55, opacity: 0 }}
-                        transition={{ duration: 1, ease: 'easeOut' }}
-                      />
-                    )}
-                    <motion.span
-                      className="flex h-24 w-24 items-center justify-center rounded-full border border-emerald-300/35 bg-emerald-400/15 text-emerald-300 shadow-[0_0_70px_-12px_rgba(52,211,153,0.9),inset_0_1px_0_rgba(255,255,255,0.28)] backdrop-blur-xl"
-                      initial={prefersReducedMotion ? false : { scale: 0.35, rotate: -14, opacity: 0 }}
-                      animate={{ scale: 1, rotate: 0, opacity: 1 }}
-                      transition={{ type: 'spring', stiffness: 360, damping: 19, delay: 0.08 }}
-                    >
-                      <ShieldCheck className="h-12 w-12" strokeWidth={2.3} />
-                    </motion.span>
-                  </div>
-                  <motion.p
-                    className="mt-4 text-xs font-black uppercase tracking-[0.28em] text-emerald-300"
-                    initial={prefersReducedMotion ? false : { y: 10, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    transition={{ delay: prefersReducedMotion ? 0 : 0.28, duration: 0.3 }}
-                  >
-                    QR locked in
-                  </motion.p>
-                  <motion.h2
-                    className="mt-3 text-3xl font-black tracking-tight"
-                    initial={prefersReducedMotion ? false : { y: 14, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    transition={{ delay: prefersReducedMotion ? 0 : 0.38, duration: 0.35 }}
-                  >
-                    Your schedule is ready
-                  </motion.h2>
-                  <motion.p
-                    className="mt-2 text-sm font-medium text-white/50"
-                    initial={prefersReducedMotion ? false : { opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: prefersReducedMotion ? 0 : 0.5, duration: 0.3 }}
-                  >
-                    Choose your event, then tap Check In.
-                  </motion.p>
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-400/12 text-emerald-300 ring-1 ring-emerald-300/20">
+                  <QrCode className="h-5 w-5" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-300">QR verified</p>
+                  <p className="mt-1 text-sm font-bold text-white">Choose your event to check in</p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-white/55">Your attendance has not been recorded yet.</p>
                 </div>
               </motion.div>
             )}
@@ -417,14 +394,7 @@ export function AttendanceQrScanner() {
           </section>
         ) : (
           <section className="card overflow-hidden">
-            <div
-              className="relative aspect-[3/4] max-h-[62vh] bg-black"
-              onPointerDownCapture={() => {
-                // A tap on the live camera view is also a valid audio-unlock
-                // gesture on mobile browsers before a QR callback arrives.
-                scannerAudioReadyRef.current = primeInteractionSounds();
-              }}
-            >
+            <div className="relative aspect-[3/4] max-h-[62vh] bg-black">
               <video ref={videoRef} className="h-full w-full object-cover" muted playsInline />
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center"><div className="h-56 w-56 rounded-3xl border-2 border-emerald-400 shadow-[0_0_0_999px_rgba(0,0,0,0.35)]" /></div>
               <div className="absolute inset-x-0 bottom-5 text-center"><span className="rounded-full bg-black/65 px-4 py-2 text-xs font-semibold text-white backdrop-blur">Point at the church QR code</span></div>

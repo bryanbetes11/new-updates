@@ -1,9 +1,9 @@
 {
-  "headline": "A cleaner ServeSync workspace with your preferred appearance.",
+  "headline": "Faster chat, cleaner conversations, and smoother mobile tools.",
   "highlights": [
-    "Desktop Home, Events, Announcements, and navigation have clearer layouts and easier-to-scan information.",
-    "New desktop sessions start in light mode; Android and mobile PWA sessions start in dark mode. Your saved Light, Dark, or System choice remains in place.",
-    "Event and announcement details stay in desktop dialogs, and assignment links open the correct schedule.",
-    "Song leaders can add songs to approved setlists from a desktop dialog. Changes return the setlist to Draft for another review."
+    "Chat messages appear immediately while sending, group more naturally, and use compact reply, reaction, and message-action controls.",
+    "Chat Info now provides focused Message and Search actions plus organized Media, Files, Links, and safety controls on desktop and mobile.",
+    "The Android QR scanner responds faster, uses one targeting indicator, and clearly separates QR verification from attendance confirmation.",
+    "Team access and attendance controls are easier to understand, while Android chat surfaces use a more consistent neutral dark theme."
   ]
 }

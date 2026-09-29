@@ -217,7 +217,10 @@ html[data-touch-feedback="apple"] :is(nav, aside) .touch-feedback-strong {
 
   html.dark.messages-page-active,
   html.dark.messages-page-active body,
-  html.dark body.messages-page-active,
+  html.dark body.messages-page-active {
+    background: #101010 !important;
+  }
+
   html.dark.messages-chat-active,
   html.dark.messages-chat-active body,
   html.dark body.messages-chat-active {

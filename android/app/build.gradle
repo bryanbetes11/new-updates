@@ -16,14 +16,13 @@ android {
         sideload { dimension 'distribution' }
         play {
             dimension 'distribution'
-            versionCode 33
         }
     }
     defaultConfig {
         applicationId "com.babcreations.servesync"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 31
+        versionCode 34
         versionName webPackage.version
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {

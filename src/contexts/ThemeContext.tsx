@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- The provider and its companion hook intentionally share this context module. */
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { syncNativeSystemBars } from '../lib/nativeSystemBars';
 
 type Theme = 'dark' | 'light';
 export type ThemeMode = Theme | 'system';
@@ -47,6 +48,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     root.classList.toggle('dark', theme === 'dark');
     root.style.colorScheme = theme;
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#050505' : '#f8f8fa');
+    void syncNativeSystemBars(theme).catch(() => {
+      // The web theme remains usable if the Android system UI bridge is unavailable.
+    });
   }, [theme]);
 
   useEffect(() => {

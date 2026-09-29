@@ -4,22 +4,20 @@ import { AttendanceMonitoring } from '../components/AttendanceMonitoring';
 import { LeadershipHeroCard } from '../components/LeadershipHeroCard';
 import { Discipline } from './Discipline';
 
-export function Accountability() {
+export function Accountability({ embedded = false }: { embedded?: boolean } = {}) {
   const [activeTab, setActiveTab] = useState<'attendance' | 'conduct'>(() => {
     return new URLSearchParams(window.location.search).get('tab') === 'conduct' ? 'conduct' : 'attendance';
   });
 
-  return (
-    <div className="page-container page-bottom-pad">
-      <div className="app-content-shell relative pb-6 pt-4 sm:pt-5">
-        <div className="space-y-5 sm:space-y-6">
-          <LeadershipHeroCard
+  const content = (
+    <div className="space-y-5 sm:space-y-6">
+          {!embedded && <LeadershipHeroCard
             tone="amber"
             icon={ClipboardCheck}
             eyebrow="Attendance & Conduct"
             title="Accountability"
             description="Review quarterly attendance, identify policy thresholds, and manage conduct follow-up from one leadership workspace."
-          />
+          />}
 
           <div className="grid grid-cols-2 gap-1 rounded-2xl border border-gray-200 bg-gray-100/80 p-1 dark:border-white/[0.08] dark:bg-white/[0.035]" role="tablist" aria-label="Accountability views">
             {(['attendance', 'conduct'] as const).map(tab => {
@@ -47,8 +45,14 @@ export function Accountability() {
           ) : (
             <section aria-label="Conduct accountability"><Discipline embedded /></section>
           )}
-        </div>
-      </div>
+    </div>
+  );
+
+  if (embedded) return content;
+
+  return (
+    <div className="page-container page-bottom-pad">
+      <div className="app-content-shell relative pb-6 pt-4 sm:pt-5">{content}</div>
     </div>
   );
 }

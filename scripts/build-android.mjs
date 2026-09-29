@@ -6,6 +6,14 @@ import { spawnSync } from 'node:child_process';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 process.chdir(root);
 const windows = process.platform === 'win32';
+const play = process.argv.includes('--play');
+if (play && windows && !process.env.SERVESYNC_SIGNING_PROPERTIES) {
+  const localSigning = join(process.env.USERPROFILE || '', 'ServeSyncSigning', 'key.properties');
+  if (existsSync(localSigning)) process.env.SERVESYNC_SIGNING_PROPERTIES = localSigning;
+}
+if (play && !existsSync(process.env.SERVESYNC_SIGNING_PROPERTIES || join(root, 'android', 'key.properties'))) {
+  throw new Error('A Play upload signing configuration is required. Set SERVESYNC_SIGNING_PROPERTIES before building.');
+}
 if (windows && !process.env.JAVA_HOME) {
   const parent = join(process.env.ProgramFiles || 'C:/Program Files', 'Eclipse Adoptium');
   const jdk = existsSync(parent) && readdirSync(parent).find(name => name.startsWith('jdk-21.'));
@@ -35,13 +43,20 @@ if (push) {
   }
 }
 process.env.VITE_ANDROID_PUSH_ENABLED = push ? 'true' : 'false';
+process.env.VITE_ANDROID_DISTRIBUTION = play ? 'play' : 'sideload';
 run(process.execPath, ['node_modules/vite/bin/vite.js', 'build']);
 run(process.execPath, ['node_modules/@capacitor/cli/bin/capacitor', 'sync', 'android']);
+const gradleTask = play ? 'bundlePlayRelease' : 'assembleSideloadDebug';
 if (windows) {
   // Fixed trusted command; no user-controlled text is passed to the shell.
-  run('cmd.exe', ['/d', '/s', '/c', 'gradlew.bat assembleDebug --console=plain'], join(root, 'android'));
+  run('cmd.exe', ['/d', '/s', '/c', `gradlew.bat ${gradleTask} --console=plain`], join(root, 'android'));
 } else {
-  run('sh', ['gradlew', 'assembleDebug', '--console=plain'], join(root, 'android'));
+  run('sh', ['gradlew', gradleTask, '--console=plain'], join(root, 'android'));
 }
-console.log('Debug APK: android/app/build/outputs/apk/debug/app-debug.apk');
-console.log('Development build only; this is not a signed Play Store release.');
+if (play) {
+  console.log('Play bundle: android/app/build/outputs/bundle/playRelease/app-play-release.aab');
+  console.log('Verify the bundle signature and manifest before uploading.');
+} else {
+  console.log('Debug APK: android/app/build/outputs/apk/sideload/debug/app-sideload-debug.apk');
+  console.log('Development build only; this is not a signed Play Store release.');
+}

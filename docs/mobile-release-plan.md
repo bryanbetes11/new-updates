@@ -5,7 +5,7 @@ Updated: 2026-09-23
 ## Agreed direction
 
 - Android first; prepare shared code for iOS. Current equipment: Windows, Android phone, iPhone; no Mac access confirmed.
-- Google Play developer registration is NOT complete. The user is waiting for funds for the registration fee; prepare and test locally without a paid account.
+- Google Play developer registration is complete and verified (Bryan, 2026-09-29). The first Play internal-test preparation is recorded in `docs/play-console-setup.md`; older implementation notes below are historical snapshots.
 - First release serves the existing church for free. Prepare for other churches, then invite a small pilot before open registration.
 - Preserve the existing church's saved behavior, event dates, attendance records, and history.
 - Use one app with church-specific settings. Only authorized church administrators may change their church's policies.

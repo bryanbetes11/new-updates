@@ -59,7 +59,7 @@ import { buildSongProposalConflicts, buildSongProposalReservations, type SongPro
 import { getEffectiveSongLyrics, getSongLyricsSource } from '../lib/songLyrics';
 import { groupEmojiReactions } from '../lib/reactions';
 import { playInteractionSound } from '../lib/interactionSounds';
-import { projectSongReadiness, SONG_READINESS_RULE_DAYS } from '../lib/songReadiness';
+import { projectSongReadinessForEvent, SONG_READINESS_RULE_DAYS } from '../lib/songReadiness';
 import { watchSharedTechMessages } from '../lib/sharedTechMessages';
 import { shareText, usesNativeAndroidFiles } from '../lib/nativeFiles';
 import { DEFAULT_STAGE_REQUEST_MESSAGES, DEFAULT_TECH_MODE_MESSAGES, loadStageRequestMessages, loadTechModeMessages, type TechModeMessages } from '../lib/techModeMessages';
@@ -377,9 +377,18 @@ const createAssignmentDraftRow = (): AssignmentDraftRow => ({
   role_id: '',
 });
 
-function getSongReadinessBadge(usage: SongUsageAge | undefined, eventDate: string) {
-  const projection = projectSongReadiness(usage?.lastDate, eventDate);
+function getSongReadinessBadge(usage: SongUsageAge | undefined, eventDate: string, eventType: string) {
+  const projection = projectSongReadinessForEvent(usage?.lastDate, eventDate, eventType);
   const eventDateLabel = format(parseISO(eventDate), 'MMM d');
+
+  if (projection.isExempt) {
+    return {
+      label: 'Exempt',
+      title: `${eventType} is exempt from the ${SONG_READINESS_RULE_DAYS}-day rule`,
+      className: 'bg-green-50 text-green-700 ring-green-200/70 dark:bg-green-950/60 dark:text-green-300 dark:ring-green-700/40',
+      Icon: CheckCircle,
+    };
+  }
 
   if (projection.meetsRule) {
     return {
@@ -609,7 +618,11 @@ export function EventDetail({ inDialog = false }: { inDialog?: boolean }) {
   }, [location.state, navigate]);
   const returnRouteRef = useRef(getEventReturnRoute(location.state));
   const eventReturnRoute = returnRouteRef.current;
-  const eventBackLabel = eventReturnRoute.startsWith('/my-assignments') ? 'Back to assignments' : 'Back to events';
+  const eventBackLabel = eventReturnRoute.startsWith('/my-assignments')
+    ? 'Back to assignments'
+    : eventReturnRoute.startsWith('/leadership/setlists')
+      ? 'Back to setlist deadlines'
+      : 'Back to events';
 
   const { user, profile, roles, userRoles, organization, loading: authLoading, offlineMode, isLeader, isOrgAdmin, isAdmin, isAdminCoordinator, isProductionDirector, isMusicDirector, isSetlistCoordinator, isPlatformOwner, capabilities, canPreviewMemberView, isViewingAsMember, isViewingAsSongLeader, setViewingAsSongLeader } = useAuth();
   const viewScope = !authLoading && user?.id && profile?.id === user.id && profile.org_id ? JSON.stringify([user.id, profile.org_id]) : null;
@@ -2676,11 +2689,11 @@ export function EventDetail({ inDialog = false }: { inDialog?: boolean }) {
     }
     const notReadyDraft = event ? setlistBuilderSongs.find(draft => {
       const usage = songUsage[draft.song_id];
-      return !projectSongReadiness(usage?.lastDate, setlistEvent!.event_date).meetsRule;
+      return !projectSongReadinessForEvent(usage?.lastDate, setlistEvent!.event_date, setlistEvent!.event_type).meetsRule;
     }) : undefined;
     if (notReadyDraft) {
       const song = songs.find(candidate => candidate.id === notReadyDraft.song_id);
-      const projection = projectSongReadiness(songUsage[notReadyDraft.song_id]?.lastDate, setlistEvent!.event_date);
+      const projection = projectSongReadinessForEvent(songUsage[notReadyDraft.song_id]?.lastDate, setlistEvent!.event_date, setlistEvent!.event_type);
       setSetlistBuilderError(`${song?.title || 'This song'} is not ready for this event. It needs ${projection.shortfallDays} more days.`);
       return;
     }
@@ -2774,7 +2787,7 @@ export function EventDetail({ inDialog = false }: { inDialog?: boolean }) {
     }
     const selectedSong = songs.find(song => song.id === selectedSongForConfig);
     if (event) {
-      const projection = projectSongReadiness(songUsage[selectedSongForConfig]?.lastDate, setlistEvent!.event_date);
+      const projection = projectSongReadinessForEvent(songUsage[selectedSongForConfig]?.lastDate, setlistEvent!.event_date, setlistEvent!.event_type);
       if (!projection.meetsRule) {
         toast('error', `${selectedSong?.title || 'This song'} cannot be added yet. It needs ${projection.shortfallDays} more days to meet the ${SONG_READINESS_RULE_DAYS}-day rule.`);
         return;
@@ -4237,13 +4250,13 @@ const openLyricsModal = (ss: SetlistSong) => {
   const pendingAssignmentPanel = visiblePendingAssignments.length > 0 && !assignmentDetailsBlocked ? (
     <motion.section
       {...blurUp(0.2)}
-      className="relative overflow-hidden rounded-3xl border border-amber-500/25 bg-[#120b05]"
+      className="relative overflow-hidden rounded-3xl border border-amber-200 bg-amber-50 dark:border-amber-500/25 dark:bg-[#120b05]"
       style={{
-        backgroundImage: 'linear-gradient(135deg, rgba(245,158,11,0.16), rgba(245,158,11,0.05) 52%, transparent 82%)',
         boxShadow: '0 6px 20px -12px rgba(245,158,11,0.20)',
       }}
       aria-labelledby="pending-assignment-title"
     >
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(245,158,11,0.10),rgba(245,158,11,0.03)_52%,transparent_82%)] dark:bg-[linear-gradient(135deg,rgba(245,158,11,0.16),rgba(245,158,11,0.05)_52%,transparent_82%)]" aria-hidden="true" />
       <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-amber-300/45 to-transparent" />
       <div className="relative p-4 sm:p-5">
         <div className="flex items-start gap-3.5">
@@ -4254,15 +4267,15 @@ const openLyricsModal = (ss: SetlistSong) => {
             <AlertCircle className="h-5 w-5 text-white" aria-hidden="true" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="mb-0.5 text-[10px] font-mono font-medium uppercase tracking-[0.22em] text-amber-400">
+            <p className="mb-0.5 text-[10px] font-mono font-medium uppercase tracking-[0.22em] text-amber-700 dark:text-amber-400">
               {attendanceOnlyPendingAssignments ? 'Event invitation' : 'Action required'}
             </p>
-            <h2 id="pending-assignment-title" className="text-[15px] font-bold leading-tight text-white" style={{ letterSpacing: '-0.02em' }}>
+            <h2 id="pending-assignment-title" className="text-[15px] font-bold leading-tight text-gray-950 dark:text-white" style={{ letterSpacing: '-0.02em' }}>
               {attendanceOnlyPendingAssignments
                 ? `${visiblePendingAssignments.length} pending ${visiblePendingAssignments.length === 1 ? 'response' : 'responses'}`
                 : `${visiblePendingAssignments.length} pending ${visiblePendingAssignments.length === 1 ? 'assignment' : 'assignments'}`}
             </h2>
-            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-white/50">
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-gray-600 dark:text-white/50">
               {attendanceOnlyPendingAssignments
                 ? 'Please let the event organizers know whether you can attend this session.'
                 : isSongLeader
@@ -4272,7 +4285,7 @@ const openLyricsModal = (ss: SetlistSong) => {
           </div>
         </div>
 
-        <div className="mt-4 divide-y divide-white/[0.07] overflow-hidden rounded-2xl border border-white/[0.08] bg-black/15">
+        <div className="mt-4 divide-y divide-gray-200 overflow-hidden rounded-2xl border border-amber-200/80 bg-white/80 dark:divide-white/[0.07] dark:border-white/[0.08] dark:bg-black/15">
           {visiblePendingAssignments.map(assignment => {
             const isResponding = respondingAssignmentId === assignment.id;
             const roleName = assignment.roles?.name || 'Team role';
@@ -4281,8 +4294,8 @@ const openLyricsModal = (ss: SetlistSong) => {
             return (
               <div key={assignment.id} className="flex flex-col gap-3 px-3.5 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
-				  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-300/70">{attendanceAssignment ? 'Event invitation' : 'Your role for this event'}</p>
-				  <p className="mt-1 text-sm font-bold leading-snug text-white">{attendanceAssignment ? 'You’re invited to attend this session.' : <>You’re assigned to serve as <span className="text-amber-300">{servingRole}</span>.</>}</p>
+				  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:text-amber-300/70">{attendanceAssignment ? 'Event invitation' : 'Your role for this event'}</p>
+				  <p className="mt-1 text-sm font-bold leading-snug text-gray-900 dark:text-white">{attendanceAssignment ? 'You’re invited to attend this session.' : <>You’re assigned to serve as <span className="text-amber-700 dark:text-amber-300">{servingRole}</span>.</>}</p>
                 </div>
                 <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
                   <button
@@ -4299,7 +4312,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                     type="button"
                     onClick={() => setShowDecline(assignment.id)}
                     disabled={respondingAssignmentId !== null}
-                    className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/[0.1] px-4 text-xs font-bold text-red-200 transition-colors hover:bg-red-500/[0.17] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 disabled:cursor-wait disabled:opacity-55"
+                    className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border border-red-300 bg-red-50 px-4 text-xs font-bold text-red-700 transition-colors hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 disabled:cursor-wait disabled:opacity-55 dark:border-red-500/30 dark:bg-red-500/[0.1] dark:text-red-200 dark:hover:bg-red-500/[0.17]"
                     aria-label={attendanceAssignment ? 'Cannot attend' : `Decline ${roleName} assignment`}
                   >
                     <X className="h-3.5 w-3.5" /> {attendanceAssignment ? 'Can’t attend' : 'Decline'}
@@ -4322,6 +4335,12 @@ const openLyricsModal = (ss: SetlistSong) => {
   const canReviewSetlist = !offlineMode && (isLeader || isOrgAdmin || isPlatformOwner || isAdmin || isProductionDirector || isMusicDirector || isSetlistCoordinator || capabilities.review_setlists);
   const canParticipateRevisionDiscussion = discussionAccess || canReviewSetlist || isSongLeader;
   const canSubmitSetlist = isSetlistCreator || canManageSetlist;
+  const revisionReviewer = setlist?.reviewed_by === profile?.id
+    ? profile
+    : members.find(member => member.id === setlist?.reviewed_by);
+  const revisionReviewerName = revisionReviewer
+    ? `${revisionReviewer.first_name} ${revisionReviewer.last_name}`.trim()
+    : 'Leadership reviewer';
   const pendingReviewAge = setlist && isSetlistPendingProcess(setlist.status)
     ? describeSetlistReviewAge(setlist.submitted_at)
     : null;
@@ -4403,7 +4422,7 @@ const openLyricsModal = (ss: SetlistSong) => {
     : null;
   const selectedSongConfigUsage = selectedSongForConfig ? songUsage[selectedSongForConfig] : undefined;
   const selectedSongConfigProjection = selectedSongForConfig
-    ? projectSongReadiness(selectedSongConfigUsage?.lastDate, setlistEvent!.event_date)
+    ? projectSongReadinessForEvent(selectedSongConfigUsage?.lastDate, setlistEvent!.event_date, setlistEvent!.event_type)
     : null;
   const eventDetailArtworkSongs = eventDetailSongs.slice(0, 4).map(ss => ({
     title: ss.songs?.title,
@@ -4831,7 +4850,7 @@ const openLyricsModal = (ss: SetlistSong) => {
         </div>
 
         <section
-          className="relative mx-auto mt-7 w-full max-w-2xl overflow-hidden rounded-[28px] border border-amber-400/20 bg-[#0b0b0b]/90 px-4 pb-4 pt-6 shadow-[0_26px_80px_-42px_rgba(245,158,11,0.55)] backdrop-blur-2xl sm:mt-9 sm:px-7 sm:pb-6 sm:pt-8"
+          className="relative mx-auto mt-7 w-full max-w-2xl overflow-hidden rounded-[28px] border border-amber-200 bg-white/95 px-4 pb-4 pt-6 shadow-[0_26px_80px_-42px_rgba(245,158,11,0.35)] backdrop-blur-2xl dark:border-amber-400/20 dark:bg-[#0b0b0b]/90 dark:shadow-[0_26px_80px_-42px_rgba(245,158,11,0.55)] sm:mt-9 sm:px-7 sm:pb-6 sm:pt-8"
           aria-labelledby="assignment-gate-title"
         >
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(245,158,11,0.14),transparent_38%),linear-gradient(135deg,rgba(255,255,255,0.025),transparent_55%)]" aria-hidden="true" />
@@ -4841,14 +4860,14 @@ const openLyricsModal = (ss: SetlistSong) => {
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500 text-black shadow-[0_12px_35px_-12px_rgba(245,158,11,0.8)]">
               <Lock className="h-5 w-5" aria-hidden="true" />
             </div>
-            <p className="mt-5 text-[10px] font-mono font-bold uppercase tracking-[0.22em] text-amber-400">
+            <p className="mt-5 text-[10px] font-mono font-bold uppercase tracking-[0.22em] text-amber-700 dark:text-amber-400">
               {attendanceOnlyPendingAssignments ? 'Invitation response required' : 'Response required'}
             </p>
-            <h2 id="assignment-gate-title" className="mt-2 text-[1.65rem] font-black leading-[1.08] text-white sm:text-3xl" style={{ letterSpacing: '-0.035em' }}>
+            <h2 id="assignment-gate-title" className="mt-2 text-[1.65rem] font-black leading-[1.08] text-gray-950 dark:text-white sm:text-3xl" style={{ letterSpacing: '-0.035em' }}>
               Respond before viewing<span className="hidden sm:inline"> </span><br className="sm:hidden" />{attendanceOnlyPendingAssignments ? 'session details' : 'event details'}
             </h2>
 
-        <div className="mx-auto mt-6 w-full max-w-xl divide-y divide-white/[0.07] overflow-hidden rounded-2xl border border-white/[0.09] bg-black/25 text-left sm:mt-7">
+        <div className="mx-auto mt-6 w-full max-w-xl divide-y divide-gray-200 overflow-hidden rounded-2xl border border-gray-200 bg-white/85 text-left dark:divide-white/[0.07] dark:border-white/[0.09] dark:bg-black/25 sm:mt-7">
           {visiblePendingAssignments.map(assignment => {
             const isResponding = respondingAssignmentId === assignment.id;
             const roleName = assignment.roles?.name || 'Team role';
@@ -4857,8 +4876,8 @@ const openLyricsModal = (ss: SetlistSong) => {
             return (
               <div key={assignment.id} className="grid gap-3 px-4 py-4 sm:grid-cols-[1fr_auto] sm:items-center sm:px-5">
                 <div className="min-w-0">
-				  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-300/70">{attendanceAssignment ? 'Event invitation' : 'Your role for this event'}</p>
-				  <p className="mt-1 text-base font-black leading-snug text-white">{attendanceAssignment ? 'You’re invited to attend this session.' : <>You’re assigned to serve as <span className="text-amber-300">{servingRole}</span>.</>}</p>
+				  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:text-amber-300/70">{attendanceAssignment ? 'Event invitation' : 'Your role for this event'}</p>
+				  <p className="mt-1 text-base font-black leading-snug text-gray-900 dark:text-white">{attendanceAssignment ? 'You’re invited to attend this session.' : <>You’re assigned to serve as <span className="text-amber-700 dark:text-amber-300">{servingRole}</span>.</>}</p>
                 </div>
                 <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
                   <button
@@ -4875,7 +4894,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                     type="button"
                     onClick={() => setShowDecline(assignment.id)}
                     disabled={respondingAssignmentId !== null}
-                    className={`inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/[0.1] px-5 text-xs font-black text-red-200 transition-colors hover:bg-red-500/[0.17] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 disabled:cursor-not-allowed ${respondingAssignmentId ? 'opacity-45' : ''}`}
+                    className={`inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border border-red-300 bg-red-50 px-5 text-xs font-black text-red-700 transition-colors hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 disabled:cursor-not-allowed dark:border-red-500/30 dark:bg-red-500/[0.1] dark:text-red-200 dark:hover:bg-red-500/[0.17] ${respondingAssignmentId ? 'opacity-45' : ''}`}
                     aria-label={attendanceAssignment ? 'Cannot attend' : `Decline ${roleName} assignment`}
                   >
                     <X className="h-3.5 w-3.5" aria-hidden="true" /> {attendanceAssignment ? 'Can’t attend' : 'Decline'}
@@ -4886,7 +4905,7 @@ const openLyricsModal = (ss: SetlistSong) => {
           })}
         </div>
 
-            <p className="mx-auto mt-4 flex max-w-md items-center justify-center gap-2 border-t border-white/[0.06] px-2 pt-4 text-[11px] font-semibold leading-relaxed text-white/35 sm:mt-5 sm:pt-5">
+            <p className="mx-auto mt-4 flex max-w-md items-center justify-center gap-2 border-t border-gray-200 px-2 pt-4 text-[11px] font-semibold leading-relaxed text-gray-500 dark:border-white/[0.06] dark:text-white/35 sm:mt-5 sm:pt-5">
               <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               {attendanceOnlyPendingAssignments
                 ? 'Session details stay private until you respond to the invitation.'
@@ -5007,16 +5026,16 @@ const openLyricsModal = (ss: SetlistSong) => {
                 className="mx-auto h-56 w-56 shrink-0 rounded-md sm:h-60 sm:w-60 lg:mx-0 lg:h-64 lg:w-64 xl:h-72 xl:w-72 dark:shadow-[0_22px_60px_-30px_rgba(0,0,0,0.9)]"
               />
 
-              <div ref={mobileHeroTitleRef} className="mt-6 min-w-0 lg:mt-0 lg:flex-1 lg:pb-5">
+              <div ref={mobileHeroTitleRef} className="mt-6 min-w-0 lg:mt-0 lg:flex lg:flex-1 lg:flex-col lg:pb-5">
                 <p className={`mb-1 text-[10px] font-mono font-medium uppercase tracking-[0.22em] ${heroEyebrow}`}>
                   {heroIsPast ? 'Past event' : heroIsOverdue ? 'Setlist overdue' : heroIsDueSoon ? (heroDaysUntilDue === 0 ? 'Due within 24h' : `Due in ${heroDaysUntilDue}d`) : heroHasApprovedSetlist ? 'Setlist approved' : 'Schedule'}
                 </p>
-                <div className="flex flex-col items-start gap-3 sm:flex-row">
-                  <h1 className="min-w-0 flex-1 text-[1.75rem] font-black leading-[1.04] text-[#474a65] dark:text-white sm:text-[2.5rem] lg:text-[4.5rem] xl:text-[5.5rem]" style={{ letterSpacing: '-0.04em' }}>
+                <div className="flex flex-col items-start gap-3 sm:flex-row lg:contents">
+                  <h1 className="min-w-0 flex-1 text-[1.75rem] font-black leading-[1.04] text-[#474a65] dark:text-white sm:text-[2.5rem] lg:order-1 lg:text-[4.5rem] xl:text-[5.5rem]" style={{ letterSpacing: '-0.04em' }}>
                     {eventDisplayTitle}
                   </h1>
                   {!assignmentDetailsBlocked && (
-                    <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    <div className="flex shrink-0 flex-wrap items-center gap-2 lg:order-3 lg:mt-4 lg:w-full lg:border-t lg:border-[#d3d4dd] lg:pt-4 dark:lg:border-white/[0.10]">
                       {canPreviewMemberView && !isViewingAsMember && (
                         <button
                           type="button"
@@ -5053,6 +5072,9 @@ const openLyricsModal = (ss: SetlistSong) => {
                         aria-label="Share event"
                       >
                         <Upload className={`h-4 w-4 ${sharingEvent ? 'animate-pulse' : ''}`} strokeWidth={2.6} />
+                        <span className="hidden text-xs font-bold lg:inline">
+                          {sharingEvent ? 'Sharing…' : 'Share'}
+                        </span>
                       </button>
                       {myAssignment && myAssignment.status !== 'declined' && !isAttendanceAssignment(myAssignment) && (
                         <button
@@ -5176,7 +5198,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                     </div>
                   )}
                 </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] font-medium text-[#62657b] dark:text-white/60">
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] font-medium text-[#62657b] dark:text-white/60 lg:order-2">
                   <span className="badge-blue text-[10px]">{event.event_type}</span>
                   {heroIsPast && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-[#e6e7ef] px-2 py-1 text-[10px] font-black text-[#474a65] dark:bg-white/[0.09] dark:text-white/70">
@@ -5198,7 +5220,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                 </div>
 
                 {event.description && !assignmentDetailsBlocked && (
-                  <p className="mt-4 max-w-3xl break-words border-t border-[#d3d4dd] pt-3 text-[12px] leading-relaxed text-[#62657b] dark:border-white/[0.08] dark:text-white/55">{event.description}</p>
+                  <p className="mt-4 max-w-3xl break-words border-t border-[#d3d4dd] pt-3 text-[12px] leading-relaxed text-[#62657b] dark:border-white/[0.08] dark:text-white/55 lg:order-4">{event.description}</p>
                 )}
               </div>
             </div>
@@ -5458,8 +5480,9 @@ const openLyricsModal = (ss: SetlistSong) => {
               >
                 <MessageCircle className="h-4 w-4 shrink-0 text-amber-500" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                    {setlist.status === 'revision_requested' ? 'Revision Requested' : 'Revision Discussion'}
+                  <p className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white">
+                    <span>{setlist.status === 'revision_requested' ? 'Revision Requested' : 'Revision Discussion'}</span>
+                    <span className="badge badge-yellow shrink-0">{revisionComments.length}</span>
                   </p>
                   {setlist.status === 'approved' && (
                     <p className="mt-0.5 text-[11px] text-gray-500 dark:text-white/35">
@@ -5467,10 +5490,9 @@ const openLyricsModal = (ss: SetlistSong) => {
                     </p>
                   )}
                 </div>
-                <ChevronDown className={`h-4 w-4 shrink-0 text-gray-400 transition-transform duration-300 ease-out dark:text-white/35 ${showRevisionDiscussion ? 'rotate-180' : ''}`} />
               </button>
               <div className="flex shrink-0 items-center gap-2">
-                <span className="badge badge-yellow">{revisionComments.length}</span>
+                <ChevronDown aria-hidden="true" className={`h-4 w-4 shrink-0 text-gray-400 transition-transform duration-300 ease-out dark:text-white/35 ${showRevisionDiscussion ? 'rotate-180' : ''}`} />
                 <span
                   role="button"
                   tabIndex={0}
@@ -5488,7 +5510,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                   className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-gray-700 ring-1 ring-black/[0.09] transition-colors hover:bg-white dark:bg-white/[0.08] dark:text-white/80 dark:ring-white/[0.12] dark:hover:bg-white/[0.14]"
                 >
                   <Eye aria-hidden="true" className="h-3.5 w-3.5" />
-                  <span>Seen {revisionDiscussionViewerCount}</span>
+                  <span>{revisionDiscussionViewerCount}</span>
                 </span>
               </div>
             </div>
@@ -5510,9 +5532,12 @@ const openLyricsModal = (ss: SetlistSong) => {
               >
               <div ref={revisionDiscussionContentRef}>
               {(setlist.review_note || setlist.approval_notes) && (
-                <div className="mx-3.5 mt-3 flex items-start gap-2 rounded-xl border border-amber-300/50 bg-amber-50/80 px-3 py-2.5 dark:border-amber-700/35 dark:bg-amber-900/15 sm:mx-4">
+                <div className="mx-2 mt-2.5 flex items-start gap-1.5 rounded-xl border border-amber-300/50 bg-amber-50/80 px-2 py-2.5 dark:border-amber-700/35 dark:bg-amber-900/15 sm:mx-4 sm:mt-3 sm:gap-2 sm:px-3">
                   <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
                   <div data-discussion-activity-at={setlist.reviewed_at || undefined} className="min-w-0 flex-1">
+                    <p className="mb-1.5 text-[11px] font-semibold text-amber-800/80 dark:text-amber-200/75">
+                      Reviewed by <span className="text-amber-900 dark:text-amber-100">{revisionReviewerName}</span>
+                    </p>
                     <SetlistGuideNote text={setlist.review_note || setlist.approval_notes || 'Please review and make necessary changes to the setlist.'} />
                   </div>
                 </div>
@@ -6185,7 +6210,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                       {setlistSongs.sort((a, b) => a.position - b.position).map((ss, i) => {
                         const usage = songUsage[ss.song_id];
                         const proposalConflict = canReviewSetlist ? songProposalConflicts[ss.song_id] : undefined;
-                        const readiness = getSongReadinessBadge(usage, setlistEvent!.event_date);
+                        const readiness = getSongReadinessBadge(usage, setlistEvent!.event_date, setlistEvent!.event_type);
                         const ReadinessIcon = readiness.Icon;
                         const displayKey = ss.performed_key || ss.songs?.song_key || '';
                         const keyChanged = ss.performed_key && ss.songs?.song_key && ss.performed_key !== ss.songs.song_key;
@@ -7003,14 +7028,16 @@ const openLyricsModal = (ss: SetlistSong) => {
         >
           {readinessDetailsSong && (() => {
             const usage = songUsage[readinessDetailsSong.songId];
-            const projection = projectSongReadiness(usage?.lastDate, setlistEvent!.event_date);
-            const readiness = getSongReadinessBadge(usage, setlistEvent!.event_date);
+            const projection = projectSongReadinessForEvent(usage?.lastDate, setlistEvent!.event_date, setlistEvent!.event_type);
+            const readiness = getSongReadinessBadge(usage, setlistEvent!.event_date, setlistEvent!.event_type);
             const ReadinessIcon = readiness.Icon;
             const targetDateLabel = format(parseISO(setlistEvent!.event_date), 'MMM d, yyyy');
             const readyDateLabel = projection.readyDate
               ? format(parseISO(projection.readyDate), 'MMM d, yyyy')
               : null;
-            const explanation = projection.daysAtTarget === null
+            const explanation = projection.isExempt
+              ? `${setlistEvent!.event_type} setlists are exempt from the ${SONG_READINESS_RULE_DAYS}-day song reuse rule.`
+              : projection.daysAtTarget === null
               ? `No earlier approved use was found before ${targetDateLabel}. New or never-used songs meet the ${SONG_READINESS_RULE_DAYS}-day rule.`
               : projection.meetsRule
                 ? `${projection.daysAtTarget} days will have passed since the last approved use. That clears the ${SONG_READINESS_RULE_DAYS}-day rule by ${projection.daysAtTarget - SONG_READINESS_RULE_DAYS} days.`
@@ -7732,7 +7759,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                 })
                 .map(song => {
                   const usage = songUsage[song.id];
-                  const projection = projectSongReadiness(usage?.lastDate, setlistEvent!.event_date);
+                  const projection = projectSongReadinessForEvent(usage?.lastDate, setlistEvent!.event_date, setlistEvent!.event_type);
                   const eventDateLabel = format(parseISO(setlistEvent!.event_date), 'MMM d');
                   const proposalReservation = songProposalReservations[song.id];
                   return (
@@ -7787,11 +7814,11 @@ const openLyricsModal = (ss: SetlistSong) => {
                         className={`mt-0.5 inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[9px] font-bold ring-1 transition-[filter,transform] hover:brightness-110 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 sm:px-2 sm:py-1 sm:text-[10px] ${projection.meetsRule
                           ? 'bg-green-50 text-green-700 ring-green-200/70 dark:bg-green-950/60 dark:text-green-300 dark:ring-green-700/40'
                           : 'bg-red-50 text-red-700 ring-red-200/70 dark:bg-red-950/60 dark:text-red-300 dark:ring-red-700/40'}`}
-                        title={projection.daysAtTarget === null ? `New song; meets the rule by ${eventDateLabel}` : `${projection.daysAtTarget} days since last approved use by ${eventDateLabel}`}
-                        aria-label={`Open readiness details for ${song.title}: ${projection.meetsRule ? 'Meets' : `${projection.shortfallDays}d short`} · ${eventDateLabel}`}
+                        title={projection.isExempt ? `${setlistEvent!.event_type} is exempt from the ${SONG_READINESS_RULE_DAYS}-day rule` : projection.daysAtTarget === null ? `New song; meets the rule by ${eventDateLabel}` : `${projection.daysAtTarget} days since last approved use by ${eventDateLabel}`}
+                        aria-label={`Open readiness details for ${song.title}: ${projection.isExempt ? 'Exempt' : projection.meetsRule ? 'Meets' : `${projection.shortfallDays}d short`} · ${eventDateLabel}`}
                       >
                         {projection.meetsRule ? <CheckCircle className="h-3.5 w-3.5 shrink-0" /> : <AlertTriangle className="h-3.5 w-3.5 shrink-0" />}
-                        <span>{projection.meetsRule ? 'Meets' : `${projection.shortfallDays}d short`} · {eventDateLabel}</span>
+                        <span>{projection.isExempt ? 'Exempt' : projection.meetsRule ? 'Meets' : `${projection.shortfallDays}d short`} · {eventDateLabel}</span>
                       </button>
                     </div>
                   );
@@ -7914,10 +7941,12 @@ const openLyricsModal = (ss: SetlistSong) => {
               const readyDateLabel = selectedSongConfigProjection.readyDate
                 ? format(parseISO(selectedSongConfigProjection.readyDate), 'MMM d, yyyy')
                 : null;
-              const readiness = getSongReadinessBadge(selectedSongConfigUsage, setlistEvent!.event_date);
+              const readiness = getSongReadinessBadge(selectedSongConfigUsage, setlistEvent!.event_date, setlistEvent!.event_type);
               const ReadinessIcon = readiness.Icon;
               const lyricsSource = getSongLyricsSource(selectedSongConfigSong);
-              const explanation = selectedSongConfigProjection.daysAtTarget === null
+              const explanation = selectedSongConfigProjection.isExempt
+                ? `${setlistEvent!.event_type} setlists are exempt from the ${SONG_READINESS_RULE_DAYS}-day song reuse rule.`
+                : selectedSongConfigProjection.daysAtTarget === null
                 ? `No earlier approved use was found before ${eventDateLabel}. New or never-used songs meet the ${SONG_READINESS_RULE_DAYS}-day rule.`
                 : selectedSongConfigProjection.meetsRule
                   ? `${selectedSongConfigProjection.daysAtTarget} days will have passed since the last approved use. That clears the ${SONG_READINESS_RULE_DAYS}-day rule by ${selectedSongConfigProjection.daysAtTarget - SONG_READINESS_RULE_DAYS} days.`

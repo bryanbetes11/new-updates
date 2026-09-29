@@ -493,6 +493,13 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
             <button type="button" disabled={appAccessStatus === 'loading'} onClick={() => setAppAccessRefresh(value => value + 1)} className="min-h-11 rounded-xl px-3 font-semibold text-emerald-700 disabled:opacity-50 dark:text-emerald-300">Refresh app access</button>
           </div>}
           <div className="desktop-team-roster space-y-2.5">
+            <div className="desktop-team-column-head hidden" aria-hidden="true">
+              <span>Member</span>
+              <span>Roles</span>
+              <span>App access</span>
+              <span>Account / status</span>
+              <span />
+            </div>
             {filtered.length === 0 && (
               <div className="rounded-3xl bg-white dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] p-12 text-center" style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -12px rgba(15,23,42,0.10)' }}>
                 <div className="relative h-14 w-14 rounded-2xl bg-gray-100 dark:bg-white/[0.06] flex items-center justify-center mx-auto mb-4">
@@ -524,40 +531,79 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                   <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.12] to-transparent" />
                   <button
                     onClick={() => setExpanded(isExpanded ? null : member.id)}
-                    className="relative w-full flex min-h-14 items-center gap-3 px-4 py-3 text-left hover:bg-gray-50/60 dark:hover:bg-white/[0.02] transition-colors"
+                    className="desktop-team-roster-row relative w-full flex min-h-14 items-center gap-3 px-4 py-3 text-left hover:bg-gray-50/60 dark:hover:bg-white/[0.02] transition-colors"
                   >
-                    <Avatar
-                      src={member.avatar_url}
-                      firstName={member.first_name}
-                      lastName={member.last_name}
-                      size="sm"
-                      className="shrink-0"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-bold text-gray-900 dark:text-white">
+                    <div className="flex min-w-0 flex-1 items-center gap-3 lg:hidden">
+                      <Avatar
+                        src={member.avatar_url}
+                        firstName={member.first_name}
+                        lastName={member.last_name}
+                        size="sm"
+                        className="shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-bold text-gray-900 dark:text-white">
+                            {member.first_name} {member.last_name}
+                            {member.nickname && <span className="text-gray-400 font-normal text-xs"> ({member.nickname})</span>}
+                          </p>
+                          {ministryStatus !== 'active' && (
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-lg ${statusCfg.bgColor} ${statusCfg.textColor}`}>
+                              {statusCfg.label}
+                            </span>
+                          )}
+                          {authCfg && authStatus !== 'ready' && (
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-lg ring-1 ${authCfg.className}`}>
+                              {authCfg.label}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                          {memberRoles.slice(0, 3).map(ur => ur.roles && (
+                            <RoleBadge key={ur.id} role={ur.roles} size="sm" />
+                          ))}
+                          {memberRoles.length === 0 && <span className="text-[11px] text-gray-400">No roles</span>}
+                          {memberRoles.length > 3 && <span className="text-[11px] text-gray-400">+{memberRoles.length - 3} more</span>}
+                        </div>
+                        {isOrgAdmin && appAccessStatus === 'ready' && <MemberAppAccessBadges rows={appAccess[member.id] ?? []} />}
+                      </div>
+                    </div>
+                    <div className="hidden lg:contents">
+                      <div className="desktop-team-member flex min-w-0 items-center gap-3">
+                        <Avatar
+                          src={member.avatar_url}
+                          firstName={member.first_name}
+                          lastName={member.last_name}
+                          size="sm"
+                          className="shrink-0"
+                        />
+                        <p className="min-w-0 truncate text-sm font-bold text-gray-900 dark:text-white">
                           {member.first_name} {member.last_name}
                           {member.nickname && <span className="text-gray-400 font-normal text-xs"> ({member.nickname})</span>}
                         </p>
-                        {ministryStatus !== 'active' && (
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-lg ${statusCfg.bgColor} ${statusCfg.textColor}`}>
-                            {statusCfg.label}
-                          </span>
-                        )}
-                        {authCfg && authStatus !== 'ready' && (
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-lg ring-1 ${authCfg.className}`}>
-                            {authCfg.label}
-                          </span>
-                        )}
                       </div>
-                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                      <div className="desktop-team-role-summary flex min-w-0 flex-wrap items-center gap-1.5">
                         {memberRoles.slice(0, 3).map(ur => ur.roles && (
                           <RoleBadge key={ur.id} role={ur.roles} size="sm" />
                         ))}
                         {memberRoles.length === 0 && <span className="text-[11px] text-gray-400">No roles</span>}
                         {memberRoles.length > 3 && <span className="text-[11px] text-gray-400">+{memberRoles.length - 3} more</span>}
                       </div>
-                      {isOrgAdmin && appAccessStatus === 'ready' && <MemberAppAccessBadges rows={appAccess[member.id] ?? []} />}
+                      <div className="desktop-team-app-access min-w-0">
+                        {isOrgAdmin && appAccessStatus === 'ready'
+                          ? <MemberAppAccessBadges rows={appAccess[member.id] ?? []} />
+                          : <span className="text-[11px] text-gray-400 dark:text-white/40">—</span>}
+                      </div>
+                      <div className="desktop-team-status flex min-w-0 flex-wrap items-center gap-1.5">
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-lg ${statusCfg.bgColor} ${statusCfg.textColor}`}>
+                          {statusCfg.label}
+                        </span>
+                        {authCfg && (
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-lg ring-1 ${authCfg.className}`}>
+                            {authCfg.label}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     {isExpanded
                       ? <ChevronUp className="h-4 w-4 text-gray-400 shrink-0" />

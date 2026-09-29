@@ -87,16 +87,16 @@ export function PushReadinessBanner({ onVisibilityChange }: PushReadinessBannerP
     : <>Get notified when you receive{' '}<br className="sm:hidden" />new messages or reminders.</>;
 
   return (
-      <div className="relative flex items-center gap-3 bg-[#25090d] px-4 py-3 text-white shadow-lg shadow-black/25 lg:mx-[30px] lg:rounded-2xl">
-        <Frown aria-hidden="true" className="mr-1 h-12 w-12 shrink-0 text-red-300 sm:mr-0 sm:h-6 sm:w-6" />
+      <div className="relative flex items-center gap-3 border border-red-200 bg-red-50 px-4 py-3 text-slate-900 shadow-sm dark:border-red-950/50 dark:bg-[#25090d] dark:text-white dark:shadow-lg dark:shadow-black/25 lg:mx-[30px] lg:rounded-2xl">
+        <Frown aria-hidden="true" className="mr-1 h-12 w-12 shrink-0 text-red-600 dark:text-red-300 sm:mr-0 sm:h-6 sm:w-6" />
         <div className="min-w-0 flex-1">
           <p className="text-[14px] font-black">Turn On Notifications</p>
-          <p className="mt-0.5 text-[12px] leading-4 text-white/65">{message}</p>
+          <p className="mt-0.5 text-[12px] leading-4 text-slate-600 dark:text-white/65">{message}</p>
         </div>
         <button
           type="button"
           onClick={setup}
-          className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1 rounded-xl bg-red-500 px-3 text-[12px] font-black capitalize text-white transition hover:bg-red-400 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white lg:rounded-full"
+          className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1 rounded-xl bg-red-600 px-3 text-[12px] font-black capitalize text-white transition hover:bg-red-700 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 dark:bg-red-500 dark:hover:bg-red-400 dark:focus-visible:ring-white lg:rounded-full"
         >
           <span>Turn On</span>
         </button>

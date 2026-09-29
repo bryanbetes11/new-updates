@@ -22,6 +22,7 @@
     "mobile:open:ios": "cap open ios",
     "mobile:doctor": "node scripts/mobile-doctor.mjs",
     "mobile:apk": "node scripts/build-android.mjs",
+    "mobile:play": "node scripts/build-android.mjs --play",
     "test:attendance-foundation": "node tests/privacyInternalNotes.mjs && node tests/leadershipRoleAssignments.mjs && node tests/attendanceTeamMemberships.mjs"
   },
   "dependencies": {
@@ -30,6 +31,7 @@
     "@capacitor/core": "8.5.2",
     "@capacitor/ios": "8.5.2",
     "@capacitor/push-notifications": "8.1.2",
+    "@phosphor-icons/react": "2.1.10",
     "@supabase/supabase-js": "^2.57.4",
     "chordsheetjs": "^15.2.0",
     "date-fns": "^4.1.0",

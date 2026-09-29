@@ -15,7 +15,7 @@ const steps = [
 ];
 
 export function CreateChurch() {
-  const { user, loading, hasOrganization, isOrgAdmin, refreshProfile } = useAuth();
+  const { user, profile, loading, hasOrganization, isOrgAdmin, refreshProfile } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [name, setName] = useState('');
@@ -31,9 +31,9 @@ export function CreateChurch() {
 
   useEffect(() => {
     if (!loading && user && hasOrganization) {
-      navigate(isOrgAdmin ? '/admin/church' : '/dashboard', { replace: true });
+      navigate(profile?.is_onboarded ? (isOrgAdmin ? '/admin/church' : '/dashboard') : '/onboarding', { replace: true });
     }
-  }, [hasOrganization, isOrgAdmin, loading, navigate, user]);
+  }, [hasOrganization, isOrgAdmin, loading, navigate, profile?.is_onboarded, user]);
 
   const normalizedSlug = normalizeChurchSlug(slug);
   const slugIsValid = isValidChurchSlug(normalizedSlug);

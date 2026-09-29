@@ -9,6 +9,7 @@ import { NotificationsSkeleton } from '../components/LoadingSpinner';
 import { withRequestTimeout } from '../lib/requestTimeout';
 import type { Notification } from '../types';
 import { recordNotificationOpen } from '../lib/notificationOpenTracking';
+import { resolveNotificationDestination } from '../lib/notificationDestination';
 
 function emptyListResponse() {
   return { data: [], error: null, count: null, status: 200, statusText: 'OK' };
@@ -95,15 +96,8 @@ export function Notifications() {
       window.setTimeout(() => navigate(`/messages/${n.data.conversation_id}`), 0);
       return;
     }
-    if (n.data?.url) {
-      navigate(n.data.url);
-    } else if (n.data?.event_id) {
-      navigate(`/events/${n.data.event_id}`);
-    } else if (n.data?.announcement_id) {
-      navigate('/announcements');
-    } else if (n.data?.video_id) {
-      navigate('/library');
-    }
+    const destination = resolveNotificationDestination(n);
+    if (destination) navigate(destination);
   };
 
   const unreadCount = notifications.filter(n => !n.is_read).length;

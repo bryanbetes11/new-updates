@@ -16,6 +16,7 @@ export function AppReminderCarousel({ mobileHeaderVisible, onHeightChange }: App
   const { search } = useLocation();
   const preview = import.meta.env.DEV && new URLSearchParams(search).get('preview') === 'app-offer';
   const showAndroid = androidAvailable || preview;
+  const showPushReminder = !import.meta.env.DEV && !(typeof window !== 'undefined' && window.location.hostname === '127.0.0.1' && window.location.port === '4173');
   const [showNotifications, setShowNotifications] = useState(false);
   const [selected, setSelected] = useState<Prompt>('notifications');
   const [interacting, setInteracting] = useState(false);
@@ -60,7 +61,7 @@ export function AppReminderCarousel({ mobileHeaderVisible, onHeightChange }: App
       onBlurCapture={leaveFocus}
     >
       <div className="grid overflow-hidden">
-        {!import.meta.env.DEV && (
+        {showPushReminder && (
           <div aria-hidden={active !== 'notifications'} className={`col-start-1 row-start-1 min-w-0 transition-[transform,opacity,visibility] duration-500 motion-reduce:transition-none ${active === 'notifications' ? 'visible translate-y-0 opacity-100' : 'invisible -translate-y-full opacity-0'}`}>
             <PushReadinessBanner onVisibilityChange={setShowNotifications} />
           </div>

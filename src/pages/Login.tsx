@@ -110,12 +110,7 @@ export function Login() {
     <div className="relative h-dvh overflow-x-hidden overflow-y-auto overscroll-contain bg-[#050505] text-white">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_16%_8%,rgba(34,197,94,0.18),transparent_32%),radial-gradient(circle_at_82%_18%,rgba(250,204,21,0.08),transparent_28%),linear-gradient(180deg,#090b09_0%,#050505_48%,#000_100%)]" />
 
-      <aside className="fixed inset-y-0 left-0 hidden w-[48%] max-w-[740px] flex-col justify-between overflow-hidden border-r border-white/[0.06] bg-[linear-gradient(160deg,rgba(16,185,129,0.12)_0%,rgba(255,255,255,0.035)_42%,rgba(0,0,0,0)_100%)] p-12 lg:flex">
-        <div className="pointer-events-none absolute inset-0">
-          <div className="absolute left-[12%] top-[18%] h-72 w-72 rounded-full bg-emerald-500/10 blur-[80px]" />
-          <div className="absolute bottom-[-10%] right-[-8%] h-[28rem] w-[28rem] rounded-full bg-emerald-300/[0.055] blur-[90px]" />
-        </div>
-
+      <aside className="fixed inset-y-0 left-0 hidden w-[48%] max-w-[740px] flex-col justify-between gap-6 overflow-y-auto border-r border-white/[0.06] bg-[linear-gradient(160deg,rgba(16,185,129,0.08)_0%,rgba(255,255,255,0.025)_42%,rgba(0,0,0,0)_100%)] p-8 xl:p-12 lg:flex">
         <div className="relative flex items-center gap-3">
           <img src="/servesync-mark-transparent.png" alt="ServeSync" className="h-12 w-12 shrink-0 object-contain drop-shadow-[0_0_18px_rgba(34,197,94,0.28)]" />
           <div>
@@ -124,30 +119,19 @@ export function Login() {
           </div>
         </div>
 
-        <div className="relative max-w-xl">
-          <h2 className="text-[clamp(3.6rem,6vw,6rem)] font-black leading-[0.88] tracking-[-0.085em] text-white">
-            Serve<br />
-            in sync.
-          </h2>
-          <p className="mt-7 max-w-md text-[17px] leading-8 text-white/45">
-            Plan services, share setlists, and keep your ministry team aligned in one focused workspace.
-          </p>
-
-          <div className="mt-10 grid max-w-md gap-2">
-            {[
-              { title: 'Assignments', detail: 'Know when and where you serve' },
-              { title: 'Setlists', detail: 'Keep songs and arrangements together' },
-              { title: 'Team updates', detail: 'Stay aligned as plans change' },
-            ].map(item => (
-              <div key={item.title} className="flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.035] px-4 py-3">
-                <div className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.8)]" />
-                <div className="min-w-0">
-                  <p className="text-sm font-bold leading-tight text-white/75">{item.title}</p>
-                  <p className="mt-0.5 truncate text-[11px] font-medium leading-tight text-white/32">{item.detail}</p>
-                </div>
-                <div className="ml-auto h-px w-10 bg-gradient-to-r from-emerald-400/50 to-transparent" />
-              </div>
-            ))}
+        <div className="relative flex min-h-0 w-full max-w-xl flex-1 flex-col justify-center gap-5 xl:gap-7">
+          <div className="relative h-[clamp(180px,32vh,320px)] shrink-0 overflow-hidden rounded-[1.75rem] border border-emerald-300/[0.08] bg-[#07120c]">
+            <img src="/servesync-login-illustration.png" alt="" className="h-full w-full object-cover opacity-[0.65] [filter:saturate(0.8)_brightness(0.78)]" />
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#06100a]/45 via-transparent to-black/10" />
+          </div>
+          <div>
+            <h2 className="text-[clamp(2.8rem,4.8vw,5rem)] font-black leading-[0.9] tracking-[-0.075em] text-white">
+              Serve<br />
+              in sync.
+            </h2>
+            <p className="mt-4 max-w-md text-[15px] leading-7 text-white/55 xl:text-[17px]">
+              Plan services, share setlists, and keep your ministry team aligned in one focused workspace.
+            </p>
           </div>
         </div>
 
@@ -158,9 +142,16 @@ export function Login() {
       </aside>
 
       <main className="relative flex min-h-dvh flex-col lg:ml-[48%]">
-        <div className="flex items-center gap-3 px-6 pt-14 pb-2 lg:hidden">
+        <div className="flex items-center gap-3 px-6 pt-8 pb-2 sm:px-10 lg:hidden">
           <img src="/servesync-mark-transparent.png" alt="ServeSync" className="h-12 w-12 shrink-0 object-contain" />
           <span className="text-[26px] font-black tracking-[-0.055em] text-white">ServeSync</span>
+        </div>
+
+        <div className="px-6 pt-3 sm:px-10 lg:hidden" aria-hidden="true">
+          <div className="relative h-[clamp(140px,42vw,200px)] overflow-hidden rounded-[1.5rem] border border-emerald-300/[0.08] bg-[#07120c]">
+            <img src="/servesync-login-illustration.png" alt="" className="h-full w-full object-cover opacity-[0.65] [filter:saturate(0.8)_brightness(0.78)]" />
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#06100a]/40 via-transparent to-black/10" />
+          </div>
         </div>
 
         <div className="flex flex-1 items-center justify-center px-6 py-6 sm:px-10 sm:py-10 lg:px-16">
@@ -186,6 +177,11 @@ export function Login() {
                       <p className="mt-3 text-[14px] leading-6 text-white/42">
                         Sign in to continue your ServeSync workspace.
                       </p>
+                      {params.get('account-deletion') === 'requested' && (
+                        <p role="status" className="mt-4 rounded-xl border border-emerald-400/30 bg-emerald-400/10 p-3 text-sm leading-5 text-emerald-100">
+                          Your account access has ended and your deletion request is being processed. Contact ServeSync support if you need help with the request.
+                        </p>
+                      )}
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-4">

@@ -5,7 +5,7 @@ import { motion, AnimatePresence, useReducedMotion, type Variants } from 'framer
 import {
   ArrowLeft, Eye, MessageCircle, Send,
   AlertTriangle, AlertCircle, Image, Pencil, Trash2, MoreVertical, Lock,
-  CornerDownRight, X, ChevronLeft, Megaphone, Smile
+  CornerDownRight, X, ChevronLeft, Megaphone, Smile, Flag
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { announcementImageUrl, useAnnouncementImages } from '../lib/announcementMedia';
@@ -13,6 +13,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { PageLoader } from '../components/LoadingSpinner';
 import { Modal } from '../components/Modal';
+import { ContentReportDialog, type ReportTarget } from '../components/ContentReportDialog';
 import { Select } from '../components/Select';
 import { Avatar } from '../components/Avatar';
 import { FormattedText } from '../components/FormattedText';
@@ -89,6 +90,7 @@ function CommentItem({
   onSaveEdit,
   onCancelEdit,
   onDelete,
+  onReport,
   reactionPickerCommentId,
   pendingReactionReveal,
   reactionLanding,
@@ -110,6 +112,7 @@ function CommentItem({
   onSaveEdit: (id: string) => void;
   onCancelEdit: () => void;
   onDelete: (id: string) => void;
+  onReport: (id: string) => void;
   reactionPickerCommentId: string | null;
   pendingReactionReveal: { commentId: string; emoji: string } | null;
   reactionLanding: { commentId: string; emoji: string; token: number } | null;
@@ -225,6 +228,11 @@ function CommentItem({
                       className="flex min-h-11 items-center gap-1 rounded-xl px-2 text-[11px] text-gray-400 transition-colors hover:bg-black/[0.035] hover:text-brand-600 dark:hover:bg-white/[0.04] dark:hover:text-brand-400"
                     >
                       <CornerDownRight className="h-3 w-3" /> Reply
+                    </button>
+                  )}
+                  {!isOwn && editingCommentId !== comment.id && (
+                    <button type="button" onClick={() => onReport(comment.id)} className="flex min-h-11 items-center gap-1 rounded-xl px-2 text-[11px] text-gray-400 transition-colors hover:text-amber-600 dark:hover:text-amber-300" aria-label="Report comment">
+                      <Flag className="h-3 w-3" /> <span className="hidden sm:inline">Report</span>
                     </button>
                   )}
                   {isOwn && editingCommentId !== comment.id && (
@@ -435,6 +443,7 @@ function CommentItem({
                 onSaveEdit={onSaveEdit}
                 onCancelEdit={onCancelEdit}
                 onDelete={onDelete}
+                onReport={onReport}
                 reactionPickerCommentId={reactionPickerCommentId}
                 pendingReactionReveal={pendingReactionReveal}
                 reactionLanding={reactionLanding}
@@ -468,14 +477,14 @@ const blockItem: Variants = {
   visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.65, ease: [0.16, 1, 0.3, 1] } },
 };
 
-export function AnnouncementDetail() {
+export function AnnouncementDetail({ inDialog = false }: { inDialog?: boolean } = {}) {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
   const smartBack = useSmartBack('/announcements');
   const backgroundLocation = (location.state as { backgroundLocation?: Location } | null)?.backgroundLocation;
   const returnToAnnouncements = () => {
-    if (backgroundLocation?.pathname === '/announcements') {
+    if (backgroundLocation && ['/announcements', '/dashboard'].includes(backgroundLocation.pathname)) {
       navigate(`${backgroundLocation.pathname}${backgroundLocation.search}${backgroundLocation.hash}`, { replace: true });
     } else {
       smartBack();
@@ -493,6 +502,7 @@ export function AnnouncementDetail() {
   const [loading, setLoading] = useState(true);
   const [isLeaving, setIsLeaving] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
@@ -903,7 +913,7 @@ export function AnnouncementDetail() {
       >
 
         {/* ── Back ─────────────────────────────────────── */}
-        <motion.button
+        {!inDialog && <motion.button
           type="button"
           initial={{ opacity: 0, x: -12 }}
           animate={isLeaving ? { opacity: 0, x: -12 } : { opacity: 1, x: 0 }}
@@ -913,7 +923,7 @@ export function AnnouncementDetail() {
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Announcements
-        </motion.button>
+        </motion.button>}
 
         {/* ── Hero Card ────────────────────────────────── */}
         <motion.div
@@ -996,6 +1006,11 @@ export function AnnouncementDetail() {
                       <span className="inline-flex h-11 shrink-0 items-center gap-1 rounded-full border border-black/[0.06] bg-white/70 px-3 text-[11px] font-semibold text-gray-500 dark:border-white/[0.07] dark:bg-white/[0.04] dark:text-white/45">
                         <Image className="h-3 w-3" /> Photos
                       </span>
+                    )}
+                    {!isCreator && (
+                      <button type="button" onClick={() => setReportTarget({ kind: 'announcement', id: announcement.id, label: 'announcement' })} className="inline-flex h-11 items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-3 text-[11px] font-semibold text-gray-600 dark:border-white/[0.07] dark:bg-white/[0.04] dark:text-white/60" aria-label="Report announcement">
+                        <Flag className="h-3.5 w-3.5" /> Report
+                      </button>
                     )}
                     {isCreator && (
                       <div className="relative shrink-0" ref={menuRef}>
@@ -1109,6 +1124,7 @@ export function AnnouncementDetail() {
                       onSaveEdit={handleSaveComment}
                       onCancelEdit={() => { setEditingCommentId(null); setEditCommentContent(''); }}
                       onDelete={(commentId) => { setDeletingCommentId(commentId); setShowDeleteCommentConfirm(true); }}
+                      onReport={(commentId) => setReportTarget({ kind: 'announcement_comment', id: commentId, label: 'comment' })}
                       reactionPickerCommentId={reactionPickerCommentId}
                       pendingReactionReveal={pendingReactionReveal}
                       reactionLanding={reactionLanding}
@@ -1329,6 +1345,7 @@ export function AnnouncementDetail() {
           </form>
         </Modal>
       )}
+      <ContentReportDialog target={reportTarget} onClose={() => setReportTarget(null)} />
     </div>
   );
 }

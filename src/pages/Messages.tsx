@@ -6,7 +6,7 @@ import {
   ArrowLeft, ChevronLeft, Send, ImageIcon, X, Pin, CornerUpLeft, Camera,
   MessageCircle, Plus, Search, Trash2, MoreHorizontal, ChevronRight, Check,
   CalendarDays, Music2, Copy, Paperclip, FileText, Download, ExternalLink, UserPlus,
-  Calendar, Clock, LogOut, PlayCircle, RefreshCw, Share2,
+  Calendar, Clock, LogOut, PlayCircle, RefreshCw, Share2, Flag, UserX,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { draftRecoveryKey, readRecovery, writeRecovery } from '../lib/draftRecovery';
@@ -20,6 +20,7 @@ import { chatMediaReferences, chatMediaUrl, useChatMediaUrls } from '../lib/chat
 import { Avatar } from '../components/Avatar';
 import { EventArtwork } from '../components/EventArtwork';
 import { Modal } from '../components/Modal';
+import { ContentReportDialog, type ReportTarget } from '../components/ContentReportDialog';
 import { MentionTextarea } from '../components/MentionTextarea';
 import { ReactionFlightAnimation, type ReactionFlightPath } from '../components/ReactionFlightAnimation';
 import { playInteractionSound, primeInteractionSounds } from '../lib/interactionSounds';
@@ -179,6 +180,7 @@ interface MessageActionOverlayProps {
   onReact: () => void;
   onTogglePin: () => void;
   onDelete: () => void;
+  onReport: () => void;
 }
 
 interface MessageActionPlacement {
@@ -210,6 +212,7 @@ function MessageActionOverlay({
   onReact,
   onTogglePin,
   onDelete,
+  onReport,
 }: MessageActionOverlayProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -341,6 +344,7 @@ function MessageActionOverlay({
             <motion.button variants={{ closed: { opacity: 0, y: 9, scale: 0.96 }, open: { opacity: 1, y: 0, scale: 1 } }} type="button" onClick={onReact} className={actionClass}><span className="text-[15px] leading-none">😊</span> React</motion.button>
             {canCopy && <motion.button variants={{ closed: { opacity: 0, y: 9, scale: 0.96 }, open: { opacity: 1, y: 0, scale: 1 } }} type="button" onClick={onCopy} className={actionClass}><Copy className="h-4 w-4 text-sky-300" /> Copy</motion.button>}
             <motion.button variants={{ closed: { opacity: 0, y: 9, scale: 0.96 }, open: { opacity: 1, y: 0, scale: 1 } }} type="button" onClick={onTogglePin} className={actionClass}><Pin className="h-4 w-4 text-amber-300" /> {isPinned ? 'Unpin' : 'Pin'}</motion.button>
+            {!isMine && <motion.button variants={{ closed: { opacity: 0, y: 9, scale: 0.96 }, open: { opacity: 1, y: 0, scale: 1 } }} type="button" onClick={onReport} className={actionClass}><Flag className="h-4 w-4 text-amber-300" /> Report message</motion.button>}
             {isMine && <motion.button variants={{ closed: { opacity: 0, y: 9, scale: 0.96 }, open: { opacity: 1, y: 0, scale: 1 } }} type="button" onClick={onDelete} className={`${actionClass} text-red-300 hover:bg-red-500/10`}><Trash2 className="h-4 w-4" /> Delete message</motion.button>}
           </motion.div>
         </motion.div>
@@ -2413,6 +2417,7 @@ function InputBar({ conversationId, onSend, replyTo, replyPreview, onCancelReply
 function ConvInfoPanel({
   conv, messages, myUserId, onClose, onBack, onScrollToMessage, onConvUpdate,
   onRequestDelete, onDeleteAsCreator, onRenameGroup, onAddMembers, onUpdateGroupPhoto,
+  isBlocked, onBlockChange, onReportUser,
 }: {
   conv: Conversation;
   messages: ReturnType<typeof import('../hooks/useMessages').useMessages>['messages'];
@@ -2426,8 +2431,11 @@ function ConvInfoPanel({
   onRenameGroup: (conversationId: string, name: string) => Promise<boolean>;
   onAddMembers: (conversationId: string, memberIds: string[]) => Promise<boolean>;
   onUpdateGroupPhoto: (conversationId: string, photoUrl: string | null) => Promise<boolean>;
+  isBlocked: boolean;
+  onBlockChange: (blocked: boolean) => void;
+  onReportUser: (userId: string, label: string) => void;
 }) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [leaveConfirm, setLeaveConfirm] = useState(false);
@@ -2444,6 +2452,7 @@ function ConvInfoPanel({
   const [showMembersModal, setShowMembersModal] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [removingPhoto, setRemovingPhoto] = useState(false);
+  const [changingBlock, setChangingBlock] = useState(false);
   const [infoView, setInfoView] = useState<'main' | 'media' | 'files' | 'links'>('main');
   const [leaveGroupConfirm, setLeaveGroupConfirm] = useState(false);
   const [leavingGroup, setLeavingGroup] = useState(false);
@@ -2452,6 +2461,19 @@ function ConvInfoPanel({
   const otherMember = conv.type === 'personal' ? conv.members.find(m => m.user_id !== myUserId) : null;
   const p = otherMember?.profile;
   const displayName = p ? getFullName(p) : (conv.name || 'Group Chat');
+
+  const toggleBlock = async () => {
+    if (!otherMember || !user || !profile?.org_id || changingBlock) return;
+    setChangingBlock(true);
+    const query = supabase.from('user_blocks');
+    const { error } = isBlocked
+      ? await query.delete().eq('org_id', profile.org_id).eq('blocker_id', user.id).eq('blocked_id', otherMember.user_id)
+      : await query.insert({ org_id: profile.org_id, blocker_id: user.id, blocked_id: otherMember.user_id });
+    setChangingBlock(false);
+    if (error) return toast('error', 'Could not change the direct-message block. Please try again.');
+    onBlockChange(!isBlocked);
+    toast('success', isBlocked ? 'Direct messages unblocked' : 'Direct messages blocked');
+  };
   const convAvatarName = getConversationAvatarName(conv, myUserId);
   const sortedMembers = [...conv.members].sort((a, b) => getFullName(a.profile).localeCompare(getFullName(b.profile)));
 
@@ -3031,6 +3053,18 @@ function ConvInfoPanel({
 
         {/* Leave / Delete card */}
         <div className="mx-4 mb-6 space-y-2 pt-4">
+
+          {conv.type === 'personal' && otherMember && (
+            <>
+              <button type="button" onClick={() => onReportUser(otherMember.user_id, displayName)} className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-amber-200 bg-white text-[13px] font-semibold text-amber-700 dark:border-amber-500/20 dark:bg-[#111013] dark:text-amber-300">
+                <Flag className="h-4 w-4" /> Report person
+              </button>
+              <button type="button" onClick={() => void toggleBlock()} disabled={changingBlock} className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white text-[13px] font-semibold text-gray-700 disabled:opacity-50 dark:border-white/10 dark:bg-[#111013] dark:text-white/80">
+                <UserX className="h-4 w-4" /> {changingBlock ? 'Working…' : isBlocked ? 'Unblock direct messages' : 'Block direct messages'}
+              </button>
+              <p className="px-2 text-center text-[11px] text-gray-500 dark:text-white/45">Blocking stops one-to-one messages. Group chats and church updates remain available.</p>
+            </>
+          )}
 
           {/* Leave Group — group/event chats, all members */}
           {(conv.type === 'group' || conv.type === 'event') && !leaveGroupConfirm && !leaveConfirm && (
@@ -3806,6 +3840,8 @@ function ChatWindow({
   const [focusedSetlistSongId, setFocusedSetlistSongId] = useState<string | null>(null);
   const [eventCommandDetails, setEventCommandDetails] = useState<EventDiscussionDetails | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
+  const [blockedUserId, setBlockedUserId] = useState<string | null>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [previewFile, setPreviewFile] = useState<{ url: string; name: string } | null>(null);
   useEffect(() => {
@@ -3842,6 +3878,25 @@ function ChatWindow({
 
   const { profile } = useAuth();
   const { toast } = useToast();
+  const directMemberId = conv.type === 'personal'
+    ? conv.members.find(member => member.user_id !== myUserId)?.user_id ?? null
+    : null;
+  const directMessagesBlocked = directMemberId !== null && blockedUserId === directMemberId;
+  useEffect(() => {
+    if (!directMemberId || !profile?.org_id) {
+      setBlockedUserId(null);
+      return;
+    }
+    let current = true;
+    void supabase.from('user_blocks').select('blocked_id')
+      .eq('org_id', profile.org_id).eq('blocker_id', myUserId).eq('blocked_id', directMemberId)
+      .maybeSingle().then(({ data, error }) => {
+        if (!current) return;
+        if (error) console.error('Could not check direct-message block:', error);
+        setBlockedUserId(data?.blocked_id ?? null);
+      });
+    return () => { current = false; };
+  }, [directMemberId, myUserId, profile?.org_id]);
   const {
     messages, loading, loadError, typingUsers, memberReadTimes,
     sendMessage, sendTyping, pinMessage, deleteMessage, toggleReaction,
@@ -4247,6 +4302,10 @@ function ChatWindow({
   }, [messages, reactionDetailsMessageId]);
 
   const handleSend = useCallback(async (text: string, clientMessageId?: string) => {
+    if (directMessagesBlocked) {
+      toast('error', 'Unblock direct messages before sending.');
+      return false;
+    }
     stopTyping();
     try {
       const error = await sendMessage(text, replyTo?.id, clientMessageId);
@@ -4254,7 +4313,7 @@ function ChatWindow({
       setReplyTo(current => current?.id === replyTo?.id ? null : current);
       return true;
     } catch { toast('error', 'Message not sent. Your draft is kept; please try again.'); return false; }
-  }, [sendMessage, replyTo, stopTyping, toast]);
+  }, [directMessagesBlocked, sendMessage, replyTo, stopTyping, toast]);
 
   const handleConfirmDelete = useCallback(async () => {
     setConfirmingDelete(true);
@@ -5007,7 +5066,13 @@ function ChatWindow({
           if (activeMessage) void deleteMessage(activeMessage.id);
           closeMessageActions();
         }}
+        onReport={() => {
+          if (activeMessage) setReportTarget({ kind: 'message', id: activeMessage.id, label: 'message' });
+          closeMessageActions();
+        }}
       />
+
+      <ContentReportDialog target={reportTarget} onClose={() => setReportTarget(null)} />
 
       <EmojiReactionPopover
         open={Boolean(emojiMsgId && emojiAnchorRect)}
@@ -5033,7 +5098,12 @@ function ChatWindow({
         document.body,
       )}
 
-      {!showInfo && !showEventDetail && !detailsSheetOpen && (
+      {directMessagesBlocked && !showInfo && (
+        <div className="border-t border-amber-200 bg-amber-50 px-4 py-3 text-center text-xs font-semibold text-amber-900 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
+          Direct messages are blocked. Open chat details to unblock this person.
+        </div>
+      )}
+      {!directMessagesBlocked && !showInfo && !showEventDetail && !detailsSheetOpen && (
         <>
           <InputBar
             key={conv.id}
@@ -5207,6 +5277,9 @@ function ChatWindow({
                 onRenameGroup={onRenameGroup}
                 onAddMembers={onAddMembers}
                 onUpdateGroupPhoto={onUpdateGroupPhoto}
+                isBlocked={directMessagesBlocked}
+                onBlockChange={blocked => setBlockedUserId(blocked ? directMemberId : null)}
+                onReportUser={(userId, label) => setReportTarget({ kind: 'user', id: userId, label })}
               />
             </motion.div>
           )}

@@ -52,6 +52,103 @@ final result: passed
 
 ---
 
+# Library Light Mode and Member Drawer Design QA
+
+## Evidence
+
+- Source visual truth: the current authenticated mobile Library and annotated member-drawer screenshots supplied in the browser comments.
+- Implementation viewport: 430 x 932 pixels in the in-app browser.
+- States reviewed: Songs, Sets, and Videos in light mode; admin drawer; member-preview drawer without leadership/admin destinations.
+
+## Full-view comparison evidence
+
+- Songs keeps its compact row layout while inactive filters, edit/delete actions, dividers, and pagination now remain visible on the light surface.
+- Sets keeps its existing list composition while Import Excel, Select, sorting, event titles, approval badges, dates, song counts, and dividers now use readable light-mode colors.
+- Videos keeps the two-column mobile grid while Add Video, search, filters, card titles, upload dates, viewer counts, and pagination now remain visible.
+- The drawer retains the same width and navigation structure. Library Quick Access appears below Request Leave, and a compact Service reminder fills the member-only empty area without appearing for leadership/admin accounts.
+- Opening Settings from the drawer now keeps the existing drawer width and swaps the content in place; it no longer reveals a second settings page or loader underneath.
+
+## Required fidelity surfaces
+
+- Typography and density: existing type sizes, card dimensions, list density, and bottom navigation remain unchanged.
+- Colors: light mode uses neutral slate text and borders with the existing emerald accent; the prior dark surfaces remain behind `dark:` variants.
+- Navigation: Songs, Sets, and Videos share the same reusable drawer row treatment and route normally; the reminder uses the existing Events destination.
+- Responsiveness: all reviewed controls fit within the 430px viewport without horizontal clipping or a visible drawer scrollbar.
+
+## Findings
+
+- No actionable P0, P1, or P2 visual differences remain for the requested light-mode readability and member-drawer empty space.
+- The Videos preview initially served a stale development transform. Restarting only the local preview server loaded the saved component; the final render shows the intended readable colors.
+
+## Implementation checklist
+
+- [x] Restore light-mode contrast on Songs.
+- [x] Restore light-mode contrast on Sets.
+- [x] Restore light-mode contrast on Videos.
+- [x] Add Songs, Sets, and Videos to mobile drawer Quick Access.
+- [x] Add a member-only Service reminder below Library.
+- [x] Verify the member reminder is absent when leadership/admin sections are available.
+- [x] Verify a Library quick link navigates and closes the drawer.
+- [x] Verify the Settings gear opens one stable in-drawer panel and Back returns to the menu.
+- [x] Pass TypeScript, focused ESLint, and diff formatting checks.
+
+final result: passed
+
+---
+
+# Mobile Leadership Drawer Design QA
+
+## Evidence
+
+- Source visual truth: Browser Comments 1 and 2 in the current conversation, 430 x 932 pixels, authenticated light-mode leadership drawer.
+- Implementation screenshot: Codex in-app browser capture from the current turn, 430 x 932 pixels at a matching 430 x 932 CSS viewport.
+- State: mobile `/leadership/overview` with the account drawer open.
+- Density normalization: source and implementation use matching pixel and CSS viewport dimensions; no resampling was needed.
+
+## Full-view comparison evidence
+
+- The drawer keeps its original width, profile header, typography, spacing, footer actions, and page overlay.
+- The content now mirrors the desktop leadership structure: Leave Queue, Setlist Queue, Swap Requests, and one Team destination for roster and accountability.
+- Overview and the library destinations duplicated by the persistent bottom navigation are absent, which shortens the menu without changing the bottom bar.
+- The menu remains vertically scrollable when needed, but its scrollbar is no longer visible.
+
+## Focused region comparison evidence
+
+- The complete drawer is readable in the matched full-view capture, including the profile header, both section labels, every remaining destination, and the footer, so a separate crop was not needed.
+- Team navigation was activated and opened `/leadership/team`, where both Accountability and Roster tabs are available.
+
+## Required fidelity surfaces
+
+- Fonts and typography: existing ServeSync font family, weights, sizes, truncation, and two-line item hierarchy are unchanged.
+- Spacing and layout rhythm: existing drawer width, row height, icon alignment, section gaps, and footer placement are preserved.
+- Colors and visual tokens: existing light-mode neutral surfaces, slate text, red sign-out action, and page-overlay treatment are unchanged.
+- Image quality and asset fidelity: no raster assets or icons were introduced or replaced; the existing avatar and navigation icons remain unchanged.
+- Copy and content: Overview was removed; Approve Swaps now matches desktop as Swap Requests; Team replaces the separate Team Roster and Accountability entries; the Team description is “Roster and accountability.”
+
+## Findings
+
+- No actionable P0, P1, or P2 differences remain for the requested mobile drawer correction.
+- The persistent bottom navigation continues to provide Home, Events, Chat, News, and Library.
+
+## Comparison history
+
+1. Source finding: the mobile drawer duplicated library destinations, exposed a redundant Overview shortcut, separated roster/accountability despite desktop combining them, and showed a native scrollbar.
+2. Fix: removed duplicate Library children and Overview, aligned the Leadership list with desktop, combined roster/accountability under Team, and applied the existing hidden-scrollbar utility while preserving overflow scrolling.
+3. Post-fix evidence: the 430 x 932 render shows the simplified drawer with no visible scrollbar, and Team successfully opens the combined leadership workspace.
+
+## Implementation checklist
+
+- [x] Remove mobile Leadership Overview.
+- [x] Combine roster and accountability under Team.
+- [x] Match desktop leadership labels and order.
+- [x] Remove destinations already represented by the mobile bottom navigation.
+- [x] Hide the scrollbar without disabling scrolling.
+- [x] Verify the rendered drawer and Team navigation at 430 x 932.
+
+final result: passed
+
+---
+
 # Login Account Recovery Placement Design QA
 
 ## Evidence

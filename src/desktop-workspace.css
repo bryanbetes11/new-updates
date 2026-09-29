@@ -1,5 +1,45 @@
 /* Desktop adaptation of the IOTask reference: quiet chrome, compact rows,
    clear type hierarchy, and restrained status color. Mobile remains untouched. */
+@media (max-width: 1023px) {
+  /* Keep the first roster card flush after the desktop-only column header. */
+  .desktop-team-roster > .desktop-team-column-head + div { margin-top: 0 !important; }
+
+  /* Deadline entries read as one scan-friendly list until the desktop table takes over. */
+  .desktop-setlist-deadlines .desktop-deadline-list {
+    overflow: hidden;
+    border: 1px solid rgb(229 231 235 / 0.9);
+    border-radius: 1rem;
+    background: #fff;
+  }
+  .desktop-setlist-deadlines .desktop-deadline-entry + .desktop-deadline-entry {
+    border-top: 1px solid rgb(229 231 235 / 0.9);
+  }
+  .desktop-setlist-deadlines .desktop-deadline-mobile-card {
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 0.5rem !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    padding: 0.75rem 0.875rem !important;
+    box-shadow: none !important;
+    background-image: none !important;
+    transform: none !important;
+  }
+  .desktop-setlist-deadlines .desktop-deadline-mobile-actions {
+    justify-content: flex-end !important;
+    gap: 0.25rem;
+    border: 0;
+    padding: 0;
+  }
+  html.dark .desktop-setlist-deadlines .desktop-deadline-list {
+    border-color: rgb(255 255 255 / 0.08);
+    background: rgb(255 255 255 / 0.025);
+  }
+  html.dark .desktop-setlist-deadlines .desktop-deadline-entry + .desktop-deadline-entry {
+    border-color: rgb(255 255 255 / 0.08);
+  }
+}
+
 @media (min-width: 1024px) {
   .desktop-workspace {
     --workspace-canvas: #f7f8fb;
@@ -10,6 +50,9 @@
     --workspace-soft: #f3f6fb;
     --workspace-selected: #eef3ff;
     --workspace-accent: #3969db;
+    --desktop-sidebar-selected: #edf8f2;
+    --desktop-sidebar-accent: #18794e;
+    --desktop-sidebar-indicator: #6fac88;
     background: var(--workspace-canvas) !important;
     color: var(--workspace-ink);
   }
@@ -22,6 +65,9 @@
     --workspace-soft: #1b1e24;
     --workspace-selected: #1c2945;
     --workspace-accent: #a9c0ff;
+    --desktop-sidebar-selected: #14261d;
+    --desktop-sidebar-accent: #74c69d;
+    --desktop-sidebar-indicator: #4b8f6b;
   }
 
   .desktop-workspace .desktop-top-bar {
@@ -82,6 +128,7 @@
     border: 0 !important;
     border-radius: 5px;
     font-size: 12px;
+    font-weight: 600;
     transition: background-color 160ms ease, color 160ms ease;
   }
   .desktop-workspace .desktop-sidebar-scroll :is(.desktop-nav-link, .desktop-library-link):hover {
@@ -94,20 +141,26 @@
   }
   .desktop-workspace .desktop-sidebar-scroll .desktop-nav-link[aria-current="page"],
   .desktop-workspace .desktop-sidebar-scroll .desktop-library-link[aria-current="page"] {
-    background: var(--workspace-selected) !important;
+    background: var(--desktop-sidebar-selected) !important;
     box-shadow: none !important;
-    color: var(--workspace-accent) !important;
+    color: var(--desktop-sidebar-accent) !important;
+    font-weight: 600;
+  }
+  .desktop-workspace .desktop-sidebar-scroll :is(.desktop-nav-link, .desktop-library-link)[aria-current="page"] svg {
+    color: var(--desktop-sidebar-accent) !important;
   }
   .desktop-workspace .desktop-sidebar-scroll :is(.desktop-nav-link, .desktop-library-link)[aria-current="page"]::before {
     content: "";
     position: absolute;
-    top: 6px; bottom: 6px; left: -11px;
-    width: 3px; border-radius: 0 3px 3px 0;
-    background: #4775e8;
+    top: 50%; left: 1px;
+    width: 3px; height: 22px;
+    border-radius: 999px;
+    background: var(--desktop-sidebar-indicator);
+    transform: translateY(-50%);
   }
   .desktop-workspace .desktop-sidebar-scroll :is(.desktop-nav-link, .desktop-library-link)[aria-current="page"]:hover {
-    background: var(--workspace-selected) !important;
-    color: var(--workspace-accent) !important;
+    background: var(--desktop-sidebar-selected) !important;
+    color: var(--desktop-sidebar-accent) !important;
   }
   .desktop-workspace .desktop-sidebar p[class*="uppercase"] {
     font-size: 9px !important;
@@ -115,7 +168,70 @@
     letter-spacing: .09em !important;
   }
   .desktop-workspace .desktop-sidebar > div > div:last-child {
-    background: var(--workspace-surface) !important;
+    background: transparent !important;
+  }
+  .desktop-workspace .desktop-sidebar .desktop-sidebar-utility-link:hover {
+    background: var(--workspace-soft);
+    color: var(--workspace-ink);
+  }
+  .desktop-workspace .desktop-sidebar .desktop-sidebar-utility-link[aria-current="page"],
+  .desktop-workspace .desktop-sidebar .desktop-sidebar-utility-link[aria-pressed="true"] {
+    background: var(--desktop-sidebar-selected);
+    color: var(--desktop-sidebar-accent) !important;
+  }
+  .desktop-workspace .desktop-sidebar .desktop-sidebar-utility-link[aria-current="page"]:hover,
+  .desktop-workspace .desktop-sidebar .desktop-sidebar-utility-link[aria-pressed="true"]:hover {
+    background: var(--desktop-sidebar-selected);
+    color: var(--desktop-sidebar-accent) !important;
+  }
+  .desktop-workspace .desktop-sidebar-tooltip-anchor {
+    --desktop-tooltip-bg: var(--desktop-sidebar-selected);
+    --desktop-tooltip-border: #cfe6d8;
+    --desktop-tooltip-ink: var(--desktop-sidebar-accent);
+    width: 44px;
+    min-height: 40px;
+    isolation: isolate;
+  }
+  .desktop-workspace .desktop-sidebar-tooltip-anchor.is-active {
+    --desktop-tooltip-bg: var(--desktop-sidebar-selected);
+    --desktop-tooltip-border: #b9dcc8;
+    --desktop-tooltip-ink: var(--desktop-sidebar-accent);
+  }
+  html.dark .desktop-workspace .desktop-sidebar-tooltip-anchor {
+    --desktop-tooltip-bg: var(--desktop-sidebar-selected);
+    --desktop-tooltip-border: #315c43;
+    --desktop-tooltip-ink: var(--desktop-sidebar-accent);
+  }
+  html.dark .desktop-workspace .desktop-sidebar-tooltip-anchor.is-active {
+    --desktop-tooltip-bg: var(--desktop-sidebar-selected);
+    --desktop-tooltip-border: #3c6f51;
+    --desktop-tooltip-ink: var(--desktop-sidebar-accent);
+  }
+  .desktop-workspace .desktop-sidebar-tooltip {
+    border-color: var(--desktop-tooltip-border);
+    background: var(--desktop-tooltip-bg);
+    color: var(--desktop-tooltip-ink);
+    box-shadow: 10px 10px 24px -22px rgba(21,128,61,.48);
+    transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
+  }
+  .desktop-workspace .desktop-sidebar-tooltip-anchor.is-tooltip-visible > button:first-of-type {
+    z-index: 51;
+    border-radius: 9px !important;
+    border-color: transparent !important;
+    background: transparent !important;
+    color: var(--desktop-tooltip-ink) !important;
+    box-shadow: none !important;
+  }
+  .desktop-workspace .desktop-sidebar-tooltip-anchor.is-tooltip-visible > button:first-of-type > div > span:not([data-sidebar-badge]) {
+    background: transparent !important;
+    color: var(--desktop-tooltip-ink) !important;
+  }
+  .desktop-workspace .desktop-sidebar [data-sidebar-badge] {
+    background-color: #ef4444 !important;
+    color: #fff !important;
+  }
+  .desktop-workspace .desktop-sidebar [data-sidebar-badge]::before {
+    content: none !important;
   }
 
   .desktop-workspace .desktop-content-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin: 0 0 21px; }
@@ -510,11 +626,55 @@
     transform: none !important;
   }
   .desktop-workspace .desktop-setlist-deadlines .desktop-deadline-row:hover {
-    border-color: var(--workspace-accent);
-    background: var(--workspace-selected);
+    background: var(--desktop-sidebar-selected);
   }
   .desktop-workspace .desktop-setlist-deadlines .desktop-deadline-stat:hover {
     border-color: var(--workspace-accent);
+  }
+  .desktop-workspace .desktop-setlist-deadlines .desktop-deadline-filters {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .desktop-workspace .desktop-setlist-deadlines .desktop-deadline-stat {
+    display: grid; min-height: 58px; grid-template-columns: minmax(0,1fr) auto;
+    align-items: center; gap: 8px; padding: 10px 12px;
+  }
+  .desktop-workspace .desktop-setlist-deadlines .desktop-deadline-stat > div { margin: 0; }
+  .desktop-workspace .desktop-setlist-deadlines .desktop-deadline-stat > p {
+    font-size: 21px; text-align: right;
+  }
+  .desktop-workspace .desktop-setlist-deadlines .desktop-deadline-list { gap: 0; }
+  .desktop-workspace .desktop-setlist-deadlines .desktop-deadline-table-head,
+  .desktop-workspace .desktop-setlist-deadlines .desktop-deadline-table-row {
+    grid-template-columns: minmax(0,1fr) 205px;
+  }
+  .desktop-workspace .desktop-setlist-deadlines .desktop-deadline-table-head {
+    min-height: 38px; align-items: center; padding-inline: 14px;
+    border: 1px solid var(--workspace-border); border-bottom: 0;
+    border-radius: 7px 7px 0 0; background: var(--workspace-soft);
+    color: var(--workspace-muted); font-size: 9px; font-weight: 750;
+    letter-spacing: .08em; text-transform: uppercase;
+  }
+  .desktop-workspace .desktop-setlist-deadlines .desktop-deadline-table-main {
+    display: grid;
+    grid-template-columns: minmax(190px,1.55fr) minmax(140px,1fr) minmax(145px,1fr) minmax(145px,1fr);
+    align-items: center; gap: 14px;
+  }
+  .desktop-workspace .desktop-setlist-deadlines .desktop-deadline-table-row {
+    min-height: 72px; align-items: stretch; border-top-width: 0;
+    border-radius: 0; transition: background-color 160ms ease, border-color 160ms ease;
+  }
+  .desktop-workspace .desktop-setlist-deadlines .desktop-deadline-entry:last-child .desktop-deadline-table-row {
+    border-radius: 0 0 7px 7px;
+  }
+  .desktop-workspace .desktop-setlist-deadlines .desktop-deadline-table-row > .desktop-deadline-table-main {
+    padding: 11px 14px;
+  }
+  .desktop-workspace .desktop-setlist-deadlines .desktop-deadline-actions {
+    padding: 11px 12px; border-left: 1px solid var(--workspace-border);
+  }
+  .desktop-workspace .desktop-setlist-deadlines .desktop-deadline-table-row:hover {
+    background: var(--desktop-sidebar-selected);
   }
   .desktop-workspace .desktop-chat-workspace > div:first-child {
     border: 1px solid var(--workspace-border); border-radius: 7px;
@@ -605,15 +765,32 @@
     overflow: hidden; border: 1px solid var(--workspace-border); border-radius: 7px;
     background: var(--workspace-surface); gap: 0;
   }
-  .desktop-workspace .desktop-team-roster > div {
+  .desktop-workspace .desktop-team-column-head {
+    display: grid; grid-template-columns: minmax(180px, 1.2fr) minmax(160px, 1fr) minmax(130px, .82fr) minmax(130px, .78fr) 32px;
+    gap: 14px; align-items: center; padding: 11px 18px;
+    color: var(--workspace-muted); background: var(--workspace-surface);
+    border-bottom: 1px solid var(--workspace-border); font-size: 10px;
+    font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  }
+  .desktop-workspace .desktop-team-roster > div:not(.desktop-team-column-head) {
     margin: 0; border: 0 !important; border-bottom: 1px solid var(--workspace-border) !important;
     border-radius: 0 !important; background: transparent !important;
     box-shadow: none !important;
   }
-  .desktop-workspace .desktop-team-roster > div:last-child { border-bottom: 0 !important; }
+  .desktop-workspace .desktop-team-roster > div:last-child:not(.desktop-team-column-head) { border-bottom: 0 !important; }
   .desktop-workspace .desktop-team-roster > div > div:first-child { display: none; }
   .desktop-workspace .desktop-team-roster > div > button { transition: background-color 160ms ease; }
   .desktop-workspace .desktop-team-roster > div > button:hover { background: var(--workspace-soft); }
+  .desktop-workspace .desktop-team-roster-row {
+    display: grid; grid-template-columns: minmax(180px, 1.2fr) minmax(160px, 1fr) minmax(130px, .82fr) minmax(130px, .78fr) 32px;
+    gap: 14px; align-items: center; min-height: 62px; padding: 8px 18px;
+  }
+  .desktop-workspace .desktop-team-roster-row > svg { justify-self: end; }
+  .desktop-workspace .desktop-team-member p { line-height: 1.3; }
+  .desktop-workspace .desktop-team-role-summary > span,
+  .desktop-workspace .desktop-team-status > span { white-space: nowrap; }
+  .desktop-workspace .desktop-team-app-access > div { margin-top: 0; gap: 4px; }
+  .desktop-workspace .desktop-team-app-access > div > span { white-space: nowrap; }
   .desktop-workspace .desktop-leave-directory [class*="rounded-3xl"],
   .desktop-workspace .desktop-swap-directory [class*="rounded-3xl"] {
     border-color: var(--workspace-border); border-radius: 7px;
@@ -657,6 +834,20 @@
 }
 
 @media (min-width: 1024px) and (max-width: 1199px) {
+  .desktop-workspace .desktop-setlist-deadlines .desktop-deadline-table-head,
+  .desktop-workspace .desktop-setlist-deadlines .desktop-deadline-table-row {
+    grid-template-columns: minmax(0,1fr) 164px;
+  }
+  .desktop-workspace .desktop-setlist-deadlines .desktop-deadline-table-main {
+    grid-template-columns: minmax(135px,1.4fr) minmax(102px,1fr) minmax(108px,1fr) minmax(112px,1fr);
+    gap: 8px;
+  }
+  .desktop-workspace .desktop-setlist-deadlines .desktop-deadline-table-row > .desktop-deadline-table-main {
+    padding-inline: 10px;
+  }
+  .desktop-workspace .desktop-setlist-deadlines .desktop-deadline-actions {
+    padding-inline: 8px;
+  }
   .desktop-workspace .desktop-event-column-head,
   .desktop-workspace .desktop-event-row > div > button:has(> .desktop-event-directory-identity),
   .desktop-workspace .desktop-event-availability-action,

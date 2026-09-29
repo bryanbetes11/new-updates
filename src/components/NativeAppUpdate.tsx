@@ -2,11 +2,11 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { App } from '@capacitor/app';
 import type { PluginListenerHandle } from '@capacitor/core';
 import { Download, X } from 'lucide-react';
-import { androidUpdates, downloadAndroidUpdate, installAndroidUpdate, isAndroidApp, isAndroidUpdateDownloaded, subscribeAndroidUpdateProgress } from '../lib/nativeAppUpdates';
+import { androidUpdates, downloadAndroidUpdate, installAndroidUpdate, isAndroidApp, isAndroidUpdateDownloaded, isPlayAndroidApp, subscribeAndroidUpdateProgress } from '../lib/nativeAppUpdates';
 
 export function NativeAppUpdateWatcher() {
   useEffect(() => {
-    if (!isAndroidApp()) return;
+    if (!isAndroidApp() || isPlayAndroidApp()) return;
     let disposed = false;
     let handle: PluginListenerHandle | undefined;
     const check = () => {
@@ -51,7 +51,7 @@ export function NativeAppUpdateCard({ alwaysVisible = false }: { alwaysVisible?:
   }, [snapshot.installedBuild, releaseKey]);
 
   useEffect(() => {
-    if (!isAndroidApp() || !release || legacyUpdater) return;
+    if (!isAndroidApp() || isPlayAndroidApp() || !release || legacyUpdater) return;
     let active = true;
     void isAndroidUpdateDownloaded(release).then(found => {
       if (active) setPrepared(found ? `${release.build}:${release.sha256}` : null);
@@ -60,7 +60,7 @@ export function NativeAppUpdateCard({ alwaysVisible = false }: { alwaysVisible?:
   }, [release, legacyUpdater]);
 
   useEffect(() => {
-    if (!isAndroidApp() || legacyUpdater) return;
+    if (!isAndroidApp() || isPlayAndroidApp() || legacyUpdater) return;
     let active = true;
     let handle: PluginListenerHandle | undefined;
     void subscribeAndroidUpdateProgress(update => {
@@ -69,7 +69,7 @@ export function NativeAppUpdateCard({ alwaysVisible = false }: { alwaysVisible?:
     return () => { active = false; void handle?.remove(); };
   }, [release?.build, legacyUpdater]);
 
-  if (!isAndroidApp() || !release || (!alwaysVisible && dismissed === release.build)) return null;
+  if (!isAndroidApp() || isPlayAndroidApp() || !release || (!alwaysVisible && dismissed === release.build)) return null;
   const act = async () => {
     setBusy(true);
     setError('');
@@ -95,18 +95,18 @@ export function NativeAppUpdateCard({ alwaysVisible = false }: { alwaysVisible?:
     } finally { setBusy(false); }
   };
   return (
-    <section aria-label="Android app update" className="mx-auto mb-4 max-w-7xl rounded-2xl border border-emerald-400/25 bg-emerald-950 p-4 text-white">
+    <section aria-label="Android app update" className="mx-auto mb-4 max-w-7xl rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-slate-900 dark:border-emerald-400/25 dark:bg-emerald-950 dark:text-white">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-bold">ServeSync {release.version} is available</h2>
-          <p className="mt-1 text-xs text-emerald-100/80">{(release.size / 1024 / 1024).toFixed(1)} MB</p>
+          <p className="mt-1 text-xs text-slate-600 dark:text-emerald-100/80">{(release.size / 1024 / 1024).toFixed(1)} MB</p>
         </div>
-        {!alwaysVisible && <button type="button" aria-label="Dismiss update notice" className="-mr-2 -mt-2 grid h-11 w-11 shrink-0 place-items-center rounded-full hover:bg-white/10" onClick={() => setDismissed(release.build)}><X className="h-4 w-4" /></button>}
+        {!alwaysVisible && <button type="button" aria-label="Dismiss update notice" className="-mr-2 -mt-2 grid h-11 w-11 shrink-0 place-items-center rounded-full hover:bg-emerald-100 dark:hover:bg-white/10" onClick={() => setDismissed(release.build)}><X className="h-4 w-4" /></button>}
       </div>
-      <p className="mt-2 text-xs leading-relaxed text-emerald-100/80">{legacyUpdater ? 'This one update opens in your browser. After installing it, future updates download inside ServeSync.' : 'Download securely inside ServeSync, then tap Install update. Android will ask you to confirm. Your existing app data is kept.'}</p>
-      <button type="button" disabled={busy} className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-sm font-bold text-emerald-950 disabled:opacity-50" onClick={() => void act()}><Download className="h-4 w-4" />{busy ? (ready ? 'Opening installer…' : legacyUpdater ? 'Opening browser…' : progress === null ? 'Preparing download…' : `Downloading… ${progress}%`) : ready ? 'Install update' : legacyUpdater ? 'Open download in browser' : 'Download update'}</button>
-      {message && <p role="status" className="mt-2 text-xs text-emerald-100/80">{message}</p>}
-      {error && <p role="alert" className="mt-2 text-xs text-amber-200">{error}</p>}
+      <p className="mt-2 text-xs leading-relaxed text-slate-600 dark:text-emerald-100/80">{legacyUpdater ? 'This one update opens in your browser. After installing it, future updates download inside ServeSync.' : 'Download securely inside ServeSync, then tap Install update. Android will ask you to confirm. Your existing app data is kept.'}</p>
+      <button type="button" disabled={busy} className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white disabled:opacity-50 dark:bg-emerald-400 dark:text-emerald-950" onClick={() => void act()}><Download className="h-4 w-4" />{busy ? (ready ? 'Opening installer…' : legacyUpdater ? 'Opening browser…' : progress === null ? 'Preparing download…' : `Downloading… ${progress}%`) : ready ? 'Install update' : legacyUpdater ? 'Open download in browser' : 'Download update'}</button>
+      {message && <p role="status" className="mt-2 text-xs text-slate-600 dark:text-emerald-100/80">{message}</p>}
+      {error && <p role="alert" className="mt-2 text-xs text-red-700 dark:text-amber-200">{error}</p>}
     </section>
   );
 }

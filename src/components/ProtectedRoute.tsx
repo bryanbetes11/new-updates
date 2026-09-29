@@ -4,11 +4,14 @@ import { PageLoader } from './LoadingSpinner';
 
 export function ProtectedRoute() {
   const location = useLocation();
-  const { user, loading, organization, hasOrganization, isOrgAdmin, isPlatformOwner } = useAuth();
+  const { user, profile, loading, organization, hasOrganization, isOrgAdmin, isPlatformOwner } = useAuth();
 
   if (loading) return <PageLoader />;
   if (!user) return <Navigate to="/login" replace />;
   if (!hasOrganization) return <Navigate to="/create-church" replace />;
+  if (profile && !profile.is_onboarded && location.pathname !== '/onboarding') {
+    return <Navigate to="/onboarding" replace />;
+  }
 
   const billingStatus = organization?.billing_status || organization?.subscription_status;
   const isSuspended = hasOrganization && !isPlatformOwner && billingStatus === 'suspended';

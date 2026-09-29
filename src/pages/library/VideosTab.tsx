@@ -643,11 +643,11 @@ export function VideosTab() {
                   className={`inline-flex h-11 shrink-0 items-center gap-3 rounded-full px-5 text-sm font-black transition-all active:scale-[0.98] ${
                     active
                       ? 'bg-[#1ed760] text-black shadow-[0_14px_34px_-20px_rgba(30,215,96,0.9)]'
-                      : 'bg-white/[0.095] text-white/82 hover:bg-white/[0.14]'
+                      : 'border border-gray-200 bg-white text-gray-700 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800 dark:border-white/[0.08] dark:bg-white/[0.095] dark:text-white/82 dark:hover:border-white/[0.08] dark:hover:bg-white/[0.14] dark:hover:text-white'
                   }`}
                 >
                   <span>{filter.label}</span>
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-black ${active ? 'bg-black/10 text-black' : 'bg-white/[0.09] text-white/62'}`}>
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-black ${active ? 'bg-black/10 text-black' : 'bg-gray-100 text-gray-600 dark:bg-white/[0.09] dark:text-white/62'}`}>
                     {filter.count}
                   </span>
                 </button>
@@ -657,7 +657,7 @@ export function VideosTab() {
         <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
           <button
             onClick={() => setShowCreate(true)}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-white/[0.095] px-5 text-[13px] font-black text-white transition-all hover:bg-[#1ed760] hover:text-black active:scale-[0.97]"
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-5 text-[13px] font-black text-gray-800 transition-all hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800 active:scale-[0.97] dark:border-white/[0.08] dark:bg-white/[0.095] dark:text-white dark:hover:border-[#1ed760] dark:hover:bg-[#1ed760] dark:hover:text-black"
           >
             <Plus className="h-4 w-4" /> Add Video
           </button>
@@ -678,7 +678,7 @@ export function VideosTab() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search videos…"
-            className="w-full h-12 pl-10 pr-9 rounded-full text-[13px] bg-white/[0.055] border border-white/[0.08] text-white placeholder-white/30 outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/50 transition-all"
+            className="h-12 w-full rounded-full border border-slate-200 bg-white pl-10 pr-9 text-[13px] text-slate-900 outline-none transition-all placeholder:text-slate-500 focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/30 dark:border-white/[0.08] dark:bg-white/[0.055] dark:text-white dark:placeholder-white/30"
           />
           {search && (
             <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
@@ -689,9 +689,9 @@ export function VideosTab() {
       </motion.div>
 
       {loadError && cacheStatus !== 'offline' && (
-        <div className="flex items-center justify-between gap-3 rounded-2xl border border-amber-400/20 bg-amber-400/[0.08] px-4 py-3 text-sm text-amber-200">
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-400/20 dark:bg-amber-400/[0.08] dark:text-amber-200">
           <span>{loadError}</span>
-          <button type="button" onClick={() => void fetchVideos()} className="shrink-0 rounded-full bg-white/10 px-3 py-1.5 text-xs font-black hover:bg-white/15">Retry</button>
+          <button type="button" onClick={() => void fetchVideos()} className="shrink-0 rounded-full bg-amber-100 px-3 py-1.5 text-xs font-black hover:bg-amber-200 dark:bg-white/10 dark:hover:bg-white/15">Retry</button>
         </div>
       )}
 
@@ -721,7 +721,7 @@ export function VideosTab() {
                 <motion.div
                   key={video.id}
                   variants={itemVariants}
-                  className="desktop-video-card group relative overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.025] transition-colors duration-200 hover:bg-white/[0.045]"
+                  className="desktop-video-card group relative overflow-hidden rounded-2xl border border-gray-200 bg-white transition-colors duration-200 hover:border-emerald-200 hover:bg-emerald-50/30 dark:border-white/[0.08] dark:bg-white/[0.025] dark:hover:border-white/[0.08] dark:hover:bg-white/[0.045]"
                 >
                   <button
                     type="button"
@@ -729,7 +729,7 @@ export function VideosTab() {
                     className="block w-full text-left"
                   >
                     <div>
-                      <div className="relative aspect-video w-full overflow-hidden bg-white/[0.055]">
+                      <div className="relative aspect-video w-full overflow-hidden bg-gray-100 dark:bg-white/[0.055]">
                       <VideoThumbnail
                         url={thumb}
                         alt={video.title}
@@ -756,19 +756,19 @@ export function VideosTab() {
                             {video.category}
                           </span>
                         </div>
-                        <p className="mt-1.5 min-w-0 text-[1rem] font-black leading-tight text-white sm:text-[1.12rem]" title={video.title}>
+                        <p className="mt-1.5 min-w-0 text-[1rem] font-black leading-tight text-gray-900 dark:text-white sm:text-[1.12rem]" title={video.title}>
                           {titleParts.dateLabel
                             ? <span className="block truncate">{titleParts.displayTitle}</span>
                             : video.title}
                         </p>
                         {video.description && (
-                          <p className="mt-1 line-clamp-2 text-[13px] leading-5 text-white/48 sm:line-clamp-1">{video.description}</p>
+                          <p className="mt-1 line-clamp-2 text-[13px] leading-5 text-gray-600 dark:text-white/48 sm:line-clamp-1">{video.description}</p>
                         )}
-                        <div className="mt-2 flex min-w-0 flex-nowrap items-center justify-between gap-2 text-[10px] font-semibold text-white/32 sm:text-[11px]">
-                          <span className="whitespace-nowrap text-white/48">
+                        <div className="mt-2 flex min-w-0 flex-nowrap items-center justify-between gap-2 text-[10px] font-semibold text-gray-500 dark:text-white/32 sm:text-[11px]">
+                          <span className="whitespace-nowrap text-gray-500 dark:text-white/48">
                             Uploaded <span className="font-mono">{format(parseISO(video.created_at), 'MMM d, yyyy')}</span>
                           </span>
-                          <span role="button" tabIndex={0} onClick={event => openViewers(video, event)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') openViewers(video, event); }} className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-white/48 transition hover:bg-white/10 hover:text-white" aria-label={`See who viewed ${video.title}`}>
+                          <span role="button" tabIndex={0} onClick={event => openViewers(video, event)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') openViewers(video, event); }} className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-gray-500 transition hover:bg-gray-100 hover:text-gray-800 dark:text-white/48 dark:hover:bg-white/10 dark:hover:text-white" aria-label={`See who viewed ${video.title}`}>
                             <Eye className="h-3.5 w-3.5" /> {viewCounts[video.id] || 0}
                           </span>
                         </div>
@@ -827,9 +827,9 @@ export function VideosTab() {
               <button
                 type="button"
                 onClick={() => setVisibleCount(count => count + VIDEOS_PER_PAGE)}
-                className="inline-flex h-11 items-center justify-center rounded-full bg-white/[0.095] px-6 text-sm font-black text-white transition-all hover:bg-white/[0.14] active:scale-[0.98]"
+                className="inline-flex h-11 items-center justify-center rounded-full border border-gray-200 bg-white px-6 text-sm font-black text-gray-800 transition-all hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800 active:scale-[0.98] dark:border-white/[0.08] dark:bg-white/[0.095] dark:text-white dark:hover:border-white/[0.08] dark:hover:bg-white/[0.14] dark:hover:text-white"
               >
-                Show more <span className="ml-2 text-white/45">{Math.min(VIDEOS_PER_PAGE, filtered.length - visibleCount)}</span>
+                Show more <span className="ml-2 text-gray-500 dark:text-white/45">{Math.min(VIDEOS_PER_PAGE, filtered.length - visibleCount)}</span>
               </button>
             </div>
           )}

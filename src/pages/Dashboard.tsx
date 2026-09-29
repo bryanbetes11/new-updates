@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { MESSENGER_ENABLED } from '../lib/features';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { format, formatDistanceToNow, parseISO } from 'date-fns';
 import { motion, type Variants } from 'framer-motion';
 import { Calendar, Music, ChevronRight, Megaphone, Trash2, ListChecks, ArrowLeftRight, Check, X, RefreshCw, Heart, MoreHorizontal, Upload, UserPlus, MessageCircle, UserX, Shield, AlertCircle, CheckCircle2, type LucideIcon } from 'lucide-react';
@@ -97,6 +97,7 @@ type DashboardAttentionItem = {
   title: string;
   detail: string;
   path: string;
+  detailPath?: string;
   icon: LucideIcon;
   urgent?: boolean;
 };
@@ -458,6 +459,8 @@ function AccountDashboard() {
   const dashboardKey = user?.id && profile?.org_id ? `${user.id}:${profile.org_id}` : null;
   const { toast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
+  const openDesktopDetail = (path: string) => navigate(path, { state: { backgroundLocation: location } });
   const cachedDashboard = getDashboardSnapshot(dashboardKey);
   const hadCachedDashboardRef = useRef(Boolean(cachedDashboard));
   const [loading, setLoading] = useState(!cachedDashboard);
@@ -1176,12 +1179,15 @@ function AccountDashboard() {
   }, []).slice(0, 12);
   const weekSongs = songsThisWeek;
   const pendingAssignmentCount = myAssignments.filter(assignment => assignment.status === 'pending').length;
+  const firstPendingAssignmentEventId = myAssignments.find(assignment => assignment.status === 'pending')?.event_id;
+  const firstPendingSetlistEventId = pendingSetlists[0]?.events?.id || pendingSetlists[0]?.event_id;
   const attentionItems: DashboardAttentionItem[] = [
     ...(pendingAssignmentCount > 0 ? [{
       id: 'pending-assignments',
       title: `Confirm ${pendingAssignmentCount} assignment${pendingAssignmentCount === 1 ? '' : 's'}`,
       detail: 'Let your leaders know you can serve',
       path: '/my-assignments?status=pending',
+      detailPath: firstPendingAssignmentEventId ? `/events/${firstPendingAssignmentEventId}` : undefined,
       icon: AlertCircle,
       urgent: true,
     }] : []),
@@ -1190,6 +1196,7 @@ function AccountDashboard() {
       title: `Review ${pendingSetlists.length} setlist${pendingSetlists.length === 1 ? '' : 's'}`,
       detail: 'Submitted and waiting for approval',
       path: '/leadership/setlists',
+      detailPath: firstPendingSetlistEventId ? `/events/${firstPendingSetlistEventId}?tab=setlist` : undefined,
       icon: ListChecks,
     }] : []),
     ...((isLeader || isOrgAdmin) && pendingLeaveCount > 0 ? [{
@@ -1347,7 +1354,7 @@ function AccountDashboard() {
                 {dashboardUpcomingEvents.length > 0 ? <div className="desktop-home-event-list">
                   {dashboardUpcomingEvents.map((event) => {
                     const preparation = getPreparationForEvent(event);
-                    return <button type="button" key={event.id} onClick={() => navigate(`/events/${event.id}`)} className="desktop-home-event">
+                    return <button type="button" key={event.id} onClick={() => openDesktopDetail(`/events/${event.id}`)} className="desktop-home-event">
                       <div className="desktop-home-date"><span>{format(parseISO(event.event_date), 'MMM')}</span><strong>{format(parseISO(event.event_date), 'd')}</strong><span>{format(parseISO(event.event_date), 'EEE')}</span></div>
                       <EventArtwork eventType={event.event_type} title={event.title} artworkUrls={eventArtworkMap[event.id] || []} songs={eventArtworkSongsMap[event.id] || []} className="h-12 w-12 shrink-0 rounded-lg" />
                       <span className="desktop-home-event-info"><strong>{eventLeaderMap[event.id] || event.title}</strong><small>{event.event_type} · {event.start_time ? formatTime12Hour(event.start_time) : 'Time TBA'}{preparation ? ` · ${preparation.label}` : ''}</small></span>
@@ -1362,7 +1369,7 @@ function AccountDashboard() {
               <section className="desktop-home-section">
                 <div className="desktop-home-card-header"><div><p className="desktop-home-eyebrow">Communication</p><h2>Recent Announcements</h2></div><button type="button" onClick={() => navigate('/announcements')}>View all <ChevronRight className="h-4 w-4" /></button></div>
                 <div className="desktop-home-card">
-                {announcementRows.length > 0 ? <div className="desktop-home-plain-list">{announcementRows.map((announcement) => <button key={announcement.id} type="button" onClick={() => navigate(`/announcements/${announcement.id}`)}><span className="desktop-home-list-icon"><Megaphone className="h-4 w-4" /></span><span className="desktop-home-list-copy"><strong>{announcement.title}</strong><small>{announcement.content}</small></span><span className="desktop-home-list-time">{formatDistanceToNow(parseISO(announcement.created_at), { addSuffix: true })}</span></button>)}</div> : <div className="desktop-home-empty"><Megaphone className="h-5 w-5" /><span>{dashboardLoadIssues.has('announcements') ? 'Announcements could not be loaded.' : 'No announcements match this view.'}</span><button type="button" onClick={dashboardLoadIssues.has('announcements') ? () => loadDashboardData() : () => navigate('/announcements')}>{dashboardLoadIssues.has('announcements') ? 'Try again' : 'Open announcements'}</button></div>}
+                {announcementRows.length > 0 ? <div className="desktop-home-plain-list">{announcementRows.map((announcement) => <button key={announcement.id} type="button" onClick={() => openDesktopDetail(`/announcements/${announcement.id}`)}><span className="desktop-home-list-icon"><Megaphone className="h-4 w-4" /></span><span className="desktop-home-list-copy"><strong>{announcement.title}</strong><small>{announcement.content}</small></span><span className="desktop-home-list-time">{formatDistanceToNow(parseISO(announcement.created_at), { addSuffix: true })}</span></button>)}</div> : <div className="desktop-home-empty"><Megaphone className="h-5 w-5" /><span>{dashboardLoadIssues.has('announcements') ? 'Announcements could not be loaded.' : 'No announcements match this view.'}</span><button type="button" onClick={dashboardLoadIssues.has('announcements') ? () => loadDashboardData() : () => navigate('/announcements')}>{dashboardLoadIssues.has('announcements') ? 'Try again' : 'Open announcements'}</button></div>}
                 </div>
               </section>
 
@@ -1387,20 +1394,23 @@ function AccountDashboard() {
               <section className="desktop-home-section">
                 <div className="desktop-home-card-header"><div><p className="desktop-home-eyebrow">Next Steps</p><h2>Needs Your Attention</h2></div></div>
                 <div className="desktop-home-card">
-                {attentionItems.length > 0 ? <div className="desktop-home-compact-list">{attentionItems.map((attention) => <button key={attention.id} type="button" onClick={() => navigate(attention.path)}><span className="desktop-home-list-icon amber"><attention.icon className="h-4 w-4" /></span><span><strong>{attention.title}</strong><small>{attention.detail}</small></span><ChevronRight className="h-4 w-4" /></button>)}</div> : <div className="desktop-home-empty compact"><CheckCircle2 className="h-5 w-5" /><span>You're all caught up.</span></div>}
+                {attentionItems.length > 0 ? <div className="desktop-home-compact-list">{attentionItems.map((attention) => <button key={attention.id} type="button" onClick={() => attention.detailPath ? openDesktopDetail(attention.detailPath) : navigate(attention.path)}><span className="desktop-home-list-icon amber"><attention.icon className="h-4 w-4" /></span><span><strong>{attention.title}</strong><small>{attention.detail}</small></span><ChevronRight className="h-4 w-4" /></button>)}</div> : <div className="desktop-home-empty compact"><CheckCircle2 className="h-5 w-5" /><span>You're all caught up.</span></div>}
                 </div>
               </section>
               <section className="desktop-home-section">
                 <div className="desktop-home-card-header"><div><p className="desktop-home-eyebrow">For You</p><h2>My Assignments</h2></div><button type="button" onClick={() => navigate('/my-assignments')}>View all <ChevronRight className="h-4 w-4" /></button></div>
                 <div className="desktop-home-card">
-                {assignmentRows.length > 0 ? <div className="desktop-home-compact-list">{assignmentRows.map((assignment) => <button key={assignment.id} type="button" onClick={() => navigate(`/events/${assignment.event_id}`)}><span className={`desktop-home-assignment-dot ${assignment.status}`} /><span><strong>{assignment.events?.title || 'Upcoming service'}</strong><small>{assignment.roles?.name || 'Team'}{assignment.events?.event_date ? ` · ${format(parseISO(assignment.events.event_date), 'MMM d')}` : ''}</small></span><ChevronRight className="h-4 w-4" /></button>)}</div> : <div className="desktop-home-empty compact"><CheckCircle2 className="h-5 w-5" /><span>{dashboardLoadIssues.has('assignments') ? 'Assignments could not be loaded.' : 'No current assignments.'}</span></div>}
+                {assignmentRows.length > 0 ? <div className="desktop-home-compact-list">{assignmentRows.map((assignment) => <button key={assignment.id} type="button" onClick={() => openDesktopDetail(`/events/${assignment.event_id}`)}><span className={`desktop-home-assignment-dot ${assignment.status}`} /><span><strong>{assignment.events?.title || 'Upcoming service'}</strong><small>{assignment.roles?.name || 'Team'}{assignment.events?.event_date ? ` · ${format(parseISO(assignment.events.event_date), 'MMM d')}` : ''}</small></span><ChevronRight className="h-4 w-4" /></button>)}</div> : <div className="desktop-home-empty compact"><CheckCircle2 className="h-5 w-5" /><span>{dashboardLoadIssues.has('assignments') ? 'Assignments could not be loaded.' : 'No current assignments.'}</span></div>}
                 </div>
               </section>
 
               {(reviewSets.length > 0 || dashboardLoadIssues.has('setlists')) && <section className="desktop-home-section">
                 <div className="desktop-home-card-header"><div><p className="desktop-home-eyebrow">Leadership</p><h2>Setlists For Review</h2></div><button type="button" onClick={() => navigate('/leadership/setlists')}>View all <ChevronRight className="h-4 w-4" /></button></div>
                 <div className="desktop-home-card">
-                {reviewSets.length > 0 ? <div className="desktop-home-compact-list">{reviewSets.map((set) => <button key={set.id} type="button" onClick={() => navigate(set.events?.id || set.event_id ? `/events/${set.events?.id || set.event_id}` : '/leadership/setlists')}><span className="desktop-home-list-icon"><ListChecks className="h-4 w-4" /></span><span><strong>{set.events?.title || 'Submitted setlist'}</strong><small>{set.events?.event_date ? format(parseISO(set.events.event_date), 'MMM d, yyyy') : 'Ready for review'}</small></span><ChevronRight className="h-4 w-4" /></button>)}</div> : <div className="desktop-home-empty compact"><AlertCircle className="h-5 w-5" /><span>Setlists could not be loaded.</span><button type="button" onClick={() => loadDashboardData()}>Try again</button></div>}
+                {reviewSets.length > 0 ? <div className="desktop-home-compact-list">{reviewSets.map((set) => {
+                  const eventId = set.events?.id || set.event_id;
+                  return <button key={set.id} type="button" onClick={() => eventId ? openDesktopDetail(`/events/${eventId}?tab=setlist`) : navigate('/leadership/setlists')}><span className="desktop-home-list-icon"><ListChecks className="h-4 w-4" /></span><span><strong>{set.events?.title || 'Submitted setlist'}</strong><small>{set.events?.event_date ? format(parseISO(set.events.event_date), 'MMM d, yyyy') : 'Ready for review'}</small></span><ChevronRight className="h-4 w-4" /></button>;
+                })}</div> : <div className="desktop-home-empty compact"><AlertCircle className="h-5 w-5" /><span>Setlists could not be loaded.</span><button type="button" onClick={() => loadDashboardData()}>Try again</button></div>}
                 </div>
               </section>}
 
@@ -1844,13 +1854,13 @@ function AccountDashboard() {
               <section aria-label="Setlists awaiting approval" className={`dashboard-panel ${reviewSets.length === 0 && !dashboardLoadIssues.has('setlists') ? 'hidden' : ''} w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-[#181818]`}>
                 <div className="mb-3 flex items-center gap-2">
                   <div className="flex min-w-0 items-center gap-2">
-                    {reviewSets.length > 0 && <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${canReviewSetlists ? 'bg-amber-400/20 text-amber-300' : 'bg-sky-400/15 text-sky-300'}`}><ListChecks className="h-4 w-4" /></span>}
-                    <h2 className="min-w-0 whitespace-nowrap text-[16px] font-black leading-tight text-white sm:text-[18px]">Setlists Awaiting Approval</h2>
-                    {reviewSets.length > 0 && <span className={`rounded-full px-2 py-0.5 text-[11px] font-black ${canReviewSetlists ? 'bg-amber-400 text-amber-950' : 'bg-sky-400/15 text-sky-200'}`}>{pendingSetlists.length}</span>}
+                    {reviewSets.length > 0 && <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${canReviewSetlists ? 'bg-amber-100 text-amber-700 dark:bg-amber-400/20 dark:text-amber-300' : 'bg-sky-100 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300'}`}><ListChecks className="h-4 w-4" /></span>}
+                    <h2 className="min-w-0 whitespace-nowrap text-[16px] font-black leading-tight text-slate-900 dark:text-white sm:text-[18px]">Setlists Awaiting Approval</h2>
+                    {reviewSets.length > 0 && <span className={`rounded-full px-2 py-0.5 text-[11px] font-black ${canReviewSetlists ? 'bg-amber-400 text-amber-950' : 'bg-sky-100 text-sky-800 dark:bg-sky-400/15 dark:text-sky-200'}`}>{pendingSetlists.length}</span>}
                   </div>
                 </div>
-                {reviewSets.length > 0 && <p className={`mb-2 text-[11px] font-semibold ${canReviewSetlists ? 'text-amber-100/70' : 'text-sky-100/65'}`}>{canReviewSetlists ? 'Your review is needed before these sets can be used.' : 'These sets are waiting for a leadership decision.'}</p>}
-                <div className={reviewSets.length > 0 ? 'space-y-1' : 'flex min-h-[270px] flex-1 items-center justify-center rounded-[0.6rem] border border-dashed border-white/[0.14] bg-white/[0.035] px-5 py-8'}>
+                {reviewSets.length > 0 && <p className={`mb-2 text-[11px] font-semibold ${canReviewSetlists ? 'text-amber-800/80 dark:text-amber-100/70' : 'text-sky-800/75 dark:text-sky-100/65'}`}>{canReviewSetlists ? 'Your review is needed before these sets can be used.' : 'These sets are waiting for a leadership decision.'}</p>}
+                <div className={reviewSets.length > 0 ? 'space-y-1' : 'flex min-h-[270px] flex-1 items-center justify-center rounded-[0.6rem] border border-dashed border-slate-200 bg-slate-50 px-5 py-8 dark:border-white/[0.14] dark:bg-white/[0.035]'}>
                   {reviewSets.length > 0 ? (
                     reviewSets.map((set) => {
                       const eventId = set.events?.id || set.event_id;
@@ -1862,7 +1872,7 @@ function AccountDashboard() {
                         <button
                           key={set.id}
                           onClick={() => navigate(eventId ? `/events/${eventId}` : canReviewSetlists ? '/leadership/setlists' : '/events')}
-                          className="group flex min-w-0 w-full items-center gap-3 overflow-hidden rounded-[0.55rem] px-2 py-2 text-left transition-colors hover:bg-white/[0.08]"
+                          className="group flex min-w-0 w-full items-center gap-3 overflow-hidden rounded-[0.55rem] px-2 py-2 text-left transition-colors hover:bg-slate-50 dark:hover:bg-white/[0.08]"
                         >
                           <EventArtwork
                             eventType={set.events?.event_type}
@@ -1872,21 +1882,21 @@ function AccountDashboard() {
                             className="h-12 w-12 rounded-[0.35rem]"
                           />
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-[13px] font-black text-white">{set.events?.title || 'Submitted setlist'}</p>
-                            <p className="mt-0.5 truncate text-[11px] font-semibold text-white/45">
+                            <p className="truncate text-[13px] font-black text-slate-900 dark:text-white">{set.events?.title || 'Submitted setlist'}</p>
+                            <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-500 dark:text-white/45">
                               {set.events?.event_date ? format(parseISO(set.events.event_date), 'MMM d, yyyy') : 'Ready for review'}
                             </p>
-                            <p className="mt-0.5 truncate text-[11px] font-semibold text-white/60">
+                            <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-600 dark:text-white/60">
                               {reviewAge.pendingDays === null ? reviewAge.submittedDateLabel : `Submitted ${reviewAge.submittedDateLabel}`}
                             </p>
                           </div>
                           <span className="flex shrink-0 flex-col items-end gap-1">
-                            <span className="rounded-full bg-white/[0.08] px-3 py-1.5 text-[11px] font-black text-white/80">
+                            <span className="rounded-full bg-slate-100 px-3 py-1.5 text-[11px] font-black text-slate-700 dark:bg-white/[0.08] dark:text-white/80">
                               {songCount} {songCount === 1 ? 'song' : 'songs'}
                             </span>
-                            {reviewAge.pendingDays !== null && <span className={`text-[10px] font-bold ${canReviewSetlists ? 'text-amber-300' : 'text-sky-300'}`}>{reviewAge.pendingDaysLabel}</span>}
+                            {reviewAge.pendingDays !== null && <span className={`text-[10px] font-bold ${canReviewSetlists ? 'text-amber-600 dark:text-amber-300' : 'text-sky-600 dark:text-sky-300'}`}>{reviewAge.pendingDaysLabel}</span>}
                           </span>
-                          <ChevronRight className="h-4 w-4 shrink-0 text-white/70 transition-transform group-hover:translate-x-0.5" />
+                          <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5 dark:text-white/70" />
                         </button>
                       );
                     })

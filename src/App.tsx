@@ -9,7 +9,7 @@ import {
   useNavigate,
   type Location,
 } from "react-router-dom";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, X } from "lucide-react";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { NotificationOpenTracker } from './components/NotificationOpenTracker';
@@ -161,14 +161,9 @@ const LeaderDashboard = lazy(() =>
     default: LeaderDashboard,
   })),
 );
-const TeamManage = lazy(() =>
-  import("./pages/TeamManage").then(({ TeamManage }) => ({
-    default: TeamManage,
-  })),
-);
-const Accountability = lazy(() =>
-  import("./pages/Accountability").then(({ Accountability }) => ({
-    default: Accountability,
+const LeadershipTeam = lazy(() =>
+  import("./pages/LeadershipTeam").then(({ LeadershipTeam }) => ({
+    default: LeadershipTeam,
   })),
 );
 const Requests = lazy(() =>
@@ -206,6 +201,9 @@ const NotificationSettings = lazy(() =>
 );
 const AppSettings = lazy(() =>
   import("./pages/AppSettings").then(({ AppSettings }) => ({ default: AppSettings })),
+);
+const PrivacyAccount = lazy(() =>
+  import("./pages/PrivacyAccount").then(({ PrivacyAccount }) => ({ default: PrivacyAccount })),
 );
 const NotificationActivity = lazy(() => import('./pages/leadership/NotificationActivity').then(({ NotificationActivity }) => ({ default: NotificationActivity })));
 const SurveyManagement = lazy(() =>
@@ -504,12 +502,24 @@ function DesktopDetailModal({
       title={title}
       size="xl"
       instantOpen={false}
+      hideHeader
       bodyClassName="!p-0 no-scrollbar"
       dialogClassName={kind === 'event'
         ? 'sm:!max-w-[94vw] 2xl:!max-w-[1440px] sm:!max-h-[88vh]'
         : 'lg:!max-w-5xl sm:!max-h-[88vh]'}
     >
-      <Suspense fallback={<PageLoader />}>{children}</Suspense>
+      <div className="relative">
+        <button
+          type="button"
+          onClick={close}
+          className="absolute right-3 top-3 z-[80] inline-flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-white/85 text-gray-600 shadow-sm backdrop-blur-md transition-colors hover:bg-white hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-white/10 dark:bg-black/55 dark:text-white/65 dark:hover:bg-black/75 dark:hover:text-white"
+          aria-label={`Close ${title.toLowerCase()}`}
+          title="Close"
+        >
+          <X className="h-4 w-4" />
+        </button>
+        <Suspense fallback={<PageLoader />}>{children}</Suspense>
+      </div>
     </Modal>
   );
 }
@@ -520,8 +530,8 @@ function ModalAwareRoutes({ children }: { children: ReactNode }) {
   const candidate = state?.backgroundLocation;
   const backgroundLocation = candidate
     && window.matchMedia('(min-width: 1024px)').matches
-    && ((location.pathname.startsWith('/events/') && candidate.pathname === '/events')
-      || (location.pathname.startsWith('/announcements/') && candidate.pathname === '/announcements'))
+    && ((location.pathname.startsWith('/events/') && ['/events', '/dashboard'].includes(candidate.pathname))
+      || (location.pathname.startsWith('/announcements/') && ['/announcements', '/dashboard'].includes(candidate.pathname)))
     ? candidate
     : null;
 
@@ -537,7 +547,7 @@ function ModalAwareRoutes({ children }: { children: ReactNode }) {
             />
             <Route
               path="/announcements/:id"
-              element={<DesktopDetailModal backgroundLocation={backgroundLocation} title="Announcement" kind="announcement"><AnnouncementDetail /></DesktopDetailModal>}
+              element={<DesktopDetailModal backgroundLocation={backgroundLocation} title="Announcement" kind="announcement"><AnnouncementDetail inDialog /></DesktopDetailModal>}
             />
           </Route>
         </Routes>
@@ -666,6 +676,8 @@ export default function App() {
                       <Route path="/profile" element={<Profile />} />
                       <Route path="/settings/sounds" element={<SoundSettings />} />
                       <Route path="/settings/app" element={<AppSettings />} />
+                      <Route path="/settings" element={<AppSettings />} />
+                      <Route path="/settings/privacy" element={<PrivacyAccount />} />
                       <Route path="/settings/notifications" element={<PushNotificationSettings />} />
                       <Route
                         path="/change-password"
@@ -702,8 +714,8 @@ export default function App() {
                         path="/leadership/discipline"
                         element={<Navigate to="/leadership/accountability?tab=conduct" replace />}
                       />
-                      <Route path="/leadership/team" element={<TeamManage />} />
-                      <Route path="/leadership/accountability" element={<Accountability />} />
+                      <Route path="/leadership/team" element={<LeadershipTeam />} />
+                      <Route path="/leadership/accountability" element={<LeadershipTeam />} />
                       <Route path="/leadership/attendance-qr" element={<AttendanceQrPilot />} />
                       <Route
                         path="/leadership/attendance-qr-pilot"

@@ -3,6 +3,12 @@ import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor
 import { ANDROID_RELEASES_API, createAndroidUpdateChecker, isTrustedAndroidDownload, type AndroidRelease } from './androidRelease';
 
 export const isAndroidApp = () => Capacitor.getPlatform() === 'android';
+export const isPlayAndroidApp = () => isAndroidApp() && import.meta.env.VITE_ANDROID_DISTRIBUTION === 'play';
+export const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.babcreations.servesync';
+
+function requireSideloadUpdates() {
+  if (isPlayAndroidApp()) throw new Error('This installation updates through Google Play.');
+}
 type UpdateProgress = { build: number; downloaded: number; total: number; percent: number };
 type InstallAction = { action: 'installer' | 'settings' };
 const nativeUpdates = registerPlugin<{
@@ -13,7 +19,7 @@ const nativeUpdates = registerPlugin<{
   addListener(eventName: 'downloadProgress', listener: (progress: UpdateProgress) => void): Promise<PluginListenerHandle>;
 }>('NativeAppUpdates');
 
-export const androidUpdates = createAndroidUpdateChecker({
+const sideloadAndroidUpdates = createAndroidUpdateChecker({
   installed: () => App.getInfo(),
   releases: async () => {
     const response = await fetch(ANDROID_RELEASES_API, {
@@ -25,8 +31,16 @@ export const androidUpdates = createAndroidUpdateChecker({
   },
   now: () => Date.now(),
 });
+export const androidUpdates = {
+  ...sideloadAndroidUpdates,
+  check(force = false) {
+    requireSideloadUpdates();
+    return sideloadAndroidUpdates.check(force);
+  },
+};
 
 function verifiedOptions(release: AndroidRelease) {
+  requireSideloadUpdates();
   if (!isTrustedAndroidDownload(release.url) || !release.sha256) {
     throw new Error('Could not verify this update package. Try again later.');
   }
@@ -34,6 +48,7 @@ function verifiedOptions(release: AndroidRelease) {
 }
 
 export function subscribeAndroidUpdateProgress(listener: (progress: UpdateProgress) => void) {
+  requireSideloadUpdates();
   return nativeUpdates.addListener('downloadProgress', listener);
 }
 
@@ -43,6 +58,7 @@ export async function isAndroidUpdateDownloaded(release: AndroidRelease) {
 }
 
 export async function downloadAndroidUpdate(expectedBuild: number): Promise<'browser' | 'downloaded'> {
+  requireSideloadUpdates();
   // Recheck before downloading so a withdrawn or replaced release is not offered.
   const result = await androidUpdates.check(true);
   if (result.status !== 'available' || !result.release || !isTrustedAndroidDownload(result.release.url)) {

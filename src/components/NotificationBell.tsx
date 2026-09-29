@@ -15,6 +15,7 @@ import {
 } from '../lib/interactionSounds';
 import { useToast } from '../contexts/ToastContext';
 import { recordNotificationOpen } from '../lib/notificationOpenTracking';
+import { resolveNotificationDestination } from '../lib/notificationDestination';
 
 const PREVIEW_LIMIT = 5;
 const SOUND_VOLUME_LEVELS = [
@@ -24,17 +25,6 @@ const SOUND_VOLUME_LEVELS = [
   { label: 'Louder', value: 80 },
   { label: 'Full', value: 100 },
 ] as const;
-
-function notificationDestination(notification: Notification) {
-  if (notification.data?.conversation_id) {
-    return `/messages/${notification.data.conversation_id}`;
-  }
-  if (notification.data?.url) return notification.data.url;
-  if (notification.data?.event_id) return `/events/${notification.data.event_id}`;
-  if (notification.data?.announcement_id) return '/announcements';
-  if (notification.data?.video_id) return '/library';
-  return '/notifications';
-}
 
 export function NotificationBell() {
   const [count, setCount] = useState(0);
@@ -87,7 +77,7 @@ export function NotificationBell() {
     if (!user) return;
 
     const channel = supabase
-      .channel('notifications-bell')
+      .channel(`notifications-bell:${crypto.randomUUID()}`)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
@@ -181,7 +171,7 @@ export function NotificationBell() {
         else window.dispatchEvent(new Event('notifications-updated'));
       }, () => { void fetchNotifications(); });
     }
-    goTo(notificationDestination(notification));
+    goTo(resolveNotificationDestination(notification) || '/notifications');
   };
 
   const markAllRead = async () => {

@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { App } from '@capacitor/app';
 import { RefreshCw, Settings } from 'lucide-react';
 import { NativeAppUpdateCard } from '../components/NativeAppUpdate';
 import { DeviceCacheSetting } from '../components/DeviceCacheSetting';
 import { APP_VERSION_LABEL } from '../lib/appUpdate';
 import { checkForAppUpdate } from '../lib/serviceWorkerUpdate';
-import { androidUpdates, isAndroidApp } from '../lib/nativeAppUpdates';
+import { androidUpdates, isAndroidApp, isPlayAndroidApp, PLAY_STORE_URL } from '../lib/nativeAppUpdates';
 import { useAuth } from '../contexts/AuthContext';
 
 export function AppSettings() {
@@ -26,7 +27,9 @@ export function AppSettings() {
     setChecking(true);
     setMessage('');
     try {
-      if (isAndroidApp()) {
+      if (isPlayAndroidApp()) {
+        setMessage('Google Play manages updates for this installation. Open ServeSync on Google Play to check for an update.');
+      } else if (isAndroidApp()) {
         const result = await androidUpdates.check(true);
         if (result.status === 'available') setMessage(`ServeSync ${result.release?.version} is available. Use Download update below.`);
         else if (result.status === 'up-to-date') setMessage(`ServeSync ${result.installedVersion} is up to date.`);
@@ -70,17 +73,24 @@ export function AppSettings() {
             <h2 id="app-updates-title" className="text-base font-bold text-gray-950 dark:text-white">App Updates</h2>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">ServeSync {installed ? `v${installed.version}` : APP_VERSION_LABEL}</p>
           </div>
-          <button type="button" onClick={() => void check()} disabled={checking} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50">
-            <RefreshCw className={`h-4 w-4 ${checking ? 'animate-spin motion-reduce:animate-none' : ''}`} />
-            {checking ? 'Checking…' : 'Check for updates'}
-          </button>
+          {isPlayAndroidApp() ? (
+            <a href={PLAY_STORE_URL} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white hover:bg-emerald-700">
+              Open Google Play
+            </a>
+          ) : (
+            <button type="button" onClick={() => void check()} disabled={checking} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50">
+              <RefreshCw className={`h-4 w-4 ${checking ? 'animate-spin motion-reduce:animate-none' : ''}`} />
+              {checking ? 'Checking…' : 'Check for updates'}
+            </button>
+          )}
           {message && <p role="status" className="text-sm text-gray-600 dark:text-gray-300">{message}</p>}
           <NativeAppUpdateCard alwaysVisible />
         </section>
         <DeviceCacheSetting />
-        <section className="rounded-3xl border border-gray-200/80 bg-white p-5 dark:border-white/[0.07] dark:bg-white/[0.025] sm:p-6">
+        <section className="hidden rounded-3xl border border-gray-200/80 bg-white p-5 dark:border-white/[0.07] dark:bg-white/[0.025] sm:p-6 lg:block">
           <h2 className="text-base font-bold text-gray-950 dark:text-white">Privacy And Help</h2>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Your church admin handles church records first. ServeSync can help with a privacy, account, or security request.</p>
+          <Link to="/settings/privacy" className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white hover:bg-emerald-700">Open Privacy &amp; account</Link>
           <div className="mt-3 flex flex-wrap gap-4 text-sm font-semibold text-emerald-700 dark:text-emerald-300">
             <a href="/privacy.html" target="_blank" rel="noopener noreferrer">Privacy notice</a>
             <a href="/delete-account.html" target="_blank" rel="noopener noreferrer">Delete account or data</a>

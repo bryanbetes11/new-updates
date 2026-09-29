@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { format, parseISO, differenceInDays, differenceInHours, isPast, isToday, startOfDay } from 'date-fns';
 import { motion } from 'framer-motion';
 import { Bell, CheckCircle2, Clock, AlertTriangle, RefreshCw, Loader2, ListMusic, Pencil, X, Check, CalendarDays } from 'lucide-react';
@@ -108,6 +108,11 @@ function getDaysLabelString(dueDate: string, setlistStatus: string | null): stri
   return getDaysLabel(dueDate, setlistStatus).text;
 }
 
+function getMobileEventTitle(title: string): string {
+  const personalTitle = title.trim().match(/^(Bro\.|Sis\.)\s+([^\s]+)/i);
+  return personalTitle ? `${personalTitle[1]} ${personalTitle[2]}` : title;
+}
+
 interface EditDueDatePopoverProps {
   event: DeadlineEvent;
   onSave: (eventId: string, newDate: string) => Promise<void>;
@@ -188,6 +193,8 @@ export function SetlistDeadlines() {
   const canManageDeadlines = isLeader || isOrgAdmin || isPlatformOwner;
   const { toast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
+  const eventReturnPath = `${location.pathname}${location.search}${location.hash}`;
   const [events, setEvents] = useState<DeadlineEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [sendingId, setSendingId] = useState<string | null>(null);
@@ -411,7 +418,7 @@ export function SetlistDeadlines() {
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-          className="grid grid-cols-2 sm:grid-cols-4 gap-2.5"
+          className="desktop-deadline-filters grid grid-cols-2 sm:grid-cols-4 gap-2.5"
         >
           {[
             { key: 'overdue', label: 'Overdue', count: countByStatus.overdue, dot: '#ef4444', tone: 'bg-red-50 dark:bg-red-500/[0.10] text-red-600 dark:text-red-400' },
@@ -455,7 +462,16 @@ export function SetlistDeadlines() {
           </p>
         </div>
       ) : (
-        <div className="touch-action-pan-y space-y-2.5">
+        <div className="desktop-deadline-list touch-action-pan-y">
+          <div className="desktop-deadline-table-head hidden lg:grid" aria-hidden="true">
+            <div className="desktop-deadline-table-main">
+              <span>Event / date</span>
+              <span>Song leader</span>
+              <span>Status / age</span>
+              <span>Deadline</span>
+            </div>
+            <span className="text-right">Reminders / actions</span>
+          </div>
           {filteredEvents.map(event => {
             const status = getDeadlineStatus(event.proposal_due_date, event.setlist_status);
             const { text: daysText, urgent: daysUrgent } = getDaysLabel(event.proposal_due_date, event.setlist_status);
@@ -473,9 +489,9 @@ export function SetlistDeadlines() {
             const isDueTodayEvent = isDueToday(event);
 
             return (
+              <div key={event.id} className="desktop-deadline-entry relative">
               <div
-                key={event.id}
-                className={`desktop-deadline-row touch-action-pan-y relative rounded-3xl overflow-hidden bg-white dark:bg-white/[0.025] border p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 transition-all duration-200 hover:-translate-y-0.5 ${
+                className={`desktop-deadline-row desktop-deadline-mobile-card touch-action-pan-y relative rounded-3xl overflow-hidden bg-white dark:bg-white/[0.025] border p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 transition-all duration-200 hover:-translate-y-0.5 lg:hidden ${
                   isOverdueEvent ? 'border-red-200 dark:border-red-500/25' : isDueTodayEvent ? 'border-amber-200 dark:border-amber-500/25' : 'border-gray-200/80 dark:border-white/[0.06]'
                 }`}
                 style={{
@@ -489,8 +505,8 @@ export function SetlistDeadlines() {
               >
                 <button
                   type="button"
-                  onClick={() => navigate(`/events/${event.id}`)}
-                  className="flex min-w-0 flex-1 items-start gap-3 rounded-2xl text-left outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
+                  onClick={() => navigate(`/events/${event.id}`, { state: { returnTo: eventReturnPath } })}
+                  className="desktop-deadline-mobile-main flex min-w-0 flex-1 items-start gap-3 rounded-xl text-left outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
                   aria-label={`Open ${event.title} event`}
                 >
                   <div className="shrink-0 mt-0.5">
@@ -509,27 +525,19 @@ export function SetlistDeadlines() {
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{event.title}</p>
-                      <span className="text-[11px] text-gray-400 dark:text-gray-500">
-                        Event {format(parseISO(event.event_date), 'MMM d')}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                      {event.song_leader
-                        ? `${event.song_leader.nickname || event.song_leader.first_name} ${event.song_leader.last_name}`
-                        : <span className="text-amber-500">No song leader assigned</span>
-                      }
-                    </p>
-
-                    <div className="flex flex-wrap items-center gap-2 mt-2">
-                      <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full ${status.bgColor} ${status.color}`}>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{getMobileEventTitle(event.title)}</p>
+                      <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${status.bgColor} ${status.color}`}>
                         {status.icon}
                         {status.label}
                       </span>
+                    </div>
+
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                      {!event.song_leader && <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">No song leader</span>}
 
                       {daysText && (
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
                           daysUrgent
                             ? isOverdueEvent
                               ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
@@ -543,7 +551,7 @@ export function SetlistDeadlines() {
                       )}
 
                       {pendingReviewAge && pendingReviewAge.pendingDays !== null && (
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
                           (pendingReviewAge.pendingDays ?? 0) > 1
                             ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
                             : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
@@ -552,13 +560,13 @@ export function SetlistDeadlines() {
                         </span>
                       )}
 
-                      <span className={`inline-flex items-center gap-1 text-xs font-semibold ${
+                      <span className={`inline-flex items-center gap-1 text-[11px] font-semibold ${
                         isOverdueEvent
                           ? 'text-red-600 dark:text-red-400'
                           : isDueTodayEvent
                             ? 'text-amber-600 dark:text-amber-400'
                             : 'text-gray-700 dark:text-gray-300'
-                      }`}>
+                      }`} aria-label={`Proposal due ${format(parseISO(event.proposal_due_date), 'MMM d, h:mm a')}`}>
                         <CalendarDays className="h-3 w-3 shrink-0" />
                         {format(parseISO(event.proposal_due_date), 'MMM d, h:mm a')}
                       </span>
@@ -566,20 +574,11 @@ export function SetlistDeadlines() {
                   </div>
                 </button>
 
-                <div className="flex items-center justify-between sm:justify-end gap-2 sm:shrink-0 relative">
-                  {event.reminder_count > 0 && (
-                    <div className="flex items-center gap-1">
-                      <Bell className="h-3 w-3 text-gray-400" />
-                      <span className="text-xs text-gray-400 dark:text-gray-500">
-                        {event.reminder_count}
-                      </span>
-                    </div>
-                  )}
-
+                <div className="desktop-deadline-mobile-actions relative flex shrink-0 items-center justify-end gap-1">
                   {canManageDeadlines && <button
                     type="button"
                     onClick={() => setEditingId(isEditOpen ? null : event.id)}
-                    className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/[0.06] dark:hover:text-gray-200"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/[0.06] dark:hover:text-gray-200"
                     title="Override due date"
                     aria-label={`Override due date for ${event.title}`}
                   >
@@ -591,33 +590,141 @@ export function SetlistDeadlines() {
                       type="button"
                       onClick={() => handleSendReminder(event)}
                       disabled={isSending || recentlySent || !event.song_leader}
-                      className={`inline-flex min-h-11 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all ${
+                      className={`relative inline-flex h-10 w-10 items-center justify-center rounded-xl text-xs font-semibold transition-all ${
                         recentlySent
                           ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 cursor-not-allowed'
                           : 'bg-brand-600 hover:bg-brand-700 text-white active:scale-95'
                       } disabled:opacity-60`}
                       title={recentlySent ? 'Recently sent — wait a moment' : 'Send reminder'}
+                      aria-label={`${recentlySent ? 'Reminder recently sent' : 'Send reminder'}${event.reminder_count > 0 ? `; ${event.reminder_count} previously sent` : ''}`}
                     >
                       {isSending ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       ) : (
                         <Bell className="h-3.5 w-3.5" />
                       )}
-                      {isSending ? 'Sending...' : recentlySent ? 'Sent' : 'Remind'}
+                      {event.reminder_count > 0 && (
+                        <span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-amber-400 px-1 text-center text-[9px] font-black leading-4 text-amber-950 shadow-sm ring-2 ring-white dark:ring-gray-900">
+                          {event.reminder_count > 99 ? '99+' : event.reminder_count}
+                        </span>
+                      )}
+                      <span className="sr-only">{isSending ? 'Sending reminder' : recentlySent ? 'Reminder sent' : 'Send reminder'}</span>
                     </button>
                   )}
 
-                  {canManageDeadlines && isEditOpen && (
-                    <div>
-                      <EditDueDatePopover
-                        event={event}
-                        onSave={handleSaveDueDate}
-                        onClose={() => setEditingId(null)}
-                        saving={isSavingThis}
+                </div>
+              </div>
+
+              <div
+                className={`desktop-deadline-row desktop-deadline-table-row hidden border bg-white dark:bg-white/[0.025] lg:grid ${
+                  isOverdueEvent ? 'border-red-200 dark:border-red-500/25' : isDueTodayEvent ? 'border-amber-200 dark:border-amber-500/25' : 'border-gray-200/80 dark:border-white/[0.06]'
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => navigate(`/events/${event.id}`, { state: { returnTo: eventReturnPath } })}
+                  className="desktop-deadline-table-main min-w-0 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500/60"
+                  aria-label={`Open ${event.title} event`}
+                >
+                  <span className="desktop-deadline-event-cell min-w-0">
+                    <strong className="block truncate text-[13px] font-bold text-gray-950 dark:text-white">{event.title}</strong>
+                    <small className="mt-1 block text-[11px] font-medium text-gray-500 dark:text-white/45">
+                      {format(parseISO(event.event_date), 'EEE, MMM d, yyyy')}
+                    </small>
+                  </span>
+
+                  <span className="desktop-deadline-leader-cell flex min-w-0 items-center gap-2.5">
+                    {event.song_leader ? (
+                      <Avatar
+                        src={event.song_leader.avatar_url}
+                        firstName={event.song_leader.first_name || '?'}
+                        lastName={event.song_leader.last_name}
+                        size="sm"
                       />
-                    </div>
+                    ) : (
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
+                        <ListMusic className="h-3.5 w-3.5 text-gray-400" />
+                      </span>
+                    )}
+                    <span className={`min-w-0 truncate text-[12px] font-semibold ${event.song_leader ? 'text-gray-700 dark:text-white/75' : 'text-amber-600 dark:text-amber-400'}`}>
+                      {event.song_leader
+                        ? `${event.song_leader.nickname || event.song_leader.first_name} ${event.song_leader.last_name}`
+                        : 'Not assigned'}
+                    </span>
+                  </span>
+
+                  <span className="desktop-deadline-status-cell min-w-0">
+                    <span className={`inline-flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${status.bgColor} ${status.color}`}>
+                      {status.icon}
+                      <span className="truncate">{status.label}</span>
+                    </span>
+                    {pendingReviewAge && pendingReviewAge.pendingDays !== null && (
+                      <small className={`mt-1.5 block truncate text-[10px] font-semibold ${(pendingReviewAge.pendingDays ?? 0) > 1 ? 'text-red-600 dark:text-red-300' : 'text-amber-600 dark:text-amber-300'}`}>
+                        Submitted {pendingReviewAge.submittedDateLabel} · {pendingReviewAge.pendingDaysLabel}
+                      </small>
+                    )}
+                  </span>
+
+                  <span className="desktop-deadline-date-cell min-w-0">
+                    <strong className={`flex items-center gap-1 text-[12px] font-semibold ${
+                      isOverdueEvent ? 'text-red-600 dark:text-red-300' : isDueTodayEvent ? 'text-amber-600 dark:text-amber-300' : 'text-gray-700 dark:text-white/75'
+                    }`}>
+                      <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+                      {format(parseISO(event.proposal_due_date), 'MMM d, h:mm a')}
+                    </strong>
+                    {daysText && (
+                      <small className={`mt-1 block text-[10px] font-bold ${daysUrgent ? (isOverdueEvent ? 'text-red-600 dark:text-red-300' : 'text-amber-600 dark:text-amber-300') : 'text-gray-500 dark:text-white/40'}`}>
+                        {daysText}
+                      </small>
+                    )}
+                  </span>
+                </button>
+
+                <div className="desktop-deadline-actions flex min-w-0 items-center justify-end gap-1.5">
+                  <span className="mr-1 inline-flex min-w-10 items-center justify-end gap-1 text-[11px] font-semibold text-gray-400 dark:text-white/35" title={`${event.reminder_count} reminder${event.reminder_count === 1 ? '' : 's'} sent`}>
+                    <Bell className="h-3.5 w-3.5" />
+                    {event.reminder_count}
+                  </span>
+
+                  {canManageDeadlines && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingId(isEditOpen ? null : event.id)}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:text-white/45 dark:hover:bg-white/[0.07] dark:hover:text-white"
+                      title="Override due date"
+                      aria-label={`Override due date for ${event.title}`}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+
+                  {canManageDeadlines && canSendReminder && (
+                    <button
+                      type="button"
+                      onClick={() => handleSendReminder(event)}
+                      disabled={isSending || recentlySent || !event.song_leader}
+                      className={`inline-flex min-h-9 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-bold transition-colors ${
+                        recentlySent
+                          ? 'cursor-not-allowed bg-gray-100 text-gray-400 dark:bg-gray-800'
+                          : 'bg-brand-600 text-white hover:bg-brand-700'
+                      } disabled:opacity-60`}
+                      title={recentlySent ? 'Recently sent — wait a moment' : 'Send reminder'}
+                    >
+                      {isSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bell className="h-3.5 w-3.5" />}
+                      {isSending ? 'Sending...' : recentlySent ? 'Sent' : 'Remind'}
+                    </button>
                   )}
                 </div>
+              </div>
+
+              {canManageDeadlines && isEditOpen && (
+                <EditDueDatePopover
+                  event={event}
+                  onSave={handleSaveDueDate}
+                  onClose={() => setEditingId(null)}
+                  saving={isSavingThis}
+                />
+              )}
               </div>
             );
           })}

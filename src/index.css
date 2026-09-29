@@ -556,6 +556,21 @@ html[data-touch-feedback="apple"] :is(nav, aside) .touch-feedback-strong {
     background-image: none !important;
   }
 
+  .event-detail-mobile-header::before {
+    content: "";
+    position: absolute;
+    right: 0;
+    bottom: 100%;
+    left: 0;
+    height: env(safe-area-inset-top, 0px);
+    pointer-events: none;
+    background: #f8f8fa;
+  }
+
+  html.dark .event-detail-mobile-header::before {
+    background: #050505;
+  }
+
   html.dark .event-detail-shell-spacing {
     background-color: #050505 !important;
   }
@@ -1678,7 +1693,7 @@ html.dark .dashboard-flat [style*="box-shadow"] { box-shadow: none !important; }
   }
 
   .desktop-workspace .desktop-sidebar button[aria-current="page"] > span:first-of-type,
-  .desktop-workspace .desktop-sidebar button[aria-current="page"] > div > span {
+  .desktop-workspace .desktop-sidebar button[aria-current="page"] > div > span:not([data-sidebar-badge]) {
     background: transparent !important;
     color: var(--workspace-accent) !important;
   }

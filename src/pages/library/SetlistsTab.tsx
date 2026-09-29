@@ -1614,7 +1614,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
               <button
                 onClick={() => fileRef.current?.click()}
                 disabled={cacheState !== 'fresh'}
-                className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-full bg-white/[0.095] px-5 text-[13px] font-black text-white transition-all hover:bg-[#1ed760] hover:text-black active:scale-[0.97]"
+                className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-5 text-[13px] font-black text-gray-800 transition-all hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800 active:scale-[0.97] dark:border-white/[0.08] dark:bg-white/[0.095] dark:text-white dark:hover:border-[#1ed760] dark:hover:bg-[#1ed760] dark:hover:text-black"
               >
                 <Upload className="h-4 w-4" />
                 Import Excel
@@ -1663,18 +1663,18 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                   <div className="flex-1" />
                   <button
                     onClick={() => setSelectMode(true)}
-                    className="inline-flex h-10 items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.055] px-3 text-[11px] font-semibold text-white/55 backdrop-blur-md transition-colors hover:bg-white/[0.09] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 active:scale-[0.97]"
+                    className="inline-flex h-10 items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 text-[11px] font-semibold text-gray-600 backdrop-blur-md transition-colors hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 active:scale-[0.97] dark:border-white/[0.07] dark:bg-white/[0.055] dark:text-white/55 dark:hover:border-white/[0.07] dark:hover:bg-white/[0.09] dark:hover:text-white"
                   >
                     <CheckSquare className="h-3.5 w-3.5" />
                     Select
                   </button>
-                  <div className="inline-flex h-10 items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.055] pl-3 pr-2 backdrop-blur-md focus-within:ring-2 focus-within:ring-emerald-400/70">
+                  <div className="inline-flex h-10 items-center gap-1.5 rounded-full border border-gray-200 bg-white pl-3 pr-2 backdrop-blur-md focus-within:ring-2 focus-within:ring-emerald-400/70 dark:border-white/[0.07] dark:bg-white/[0.055]">
                     <ArrowUpDown className="h-3 w-3 text-gray-400 dark:text-white/35" />
                     <select
                       value={sortKey}
                       onChange={e => setSortKey(e.target.value as SortKey)}
                       aria-label="Sort approved sets"
-                      className="text-[11px] font-semibold text-white/60 bg-transparent border-none outline-none cursor-pointer pr-1"
+                      className="cursor-pointer border-none bg-transparent pr-1 text-[11px] font-semibold text-gray-600 outline-none dark:text-white/60"
                     >
                       <option value="date_desc">Newest first</option>
                       <option value="date_asc">Oldest first</option>
@@ -1690,7 +1690,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
               variants={containerVariants}
               initial="hidden"
               animate="show"
-              className="desktop-sets-list overflow-hidden border-y border-white/[0.08]"
+              className="desktop-sets-list overflow-hidden border-y border-gray-200 dark:border-white/[0.08]"
             >
               {sortedSetlists.length === 0 ? (
                 <div className="px-5 py-10 text-center">
@@ -1720,10 +1720,10 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                   <motion.div
                     key={sl.id}
                     variants={itemVariants}
-                    className={`group relative border-b border-white/[0.075] transition-colors duration-200 last:border-b-0 ${
+                    className={`group relative border-b border-gray-200 transition-colors duration-200 last:border-b-0 dark:border-white/[0.075] ${
                       isSelected
                         ? 'bg-[#22c55e]/10'
-                        : 'hover:bg-white/[0.045]'
+                        : 'hover:bg-emerald-50/45 dark:hover:bg-white/[0.045]'
                     }`}
                   >
                     <div className="flex items-center">
@@ -1746,7 +1746,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                         aria-expanded={isExpanded}
                         aria-controls={`setlist-songs-${sl.id}`}
                       >
-                        <div className="grid h-16 w-16 shrink-0 grid-cols-2 overflow-hidden rounded-md bg-white/[0.055] ring-1 ring-white/[0.08] sm:h-20 sm:w-20">
+                        <div className="grid h-16 w-16 shrink-0 grid-cols-2 overflow-hidden rounded-md bg-gray-100 ring-1 ring-gray-200 dark:bg-white/[0.055] dark:ring-white/[0.08] sm:h-20 sm:w-20">
                           {Array.from({ length: 4 }).map((_, index) => {
                             const setlistSong = artworkSongs[index];
                             return setlistSong ? (
@@ -1769,26 +1769,26 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-[1rem] font-black leading-tight text-white sm:text-[1.12rem]">
+                            <p className="text-[1rem] font-black leading-tight text-gray-900 dark:text-white sm:text-[1.12rem]">
                               {displayName}
                             </p>
-                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/[0.12] px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.1em] text-emerald-300 ring-1 ring-emerald-500/20">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.1em] text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/[0.12] dark:text-emerald-300 dark:ring-emerald-500/20">
                               <CheckCircle className="h-2.5 w-2.5" /> Approved
                             </span>
                           </div>
                           <div className="flex items-center flex-wrap gap-x-2.5 gap-y-0.5 mt-1">
                             {eventDate && (
-                              <span className="text-[11px] text-white/40 flex items-center gap-1 font-mono">
+                              <span className="flex items-center gap-1 font-mono text-[11px] text-gray-500 dark:text-white/40">
                                 <Calendar className="h-3 w-3" />
                                 {format(parseISO(eventDate), 'MMM d, yyyy')}
                               </span>
                             )}
-                            <span className="text-[11px] text-white/30 font-mono">{songCount} song{songCount !== 1 ? 's' : ''}</span>
+                            <span className="font-mono text-[11px] text-gray-500 dark:text-white/30">{songCount} song{songCount !== 1 ? 's' : ''}</span>
                             {relativeDay !== null && (
-                              <span className="text-[11px] text-white/60 font-mono hidden sm:inline">{relativeDay}</span>
+                              <span className="hidden font-mono text-[11px] text-gray-600 dark:text-white/60 sm:inline">{relativeDay}</span>
                             )}
                             {eventType && eventType !== 'imported' && (
-                              <span className="hidden sm:inline text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-white/[0.06] text-white/45 capitalize">{eventType.replace(/_/g, ' ')}</span>
+                              <span className="hidden rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] font-bold capitalize text-gray-600 dark:bg-white/[0.06] dark:text-white/45 sm:inline">{eventType.replace(/_/g, ' ')}</span>
                             )}
                           </div>
                         </div>
@@ -1803,7 +1803,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                               className="ring-1 ring-black/[0.06] dark:ring-white/[0.08]"
                             />
                           )}
-                          <div className={`flex items-center justify-center w-7 h-7 rounded-xl transition-all ${isExpanded ? 'bg-white/[0.06] rotate-180' : ''}`}>
+                          <div className={`flex h-7 w-7 items-center justify-center rounded-xl transition-all ${isExpanded ? 'rotate-180 bg-gray-100 dark:bg-white/[0.06]' : ''}`}>
                             <ChevronDown className="h-3.5 w-3.5 text-gray-400 dark:text-white/35" />
                           </div>
                         </div>
@@ -1878,13 +1878,13 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
 
             {remainingSetlistCount > 0 && (
               <div className="flex flex-col items-center gap-2 pt-1">
-                <span className="text-[11px] font-mono text-white/30" aria-live="polite">
+                <span className="font-mono text-[11px] text-gray-400 dark:text-white/30" aria-live="polite">
                   Showing {paginatedSetlists.length} of {sortedSetlists.length} sets
                 </span>
                 <button
                   type="button"
                   onClick={showMoreSetlists}
-                  className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.06] px-5 text-[12px] font-black text-white transition-colors hover:bg-white/[0.10] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 active:scale-[0.98] sm:w-auto sm:min-w-52"
+                  className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-5 text-[12px] font-black text-gray-800 transition-colors hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 active:scale-[0.98] dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white dark:hover:border-white/[0.08] dark:hover:bg-white/[0.10] dark:hover:text-white sm:w-auto sm:min-w-52"
                 >
                   <ChevronDown className="h-4 w-4" />
                   Show {Math.min(SETLIST_PAGE_SIZE, remainingSetlistCount)} more
@@ -2030,8 +2030,8 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
             { id: 'never_used' as const, label: 'Never Used', count: neverUsed },
           ].map(filter => {
             const active = activeFilter === filter.id;
-            return <button key={filter.id} type="button" onClick={() => setActiveFilter(prev => (prev === filter.id && filter.id !== 'all' ? 'all' : filter.id))} aria-pressed={active} className={`inline-flex h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full px-4 text-[12px] font-black transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 ${active ? 'bg-[#22c55e] text-black' : 'bg-white/[0.10] text-white hover:bg-white/[0.16]'}`}>
-              {filter.label}<span className={`rounded-full px-1.5 py-0.5 text-[10px] ${active ? 'bg-black/12 text-black' : 'bg-white/[0.10] text-white/68'}`}>{filter.count}</span>
+            return <button key={filter.id} type="button" onClick={() => setActiveFilter(prev => (prev === filter.id && filter.id !== 'all' ? 'all' : filter.id))} aria-pressed={active} className={`inline-flex h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full px-4 text-[12px] font-black transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 ${active ? 'bg-[#22c55e] text-black' : 'border border-gray-200 bg-white text-gray-700 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800 dark:border-white/[0.08] dark:bg-white/[0.10] dark:text-white dark:hover:border-white/[0.08] dark:hover:bg-white/[0.16]'}`}>
+              {filter.label}<span className={`rounded-full px-1.5 py-0.5 text-[10px] ${active ? 'bg-black/12 text-black' : 'bg-gray-100 text-gray-600 dark:bg-white/[0.10] dark:text-white/68'}`}>{filter.count}</span>
             </button>;
           })}
           {canManageSongLibrary && duplicateSongGroups.length > 0 && (
@@ -2155,10 +2155,10 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
-        className="desktop-songs-list divide-y divide-white/[0.07]"
+        className="desktop-songs-list divide-y divide-gray-200 dark:divide-white/[0.07]"
       >
         {filteredSongs.length === 0 ? (
-          <p className="rounded-[0.75rem] bg-[#181818] px-5 py-12 text-center text-sm text-gray-400 dark:text-white/30">No songs found</p>
+          <p className="rounded-[0.75rem] bg-gray-50 px-5 py-12 text-center text-sm text-gray-500 dark:bg-[#181818] dark:text-white/30">No songs found</p>
         ) : (
           <>
             {visibleSongs.map(song => {
@@ -2226,7 +2226,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                       onClick={() => openEditLibrarySong(song)}
                       disabled={cacheState !== 'fresh'}
                       aria-label={`Edit ${song.title}`}
-                      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.035] text-white/45 transition-colors hover:border-emerald-400/40 hover:bg-emerald-500/[0.12] hover:text-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 active:scale-[0.96] sm:h-9 sm:w-9"
+                      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition-colors hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 active:scale-[0.96] dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-white/45 dark:hover:border-emerald-400/40 dark:hover:bg-emerald-500/[0.12] dark:hover:text-emerald-300 sm:h-9 sm:w-9"
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
@@ -2235,7 +2235,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                       onClick={() => requestDeleteSong(song.id)}
                       disabled={cacheState !== 'fresh'}
                       aria-label={`Delete ${song.title}`}
-                      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-red-500/15 bg-red-500/[0.08] text-red-300 transition-colors hover:border-red-400/45 hover:bg-red-500/[0.16] hover:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/70 active:scale-[0.96] sm:h-9 sm:w-9"
+                      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-red-200 bg-red-50 text-red-600 transition-colors hover:border-red-300 hover:bg-red-100 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/70 active:scale-[0.96] dark:border-red-500/15 dark:bg-red-500/[0.08] dark:text-red-300 dark:hover:border-red-400/45 dark:hover:bg-red-500/[0.16] dark:hover:text-red-200 sm:h-9 sm:w-9"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -2265,7 +2265,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
           <button
             type="button"
             onClick={showMoreSongs}
-            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.06] px-5 text-[12px] font-black text-white transition-colors hover:bg-white/[0.10] active:scale-[0.98] sm:w-auto sm:min-w-52"
+            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-5 text-[12px] font-black text-gray-800 transition-colors hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800 active:scale-[0.98] dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white dark:hover:border-white/[0.08] dark:hover:bg-white/[0.10] dark:hover:text-white sm:w-auto sm:min-w-52"
           >
             <ChevronDown className="h-4 w-4" />
             Show {Math.min(SONG_PAGE_SIZE, remainingSongCount)} more

@@ -13,7 +13,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Layers3,
-  LayoutDashboard,
   MessageCircle,
   Monitor,
   Music2,
@@ -24,6 +23,7 @@ import {
   RefreshCw,
   Search,
   Settings,
+  ShieldCheck,
   Sparkles,
   Sun,
   Trash2,
@@ -54,20 +54,25 @@ import {
 import { supabase } from "../lib/supabase";
 import { preloadPrimaryRoutes, preloadRoute } from "../lib/routePreload";
 import { playGlobalClickSound } from "../lib/interactionSounds";
+import { useSmartBack } from "../lib/navigationHistory";
 import {
-  HomeIcon,
-  CalendarIcon,
-  NewsIcon,
-  LeaveIcon,
-  ShieldNavIcon,
-  MessageIcon,
-} from "./NavIcons";
-
-type NavIcon = React.ComponentType<{
-  active?: boolean;
-  className?: string;
-  style?: React.CSSProperties;
-}>;
+  AnnouncementsNavIcon,
+  EventsNavIcon,
+  HomeNavIcon,
+  LeaveNavIcon,
+  LibraryNavIcon,
+  MemberViewNavIcon,
+  MessagesNavIcon,
+  PrivacyNavIcon,
+  SetsNavIcon,
+  SettingsNavIcon,
+  SongsNavIcon,
+  SoundNavIcon,
+  SwapsNavIcon,
+  TeamNavIcon,
+  VideosNavIcon,
+  type NavigationIcon as NavIcon,
+} from "./PhosphorNavIcons";
 type GlobalSearchKind = "event" | "song" | "setlist" | "person" | "page";
 interface GlobalSearchResult {
   id: string;
@@ -107,6 +112,7 @@ function AttendanceQrScanIcon({ className = "" }: { className?: string }) {
 
 interface NavItem {
   path: string;
+  activePaths?: string[];
   label: string;
   shortLabel?: string;
   icon: NavIcon;
@@ -117,26 +123,6 @@ interface NavItem {
   exact?: boolean;
 }
 
-const SetsNavIcon: NavIcon = ({ className, style }) => (
-  <ListChecks className={className} style={style} />
-);
-const LibraryNavIcon: NavIcon = ({ className, style }) => (
-  <Layers3 className={className} style={style} />
-);
-const SwapsNavIcon: NavIcon = ({ className, style }) => (
-  <ArrowLeftRight className={className} style={style} />
-);
-const TeamNavIcon: NavIcon = ({ className, style }) => (
-  <Users className={className} style={style} />
-);
-const ACTIVE_STATE_NAV_ICONS = new Set<NavIcon>([
-  HomeIcon,
-  CalendarIcon,
-  NewsIcon,
-  LeaveIcon,
-  ShieldNavIcon,
-  MessageIcon,
-]);
 const globalSearchTypeMeta: Record<
   GlobalSearchKind,
   { label: string; icon: LucideIcon; tone: string }
@@ -163,18 +149,18 @@ const globalSearchTypeMeta: Record<
 import { MESSENGER_ENABLED } from '../lib/features';
 
 const mobileNavItems: NavItem[] = ([
-  { path: "/dashboard", label: "Home", icon: HomeIcon, exact: true },
+  { path: "/dashboard", label: "Home", icon: HomeNavIcon, exact: true },
   {
     path: "/events",
     label: "Events",
-    icon: CalendarIcon,
+    icon: EventsNavIcon,
     badgeKey: "events",
     badgeColor: "red",
   },
   {
     path: "/messages",
     label: "Chat",
-    icon: MessageIcon,
+    icon: MessagesNavIcon,
     badgeKey: "messages",
     badgeColor: "red",
   },
@@ -182,7 +168,7 @@ const mobileNavItems: NavItem[] = ([
     path: "/announcements",
     label: "Announcements",
     shortLabel: "News",
-    icon: NewsIcon,
+    icon: AnnouncementsNavIcon,
     badgeKey: "announcements",
     badgeColor: "blue",
   },
@@ -193,27 +179,27 @@ const sidebarMainItems: NavItem[] = ([
   {
     path: "/dashboard",
     label: "Home",
-    icon: HomeIcon,
+    icon: HomeNavIcon,
     exact: true,
   },
   {
     path: "/events",
     label: "Events",
-    icon: CalendarIcon,
+    icon: EventsNavIcon,
     badgeKey: "events",
     badgeColor: "red",
   },
   {
     path: "/announcements",
     label: "Announcements",
-    icon: NewsIcon,
+    icon: AnnouncementsNavIcon,
     badgeKey: "announcements",
     badgeColor: "blue",
   },
   {
     path: "/messages",
     label: "Chat",
-    icon: MessageIcon,
+    icon: MessagesNavIcon,
     badgeKey: "messages",
     badgeColor: "red",
   },
@@ -268,16 +254,12 @@ function SidebarBadge({
 function Tooltip({
   label,
   active = false,
-  badge = 0,
-  badgeColor,
   touchVisible = false,
   onActivate,
   children,
 }: {
   label: string;
   active?: boolean;
-  badge?: number;
-  badgeColor?: "red" | "blue" | "amber";
   touchVisible?: boolean;
   onActivate?: () => void;
   children: React.ReactNode;
@@ -285,7 +267,7 @@ function Tooltip({
   const [visible, setVisible] = useState(false);
   return (
     <div
-      className="relative flex items-center"
+      className={`desktop-sidebar-tooltip-anchor relative flex items-center ${visible || touchVisible ? 'is-tooltip-visible' : ''} ${active ? 'is-active' : ''}`}
       onMouseEnter={() => setVisible(true)}
       onMouseLeave={() => setVisible(false)}
       onFocus={() => setVisible(true)}
@@ -297,14 +279,13 @@ function Tooltip({
           <motion.button
             type="button"
             onClick={onActivate}
-            initial={{ opacity: 0, x: -4 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -4 }}
-            transition={{ duration: 0.12 }}
-            className={`absolute left-[calc(100%-0.35rem)] z-50 flex h-11 min-w-40 items-center justify-between gap-3 whitespace-nowrap rounded-r-[0.85rem] border-y border-r px-4 text-left text-[13px] font-bold text-white shadow-[18px_14px_30px_-20px_rgba(0,0,0,0.95)] ${active ? "border-white/[0.10] bg-[#202020]" : "border-white/[0.08] bg-[#151515]"}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+            className="desktop-sidebar-tooltip absolute inset-y-0 left-0 z-50 flex w-max min-w-[108px] items-center whitespace-nowrap rounded-[9px] border pl-[52px] pr-3 text-left text-[12px] font-semibold leading-none"
           >
             <span>{label}</span>
-            {badge > 0 && <SidebarBadge count={badge} color={badgeColor} />}
           </motion.button>
         )}
       </AnimatePresence>
@@ -369,6 +350,8 @@ export function Navigation({
   );
   const [savingNavStyle, setSavingNavStyle] = useState(false);
   const [drawerPanel, setDrawerPanel] = useState<"menu" | "settings">("menu");
+  const isMobileSettingsRoute = location.pathname === '/settings';
+  const smartBackFromSettings = useSmartBack('/dashboard');
   const [switchingAccountId, setSwitchingAccountId] = useState<string | null>(
     null,
   );
@@ -421,6 +404,15 @@ export function Navigation({
 
   const isActive = useCallback(
     (item: NavItem) => {
+      if (
+        item.activePaths?.some(
+          (path) =>
+            location.pathname === path ||
+            location.pathname.startsWith(`${path}/`),
+        )
+      ) {
+        return true;
+      }
       if (item.path === "/library") {
         return ["/library", "/songs", "/sets"].some((p) =>
           location.pathname.startsWith(p),
@@ -469,8 +461,24 @@ export function Navigation({
   }, [user?.id]);
 
   useEffect(() => {
-    if (!mobileOpen) setDrawerPanel("menu");
-  }, [mobileOpen]);
+    if (isMobileSettingsRoute) {
+      setDrawerPanel('settings');
+      if (!mobileOpen) onMobileOpenChange(true);
+    } else if (!mobileOpen) {
+      setDrawerPanel('menu');
+    }
+  }, [isMobileSettingsRoute, mobileOpen, onMobileOpenChange]);
+
+  const closeMobileSettings = () => {
+    if (isMobileSettingsRoute) {
+      onMobileOpenChange(false);
+      setDrawerPanel('menu');
+      smartBackFromSettings();
+      return;
+    }
+
+    setDrawerPanel('menu');
+  };
 
   useEffect(() => {
     if (!user?.id) return;
@@ -828,21 +836,11 @@ export function Navigation({
     };
   }, [globalSearchOpen, globalSearchQuery]);
 
-  const leadershipHomePath = "/leadership/overview";
   const sidebarManagementItems: NavItem[] = [
-    ...(isLeader || isOrgAdmin
-      ? [
-          {
-            path: leadershipHomePath,
-            label: "Overview",
-            icon: ShieldNavIcon,
-          },
-        ]
-      : []),
     {
       path: canApproveLeave ? "/leadership/leave" : "/request-leave",
       label: canApproveLeave ? "Leave Queue" : "Request Leave",
-      icon: LeaveIcon,
+      icon: LeaveNavIcon,
       ...(canApproveLeave
         ? { badgeKey: "pendingLeave" as const, badgeColor: "red" as const }
         : {}),
@@ -865,13 +863,12 @@ export function Navigation({
       ? [
           {
             path: "/leadership/team",
-            label: "Team Roster",
+            activePaths: [
+              "/leadership/team",
+              "/leadership/accountability",
+            ],
+            label: "Team",
             icon: TeamNavIcon,
-          },
-          {
-            path: "/leadership/accountability",
-            label: "Accountability",
-            icon: ListChecks,
           },
         ]
       : []),
@@ -880,7 +877,7 @@ export function Navigation({
     ...(isOrgAdmin || isPlatformOwner ? [{
       path: "/admin/settings",
       label: "Admin Settings",
-      icon: Settings,
+      icon: SettingsNavIcon,
     }] : []),
   ];
   const displayName = profile?.nickname || profile?.first_name || "";
@@ -912,19 +909,19 @@ export function Navigation({
       title: "Songs",
       caption: "Charts & library",
       path: "/songs",
-      icon: Music2,
+      icon: SongsNavIcon,
     },
     {
       title: "Sets",
       caption: "Approved setlists",
       path: "/sets",
-      icon: ListChecks,
+      icon: SetsNavIcon,
     },
     {
       title: "Videos",
       caption: "Training media",
       path: "/videos",
-      icon: Video,
+      icon: VideosNavIcon,
     },
   ];
   const isDesktopListItemActive = (path: string) => {
@@ -936,7 +933,9 @@ export function Navigation({
     : location.pathname.startsWith('/announcements/') ? 'Announcement'
     : location.pathname.startsWith('/messages/') ? 'Conversation'
     : location.pathname.startsWith('/dashboard') ? 'Home'
-    : [...sidebarMainItems, ...sidebarManagementItems, ...sidebarAdminItems].find((entry) => isDesktopListItemActive(entry.path))?.label
+    : location.pathname.startsWith('/settings/privacy') ? 'Privacy & Account'
+    : location.pathname.startsWith('/settings/sounds') ? 'Sound & Feedback'
+    : [...sidebarMainItems, ...sidebarManagementItems, ...sidebarAdminItems].find((entry) => isActive(entry))?.label
       || desktopLibraryItems.find((entry) => isDesktopListItemActive(entry.path))?.title
       || 'Workspace';
 
@@ -1129,12 +1128,13 @@ export function Navigation({
 
   const leadershipMenuItems: typeof baseProfileMenuItems = [
     {
-      icon: LayoutDashboard,
-      label: "Overview",
-      desc: "Leadership tools at a glance",
-      path: "/leadership/overview",
-      show: isLeader || isOrgAdmin,
-      color: "#10b981",
+      icon: Calendar,
+      label: "Leave Queue",
+      desc: "Review leave requests",
+      path: "/leadership/leave",
+      show: !!canApproveLeave,
+      badge: unread.pendingLeave,
+      color: "#f59e0b",
     },
     {
       icon: ListChecks,
@@ -1146,17 +1146,8 @@ export function Navigation({
       color: "#16a34a",
     },
     {
-      icon: Calendar,
-      label: "Leave Queue",
-      desc: "Review leave requests",
-      path: "/leadership/leave",
-      show: !!canApproveLeave,
-      badge: unread.pendingLeave,
-      color: "#f59e0b",
-    },
-    {
       icon: ArrowLeftRight,
-      label: "Approve Swaps",
+      label: "Swap Requests",
       desc: "Review swap requests",
       path: "/leadership/swaps",
       show: isLeader || capabilities.approve_swaps,
@@ -1165,19 +1156,15 @@ export function Navigation({
     },
     {
       icon: Users,
-      label: "Team Roster",
-      desc: "Manage team members",
+      label: "Team",
+      desc: "Roster and accountability",
       path: "/leadership/team",
-      show: isLeader || isOrgAdmin || capabilities.manage_members,
+      show:
+        isLeader ||
+        isOrgAdmin ||
+        capabilities.manage_members ||
+        capabilities.manage_accountability,
       color: "#8b5cf6",
-    },
-    {
-      icon: ListChecks,
-      label: "Accountability",
-      desc: "Review attendance and conduct",
-      path: "/leadership/accountability",
-      show: isLeader || isOrgAdmin || capabilities.manage_accountability,
-      color: "#f59e0b",
     },
   ].filter((item) => item.show);
 
@@ -1198,14 +1185,16 @@ export function Navigation({
     desc: "Navigation, accounts, notifications",
     show: true,
     color: "#94a3b8",
-    action: () => setDrawerPanel("settings"),
+    action: () => {
+      setDrawerPanel('settings');
+    },
     keepDrawerOpen: true,
   };
 
-  const primaryMenuItems = [
-    ...baseProfileMenuItems.filter((item) => item.show),
-    settingsMenuItem,
-  ];
+  const primaryMenuItems = baseProfileMenuItems.filter((item) => item.show);
+  const mobileLibraryMenuItems = ["Songs", "Sets", "Videos"]
+    .map((label) => primaryMenuItems.find((item) => item.label === label))
+    .filter((item): item is (typeof primaryMenuItems)[number] => Boolean(item));
 
   const openProfileMenuAction = (item: (typeof primaryMenuItems)[number]) => {
     if (item.action) {
@@ -1222,7 +1211,9 @@ export function Navigation({
     const badge = getBadgeCount(item);
     const iconTone = active
       ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
-      : "bg-slate-100 text-slate-600 dark:bg-white/[0.06] dark:text-white/55";
+      : isCollapsed
+        ? "bg-transparent text-slate-600 dark:text-white/55"
+        : "bg-slate-100 text-slate-600 dark:bg-white/[0.06] dark:text-white/55";
 
     if (isCollapsed) {
       const openCollapsedItem = () => {
@@ -1242,8 +1233,6 @@ export function Navigation({
           key={item.path}
           label={item.label}
           active={active}
-          badge={badge}
-          badgeColor={item.badgeColor}
           touchVisible={touchPreviewPath === item.path}
           onActivate={() => {
             setTouchPreviewPath(null);
@@ -1280,14 +1269,15 @@ export function Navigation({
             <div className="relative flex h-9 w-9 items-center justify-center overflow-visible">
               <span className={`absolute inset-0 flex items-center justify-center overflow-hidden rounded-[0.6rem] ${iconTone}`}>
                 <Icon
-                  {...(ACTIVE_STATE_NAV_ICONS.has(Icon) ? { active } : {})}
+                  active={active}
                   className="relative h-[18px] w-[18px] shrink-0"
-                  style={{ width: "18px", height: "18px", strokeWidth: 2.1 }}
+                  style={{ width: "18px", height: "18px" }}
                 />
               </span>
               {badge > 0 && (
                 <span
-                  className={`absolute -right-1.5 -top-1.5 z-10 flex h-[15px] min-w-[15px] items-center justify-center rounded-full px-0.5 text-[8px] font-bold leading-none text-white ring-2 ring-[#050505] ${item.badgeColor === "blue" ? "bg-blue-500" : item.badgeColor === "amber" ? "bg-amber-500" : "bg-red-500"}`}
+                  data-sidebar-badge
+                  className={`absolute -right-0.5 -top-0.5 z-20 flex h-4 min-w-4 items-center justify-center rounded-full px-0.5 text-[9px] font-bold leading-none text-white ring-2 ring-[#f8fafc] dark:ring-[#101010] ${item.badgeColor === "blue" ? "bg-blue-500" : item.badgeColor === "amber" ? "bg-amber-500" : "bg-red-500"}`}
                 >
                   {badge > 9 ? "9+" : badge}
                 </span>
@@ -1315,8 +1305,8 @@ export function Navigation({
         }}
         className={`desktop-nav-link relative group flex h-12 w-full items-center gap-3 rounded-[0.8rem] border px-1.5 text-[13px] transition-all duration-200 ${
           active
-                ? "border-slate-200 bg-white font-bold text-slate-900 dark:border-white/[0.10] dark:bg-white/[0.08] dark:text-white"
-                : "border-transparent font-semibold text-slate-600 hover:border-slate-200 hover:bg-white hover:text-slate-900 dark:text-white/62 dark:hover:border-white/[0.08] dark:hover:bg-white/[0.065] dark:hover:text-white"
+                ? "border-slate-200 bg-white font-semibold text-slate-900 dark:border-white/[0.10] dark:bg-white/[0.08] dark:text-white"
+                : "border-transparent font-normal text-slate-600 hover:border-slate-200 hover:bg-white hover:text-slate-900 dark:text-white/62 dark:hover:border-white/[0.08] dark:hover:bg-white/[0.065] dark:hover:text-white"
         }`}
       >
         {active && (
@@ -1330,9 +1320,9 @@ export function Navigation({
           className={`relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-[0.6rem] ${iconTone}`}
         >
           <Icon
-			{...(ACTIVE_STATE_NAV_ICONS.has(Icon) ? { active } : {})}
+            active={active}
             className="relative h-[18px] w-[18px] shrink-0"
-            style={{ width: "18px", height: "18px", strokeWidth: 2.1 }}
+            style={{ width: "18px", height: "18px" }}
           />
         </span>
         <span className="relative flex-1 truncate text-left">{item.label}</span>
@@ -1350,9 +1340,9 @@ export function Navigation({
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => setDrawerPanel("menu")}
+            onClick={closeMobileSettings}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.08] text-gray-500 transition-colors hover:bg-black/[0.04] hover:text-gray-900 dark:border-white/[0.08] dark:text-gray-300 dark:hover:bg-white/[0.06] dark:hover:text-white"
-            aria-label="Back to menu"
+            aria-label="Back to previous page"
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
@@ -1364,14 +1354,6 @@ export function Navigation({
               Appearance, navigation, accounts
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => onMobileOpenChange(false)}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.08] text-gray-500 transition-colors hover:bg-black/[0.04] hover:text-gray-900 dark:border-white/[0.08] dark:text-gray-300 dark:hover:bg-white/[0.06] dark:hover:text-white"
-            aria-label="Close menu"
-          >
-            <X className="h-4 w-4" />
-          </button>
         </div>
       </div>
 
@@ -1561,8 +1543,19 @@ export function Navigation({
               </span>
               <ChevronRight className="h-4 w-4 text-gray-400 dark:text-white/40" />
             </button>
-            <button type="button" onClick={() => handleNav('/settings/sounds')} className="mt-2 flex min-h-11 w-full items-center gap-3 rounded-2xl px-3.5 text-left text-sm font-bold text-gray-700 hover:bg-black/[0.04] dark:text-white/75 dark:hover:bg-white/[0.06]">
-              <Volume2 className="h-5 w-5" /> Sound & feedback
+            <button
+              type="button"
+              onClick={() => handleNav('/settings/sounds')}
+              className="mt-2 flex w-full items-center gap-3 rounded-[1.4rem] border border-black/[0.06] bg-white/72 px-3.5 py-3.5 text-left transition-colors hover:bg-white dark:border-white/[0.08] dark:bg-white/[0.045] dark:hover:bg-white/[0.07]"
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-400/[0.13] text-emerald-700 dark:text-emerald-200">
+                <Volume2 className="h-5 w-5" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[14px] font-black text-gray-900 dark:text-white">Sound & feedback</span>
+                <span className="mt-0.5 block text-[11px] font-semibold text-gray-500 dark:text-white/45">Choose interaction sounds for this device</span>
+              </span>
+              <ChevronRight className="h-4 w-4 text-gray-400 dark:text-white/40" />
             </button>
           </section>
 
@@ -1571,6 +1564,29 @@ export function Navigation({
               Device Alerts
             </p>
             <PushNotificationSetting surface="drawer" />
+          </section>
+
+          <section className="pb-4" aria-labelledby="mobile-privacy-help-title">
+            <p id="mobile-privacy-help-title" className="mb-2 px-1 text-[10px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
+              Privacy & help
+            </p>
+            <div className="overflow-hidden rounded-[1.4rem] border border-black/[0.06] bg-white/72 dark:border-white/[0.08] dark:bg-white/[0.045]">
+              <button type="button" onClick={() => handleNav('/settings/privacy')} className="flex min-h-14 w-full items-center gap-3 px-4 text-left text-[13px] font-bold text-gray-800 hover:bg-black/[0.04] dark:text-white dark:hover:bg-white/[0.06]">
+                <ShieldCheck className="h-5 w-5 shrink-0 text-emerald-700 dark:text-emerald-300" />
+                <span className="flex-1">Privacy & account</span>
+                <ChevronRight className="h-4 w-4 text-gray-400 dark:text-white/40" />
+              </button>
+              {([
+                { label: 'Privacy notice', href: '/privacy.html' },
+                { label: 'Delete account or data', href: '/delete-account.html' },
+                { label: 'Pilot terms', href: '/pilot-terms.html' },
+                { label: 'Contact support', href: 'mailto:babcreations11@gmail.com?subject=ServeSync%20account%20or%20privacy%20request' },
+              ] as const).map(({ label, href }) => (
+                <a key={label} href={href} className="flex min-h-12 items-center border-t border-black/[0.06] px-4 text-[13px] font-semibold text-gray-700 hover:bg-black/[0.04] dark:border-white/[0.08] dark:text-white/75 dark:hover:bg-white/[0.06]" {...(href.startsWith('/') ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>
+                  {label}
+                </a>
+              ))}
+            </div>
           </section>
         </div>
       </div>
@@ -1720,65 +1736,6 @@ export function Navigation({
                   <ChevronRight className="h-4 w-4 text-white/28 transition-colors group-hover:text-white/72" />
                 </button>
               </div>
-
-              <div className="border-b border-white/[0.08] p-2">
-                <button
-                  type="button"
-                  onClick={() => handleNav('/settings/sounds')}
-                  className="flex w-full items-center gap-3 rounded-[0.7rem] px-3 py-2.5 text-left transition-colors hover:bg-white/[0.06]"
-                  role="menuitem"
-                >
-                  <span className="flex h-9 w-9 items-center justify-center rounded-[0.65rem] bg-emerald-400/[0.13] text-emerald-200">
-                    <Volume2 className="h-[18px] w-[18px]" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[13px] font-black text-white">Sound & feedback</span>
-                    <span className="mt-0.5 block text-[10px] font-semibold text-white/42">Volume and interaction sounds</span>
-                  </span>
-                  <ChevronRight className="h-4 w-4 text-white/30" />
-                </button>
-              </div>
-
-              {canPreviewMemberView && (
-                <div className="border-b border-white/[0.08] p-2">
-                  <button
-                    type="button"
-                    onClick={handleToggleMemberView}
-                    className={`flex w-full items-center gap-3 rounded-[0.7rem] px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 ${
-                      isViewingAsMember || isViewingAsSongLeader
-                        ? "bg-amber-400/[0.10] hover:bg-amber-400/[0.16] focus-visible:ring-amber-400/70"
-                        : "hover:bg-white/[0.06] focus-visible:ring-sky-400/70"
-                    }`}
-                    role="menuitem"
-                  >
-                    <span className={`flex h-9 w-9 items-center justify-center rounded-[0.65rem] ${
-                      isViewingAsMember || isViewingAsSongLeader
-                        ? "bg-amber-400/[0.15] text-amber-200"
-                        : "bg-sky-400/[0.13] text-sky-200"
-                    }`}>
-                      {isViewingAsMember || isViewingAsSongLeader
-                        ? <EyeOff className="h-[18px] w-[18px]" />
-                        : <Eye className="h-[18px] w-[18px]" />}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-2 text-[13px] font-black text-white">
-                        {isViewingAsSongLeader ? "Exit Song Leader view" : isViewingAsMember ? "Exit member view" : "View as member"}
-                        {(isViewingAsMember || isViewingAsSongLeader) && (
-                          <span className="rounded-full bg-amber-400/[0.14] px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.1em] text-amber-200">
-                            Active
-                          </span>
-                        )}
-                      </span>
-                      <span className="mt-0.5 block text-[10px] font-semibold text-white/42">
-                        {isViewingAsMember || isViewingAsSongLeader
-                          ? "Restore your admin and leadership tools"
-                          : "Hide admin and leadership tools temporarily"}
-                      </span>
-                    </span>
-                    <ChevronRight className="h-4 w-4 text-white/30" />
-                  </button>
-                </div>
-              )}
 
               <div className="border-t border-white/[0.08] p-2">
                 <div className="mb-2 flex items-center justify-between gap-2 px-1">
@@ -2057,7 +2014,7 @@ export function Navigation({
       <AnimatePresence>
         {mobileOpen && !hideMobileAll && !hideMobileHeader && (
           <>
-            <motion.button
+            {!isMobileSettingsRoute && <motion.button
               aria-label="Close account menu"
               className="fixed inset-0 z-[45] bg-black/42 backdrop-blur-[2px] backdrop-saturate-75 touch-action-none lg:hidden"
               initial={{ opacity: 0 }}
@@ -2065,13 +2022,13 @@ export function Navigation({
               exit={{ opacity: 0 }}
               transition={{ duration: 0.18 }}
               onClick={() => onMobileOpenChange(false)}
-            />
+            />}
             <motion.aside
-              className="fixed inset-y-0 left-0 z-[70] w-[min(82vw,340px)] overflow-hidden touch-action-none bg-white text-slate-900 shadow-[24px_0_70px_-44px_rgba(0,0,0,0.9)] dark:bg-[#121212] dark:text-white lg:hidden"
+              className={`fixed inset-y-0 left-0 z-[70] overflow-hidden touch-action-none bg-white text-slate-900 dark:bg-[#121212] dark:text-white lg:hidden ${isMobileSettingsRoute ? 'w-full' : 'w-[min(82vw,340px)] shadow-[24px_0_70px_-44px_rgba(0,0,0,0.9)]'}`}
               style={{ overscrollBehaviorY: "none" }}
-              initial={{ x: "-100%" }}
+              initial={{ x: isMobileSettingsRoute ? '100%' : '-100%' }}
               animate={{ x: 0 }}
-              exit={{ x: "-100%" }}
+              exit={{ x: isMobileSettingsRoute ? '100%' : '-100%' }}
               transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
             >
               <div className="flex h-full min-h-0 flex-col">
@@ -2121,24 +2078,19 @@ export function Navigation({
                         mobileMenuScrollTopRef.current =
                           event.currentTarget.scrollTop;
                       }}
-                      className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain touch-action-pan-y px-3 py-3"
+                      className="no-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-y-contain touch-action-pan-y px-3 py-3"
                     >
-                      <button
-                        type="button"
-                        onClick={() => setDrawerPanel("settings")}
-                        className="group mb-2 flex w-full items-center gap-3.5 rounded-2xl border border-black/[0.06] bg-black/[0.02] px-3 py-3.5 text-left transition-colors hover:bg-black/[0.05] dark:border-white/[0.08] dark:bg-white/[0.035] dark:hover:bg-white/[0.07]"
-                      >
-                        <span className="flex h-7 w-7 shrink-0 items-center justify-center text-gray-900 dark:text-white">
-                          {mode === 'system' ? <Monitor className="h-5 w-5" /> : theme === 'dark' ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block text-[16px] font-bold text-gray-900 dark:text-white">Appearance</span>
-                          <span className="block text-[11px] font-semibold text-gray-500 dark:text-gray-300">{mode === 'system' ? 'System' : theme === 'dark' ? 'Dark' : 'Light'} mode · Tap to change</span>
-                        </span>
-                        <ChevronRight className="h-[18px] w-[18px] shrink-0 text-gray-400 dark:text-gray-500" />
-                      </button>
                       {primaryMenuItems
-                        .filter((item) => item.label !== "Profile")
+                        .filter(
+                          (item) =>
+                            ![
+                              "Profile",
+                              "App updates",
+                              "Songs",
+                              "Videos",
+                              "Sets",
+                            ].includes(item.label),
+                        )
                         .map((item) => {
                           const Icon = item.icon;
                           return (
@@ -2167,6 +2119,65 @@ export function Navigation({
                             </button>
                           );
                         })}
+
+                      {mobileLibraryMenuItems.length > 0 && (
+                        <div className="pt-3">
+                          <div className="px-3 pb-2">
+                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-gray-400 dark:text-gray-400">
+                              Library
+                            </p>
+                          </div>
+                          {mobileLibraryMenuItems.map((item) => {
+                            const Icon = item.icon;
+                            return (
+                              <button
+                                key={item.path || item.label}
+                                onClick={() => openProfileMenuAction(item)}
+                                className="group flex w-full items-center gap-3.5 rounded-2xl px-3 py-3.5 text-left transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.055]"
+                              >
+                                <span className="relative flex h-7 w-7 shrink-0 items-center justify-center text-gray-900 dark:text-white">
+                                  <Icon className="h-5 w-5" />
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-[16px] font-bold text-gray-900 dark:text-white">
+                                    {item.label}
+                                  </span>
+                                  <span className="mt-0.5 block truncate text-[11px] font-semibold text-gray-500 dark:text-gray-300">
+                                    {item.desc}
+                                  </span>
+                                </span>
+                                <ChevronRight className="h-[18px] w-[18px] shrink-0 text-gray-400 transition-colors group-hover:text-gray-700 dark:text-gray-500 dark:group-hover:text-gray-200" />
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {leadershipMenuItems.length === 0 && adminMenuItems.length === 0 && (
+                        <div className="mx-3 mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-500/20 dark:bg-emerald-500/[0.08]">
+                          <div className="flex items-start gap-3">
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-700 shadow-sm ring-1 ring-emerald-100 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-500/20">
+                              <Calendar className="h-5 w-5" />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-[14px] font-black text-gray-900 dark:text-white">
+                                Service reminder
+                              </span>
+                              <span className="mt-1 block text-[11px] font-semibold leading-5 text-gray-600 dark:text-gray-300">
+                                Check your next assignment and report unavailable dates early.
+                              </span>
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleNav('/events')}
+                            className="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-[12px] font-black text-white transition-colors hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 active:scale-[0.98] dark:bg-emerald-500 dark:text-black dark:hover:bg-emerald-400"
+                          >
+                            Review my events
+                            <ChevronRight className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
 
                       {leadershipMenuItems.length > 0 && (
                         <div className="pt-3">
@@ -2245,13 +2256,13 @@ export function Navigation({
                       )}
                     </div>
 
-                    <div className="border-t border-black/[0.06] px-3 pb-3 pt-3 dark:border-white/[0.08]">
+                    <div className="flex items-center gap-2 border-t border-black/[0.06] px-3 pb-3 pt-3 dark:border-white/[0.08]">
                       <button
                         onClick={() => {
                           onMobileOpenChange(false);
                           void signOut().catch(error => toast('error', error instanceof Error ? error.message : 'Could not sign out.'));
                         }}
-                        className="flex w-full items-center gap-3 rounded-2xl px-3 py-3.5 text-left text-red-500 transition-colors hover:bg-red-500/10 dark:text-red-400"
+                        className="flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-2xl px-3 text-left text-red-500 transition-colors hover:bg-red-500/10 dark:text-red-400"
                       >
                         <span className="flex h-7 w-7 shrink-0 items-center justify-center">
                           <LogOut className="h-5 w-5" />
@@ -2259,6 +2270,15 @@ export function Navigation({
                         <span className="min-w-0 flex-1 text-[16px] font-bold">
                           Sign out
                         </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openProfileMenuAction(settingsMenuItem)}
+                        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-black/[0.08] text-gray-700 transition-colors hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-white/[0.10] dark:text-gray-200 dark:hover:bg-white/[0.07]"
+                        aria-label="Open settings"
+                        title="Settings"
+                      >
+                        <Settings className="h-5 w-5" aria-hidden="true" />
                       </button>
                     </div>
                   </>
@@ -2340,12 +2360,12 @@ export function Navigation({
                           className={`relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-[0.6rem] ${active ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" : "bg-slate-100 text-slate-600 dark:bg-white/[0.06] dark:text-white/55"}`}
                         >
                           <entry.icon
+                            active={active}
                             className="h-[18px] w-[18px]"
-                            strokeWidth={2.1}
                           />
                         </span>
                         <span className="min-w-0">
-                          <span className="block truncate text-[13px] font-bold leading-tight text-slate-900 dark:text-white">
+                          <span className="block truncate text-[12px] font-semibold leading-tight text-slate-900 dark:text-white">
                             {entry.title}
                           </span>
                           <span className="mt-0.5 block truncate text-[11px] font-semibold leading-tight text-slate-500 dark:text-white/45">
@@ -2362,7 +2382,7 @@ export function Navigation({
             )}
 
             {sidebarManagementItems.length > 0 && (
-              <div className="mt-5">
+              <div className="mt-5 border-t border-slate-200 pt-4 dark:border-white/[0.08]">
                 {!collapsed && (
                   <div className="mb-2 px-2.5">
                     <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500 dark:text-white/45">
@@ -2370,7 +2390,6 @@ export function Navigation({
                     </p>
                   </div>
                 )}
-                {collapsed && <div className="h-3" />}
                 <div className="space-y-1.5">
                   {sidebarManagementItems.map((item) =>
                     renderNavItem(item, collapsed),
@@ -2379,7 +2398,7 @@ export function Navigation({
               </div>
             )}
             {sidebarAdminItems.length > 0 && (
-              <div className="mt-5">
+              <div className="mt-5 border-t border-slate-200 pt-4 dark:border-white/[0.08]">
                 {!collapsed && (
                   <div className="mb-2 px-2.5">
                     <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500 dark:text-white/45">
@@ -2387,7 +2406,6 @@ export function Navigation({
                     </p>
                   </div>
                 )}
-                {collapsed && <div className="h-3" />}
                 <div className="space-y-1.5">
                   {sidebarAdminItems.map((item) => renderNavItem(item, collapsed))}
                 </div>
@@ -2395,23 +2413,56 @@ export function Navigation({
             )}
           </motion.div>
           {!collapsed && (
-            <div className="flex shrink-0 flex-col items-stretch border-t border-[#d3d4dd] bg-[#e6e7ef] px-4 py-2 dark:border-white/[0.09] dark:bg-[#101010]">
-              <button type="button" onClick={toggleTheme} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} className="flex h-10 items-center gap-2 rounded-xl px-2 text-xs font-bold text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-white/[0.08]">
+            <div className="desktop-sidebar-utilities flex shrink-0 flex-col items-stretch border-t border-[#d3d4dd] bg-transparent px-[11px] py-2 dark:border-white/[0.09]">
+              <div className="mb-1 border-b border-slate-300/80 pb-1 dark:border-white/[0.08]">
+                <button type="button" onClick={() => handleNav('/settings/privacy')} aria-current={isDesktopListItemActive('/settings/privacy') ? 'page' : undefined} className="desktop-sidebar-utility-link flex h-9 w-full items-center gap-2 rounded-[5px] px-2 text-xs font-semibold text-slate-600 transition-colors dark:text-slate-300">
+                  <PrivacyNavIcon active={isDesktopListItemActive('/settings/privacy')} className="h-[18px] w-[18px]" />
+                  Privacy &amp; Account
+                </button>
+                <button type="button" onClick={() => handleNav('/settings/sounds')} aria-current={isDesktopListItemActive('/settings/sounds') ? 'page' : undefined} className="desktop-sidebar-utility-link flex h-9 w-full items-center gap-2 rounded-[5px] px-2 text-xs font-semibold text-slate-600 transition-colors dark:text-slate-300">
+                  <SoundNavIcon active={isDesktopListItemActive('/settings/sounds')} className="h-[18px] w-[18px]" />
+                  Sound &amp; Feedback
+                </button>
+                {canPreviewMemberView && (
+                  <button type="button" onClick={handleToggleMemberView} aria-pressed={isViewingAsMember || isViewingAsSongLeader} className="desktop-sidebar-utility-link flex h-9 w-full items-center gap-2 rounded-[5px] px-2 text-xs font-semibold text-slate-600 transition-colors dark:text-slate-300">
+                    <MemberViewNavIcon active={isViewingAsMember || isViewingAsSongLeader} className="h-[18px] w-[18px]" />
+                    {isViewingAsSongLeader ? 'Exit Song Leader View' : isViewingAsMember ? 'Exit Member View' : 'View as Member'}
+                  </button>
+                )}
+              </div>
+              <button type="button" onClick={toggleTheme} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} className="desktop-sidebar-utility-link flex h-9 items-center gap-2 rounded-[5px] px-2 text-xs font-semibold text-slate-600 transition-colors dark:text-slate-300">
                 {theme === 'dark' ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
                 {theme === 'dark' ? 'Light mode' : 'Dark mode'}
               </button>
-              <button type="button" onClick={() => onCollapsedChange(true)} aria-label="Collapse sidebar" className="flex h-10 items-center gap-2 rounded-xl px-2 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-white/[0.08]">
+              <button type="button" onClick={() => onCollapsedChange(true)} aria-label="Collapse sidebar" className="desktop-sidebar-utility-link flex h-9 items-center gap-2 rounded-[5px] px-2 text-xs font-semibold text-slate-600 transition-colors dark:text-slate-300">
                 <PanelLeftClose className="h-[18px] w-[18px]" />
                 Collapse
               </button>
             </div>
           )}
           {collapsed && (
-            <div className="mt-auto flex flex-col items-center gap-2 border-t border-[#d3d4dd] bg-[#e6e7ef] px-2 py-3 dark:border-white/[0.09] dark:bg-[#101010]">
-              <button type="button" onClick={toggleTheme} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-white/[0.08]">
+            <div className="desktop-sidebar-utilities mt-auto flex flex-col items-center gap-2 border-t border-[#d3d4dd] bg-transparent px-2 py-3 dark:border-white/[0.09]">
+              <Tooltip label="Privacy & Account" active={isDesktopListItemActive('/settings/privacy')} onActivate={() => handleNav('/settings/privacy')}>
+                <button type="button" onClick={() => handleNav('/settings/privacy')} aria-label="Privacy & Account" aria-current={isDesktopListItemActive('/settings/privacy') ? 'page' : undefined} className="desktop-sidebar-utility-link flex h-10 w-10 items-center justify-center rounded-[5px] text-slate-600 transition-colors dark:text-slate-300">
+                  <PrivacyNavIcon active={isDesktopListItemActive('/settings/privacy')} className="h-[19px] w-[19px]" />
+                </button>
+              </Tooltip>
+              <Tooltip label="Sound & Feedback" active={isDesktopListItemActive('/settings/sounds')} onActivate={() => handleNav('/settings/sounds')}>
+                <button type="button" onClick={() => handleNav('/settings/sounds')} aria-label="Sound & Feedback" aria-current={isDesktopListItemActive('/settings/sounds') ? 'page' : undefined} className="desktop-sidebar-utility-link flex h-10 w-10 items-center justify-center rounded-[5px] text-slate-600 transition-colors dark:text-slate-300">
+                  <SoundNavIcon active={isDesktopListItemActive('/settings/sounds')} className="h-[19px] w-[19px]" />
+                </button>
+              </Tooltip>
+              {canPreviewMemberView && (
+                <Tooltip label={isViewingAsSongLeader ? 'Exit Song Leader View' : isViewingAsMember ? 'Exit Member View' : 'View as Member'} active={isViewingAsMember || isViewingAsSongLeader} onActivate={handleToggleMemberView}>
+                  <button type="button" onClick={handleToggleMemberView} aria-label={isViewingAsSongLeader ? 'Exit Song Leader View' : isViewingAsMember ? 'Exit Member View' : 'View as Member'} aria-pressed={isViewingAsMember || isViewingAsSongLeader} className="desktop-sidebar-utility-link flex h-10 w-10 items-center justify-center rounded-[5px] text-slate-600 transition-colors dark:text-slate-300">
+                    <MemberViewNavIcon active={isViewingAsMember || isViewingAsSongLeader} className="h-[19px] w-[19px]" />
+                  </button>
+                </Tooltip>
+              )}
+              <button type="button" onClick={toggleTheme} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} className="desktop-sidebar-utility-link flex h-10 w-10 items-center justify-center rounded-[5px] text-slate-600 transition-colors dark:text-slate-300">
                 {theme === 'dark' ? <Sun className="h-[19px] w-[19px]" /> : <Moon className="h-[19px] w-[19px]" />}
               </button>
-              <button type="button" onClick={() => onCollapsedChange(false)} aria-label="Expand sidebar" title="Expand sidebar" className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-600 transition-colors hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-white/[0.08]">
+              <button type="button" onClick={() => onCollapsedChange(false)} aria-label="Expand sidebar" title="Expand sidebar" className="desktop-sidebar-utility-link flex h-10 w-10 items-center justify-center rounded-[5px] text-slate-600 transition-colors dark:text-slate-300">
                 <PanelLeftOpen className="h-[19px] w-[19px]" />
               </button>
             </div>
@@ -2541,8 +2592,8 @@ export function Navigation({
                     )}
                     <div className="relative">
                       <Icon
-						{...(ACTIVE_STATE_NAV_ICONS.has(Icon) ? { active } : {})}
-                        className="transition-colors duration-200"
+                        active={active}
+                        className="h-6 w-6 transition-colors duration-200"
                       />
                       <MobileBadge count={badge} color={item.badgeColor} />
                     </div>

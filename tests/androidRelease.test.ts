@@ -1,5 +1,13 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { newestAndroidRelease, isTrustedAndroidDownload, createAndroidUpdateChecker } from '../src/lib/androidRelease';
+
+const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+assert.match(
+  packageJson.scripts['mobile:apk'],
+  /(?:^|\s)--push(?:\s|$)/,
+  'the standard APK build must include native notification support',
+);
 
 function release(build: number, version = '1.3.1') {
   const tag = `android-test-v${version}-build${build}`;

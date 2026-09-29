@@ -52,6 +52,29 @@ final result: passed
 
 ---
 
+# Android Dark Status Bar Design QA
+
+## Evidence
+
+- Source visual truth: the user's installed APK screenshot showing a white Android status-bar safe area above the dark ServeSync dashboard.
+- Target state: the native status-bar inset uses ServeSync's current light or dark app background and maintains readable system icons.
+- Implementation evidence: the Android system-bars plugin now owns an inset-sized protection view on Android 15+ and updates it whenever the app theme changes.
+
+## Checks
+
+- The Android Java source compiled successfully in the version 1.4.14 / code 35 APK.
+- Source regression coverage verifies status-bar inset sizing, background synchronization, and light/dark icon contrast.
+- Package, signature, and production asset checks passed.
+
+## Remaining visual verification
+
+- No Android device or emulator was available in this workspace, so a post-fix native screenshot could not be captured.
+- Install `output/mobile/ServeSync-1.4.14-status-bar-notifications-test.apk` on the affected Android device and compare the top safe area in both themes.
+
+final result: blocked pending physical Android screenshot
+
+---
+
 # Library Light Mode and Member Drawer Design QA
 
 ## Evidence

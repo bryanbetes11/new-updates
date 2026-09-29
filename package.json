@@ -1,7 +1,7 @@
 {
   "name": "servesync",
   "private": true,
-  "version": "1.4.13",
+  "version": "1.4.14",
   "type": "module",
   "scripts": {
     "test:attendance-privacy": "node tests/privacyInternalNotes.mjs && node tests/leadershipRoleAssignments.mjs && node tests/attendanceTeamMemberships.mjs && node tests/attendanceTeamAccess.mjs && node tests/attendanceReminderPrivacy.mjs",
@@ -21,7 +21,7 @@
     "mobile:open:android": "cap open android",
     "mobile:open:ios": "cap open ios",
     "mobile:doctor": "node scripts/mobile-doctor.mjs",
-    "mobile:apk": "node scripts/build-android.mjs",
+    "mobile:apk": "node scripts/build-android.mjs --push",
     "mobile:play": "node scripts/build-android.mjs --play",
     "test:attendance-foundation": "node tests/privacyInternalNotes.mjs && node tests/leadershipRoleAssignments.mjs && node tests/attendanceTeamMemberships.mjs"
   },

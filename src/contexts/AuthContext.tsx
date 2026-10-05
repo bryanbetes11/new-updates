@@ -11,11 +11,12 @@ import type { Organization, Profile, Role, UserRole } from '../types';
 import { androidPushAvailable, disconnectNativePush } from '../lib/nativePush';
 import { deviceCacheScope, setDeviceCacheScope } from '../lib/deviceCache';
 import { setNativeImageCacheScope } from '../lib/nativeImageCache';
+import { setWidgetScope } from '../lib/nativeWidgets';
 import { isDefinitelyInvalidSession, isOfflineNetworkError, readOfflineAccount, revokeOfflineAccount, saveOfflineAccount } from '../lib/offlineAccount';
 import { hasPlatformOwnerAccess, loadPlatformOwnerAccess, type PlatformOwnerAccess } from '../lib/platformOwnerAccess';
 
 function activateDeviceCache(scope: string | null) {
-  return Promise.all([setDeviceCacheScope(scope), setNativeImageCacheScope(scope)])
+  return Promise.all([setDeviceCacheScope(scope), setNativeImageCacheScope(scope), setWidgetScope(scope)])
     .catch(error => { console.warn('[Cache] Device cache unavailable:', error); });
 }
 

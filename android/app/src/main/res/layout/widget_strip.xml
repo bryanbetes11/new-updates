@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/widget_root"
+ android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="horizontal"
+ android:padding="8dp" android:gravity="center_vertical" android:background="@drawable/widget_light">
+ <ViewFlipper android:id="@+id/widget_flipper" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent"
+ android:inAnimation="@anim/widget_enter" android:outAnimation="@anim/widget_exit" android:animateFirstView="false" android:autoStart="false">
+  <LinearLayout android:id="@+id/widget_page_a" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" />
+  <LinearLayout android:id="@+id/widget_page_b" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" />
+ </ViewFlipper>
+ <TextView android:id="@+id/widget_next" android:layout_width="44dp" android:layout_height="match_parent"
+ android:gravity="center" android:text="›" android:textSize="26sp" android:contentDescription="Next item" android:background="@drawable/widget_ripple" />
+</LinearLayout>

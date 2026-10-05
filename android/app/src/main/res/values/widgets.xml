@@ -1,0 +1,8 @@
+<resources><string name="widget_next_label">My Next Assignment</string><string name="widget_next_description">My Next Assignment. Tap to open, choose your style, and resize from compact to expanded.</string>
+<string name="widget_schedule_label">My Schedule</string><string name="widget_schedule_description">My Schedule. Tap to open, choose your style, and resize from compact to expanded.</string>
+<string name="widget_setlist_label">Upcoming Setlist</string><string name="widget_setlist_description">Upcoming Setlist. Tap to open, choose your style, and resize from compact to expanded.</string>
+<string name="widget_news_label">Church Announcements</string><string name="widget_news_description">Church Announcements. Tap to open, choose your style, and resize from compact to expanded.</string>
+<string name="widget_pending_label">Pending Responses</string><string name="widget_pending_description">Pending Responses. Tap to open, choose your style, and resize from compact to expanded.</string>
+<string name="widget_quick_label">Quick Access</string><string name="widget_quick_description">Quick Access. Tap to open, choose your style, and resize from compact to expanded.</string>
+<string name="widget_vertical_label">Next Assignment · Vertical</string><string name="widget_vertical_description">Next Assignment · Vertical. Tap to open, choose your style, and resize from compact to expanded.</string>
+<string name="widget_wide_label">Next Assignment · Wide</string><string name="widget_wide_description">Next Assignment · Wide. Tap to open, choose your style, and resize from compact to expanded.</string></resources>

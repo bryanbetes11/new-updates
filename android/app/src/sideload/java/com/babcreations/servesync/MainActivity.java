@@ -13,6 +13,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(ScreenAwakePlugin.class);
         registerPlugin(NativeImageCachePlugin.class);
         registerPlugin(SystemBarsPlugin.class);
+        registerPlugin(HomeWidgetsPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

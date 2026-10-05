@@ -7,6 +7,7 @@ import {
 import { Outlet, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Navigation } from "./Navigation";
+import { NativeWidgetBridge } from './NativeWidgetBridge';
 import { InteractionSoundSetupModal } from "./InteractionSoundSetupModal";
 import { useAuth } from "../contexts/AuthContext";
 import { BillingStatusBanner } from "./BillingStatusBanner";
@@ -412,6 +413,7 @@ export function Layout() {
 
   return (
     <div className="desktop-workspace min-h-screen bg-[#f6f8fb] dark:bg-[#050505]" style={{ "--desktop-sidebar-width": `${desktopSidebarWidth}px` } as CSSProperties}>
+      <NativeWidgetBridge />
       {user && !staticHideNav && (
       <Navigation
           hideMobile={hideNavMobile}

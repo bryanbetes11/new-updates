@@ -101,7 +101,7 @@
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_wide" />
         </receiver>
         <activity android:name=".WidgetConfigurationActivity" android:exported="true"
-            android:theme="@android:style/Theme.Material.Light.NoActionBar"
+            android:theme="@style/WidgetEditorTheme"
             android:label="Customize ServeSync widget">
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" /></intent-filter>
         </activity>

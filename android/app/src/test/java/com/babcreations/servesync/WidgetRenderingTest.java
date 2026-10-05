@@ -70,7 +70,7 @@ public class WidgetRenderingTest {
     }
     @Test public void allPurposesSizesStylesInflateAndHaveVisibleContent() {
         int[][] sizes = {{56, 160}, {130, 64}, {160, 180}, {280, 64}, {310, 230}, {310, 360}, {500, 400}};
-        for (String kind : ServeSyncWidgetProvider.KINDS) for (String style : new String[]{"minimal", "branded", "bold"}) for (int[] size : sizes) {
+        for (String kind : ServeSyncWidgetProvider.KINDS) for (String style : new String[]{"paper", "signal"}) for (int[] size : sizes) {
             View view = inflate(kind, style, "dark", size[0], size[1], "on");
             ViewFlipper flipper = view.findViewById(R.id.widget_flipper);
             ViewGroup page = (ViewGroup) flipper.getCurrentView();
@@ -84,7 +84,7 @@ public class WidgetRenderingTest {
                 for (int textId : new int[]{R.id.widget_item_title, R.id.widget_item_subtitle, R.id.widget_item_detail}) {
                     View text = page.getChildAt(n).findViewById(textId);
                     if (text.getVisibility() == View.VISIBLE) {
-                        assertTrue(kind + " text fits row at " + size[0] + "x" + size[1], text.getTop() >= 0 && text.getBottom() <= page.getChildAt(n).getHeight());
+                        assertTrue(kind + " text fits row at " + size[0] + "x" + size[1], text.getTop() >= 0 && text.getBottom() <= ((View)text.getParent()).getHeight());
                     }
                 }
             }
@@ -94,10 +94,11 @@ public class WidgetRenderingTest {
         File directory = new File("build/widget-previews"); directory.mkdirs();
         String[] kinds = {"next", "schedule", "setlist", "news", "pending", "quick"};
         int[][] sizes = {{64, 180}, {310, 230}, {310, 360}, {310, 230}, {160, 180}, {160, 76}};
-        for (int i = 0; i < kinds.length; i++) {
-            View view = inflate(kinds[i], i % 3 == 0 ? "bold" : i % 3 == 1 ? "branded" : "minimal", i % 2 == 0 ? "dark" : "light", sizes[i][0], sizes[i][1], "off");
-            Bitmap bitmap = Bitmap.createBitmap(sizes[i][0], sizes[i][1], Bitmap.Config.ARGB_8888); view.draw(new Canvas(bitmap));
-            try (FileOutputStream output = new FileOutputStream(new File(directory, kinds[i] + ".png"))) { bitmap.compress(Bitmap.CompressFormat.PNG, 100, output); }
+        for (String style : new String[]{"paper", "signal"}) for (int i=0;i<kinds.length;i++) {
+            int width=kinds[i].equals("pending")?160:310, height=kinds[i].equals("quick")?100:kinds[i].equals("pending")?230:300;
+            View view=inflate(kinds[i],style,"design",width,height,"off");
+            Bitmap bitmap=Bitmap.createBitmap(width,height,Bitmap.Config.ARGB_8888);view.draw(new Canvas(bitmap));
+            try(FileOutputStream output=new FileOutputStream(new File(directory,style+"-"+kinds[i]+".png"))){bitmap.compress(Bitmap.CompressFormat.PNG,100,output);}
         }
     }
     @Test public void pagingIsLocalAndRejectsOtherAccount() {
@@ -171,21 +172,79 @@ public class WidgetRenderingTest {
         try (var controller = Robolectric.buildActivity(WidgetConfigurationActivity.class, intent).setup().visible()) {
             WidgetConfigurationActivity activity = controller.get(); View root = activity.getWindow().getDecorView();
             Shadows.shadowOf(Looper.getMainLooper()).idle();
-            spinner(root, "Design").setSelection(2); spinner(root, "Theme").setSelection(2);
+            ((View) findText(root, "Mono / Signal").getParent()).performClick(); findText(root, "Dark").performClick();
             Shadows.shadowOf(Looper.getMainLooper()).idle();
             assertEquals("unset", WidgetStore.get(context, id, "style", "unset"));
             findText(root, "Save widget").performClick();
-            assertEquals("bold", WidgetStore.get(context, id, "style", "unset"));
+            assertEquals("signal", WidgetStore.get(context, id, "style", "unset"));
             assertEquals("dark", WidgetStore.get(context, id, "theme", "unset"));
             assertEquals("unset", WidgetStore.get(context, 72, "style", "unset"));
             assertEquals(ActivityResult.OK, Shadows.shadowOf(activity).getResultCode());
         }
         try (var controller = Robolectric.buildActivity(WidgetConfigurationActivity.class, intent).setup().visible()) {
             View root = controller.get().getWindow().getDecorView();
-            spinner(root, "Design").setSelection(0); Shadows.shadowOf(Looper.getMainLooper()).idle();
+            ((View) findText(root, "Paper / Pulse").getParent()).performClick(); Shadows.shadowOf(Looper.getMainLooper()).idle();
             findText(root, "Cancel").performClick();
-            assertEquals("bold", WidgetStore.get(context, id, "style", "unset"));
+            assertEquals("signal", WidgetStore.get(context, id, "style", "unset"));
         }
+    }
+    @Test @Config(qualifiers="w393dp-h852dp-mdpi") public void editorLightPreviewAndDraftControls() throws Exception { editorPreview(false); }
+    @Test @Config(qualifiers="w393dp-h852dp-night-mdpi") public void editorDarkPreviewAndDraftControls() throws Exception { editorPreview(true); }
+    private void editorPreview(boolean dark) throws Exception {
+        Intent intent=new Intent(context,WidgetConfigurationActivity.class).putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID,id);
+        Bundle bounds=new Bundle();bounds.putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH,310);bounds.putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT,230);AppWidgetManager.getInstance(context).updateAppWidgetOptions(id,bounds);
+        try(var controller=Robolectric.buildActivity(WidgetConfigurationActivity.class,intent).setup().visible()){
+            WidgetConfigurationActivity activity=controller.get();View root=activity.getWindow().getDecorView();Shadows.shadowOf(Looper.getMainLooper()).idle();
+            TextView heading=(TextView)findText(root,"Widget studio");assertNotNull(heading);
+            assertEquals(dark?android.graphics.Color.parseColor("#F2F3EF"):android.graphics.Color.parseColor("#151713"),heading.getCurrentTextColor());
+            findText(root,"Expand").performClick();android.app.Dialog expanded=org.robolectric.shadows.ShadowDialog.getLatestDialog();assertTrue(expanded.isShowing());findText(expanded.getWindow().getDecorView(),"Back to editing").performClick();assertFalse(expanded.isShowing());
+            findText(root,"Roomy").performClick();findText(root,"Large").performClick();findText(root,"Follow phone").performClick();
+            assertEquals("unset",WidgetStore.get(context,id,"density","unset"));
+            findText(root,"Balanced").performClick();findText(root,"Default").performClick();
+            root.measure(View.MeasureSpec.makeMeasureSpec(393,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(852,View.MeasureSpec.EXACTLY));root.layout(0,0,393,852);
+            Bitmap bitmap=Bitmap.createBitmap(393,852,Bitmap.Config.ARGB_8888);root.draw(new Canvas(bitmap));
+            try(FileOutputStream out=new FileOutputStream(new File("build/widget-previews/editor-"+(dark?"dark":"light")+".png"))){bitmap.compress(Bitmap.CompressFormat.PNG,100,out);}
+            View save=findText(root,"Save widget");assertTrue(save.isShown());save.performClick();assertEquals("system",WidgetStore.get(context,id,"theme",""));
+        }
+    }
+    @Test public void typographyAndDensityKeepCompactContentInsideWidget() {
+        float previous=context.getResources().getConfiguration().fontScale;
+        context.getResources().getConfiguration().fontScale=1.3f;
+        try{
+            for(String kind:ServeSyncWidgetProvider.KINDS)for(String density:new String[]{"compact","balanced","roomy"})for(int[] size:new int[][]{{56,160},{130,64},{160,180},{310,230},{310,360}}){
+                Bundle draft=new Bundle();draft.putString("kind",kind);draft.putString("style","signal");draft.putString("density",density);draft.putString("text","large");
+                View view=ServeSyncWidgetProvider.render(context,id,size[0],size[1],draft).apply(context,new FrameLayout(context));
+                view.measure(View.MeasureSpec.makeMeasureSpec(size[0],View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(size[1],View.MeasureSpec.EXACTLY));view.layout(0,0,size[0],size[1]);
+                ViewFlipper flipper=view.findViewById(R.id.widget_flipper);assertTrue(kind+" body has room",flipper.getHeight()>0);
+                checkTextBounds(flipper.getCurrentView(),kind+" "+density+" "+size[0]+"x"+size[1]);
+            }
+        }finally{context.getResources().getConfiguration().fontScale=previous;}
+    }
+    private void checkTextBounds(View view,String state){
+        if(view.getVisibility()!=View.VISIBLE)return;
+        if(view instanceof TextView){assertTrue(state+" text top",view.getTop()>=0);assertTrue(state+" text bottom "+view.getId(),view.getBottom()<=((View)view.getParent()).getHeight());}
+        if(view instanceof ViewGroup)for(int i=0;i<((ViewGroup)view).getChildCount();i++)checkTextBounds(((ViewGroup)view).getChildAt(i),state);
+    }
+    @Test public void orangeDateUsesWhiteTextAndPreviewPagingNeverChangesWidget() {
+        View view=inflate("next","paper","light",310,230,"off");ViewFlipper flipper=view.findViewById(R.id.widget_flipper);
+        assertEquals(android.graphics.Color.WHITE,((TextView)flipper.getCurrentView().findViewById(R.id.widget_badge)).getCurrentTextColor());
+        Intent intent=new Intent(context,WidgetConfigurationActivity.class).putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID,id);
+        try(var controller=Robolectric.buildActivity(WidgetConfigurationActivity.class,intent).setup().visible()){
+            View root=controller.get().getWindow().getDecorView();Shadows.shadowOf(Looper.getMainLooper()).idle();
+            View next=root.findViewById(R.id.widget_next);assertNotNull(next);next.performClick();assertEquals(0,WidgetStore.page(context,id));
+            findText(root,"Roomy").performClick();((View)findText(root,"Mono / Signal").getParent()).performClick();
+            Bundle state=new Bundle();controller.saveInstanceState(state).pause().stop().destroy();
+            try(var restored=Robolectric.buildActivity(WidgetConfigurationActivity.class,intent).create(state).start().resume().visible()){
+                Shadows.shadowOf(Looper.getMainLooper()).idle();View restoredRoot=restored.get().getWindow().getDecorView();
+                assertTrue(findText(restoredRoot,"Roomy").isSelected());findText(restoredRoot,"Save widget").performClick();
+                assertEquals("roomy",WidgetStore.get(context,id,"density",""));assertEquals("signal",WidgetStore.get(context,id,"style",""));
+            }
+        }
+    }
+    @Test public void changingPurposeRestoresHeaderWhenLauncherReusesView(){
+        Bundle draft=new Bundle();draft.putString("kind","next");draft.putString("style","paper");draft.putString("motion","off");
+        View view=ServeSyncWidgetProvider.render(context,id,310,300,draft).apply(context,new FrameLayout(context));assertEquals(View.GONE,view.findViewById(R.id.widget_heading_row).getVisibility());
+        draft.putString("kind","schedule");ServeSyncWidgetProvider.render(context,id,310,300,draft).reapply(context,view);assertEquals(View.VISIBLE,view.findViewById(R.id.widget_heading_row).getVisibility());
     }
     private static class ActivityResult { static final int OK = android.app.Activity.RESULT_OK; }
 }

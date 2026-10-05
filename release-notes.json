@@ -1,9 +1,9 @@
 {
-  "headline": "ServeSync on your home screen: flexible, interactive Android widgets.",
+  "headline": "Redesigned Android widgets and a more flexible widget editor.",
   "highlights": [
-    "Add widgets for your next assignment, schedule, approved setlist, church announcements, pending responses, and quick shortcuts.",
-    "Choose Minimal, Church-branded, or Bold designs, light/dark/system themes, and four accent colors for each widget.",
-    "Resize from narrow 1×2 and compact 2×1 arrangements to larger agendas, subject to your phone's home-screen grid.",
-    "Tap to open the relevant screen or use paging arrows with optional short transitions. Open ServeSync to refresh saved widget information."
+    "Choose Paper / Pulse or Mono / Signal, with distinct assignment, schedule, setlist, announcement, pending-response, and shortcut layouts.",
+    "Customize with a live preview, expanded preview, size comparisons, spacing, text, accent colors, artwork, and content options.",
+    "The widget editor follows your phone's light or dark mode; each widget can use its own theme.",
+    "Orange date tiles now use white lettering. Existing widget navigation, paging, account protection, and optional transitions are preserved."
   ]
 }

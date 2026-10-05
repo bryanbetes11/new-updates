@@ -1,0 +1,9 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/widget_item" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:orientation="vertical">
+ <TextView android:id="@+id/widget_kicker" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="YOUR PENDING
+RESPONSES" android:textSize="10sp" android:letterSpacing="0.1" android:maxLines="3"/>
+ <TextView android:id="@+id/widget_item_title" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:fontFamily="sans-serif-black" android:gravity="center_vertical" android:includeFontPadding="false" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="22sp" android:autoSizeMaxTextSize="112sp" android:autoSizeStepGranularity="2sp"/>
+ <TextView android:id="@+id/widget_item_subtitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="11sp" android:maxLines="2" android:ellipsize="end"/>
+ <TextView android:id="@+id/widget_item_detail" android:layout_width="match_parent" android:layout_height="32dp" android:layout_marginTop="8dp" android:gravity="center_vertical" android:paddingStart="10dp" android:text="Review invitations" android:textSize="11sp" android:fontFamily="sans-serif-medium" android:maxLines="1" android:ellipsize="end"/>
+ <TextView android:id="@+id/widget_badge" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone"/>
+ <ImageView android:id="@+id/widget_art" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone"/>
+</LinearLayout>

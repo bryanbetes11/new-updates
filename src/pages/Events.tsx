@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { SetlistRequiredToggle } from '../components/SetlistRequiredToggle';
+import { InactiveEventAssignmentCard } from '../components/InactiveEventAssignmentCard';
+import { useEventAssignmentIssues } from '../hooks/useEventAssignmentIssues';
+import type { groupInactiveAssignments } from '../lib/inactiveAssignments';
+import type { DeclinedAssignmentGroups, DeclinedMember } from '../lib/declinedAssignments';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { format, parseISO, startOfDay, differenceInDays, eachDayOfInterval } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
@@ -258,8 +262,12 @@ function formatSongLeaderName(profile: RelatedProfile) {
   return prefix ? `${prefix} ${name}` : name;
 }
 
-function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEventClick, onLifecycleChange, isPast, artworkClassName = 'h-16 w-16', variant = 'list' }: {
-  event: Event; calendarEntries: CalendarEntry[]; songLeaderMap?: Record<string, string>; setlistInfoMap?: Record<string, SetlistInfo>; onEventClick: (id: string) => void; onLifecycleChange?: (event: Event) => void; isPast?: boolean; artworkClassName?: string; variant?: 'list' | 'featured' | 'directory';
+type InactiveAssignmentGroups = ReturnType<typeof groupInactiveAssignments>;
+type AvailabilityState = 'ready' | 'loading' | 'unavailable';
+
+function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEventClick, onLifecycleChange, isPast, inactiveMembers, declinedMembers = [], availabilityState = 'ready', artworkClassName = 'h-16 w-16', variant = 'list' }: {
+  event: Event; calendarEntries: CalendarEntry[]; songLeaderMap?: Record<string, string>; setlistInfoMap?: Record<string, SetlistInfo>; onEventClick: (id: string) => void; onLifecycleChange?: (event: Event) => void; isPast?: boolean; inactiveMembers?: { id: string; name: string }[]; artworkClassName?: string; variant?: 'list' | 'featured' | 'directory';
+  declinedMembers?: DeclinedMember[]; availabilityState?: AvailabilityState;
 }) {
   const { user, profile, isOrgAdmin, isAdmin, offlineMode, isViewingAsMember, isViewingAsSongLeader } = useAuth();
   const { toast } = useToast();
@@ -375,6 +383,17 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
     toast('success', isPast ? 'Event moved to Upcoming' : 'Event moved to Past events');
   };
 
+  if (inactiveMembers?.length && !isPast && !scheduleHasEnded) return <InactiveEventAssignmentCard event={event} members={inactiveMembers} declinedCount={declinedMembers.length} onClick={onEventClick} variant={variant} />;
+
+  const availabilityLabel = [declinedMembers.length ? `${declinedMembers.length} declined` : '', dayEntries.length ? `${dayEntries.length} unavailable` : ''].filter(Boolean).join(' · ');
+  const availabilityTone = declinedMembers.length ? 'border-red-300/50 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-400/25 dark:bg-red-400/10 dark:text-red-300 dark:hover:bg-red-400/15' : 'border-amber-400/25 bg-amber-400/[0.08] text-amber-800 hover:bg-amber-400/[0.16] dark:text-amber-200';
+  const AvailabilityIcon = declinedMembers.length ? AlertCircle : CalendarOff;
+  const availabilityBadge = availabilityLabel && (
+    <span role="button" tabIndex={0} aria-label={`View availability for ${songLeader || event.title} on ${event.event_date}: ${availabilityLabel}`} onClick={click => { click.stopPropagation(); setLeaveReasonsOpen(true); }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); setLeaveReasonsOpen(true); } }} className={`mt-1 inline-flex w-fit max-w-full touch-manipulation cursor-pointer items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold leading-4 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${availabilityTone}`}>
+      <AvailabilityIcon className="h-3 w-3 shrink-0" /><span>{availabilityLabel}</span>
+    </span>
+  );
+
   return (
     <div className={variant === 'featured' ? 'desktop-featured-event relative h-full' : 'relative'}>
       <button
@@ -443,12 +462,7 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
               <span className="truncate text-[10px] font-semibold text-white/42">{formatTime12Hour(event.start_time || '')}{event.end_time && ` – ${formatTime12Hour(event.end_time)}`}</span>
             </div>
             <div className="mt-auto min-h-6 pt-1">
-              {dayEntries.length > 0 ? (
-                <span role="button" tabIndex={0} onClick={(event) => { event.stopPropagation(); setLeaveReasonsOpen(true); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); setLeaveReasonsOpen(true); } }} className="inline-flex max-w-full touch-manipulation cursor-pointer items-center gap-1 rounded-full border border-amber-400/25 bg-amber-400/[0.08] px-2 py-0.5 text-[9px] font-bold leading-4 text-amber-800 transition-colors hover:bg-amber-400/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 dark:text-amber-200">
-                  <CalendarOff className="h-2.5 w-2.5 shrink-0" />
-                  <span className="truncate">{dayEntries.length} unavailable · View reason{dayEntries.length === 1 ? '' : 's'}</span>
-                </span>
-              ) : null}
+              {availabilityBadge}
             </div>
           </div>
         </>
@@ -473,9 +487,10 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
         </div>
       </div>
       <div className="desktop-event-directory-availability min-w-0">
-        {dayEntries.length === 0 && <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300"><CheckCircle className="h-3.5 w-3.5 shrink-0" />No Leave Reported</span>}
+        {availabilityState !== 'ready' ? <span className="text-[11px] font-semibold text-slate-500 dark:text-white/50">{availabilityState === 'loading' ? 'Checking assignments…' : 'Assignments unavailable'}</span> : !dayEntries.length && !declinedMembers.length && <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300"><CheckCircle className="h-3.5 w-3.5 shrink-0" />No Leave Reported</span>}
       </div>
       <div className="desktop-event-directory-status min-w-0">
+        {pendingReviewAge && <span className="mb-1 block text-[11px] font-semibold text-amber-700 dark:text-amber-300" title={pendingReviewAge.submittedDateLabel}>{pendingReviewAge.pendingDaysLabel}</span>}
         {showOverdueStyle || showDueSoonStyle ? <span className={`block text-[10px] font-bold ${showOverdueStyle ? 'text-red-600 dark:text-red-400' : 'text-amber-700 dark:text-amber-300'}`}>{showOverdueStyle ? 'Overdue' : `Due in ${daysUntilDue}d`}</span> : null}
         {!canManageLifecycle && <span className={`inline-flex max-w-full rounded-md border px-2 py-1 text-[11px] font-semibold ${hasApprovedSetlist ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-700/50 dark:bg-emerald-900/20 dark:text-emerald-300' : isSetlistPendingProcess(setlistInfo?.status) ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-700/50 dark:bg-amber-900/20 dark:text-amber-300' : 'border-slate-200 text-slate-600 dark:border-white/10 dark:text-white/60'}`}>{hasApprovedSetlist ? 'Ready' : setlistInfo?.status === 'revision_requested' ? 'Revision Requested' : setlistInfo?.status === 'pending_review' ? 'Pending Review' : hasSetlistSongs ? 'Draft' : 'No Songs Yet'}</span>}
       </div>
@@ -533,12 +548,7 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
           </span>
         </div>
 
-        {dayEntries.length > 0 && (
-          <span role="button" tabIndex={0} onClick={(event) => { event.stopPropagation(); setLeaveReasonsOpen(true); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); setLeaveReasonsOpen(true); } }} className="mt-1.5 flex w-fit max-w-full min-w-0 touch-manipulation cursor-pointer items-center gap-1.5 rounded-full border border-amber-400/25 bg-amber-400/[0.08] px-2 py-0.5 text-[10px] font-bold leading-4 text-amber-800 transition-colors hover:bg-amber-400/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 dark:text-amber-200">
-            <CalendarOff className="h-3 w-3 shrink-0 text-amber-400/70" />
-            <span className="truncate">{dayEntries.length} unavailable · View reason{dayEntries.length === 1 ? '' : 's'}</span>
-          </span>
-        )}
+        {availabilityBadge}
       </div>
 
       <div className="flex shrink-0 items-center gap-2 lg:gap-3">
@@ -557,22 +567,24 @@ function EventCard({ event, calendarEntries, songLeaderMap, setlistInfoMap, onEv
       </>}
       </button>
 
-      {variant === 'directory' && dayEntries.length > 0 && (
+      {variant === 'directory' && (dayEntries.length > 0 || declinedMembers.length > 0) && (
         <div className="desktop-event-availability-action pointer-events-none absolute inset-0 z-10 grid items-center" >
-          <button type="button" onClick={() => setLeaveReasonsOpen(true)} className="pointer-events-auto col-start-3 inline-flex w-fit max-w-full items-center gap-1.5 rounded-md px-1 py-1 text-left text-[11px] font-semibold text-amber-700 transition-colors hover:bg-amber-50 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 dark:text-amber-300 dark:hover:bg-amber-400/10" aria-label={`View ${dayEntries.length} unavailable team member${dayEntries.length === 1 ? '' : 's'} for ${songLeader || event.title}`}>
-            <CalendarOff className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{dayEntries.length} Unavailable</span>
-          </button>
+          <button type="button" onClick={() => setLeaveReasonsOpen(true)} className={`pointer-events-auto col-start-3 inline-flex w-fit max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-left text-[11px] font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 ${availabilityTone}`} aria-label={`View availability for ${songLeader || event.title} on ${event.event_date}: ${availabilityLabel}`}><AvailabilityIcon className="h-3.5 w-3.5 shrink-0" /><span>{availabilityLabel}</span></button>
         </div>
       )}
 
-      {dayEntries.length > 0 && (
-        <Modal open={leaveReasonsOpen} onClose={() => setLeaveReasonsOpen(false)} title={`Unavailable for ${format(parseISO(event.event_date), 'MMM d')}`} size="sm" mobileView="dialog" dialogClassName="max-w-[calc(100%-2rem)] sm:max-w-sm">
+      {(dayEntries.length > 0 || declinedMembers.length > 0) && (
+        <Modal open={leaveReasonsOpen} onClose={() => setLeaveReasonsOpen(false)} title={`Availability for ${format(parseISO(event.event_date), 'MMM d')}`} size="sm" mobileView="dialog" dialogClassName="max-w-[calc(100%-2rem)] sm:max-w-sm">
           <div className="space-y-3">
-            <p className="text-sm leading-6 text-gray-500 dark:text-white/55">These approved leave reasons may affect coverage for this event.</p>
+            <p className="text-sm leading-6 text-gray-500 dark:text-white/55">Declined assignments and approved leave may affect coverage for this event.</p>
             <div className="space-y-2">
+              {declinedMembers.map(member => <div key={member.id} className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-400/20 dark:bg-red-400/5">
+                <p className="text-sm font-bold text-gray-900 dark:text-white">{member.name}<span className="ml-2 text-xs font-semibold text-red-700 dark:text-red-300">Declined</span></p>
+                <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-gray-600 dark:text-white/65">{member.reasons.join('\n') || 'No reason provided'}</p>
+              </div>)}
               {dayEntries.map((entry, index) => (
                 <div key={`${entry.userId || entry.name}-${index}`} className="rounded-xl border border-black/[0.07] bg-gray-50 px-4 py-3 dark:border-white/[0.08] dark:bg-white/[0.05]">
-                  <p className="text-sm font-black text-gray-900 dark:text-white">{entry.name}</p>
+                  <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm font-bold text-gray-900 dark:text-white"><span>{entry.name}</span><span className="text-xs font-semibold text-amber-700 dark:text-amber-300">Approved Leave</span></p>
                   <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-white/65">{entry.reason || 'No reason provided'}</p>
                 </div>
               ))}
@@ -781,8 +793,9 @@ const createEmptyEventForm = (eventDate = ''): EventFormState => ({
   linked_event_id: '',
 });
 
-function EventList({ events, calendarEntries, songLeaderMap, setlistInfoMap, onEventClick, onLifecycleChange, showPast, animateItems = true, layout = 'list' }: {
-  events: Event[]; calendarEntries: CalendarEntry[]; songLeaderMap?: Record<string, string>; setlistInfoMap?: Record<string, SetlistInfo>; onEventClick: (id: string) => void; onLifecycleChange?: (event: Event) => void; showPast?: boolean; animateItems?: boolean; layout?: 'list' | 'grid';
+function EventList({ events, calendarEntries, songLeaderMap, setlistInfoMap, onEventClick, onLifecycleChange, showPast, inactiveAssignments, declinedAssignments, availabilityState, animateItems = true, layout = 'list' }: {
+  events: Event[]; calendarEntries: CalendarEntry[]; songLeaderMap?: Record<string, string>; setlistInfoMap?: Record<string, SetlistInfo>; onEventClick: (id: string) => void; onLifecycleChange?: (event: Event) => void; showPast?: boolean; inactiveAssignments?: InactiveAssignmentGroups; animateItems?: boolean; layout?: 'list' | 'grid';
+  declinedAssignments?: DeclinedAssignmentGroups; availabilityState?: AvailabilityState;
 }) {
   const now = new Date();
   const today = startOfDay(now);
@@ -820,7 +833,7 @@ function EventList({ events, calendarEntries, songLeaderMap, setlistInfoMap, onE
 
   const renderItem = (item: ListItem, featured = false) => (
     item.kind === 'event' ? (
-      <EventCard event={item.event} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={onEventClick} onLifecycleChange={onLifecycleChange} isPast={showPast} variant={featured ? 'featured' : 'list'} />
+      <EventCard event={item.event} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={onEventClick} onLifecycleChange={onLifecycleChange} isPast={showPast} inactiveMembers={inactiveAssignments?.[item.event.id]} declinedMembers={declinedAssignments?.[item.event.id]} availabilityState={availabilityState} variant={featured ? 'featured' : 'list'} />
     ) : (
       <BirthdayCard name={item.entry.name} date={item.entry.date} />
     )
@@ -925,7 +938,7 @@ function groupEventItemsByMonth(items: EventListItem[]) {
   return Array.from(groups.entries()).map(([month, monthItems]) => ({ month, items: monthItems }));
 }
 
-function EventDesktopCardGroups({ events, calendarEntries, songLeaderMap, setlistInfoMap, onEventClick, onLifecycleChange, showPast }: {
+function EventDesktopCardGroups({ events, calendarEntries, songLeaderMap, setlistInfoMap, onEventClick, onLifecycleChange, showPast, inactiveAssignments, declinedAssignments, availabilityState }: {
   events: Event[];
   calendarEntries: CalendarEntry[];
   songLeaderMap?: Record<string, string>;
@@ -933,6 +946,9 @@ function EventDesktopCardGroups({ events, calendarEntries, songLeaderMap, setlis
   onEventClick: (id: string) => void;
   onLifecycleChange?: (event: Event) => void;
   showPast?: boolean;
+  inactiveAssignments?: InactiveAssignmentGroups;
+  declinedAssignments?: DeclinedAssignmentGroups;
+  availabilityState?: AvailabilityState;
 }) {
   const allItems = getEventListItems(events, calendarEntries, showPast) as EventListItem[];
   const monthGroups = groupEventItemsByMonth(allItems);
@@ -970,6 +986,7 @@ function EventDesktopCardGroups({ events, calendarEntries, songLeaderMap, setlis
                   key={item.event.id}
                   className="desktop-event-row transition-colors hover:bg-white/[0.035]"
                   data-event-type={item.event.event_type.toLowerCase()}
+                  data-needs-replacement={Boolean(inactiveAssignments?.[item.event.id]?.length)}
                 >
                   <EventCard
                     event={item.event}
@@ -979,6 +996,9 @@ function EventDesktopCardGroups({ events, calendarEntries, songLeaderMap, setlis
                     onEventClick={onEventClick}
                     onLifecycleChange={onLifecycleChange}
                     isPast={showPast}
+                    inactiveMembers={inactiveAssignments?.[item.event.id]}
+                    declinedMembers={declinedAssignments?.[item.event.id]}
+                    availabilityState={availabilityState}
                     artworkClassName="event-list-artwork h-12 w-12"
                     variant="directory"
                   />
@@ -1008,13 +1028,15 @@ export function Events() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
-  const openEvent = useCallback((id: string) => {
+  const openEvent = useCallback((id: string, tab?: 'team') => {
     const desktop = window.matchMedia('(min-width: 1024px)').matches;
-    navigate(`/events/${id}`, desktop
+    navigate(`/events/${id}${tab ? `?tab=${tab}` : ''}`, desktop
       ? { state: { backgroundLocation: location, returnTo: `${location.pathname}${location.search}` } }
       : undefined);
   }, [location, navigate]);
   const [events, setEvents] = useState<Event[]>([]);
+  const { groups: inactiveAssignments, declined: declinedAssignments, availabilityState, unavailable: inactiveChecksUnavailable } = useEventAssignmentIssues(events);
+  const openListedEvent = (eventId: string) => openEvent(eventId, inactiveAssignments[eventId]?.length ? 'team' : undefined);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
@@ -1579,6 +1601,7 @@ export function Events() {
         </motion.div>
         {/* ── Content ── */}
         <div>
+        {inactiveChecksUnavailable && activeTab === 'upcoming' && <p role="status" className="mb-3 text-xs text-amber-700 dark:text-amber-300">Inactive-member assignment checks are unavailable. Reconnect or return to this page to retry.</p>}
         {displayEvents.length === 0 ? (
           <EmptyState
             icon={<Calendar className="h-8 w-8" />}
@@ -1595,7 +1618,7 @@ export function Events() {
                   calendarEntries={calendarEntries}
                   songLeaderMap={songLeaderMap}
                   setlistInfoMap={setlistInfoMap}
-                  onEventClick={openEvent}
+                  onEventClick={openListedEvent}
                   onCreateEvent={canCreateEvent && cacheState === 'fresh' ? openCreateEvent : undefined}
                   onEventDateChange={canCreateEvent && cacheState === 'fresh' ? handleEventDateChange : undefined}
                 />
@@ -1607,14 +1630,17 @@ export function Events() {
                   calendarEntries={calendarEntries}
                   songLeaderMap={songLeaderMap}
                   setlistInfoMap={setlistInfoMap}
-                  onEventClick={openEvent}
+                  onEventClick={openListedEvent}
                   onLifecycleChange={cacheState === 'fresh' ? handleEventLifecycleChange : undefined}
                   showPast={activeTab === 'past'}
+                  inactiveAssignments={inactiveAssignments}
+                  declinedAssignments={declinedAssignments}
+                  availabilityState={availabilityState}
                 />
               </motion.div>
             )}
             <div className={`touch-action-pan-y ${desktopView === 'calendar' ? 'md:hidden' : 'lg:hidden'}`}>
-              <EventList events={filtered} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={openEvent} onLifecycleChange={cacheState === 'fresh' ? handleEventLifecycleChange : undefined} showPast={activeTab === 'past'} animateItems={false} />
+              <EventList events={filtered} calendarEntries={calendarEntries} songLeaderMap={songLeaderMap} setlistInfoMap={setlistInfoMap} onEventClick={openListedEvent} onLifecycleChange={cacheState === 'fresh' ? handleEventLifecycleChange : undefined} showPast={activeTab === 'past'} inactiveAssignments={inactiveAssignments} declinedAssignments={declinedAssignments} availabilityState={availabilityState} animateItems={false} />
             </div>
           </>
         )}

@@ -23,6 +23,8 @@ import { AndroidDownload } from './pages/AndroidDownload';
 import { ToastProvider } from "./contexts/ToastContext";
 import { Layout } from "./components/Layout";
 import { Modal } from "./components/Modal";
+import { useEventDialogHeight } from './hooks/useEventDialogHeight';
+import { isEventModalBackgroundPath } from './lib/eventModalNavigation';
 import { PageLoader } from "./components/LoadingSpinner";
 import { StartupScreen } from "./components/StartupScreen";
 import { ProtectedRoute } from "./components/ProtectedRoute";
@@ -482,6 +484,7 @@ function DesktopDetailModal({
   const navigate = useNavigate();
   const [open, setOpen] = useState(true);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const eventDialogContentRef = useEventDialogHeight(kind === 'event');
 
   useEffect(() => () => {
     if (closeTimer.current) clearTimeout(closeTimer.current);
@@ -503,12 +506,12 @@ function DesktopDetailModal({
       size="xl"
       instantOpen={false}
       hideHeader
-      bodyClassName="!p-0 no-scrollbar"
+      bodyClassName={kind === 'event' ? '!p-0 no-scrollbar bg-[#f6f8fb] dark:bg-[#050505]' : '!p-0 no-scrollbar'}
       dialogClassName={kind === 'event'
-        ? 'sm:!max-w-[94vw] 2xl:!max-w-[1440px] sm:!max-h-[88vh]'
+        ? 'sm:!max-w-[94vw] 2xl:!max-w-[1440px] sm:!max-h-[88vh] sm:dark:border sm:dark:border-white/[0.08]'
         : 'lg:!max-w-5xl sm:!max-h-[88vh]'}
     >
-      <div className="relative">
+      <div className="relative" ref={eventDialogContentRef}>
         <button
           type="button"
           onClick={close}
@@ -530,7 +533,7 @@ function ModalAwareRoutes({ children }: { children: ReactNode }) {
   const candidate = state?.backgroundLocation;
   const backgroundLocation = candidate
     && window.matchMedia('(min-width: 1024px)').matches
-    && ((location.pathname.startsWith('/events/') && ['/events', '/dashboard'].includes(candidate.pathname))
+    && ((location.pathname.startsWith('/events/') && isEventModalBackgroundPath(candidate.pathname))
       || (location.pathname.startsWith('/announcements/') && ['/announcements', '/dashboard'].includes(candidate.pathname)))
     ? candidate
     : null;

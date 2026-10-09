@@ -17,7 +17,7 @@ assert.match(
   'Events must carry each leave reason into the event availability entries',
 );
 assert.ok(
-  eventsSource.includes('View reason{dayEntries.length === 1 ? \'\' : \'s\'}'),
+  eventsSource.includes('View availability for ${songLeader || event.title}') && eventsSource.includes('dayEntries.map((entry, index)'),
   'Event cards must provide a compact path to each unavailable member reason',
 );
 assert.ok(
@@ -25,12 +25,12 @@ assert.ok(
   'The compact reason control must remain keyboard accessible without nesting a button inside the event button',
 );
 assert.ok(
-  eventsSource.includes('w-fit max-w-full') && eventsSource.includes('py-0.5') && eventsSource.includes('touch-manipulation') && eventsSource.includes('rounded-full border border-amber-400/25'),
+  eventsSource.includes('w-fit max-w-full') && eventsSource.includes('py-0.5') && eventsSource.includes('touch-manipulation') && eventsSource.includes('border-amber-400/25'),
   'The compact reason control must remain touch-friendly, compact, and visibly button-like',
 );
 assert.match(
   eventsSource,
-  /title=\{`Unavailable for \$\{format\(parseISO\(event\.event_date\), 'MMM d'\)\}`\} size="sm" mobileView="dialog"/,
+  /title=\{`Availability for \$\{format\(parseISO\(event\.event_date\), 'MMM d'\)\}`\} size="sm" mobileView="dialog"/,
   'Leave reasons must use a floating dialog presentation on mobile',
 );
 assert.match(

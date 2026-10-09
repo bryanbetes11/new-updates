@@ -425,6 +425,14 @@
   .desktop-workspace .desktop-event-row[data-event-type*="rehearsal"] { --event-accent: #bd7937; --event-tint: #fff4e8; }
   .desktop-workspace .desktop-event-row-birthday { --event-accent: #d65d92; --event-tint: #fff0f6; }
   .desktop-workspace .desktop-event-row:last-child { border-bottom: 0; }
+  .desktop-workspace .desktop-event-row[data-needs-replacement="true"] {
+    background: #fffbeb !important;
+    box-shadow: inset 3px 0 0 #d99a25;
+  }
+  html.dark .desktop-workspace .desktop-event-row[data-needs-replacement="true"] {
+    background: #201b10 !important;
+    box-shadow: inset 3px 0 0 #a87925;
+  }
   .desktop-workspace .desktop-event-row:hover,
   .desktop-workspace .desktop-event-row:focus-within { background: var(--workspace-selected) !important; }
   .desktop-workspace .desktop-event-row > div > button {

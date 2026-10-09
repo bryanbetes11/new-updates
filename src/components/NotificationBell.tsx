@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowRight, Bell, Check, Volume2, VolumeX, X } from 'lucide-react';
 import { formatDistanceToNow, parseISO } from 'date-fns';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import type { Notification } from '../types';
@@ -16,6 +16,7 @@ import {
 import { useToast } from '../contexts/ToastContext';
 import { recordNotificationOpen } from '../lib/notificationOpenTracking';
 import { resolveNotificationDestination } from '../lib/notificationDestination';
+import { eventModalNavigationOptions } from '../lib/eventModalNavigation';
 
 const PREVIEW_LIMIT = 5;
 const SOUND_VOLUME_LEVELS = [
@@ -38,6 +39,7 @@ export function NotificationBell() {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const { user, profile } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
 
   const fetchNotifications = useCallback(async () => {
@@ -158,7 +160,7 @@ export function NotificationBell() {
 
   const goTo = (path: string) => {
     setOpen(false);
-    navigate(path);
+    navigate(path, eventModalNavigationOptions(path, location, window.matchMedia('(min-width: 1024px)').matches));
   };
 
   const handleNotification = (notification: Notification) => {

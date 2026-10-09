@@ -7,6 +7,14 @@ import {
 
 const notification = (type: string, data: Record<string, string> = {}) => ({ type, data });
 
+for (const type of ['assignment', 'assignment_response', 'assignment_confirmed', 'assignment_declined', 'assignment_removed', 'assignment_confirmation_reminder']) {
+  assert.equal(resolveNotificationDestination(notification(type, { event_id: 'event-123' })), '/events/event-123?tab=team');
+  assert.equal(resolveNotificationDestination(notification(type, { url: '/events/event-123?source=notice#member' })), '/events/event-123?source=notice&tab=team#member');
+}
+assert.equal(resolveNotificationDestination(notification('assignment_declined', { url: '/events/event-123?tab=attendance' })), '/events/event-123?tab=attendance', 'an explicit tab remains authoritative');
+assert.equal(resolveNotificationDestination(notification('assignment', { url: '/events/event-123?mode=live' })), '/events/event-123?mode=live', 'live mode is preserved');
+assert.equal(resolveNotificationDestination(notification('assignment_declined', { url: 'https://example.com/events/event-123' })), 'https://example.com/events/event-123', 'do not rewrite external destinations');
+
 assert.equal(
   resolveNotificationDestination(notification('proposal_overdue_alert')),
   SETLIST_QUEUE_PATH,

@@ -685,6 +685,15 @@ export function EventDetail({ inDialog = false }: { inDialog?: boolean }) {
   const [sharingEvent, setSharingEvent] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
   const [showAssign, setShowAssign] = useState(false);
+  const [replacementMemberIds, setReplacementMemberIds] = useState<string[]>([]);
+  const [replacementAssignmentId, setReplacementAssignmentId] = useState('');
+  const [replacementUserId, setReplacementUserId] = useState('');
+  const [replacingAssignment, setReplacingAssignment] = useState(false);
+  useEffect(() => {
+    setReplacementMemberIds([]);
+    setReplacementAssignmentId('');
+    setReplacementUserId('');
+  }, [activeDetailIdentity]);
   const [showSetlist, setShowSetlist] = useState(false);
   const [songSearch, setSongSearch] = useState('');
   const [showAddSong, setShowAddSong] = useState(false);
@@ -1233,7 +1242,7 @@ export function EventDetail({ inDialog = false }: { inDialog?: boolean }) {
       }
       const ownerEventId = ownerEvent?.id || id;
       const [assignRes, membersRes, memberRolesRes, memberSettingsRes, availabilityRes, setlistRes, songsRes, allSetlistsRes, proposalSetlistsRes, sundayServicesRes, observationsRes, observationRepliesRes, observationViewsRes] = await Promise.all([
-        supabase.from('event_assignments').select('*, events(*), profiles(first_name, last_name, gender, avatar_url), roles(name)').eq('event_id', id),
+        supabase.from('event_assignments').select('*, events(*), profiles(first_name, last_name, gender, avatar_url, ministry_status), roles(name)').eq('event_id', id),
         supabase.from('profiles').select('id, first_name, last_name, ministry_status').eq('ministry_status', 'active'),
         supabase.from('user_roles').select('user_id, role_id'),
         supabase.from('organization_member_settings').select('user_id, include_in_assignments'),
@@ -2312,6 +2321,10 @@ export function EventDetail({ inDialog = false }: { inDialog?: boolean }) {
 
   const handleConfirm = async (assignmentId: string) => {
     if (respondingAssignmentId || !user?.id) return;
+    if (profile?.ministry_status === 'inactive' || assignments.find(a => a.id === assignmentId)?.profiles?.ministry_status === 'inactive') {
+      toast('error', 'This assignment needs a replacement because your ministry status is inactive.');
+      return;
+    }
     setRespondingAssignmentId(assignmentId);
     try {
       const { data, error } = await withSaveTimeout(
@@ -2343,6 +2356,11 @@ export function EventDetail({ inDialog = false }: { inDialog?: boolean }) {
 
   const handleDecline = async (assignmentId: string) => {
     if (respondingAssignmentId) return;
+    if (profile?.ministry_status === 'inactive' || assignments.find(a => a.id === assignmentId)?.profiles?.ministry_status === 'inactive') {
+      toast('error', 'This assignment needs a replacement because your ministry status is inactive.');
+      setShowDecline(null);
+      return;
+    }
     const reason = declineReason.trim();
     if (!reason) {
       toast('error', 'Please provide a reason for declining');
@@ -2403,6 +2421,24 @@ export function EventDetail({ inDialog = false }: { inDialog?: boolean }) {
     } finally {
       setRemovingAssignmentId(null);
     }
+  };
+
+  const handleReplaceInactiveAssignment = async () => {
+    if (replacingAssignment || !replacementAssignmentId || !replacementUserId) return;
+    setReplacingAssignment(true);
+    try {
+      const { data, error } = await withSaveTimeout(supabase.rpc('replace_inactive_event_assignment', {
+        p_assignment_id: replacementAssignmentId, p_new_user_id: replacementUserId,
+      }));
+      if (error) throw error;
+      if (!data) throw new Error('Replacement was not confirmed. Refresh the team before retrying.');
+      setReplacementMemberIds([]);
+      toast('success', 'Replacement assigned. The new member has been asked to confirm.');
+      dispatchBadgeCountsRefresh();
+      await fetchAll(true);
+    } catch (error) {
+      toast('error', getErrorMessage(error, 'Could not confirm the replacement. Refresh the team before retrying.'));
+    } finally { setReplacingAssignment(false); }
   };
 
   const openSetlistBuilder = () => {
@@ -4212,13 +4248,15 @@ const openLyricsModal = (ss: SetlistSong) => {
   );
 
   const myAssignments = getUserEventAssignments(assignments, user?.id);
-  const myPendingAssignments = getPendingUserEventAssignments(assignments, user?.id);
+  const responseEligibleAssignments = assignments.filter(assignment => assignment.profiles?.ministry_status !== 'inactive'
+    && !(assignment.user_id === user?.id && profile?.ministry_status === 'inactive'));
+  const myPendingAssignments = getPendingUserEventAssignments(responseEligibleAssignments, user?.id);
   const myAssignment = myAssignments.find(assignment => assignment.roles?.name === 'Song Leader')
     || myAssignments.find(assignment => assignment.status !== 'declined')
     || myAssignments[0];
   const decliningAssignment = showDecline ? assignments.find(assignment => assignment.id === showDecline) : null;
   const confirmedCount = assignments.filter(a => a.status === 'confirmed').length;
-  const pendingAssignmentUserCount = getPendingAssignmentUserCount(assignments);
+  const pendingAssignmentUserCount = getPendingAssignmentUserCount(responseEligibleAssignments);
   const songLeaderAssignment = assignments.find(a => a.roles?.name === 'Song Leader');
   const getShortLeaderName = (profile?: { first_name?: string; last_name?: string; gender?: string } | null) => {
     if (!profile?.first_name) return '';
@@ -4246,7 +4284,7 @@ const openLyricsModal = (ss: SetlistSong) => {
   const attendanceOnlyPendingAssignments = visiblePendingAssignments.length > 0
     && visiblePendingAssignments.every(isAttendanceAssignment);
   const decliningAttendance = Boolean(decliningAssignment && isAttendanceAssignment(decliningAssignment));
-  const assignmentDetailsBlocked = shouldBlockEventDetails(assignments, user?.id, hasEventManagementAccess);
+  const assignmentDetailsBlocked = shouldBlockEventDetails(responseEligibleAssignments, user?.id, hasEventManagementAccess);
   const pendingAssignmentPanel = visiblePendingAssignments.length > 0 && !assignmentDetailsBlocked ? (
     <motion.section
       {...blurUp(0.2)}
@@ -4922,7 +4960,7 @@ const openLyricsModal = (ss: SetlistSong) => {
     : null;
 
   return (
-    <div className="event-detail-theme page-container page-bottom-pad relative isolate min-h-screen overflow-x-clip bg-[#f6f8fb] dark:bg-[#050505]">
+    <div className={`event-detail-theme page-container page-bottom-pad relative isolate ${inDialog ? 'min-h-0' : 'min-h-screen'} overflow-x-clip bg-[#f6f8fb] dark:bg-[#050505]`}>
       <div
         aria-hidden={!showMobileEventHeader}
         className={`event-detail-mobile-header fixed inset-x-0 z-30 flex items-center gap-3 border-b border-[#d3d4dd] bg-[#f8f8fa] px-4 py-2.5 transition-opacity duration-200 motion-reduce:transition-none dark:border-white/[0.08] dark:bg-[#050505] lg:hidden ${showMobileEventHeader ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'}`}
@@ -5231,6 +5269,31 @@ const openLyricsModal = (ss: SetlistSong) => {
 
         {/* ── Pending Assignment Banner ────────────────── */}
         <EventRescheduleNotice event={event} />
+        <Modal open={replacementMemberIds.length > 0} onClose={() => !replacingAssignment && setReplacementMemberIds([])} title="Assign a different person" size="md" closeOnBackdrop={!replacingAssignment} closeOnEscape={!replacingAssignment}>
+          {(() => {
+            const affected = assignments.filter(assignment => replacementMemberIds.includes(assignment.user_id) && assignment.status !== 'declined');
+            const selected = affected.find(assignment => assignment.id === replacementAssignmentId);
+            const eligible = selected ? members.filter(member => member.id !== selected.user_id
+              && !outMemberIds.has(member.id)
+              && canAssignMemberToEventRole(selected.roles?.name, memberRoles.some(role => role.user_id === member.id && role.role_id === selected.role_id))
+              && !assignments.some(assignment => assignment.user_id === member.id && assignment.role_id === selected.role_id)) : [];
+            return <div className="space-y-4">
+              <p className="text-sm text-gray-600 dark:text-white/65">Choose an active replacement for the same role. They will be asked to confirm. Linked upcoming rehearsals will also be updated where applicable.</p>
+              <fieldset disabled={replacingAssignment} className="space-y-4">
+              <div><label className="mb-1.5 block text-xs font-bold">Assignment to replace</label>
+                <Select value={replacementAssignmentId} onChange={value => { setReplacementAssignmentId(value); setReplacementUserId(''); }} options={affected.map(assignment => ({ value: assignment.id, label: `${assignment.profiles?.first_name || ''} ${assignment.profiles?.last_name || ''} — ${assignment.roles?.name || 'Assigned role'}` }))} />
+              </div>
+              <div><label className="mb-1.5 block text-xs font-bold">Assign instead</label>
+                <Select value={replacementUserId} onChange={setReplacementUserId} options={eligible.map(member => ({ value: member.id, label: `${member.first_name} ${member.last_name}` }))} placeholder="Choose an active member" />
+              </div>
+              </fieldset>
+              {!eligible.length && <p role="status" className="text-sm text-amber-700 dark:text-amber-300">No eligible active members are available for this role on the event date.</p>}
+              <div className="flex justify-end gap-2"><button type="button" className="btn-secondary" disabled={replacingAssignment} onClick={() => setReplacementMemberIds([])}>Cancel</button>
+                <button type="button" className="btn-primary" disabled={replacingAssignment || !selected || !eligible.some(member => member.id === replacementUserId)} onClick={() => void handleReplaceInactiveAssignment()}>{replacingAssignment ? 'Assigning…' : 'Assign replacement'}</button>
+              </div>
+            </div>;
+          })()}
+        </Modal>
         <EventUpdateViewTracker key={user?.id} eventId={event.id} rescheduledAt={event.rescheduled_at || null} />
         {!assignmentDetailsBlocked && postEventFeedbackOpen && (
           <button
@@ -5275,7 +5338,7 @@ const openLyricsModal = (ss: SetlistSong) => {
           ))}
         </div>
 
-        <div id="event-panel-attendance" role="tabpanel" aria-labelledby="event-tab-attendance" hidden={activeEventTab !== 'attendance'} className="pt-4">
+        <div id="event-panel-attendance" role="tabpanel" aria-labelledby="event-tab-attendance" hidden={activeEventTab !== 'attendance'} className={`pt-4 ${inDialog ? '!mt-0' : ''}`}>
 
         {(() => {
           const attendanceStatus = getAttendanceStatus();
@@ -5455,7 +5518,7 @@ const openLyricsModal = (ss: SetlistSong) => {
         })()}
         </div>
 
-        <div id="event-panel-setlist" role="tabpanel" aria-labelledby="event-tab-setlist" hidden={activeEventTab !== 'setlist'} className="pt-4">
+        <div id="event-panel-setlist" role="tabpanel" aria-labelledby="event-tab-setlist" hidden={activeEventTab !== 'setlist'} className={`pt-4 ${inDialog ? '!mt-0' : ''}`}>
         {linkedServiceEvent && (
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-emerald-500/10 px-3.5 py-3 text-xs text-emerald-800 dark:text-emerald-200">
             <span>Shared setlist with Sunday Service · {format(parseISO(linkedServiceEvent.event_date), 'MMM d')}. Songs, revisions and approval stay the same on both events.</span>
@@ -6853,7 +6916,7 @@ const openLyricsModal = (ss: SetlistSong) => {
         )}
 
         {!assignmentDetailsBlocked && (!postEventFeedbackOpen || showPastEventDetails) && (
-        <div id="event-panel-team" role="tabpanel" aria-labelledby="event-tab-team" hidden={activeEventTab !== 'team'} className="animate-slide-up pt-4" style={{ animationDelay: '150ms' }}>
+        <div id="event-panel-team" role="tabpanel" aria-labelledby="event-tab-team" hidden={activeEventTab !== 'team'} className={`animate-slide-up pt-4 ${inDialog ? '!mt-0' : ''}`} style={{ animationDelay: '150ms' }}>
           <div>
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <h2 className="flex min-w-0 items-center gap-2 text-lg font-black text-gray-900 dark:text-white">
@@ -6922,6 +6985,8 @@ const openLyricsModal = (ss: SetlistSong) => {
                     const RoleIcon = getEventTeamRoleIcon(a.roles?.name);
                     const declineNoteOpen = expandedDeclineNotes.has(a.id);
                     const isOutForEvent = outMemberIds.has(a.user_id);
+                    const needsReplacement = a.profiles?.ministry_status === 'inactive' && a.status !== 'declined'
+                      && !isEventCompleted(event) && !hasEventScheduleEnded(event);
                     return (
                       <div key={a.id}>
                         <div className="group flex items-center gap-3 rounded-xl px-1.5 py-2 transition-colors hover:bg-slate-50 dark:hover:bg-white/[0.04]">
@@ -6963,20 +7028,21 @@ const openLyricsModal = (ss: SetlistSong) => {
                                     return next;
                                   });
                                 }}
-                                className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-red-500/[0.08] px-2 py-0.5 text-[11px] font-semibold text-red-200/80 transition-colors hover:bg-red-500/[0.13] hover:text-red-100"
+                                className="mt-1 inline-flex min-h-7 items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-700 transition-colors hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 dark:border-red-400/15 dark:bg-red-500/[0.08] dark:text-red-200/80 dark:hover:bg-red-500/[0.13] dark:hover:text-red-100"
                                 aria-expanded={declineNoteOpen}
+                                aria-label={`${declineNoteOpen ? 'Hide' : 'View'} decline note from ${a.profiles?.first_name || 'team member'} ${a.profiles?.last_name || ''}`.trim()}
                               >
-                                <span className="h-1.5 w-1.5 rounded-full bg-red-300/80 shadow-[0_0_10px_rgba(252,165,165,0.4)]" />
+                                <span className="h-1.5 w-1.5 rounded-full bg-red-500 dark:bg-red-300/80" />
                                 {declineNoteOpen ? 'Hide note' : 'View note'}
                               </button>
                             )}
                           </div>
-                          <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${a.status === 'confirmed' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : a.status === 'declined' ? 'bg-red-500/10 text-red-700 dark:text-red-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'}`}>{a.status}</span>
+                          <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${!needsReplacement && a.status === 'confirmed' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : a.status === 'declined' ? 'bg-red-500/10 text-red-700 dark:text-red-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'}`}>{needsReplacement ? 'Inactive' : a.status}</span>
                           {isLeader && (
                             <button
                               onClick={() => handleRemoveAssignment(a.id)}
                               disabled={removingAssignmentId !== null}
-                              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/30 transition-colors hover:bg-red-500/10 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 disabled:cursor-not-allowed disabled:opacity-40"
+                              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:cursor-not-allowed disabled:opacity-40 dark:text-white/30 dark:hover:bg-red-500/10 dark:hover:text-red-300"
                               title={`Remove ${a.profiles?.first_name || 'team member'} from this event`}
                               aria-label={`Remove ${a.profiles?.first_name || 'team member'} from this event`}
                             >
@@ -6984,6 +7050,17 @@ const openLyricsModal = (ss: SetlistSong) => {
                             </button>
                           )}
                         </div>
+                        {needsReplacement && hasEventManagementAccess && !isViewingAsMember && !isViewingAsSongLeader && (
+                          <div className="mt-2 mb-3 flex flex-col gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 sm:flex-row sm:items-center sm:justify-between dark:border-amber-500/30 dark:bg-amber-500/10">
+                            <div className="text-xs text-amber-900 dark:text-amber-100">
+                              <p className="font-bold">Inactive · Needs replacement</p>
+                              <p className="mt-1">Assign an active person to this role. No response is needed from {a.profiles?.first_name || 'this member'}.</p>
+                            </div>
+                            <button type="button" className="btn-secondary shrink-0" onClick={() => {
+                              setReplacementMemberIds([a.user_id]); setReplacementAssignmentId(a.id); setReplacementUserId('');
+                            }}>Assign a different person</button>
+                          </div>
+                        )}
                         <AnimatePresence initial={false}>
                           {a.status === 'declined' && a.decline_reason && declineNoteOpen && (
                             <motion.div
@@ -6993,9 +7070,9 @@ const openLyricsModal = (ss: SetlistSong) => {
                               transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
                               className="overflow-hidden"
                             >
-                              <div className="ml-12 mr-2 mb-1 flex items-start gap-2 rounded-xl bg-white/[0.035] px-3 py-2 text-[12px] leading-snug text-white/50 ring-1 ring-white/[0.06]">
-                                <span className="mt-[0.45rem] h-1.5 w-1.5 shrink-0 rounded-full bg-red-300/80 shadow-[0_0_10px_rgba(252,165,165,0.4)]" />
-                                <p className="min-w-0">{a.decline_reason}</p>
+                              <div className="ml-12 mr-2 mb-1 flex items-start gap-2 rounded-xl border border-red-200/70 bg-red-50/70 px-3 py-2 text-[12px] leading-relaxed text-slate-700 dark:border-white/[0.06] dark:bg-white/[0.035] dark:text-white/65">
+                                <span className="mt-[0.45rem] h-1.5 w-1.5 shrink-0 rounded-full bg-red-500 dark:bg-red-300/80" />
+                                <p className="min-w-0 whitespace-pre-wrap break-words">{a.decline_reason}</p>
                               </div>
                             </motion.div>
                           )}

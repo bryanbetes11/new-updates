@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { Bell, CheckCheck, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -10,6 +10,7 @@ import { withRequestTimeout } from '../lib/requestTimeout';
 import type { Notification } from '../types';
 import { recordNotificationOpen } from '../lib/notificationOpenTracking';
 import { resolveNotificationDestination } from '../lib/notificationDestination';
+import { eventModalNavigationOptions } from '../lib/eventModalNavigation';
 
 function emptyListResponse() {
   return { data: [], error: null, count: null, status: 200, statusText: 'OK' };
@@ -19,6 +20,7 @@ export function Notifications() {
   const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -97,7 +99,7 @@ export function Notifications() {
       return;
     }
     const destination = resolveNotificationDestination(n);
-    if (destination) navigate(destination);
+    if (destination) navigate(destination, eventModalNavigationOptions(destination, location, window.matchMedia('(min-width: 1024px)').matches));
   };
 
   const unreadCount = notifications.filter(n => !n.is_read).length;

@@ -1,9 +1,10 @@
 {
-  "headline": "Redesigned Android widgets and a more flexible widget editor.",
+  "headline": "Clearer assignment warnings, availability, and event notifications.",
   "highlights": [
-    "Choose Paper / Pulse or Mono / Signal, with distinct assignment, schedule, setlist, announcement, pending-response, and shortcut layouts.",
-    "Customize with a live preview, expanded preview, size comparisons, spacing, text, accent colors, artwork, and content options.",
-    "The widget editor follows your phone's light or dark mode; each widget can use its own theme.",
-    "Orange date tiles now use white lettering. Existing widget navigation, paging, account protection, and optional transitions are preserved."
+    "Save ministry status reliably and spot inactive members whose event assignments need a replacement.",
+    "Replace inactive assignments from the member's row; inactive members are no longer prompted to confirm or decline.",
+    "See declined assignments and approved leave in one Availability badge, with readable reasons in light and dark mode.",
+    "Open assignment notifications directly to Team; desktop opens an event modal over the current screen.",
+    "Mobile inactive rows match the event list, and desktop event dialogs keep a steady size across tabs."
   ]
 }

@@ -285,8 +285,13 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
   };
 
   const saveMemberEdit = async (memberId: string) => {
+    if (saving) return;
     const member = members.find(m => m.id === memberId);
-    const { official_join_date, ...memberForm } = editForm;
+    if (!member?.org_id || member.org_id !== profile?.org_id) {
+      toast('error', 'Could not verify this member’s church. Refresh and try again.');
+      return;
+    }
+    const { official_join_date, ministry_status, ...memberForm } = editForm;
     const officialJoinDateChanged = official_join_date !== (member?.official_join_date || '');
 
     const updatePayload: Record<string, string | null> = {
@@ -298,17 +303,33 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
     if (officialJoinDateChanged) {
       updatePayload.official_join_date = official_join_date || null;
     }
+    if (ministry_status !== member.ministry_status) {
+      updatePayload.ministry_status = ministry_status;
+    }
 
     setSaving(true);
-    const { error } = await supabase
-      .from('profiles')
-      .update(updatePayload)
-      .eq('id', memberId);
-    setSaving(false);
-    if (error) { toast('error', `Failed to save: ${error.message}`); return; }
-    toast('success', 'Member updated');
-    setEditingMember(null);
-    fetchMembers();
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .update(updatePayload)
+        .eq('id', memberId)
+        .eq('org_id', member.org_id)
+        .select('id, ministry_status')
+        .single();
+      if (error) throw error;
+      if (!data || data.id !== memberId || data.ministry_status !== ministry_status) {
+        throw new Error('The member changes were not saved. Refresh and try again.');
+      }
+      toast('success', 'Member updated');
+      setEditingMember(null);
+      await fetchMembers();
+    } catch (error) {
+      const message = error && typeof error === 'object' && 'message' in error
+        ? String(error.message) : 'Check your connection and try again.';
+      toast('error', `Failed to save: ${message}`);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const defaultMemberSettings = (member: MemberWithRoles): MemberSettings => ({
@@ -707,6 +728,10 @@ export function TeamManage({ embedded }: TeamManageProps = {}) {
                                 { value: 'inactive', label: 'Inactive' },
                               ]}
                             />
+                            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                              Only Active members appear in the event assignment picker, unless excluded from Assignments below.
+                              Restoration, Suspended, and Inactive members stay in this roster. Existing assignments and history are kept; review future assignments separately.
+                            </p>
                           </div>
 
                           <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">

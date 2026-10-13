@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { motion } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -13,10 +13,19 @@ import type { Video } from '../../types';
 import { cacheSnapshot, loadSnapshot } from '../../lib/syncedPreferences';
 import { deviceCacheScope, invalidateDeviceSnapshots, readDeviceSnapshot, writeDeviceSnapshot } from '../../lib/deviceCache';
 import { useNativeCachedImage } from '../../lib/nativeImageCache';
+import { matchVideoSetlist, type VideoSetlist } from '../../lib/videoSetlist';
+import { VideoSetlistSongs } from '../../components/VideoSetlistSongs';
 
 const categories = ['General', 'Worship', 'Tutorial', 'Sermon', 'Conference', 'Other'];
 const VIDEOS_PER_PAGE = 20;
 const VIDEO_SNAPSHOT_KEY = 'library:videos';
+const VIDEO_SETS_SNAPSHOT_KEY = 'library:video-sets';
+
+interface VideoSetlistLibrary {
+  identity: string;
+  items: VideoSetlist[];
+  status: 'loading' | 'ready' | 'saved' | 'unavailable';
+}
 
 const categoryColors: Record<string, string> = {
   Worship: 'bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300',
@@ -184,6 +193,7 @@ export function VideosTab() {
   const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [showSets, setShowSets] = useState(true);
   const [visibleCount, setVisibleCount] = useState(VIDEOS_PER_PAGE);
   const [showCreate, setShowCreate] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
@@ -201,6 +211,52 @@ export function VideosTab() {
   const [createNotifyMembers, setCreateNotifyMembers] = useState(false);
   const [showPlayer, setShowPlayer] = useState(false);
   const [playerUnavailable, setPlayerUnavailable] = useState(false);
+  const [playerSetlistId, setPlayerSetlistId] = useState<string | null>(null);
+  const [setlistLibrary, setSetlistLibrary] = useState<VideoSetlistLibrary>({ identity: listIdentity, items: [], status: 'loading' });
+  const setlistRequestGeneration = useRef(0);
+
+  const fetchVideoSetlists = useCallback(async () => {
+    const generation = ++setlistRequestGeneration.current;
+    const identity = listIdentity;
+    const isCurrent = () => currentIdentity.current === identity && setlistRequestGeneration.current === generation;
+    setSetlistLibrary({ identity, items: [], status: 'loading' });
+    if (!user?.id || !organization?.id) return;
+    let networkApplied = false;
+    let savedItems: VideoSetlist[] | null = null;
+    const savedRead = Promise.all([
+      readDeviceSnapshot<VideoSetlist[]>(cacheScope, VIDEO_SETS_SNAPSHOT_KEY),
+      readDeviceSnapshot<{ setlists: VideoSetlist[] }>(cacheScope, 'library:songs-sets'),
+    ]).then(([videoSets, songLibrary]) => {
+      const items = videoSets?.value || songLibrary?.value.setlists;
+      if (!isCurrent() || networkApplied || !Array.isArray(items)) return;
+      savedItems = items;
+      setSetlistLibrary({ identity, items, status: 'saved' });
+    }).catch(() => {});
+    if (offlineMode) {
+      await savedRead;
+      if (isCurrent() && !savedItems) setSetlistLibrary({ identity, items: [], status: 'unavailable' });
+      return;
+    }
+    try {
+      const { data, error } = await supabase.from('setlists')
+        .select('id, status, event_id, events(title, event_date, event_type), setlist_songs(id, position, performed_key, songs(title, artist, song_key))')
+        .eq('org_id', organization.id).eq('status', 'approved').order('created_at', { ascending: false });
+      if (!isCurrent()) return;
+      if (error) throw error;
+      const items = (data || []) as unknown as VideoSetlist[];
+      networkApplied = true;
+      setSetlistLibrary({ identity, items, status: 'ready' });
+      void writeDeviceSnapshot(cacheScope, VIDEO_SETS_SNAPSHOT_KEY, items).catch(() => {});
+    } catch {
+      await savedRead;
+      if (isCurrent() && !savedItems) setSetlistLibrary({ identity, items: [], status: 'unavailable' });
+    }
+  }, [listIdentity, user?.id, organization?.id, cacheScope, offlineMode]);
+
+  useEffect(() => {
+    void fetchVideoSetlists();
+    return () => { setlistRequestGeneration.current += 1; };
+  }, [fetchVideoSetlists]);
 
   useEffect(() => {
     const state = location.state as { openModal?: string } | null;
@@ -412,6 +468,7 @@ export function VideosTab() {
 
   const openVideo = (video: Video) => {
     setSelectedVideo(video);
+    setPlayerSetlistId(null);
     setPlayerUnavailable(false);
     setShowPlayer(true);
     setCommentContent('');
@@ -582,11 +639,22 @@ export function VideosTab() {
   const canManageVideo = (video: Video) => (!cacheScope || cacheStatus === 'updated') && (video.uploaded_by === user?.id || isProductionDirector);
 
   const scopedVideos = videosIdentity === listIdentity ? videos : [];
+  const setlistStatus = setlistLibrary.identity === listIdentity ? setlistLibrary.status : 'loading';
+  const videoSetlistMatches = useMemo(() => {
+    const scopedSetlists = setlistLibrary.identity === listIdentity ? setlistLibrary.items : [];
+    return new Map((videosIdentity === listIdentity ? videos : []).map(video => [video.id, matchVideoSetlist(video.title, scopedSetlists)]));
+  }, [videos, videosIdentity, listIdentity, setlistLibrary]);
+  const playerMatch = selectedVideo ? videoSetlistMatches.get(selectedVideo.id) : undefined;
+  const playerSetlist = playerMatch?.kind === 'matched' ? playerMatch.setlist
+    : playerMatch?.kind === 'ambiguous' ? playerMatch.setlists.find(setlist => setlist.id === playerSetlistId) : undefined;
   const filtered = [...scopedVideos].sort((a, b) => {
     const dateDifference = getVideoSortDate(b) - getVideoSortDate(a);
     return dateDifference || Date.parse(b.created_at) - Date.parse(a.created_at);
   }).filter(v => {
-    const matchSearch = !search || v.title.toLowerCase().includes(search.toLowerCase()) || v.description.toLowerCase().includes(search.toLowerCase());
+    const matchedSet = videoSetlistMatches.get(v.id);
+    const query = search.toLowerCase();
+    const matchSearch = !search || v.title.toLowerCase().includes(query) || (v.description || '').toLowerCase().includes(query)
+      || (matchedSet?.kind === 'matched' && matchedSet.setlist.setlist_songs?.some(song => song.songs?.title.toLowerCase().includes(query)));
     const matchCat = !categoryFilter || v.category === categoryFilter;
     return matchSearch && matchCat;
   });
@@ -654,7 +722,20 @@ export function VideosTab() {
               );
             })}
         </div>
-        <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+        <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={showSets}
+            aria-label="Show sets"
+            onClick={() => setShowSets(current => !current)}
+            className="inline-flex min-h-11 shrink-0 items-center gap-2.5 rounded-lg px-1 text-xs font-semibold text-gray-600 transition-colors hover:text-emerald-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500 dark:text-white/65 dark:hover:text-emerald-300 sm:px-2"
+          >
+            <span aria-hidden="true" className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${showSets ? 'bg-emerald-600' : 'bg-gray-300 dark:bg-white/20'}`}>
+              <span className={`absolute left-0 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${showSets ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+            </span>
+            Show sets
+          </button>
           <button
             onClick={() => setShowCreate(true)}
             className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-5 text-[13px] font-black text-gray-800 transition-all hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800 active:scale-[0.97] dark:border-white/[0.08] dark:bg-white/[0.095] dark:text-white dark:hover:border-[#1ed760] dark:hover:bg-[#1ed760] dark:hover:text-black"
@@ -677,7 +758,7 @@ export function VideosTab() {
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search videos…"
+            placeholder="Search videos or songs…"
             className="h-12 w-full rounded-full border border-slate-200 bg-white pl-10 pr-9 text-[13px] text-slate-900 outline-none transition-all placeholder:text-slate-500 focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/30 dark:border-white/[0.08] dark:bg-white/[0.055] dark:text-white dark:placeholder-white/30"
           />
           {search && (
@@ -710,13 +791,14 @@ export function VideosTab() {
             variants={containerVariants}
             initial="hidden"
             animate="show"
-            className="grid grid-cols-2 gap-2.5 overflow-visible md:gap-4 lg:grid-cols-3"
+            className={`grid ${showSets ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-2'} gap-2.5 overflow-visible md:gap-4 lg:grid-cols-3`}
           >
             {visibleVideos.map(video => {
               const thumb = video.thumbnail_url || getYouTubeThumb(video.video_url);
               const canManage = canManageVideo(video);
               const catColor = categoryColors[video.category] ?? categoryColors.General;
               const titleParts = splitVideoTitleDate(video.title);
+              const setlistMatch = videoSetlistMatches.get(video.id);
               return (
                 <motion.div
                   key={video.id}
@@ -764,9 +846,12 @@ export function VideosTab() {
                         {video.description && (
                           <p className="mt-1 line-clamp-2 text-[13px] leading-5 text-gray-600 dark:text-white/48 sm:line-clamp-1">{video.description}</p>
                         )}
+                        {showSets && setlistMatch?.kind === 'matched' && <VideoSetlistSongs setlist={setlistMatch.setlist} compact saved={setlistStatus === 'saved'} />}
+                        {showSets && setlistMatch?.kind === 'ambiguous' && <p className="mt-3 border-t border-gray-100 pt-2.5 text-[11px] text-gray-500 dark:border-white/[0.07] dark:text-white/45">{setlistMatch.setlists.length} possible sets · Choose when viewing</p>}
+                        {showSets && setlistMatch?.kind === 'unmatched' && setlistMatch.date && <p className="mt-3 text-[11px] text-gray-400 dark:text-white/35">{setlistStatus === 'loading' ? 'Loading matching set…' : setlistStatus === 'unavailable' ? 'Matching set unavailable' : 'No matching approved set yet'}</p>}
                         <div className="mt-2 flex min-w-0 flex-nowrap items-center justify-between gap-2 text-[10px] font-semibold text-gray-500 dark:text-white/32 sm:text-[11px]">
                           <span className="whitespace-nowrap text-gray-500 dark:text-white/48">
-                            Uploaded <span className="font-mono">{format(parseISO(video.created_at), 'MMM d, yyyy')}</span>
+                            <span className="sr-only sm:not-sr-only">Uploaded </span><span className="font-mono">{format(parseISO(video.created_at), 'MMM d, yyyy')}</span>
                           </span>
                           <span role="button" tabIndex={0} onClick={event => openViewers(video, event)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') openViewers(video, event); }} className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-gray-500 transition hover:bg-gray-100 hover:text-gray-800 dark:text-white/48 dark:hover:bg-white/10 dark:hover:text-white" aria-label={`See who viewed ${video.title}`}>
                             <Eye className="h-3.5 w-3.5" /> {viewCounts[video.id] || 0}
@@ -973,6 +1058,20 @@ export function VideosTab() {
               </span>
               <span className="font-mono">{format(parseISO(selectedVideo.created_at), 'MMM d, yyyy')}</span>
             </div>
+
+            {showSets && <section aria-label="Songs from Sets" className="space-y-3">
+              {playerMatch?.kind === 'ambiguous' && <div className="rounded-2xl border border-gray-200 p-4 dark:border-white/10">
+                <p className="text-sm font-bold text-gray-900 dark:text-white">Choose the matching set</p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-white/45">More than one approved set is available for this date.</p>
+                <div className="mt-3 flex flex-wrap gap-2">{playerMatch.setlists.map(setlist => <button key={setlist.id} type="button" aria-pressed={playerSetlistId === setlist.id} onClick={() => setPlayerSetlistId(setlist.id)} className={`min-h-11 max-w-full rounded-xl border px-3 py-2 text-left text-xs font-semibold ${playerSetlistId === setlist.id ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : 'border-gray-200 text-gray-600 hover:border-emerald-300 dark:border-white/10 dark:text-white/60'}`}>
+                  {setlist.events?.event_type || 'Approved set'}{setlist.events?.title ? ` · ${setlist.events.title}` : ''}
+                </button>)}</div>
+              </div>}
+              {playerSetlist ? <VideoSetlistSongs setlist={playerSetlist} saved={setlistStatus === 'saved'} /> : playerMatch?.kind !== 'ambiguous' && <div className="rounded-2xl border border-gray-200 p-4 text-xs text-gray-500 dark:border-white/10 dark:text-white/45">
+                {setlistStatus === 'loading' ? 'Loading matching set…' : setlistStatus === 'unavailable' ? 'The approved sets could not be loaded. You can still watch the video.' : playerMatch?.kind === 'unmatched' && !playerMatch.date ? 'No matching set found. Dated video titles can be matched to approved sets.' : 'No matching approved set for this date yet.'}
+                {setlistStatus === 'unavailable' && !offlineMode && <button type="button" onClick={() => void fetchVideoSetlists()} className="ml-2 font-bold text-emerald-700 dark:text-emerald-300">Retry sets</button>}
+              </div>}
+            </section>}
 
             <div className="border-b border-gray-200 pb-4 dark:border-white/10">
               <div className="flex items-center justify-between gap-3">

@@ -1,10 +1,10 @@
 {
-  "headline": "Clearer assignment warnings, availability, and event notifications.",
+  "headline": "See the full song set while browsing worship videos.",
   "highlights": [
-    "Save ministry status reliably and spot inactive members whose event assignments need a replacement.",
-    "Replace inactive assignments from the member's row; inactive members are no longer prompted to confirm or decline.",
-    "See declined assignments and approved leave in one Availability badge, with readable reasons in light and dark mode.",
-    "Open assignment notifications directly to Team; desktop opens an event modal over the current screen.",
-    "Mobile inactive rows match the event list, and desktop event dialogs keep a steady size across tabs."
+    "Videos show every song from the matching approved set, in set order.",
+    "Use the Show sets toggle beside Add Video to show or hide song lists.",
+    "On mobile, showing sets uses one column for readable song lists; hiding sets restores two columns.",
+    "Search videos by song title, and see song artists and keys in the video player.",
+    "Choose the matching service when more than one approved set shares a recording date."
   ]
 }

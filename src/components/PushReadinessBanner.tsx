@@ -1,3 +1,5 @@
+import { isDesktopApp } from '../lib/desktopPlatform';
+import { desktopAlertsEnabled } from '../lib/desktopNotifications';
 import { useCallback, useEffect, useState } from 'react';
 import { Frown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -12,12 +14,16 @@ type PushReadinessBannerProps = {
 };
 
 export function PushReadinessBanner({ onVisibilityChange }: PushReadinessBannerProps) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const navigate = useNavigate();
   const [ready, setReady] = useState<boolean | null>(null);
 
   const checkReadiness = useCallback(async () => {
     if (!user || typeof window === 'undefined') return;
+    if (isDesktopApp()) {
+      setReady(Boolean(profile?.org_id && desktopAlertsEnabled({ userId: user.id, orgId: profile.org_id })));
+      return;
+    }
     if (isNativeApp()) {
       try { setReady(await nativePushReadiness(user.id)); }
       catch { setReady(null); }
@@ -46,7 +52,7 @@ export function PushReadinessBanner({ onVisibilityChange }: PushReadinessBannerP
     } catch {
       setReady(false);
     }
-  }, [user]);
+  }, [user, profile?.org_id]);
 
   useEffect(() => {
     checkReadiness();
@@ -82,7 +88,7 @@ export function PushReadinessBanner({ onVisibilityChange }: PushReadinessBannerP
     navigate('/settings/notifications?setup=push');
   };
 
-  const message = !isNativeApp() && isIosDevice() && !isStandalonePwa()
+  const message = isDesktopApp() ? 'Get desktop alerts while ServeSync is open or minimized.' : !isNativeApp() && isIosDevice() && !isStandalonePwa()
     ? 'Add ServeSync to your Home Screen to turn on alerts.'
     : <>Get notified when you receive{' '}<br className="sm:hidden" />new messages or reminders.</>;
 

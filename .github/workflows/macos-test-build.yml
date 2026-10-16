@@ -1,0 +1,41 @@
+name: ServeSync Mac test installer
+
+on:
+  push:
+    branches: [desktop/macos-dmg-test]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apple-silicon:
+    runs-on: macos-15
+    timeout-minutes: 40
+    env:
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install JavaScript dependencies
+        run: npm ci
+      - name: Install Rust and Apple Silicon target
+        run: |
+          rustup toolchain install 1.90.0 --profile minimal
+          rustup default 1.90.0
+          rustup target add aarch64-apple-darwin
+      - name: Build and verify personal Mac installer
+        run: npm run desktop:build:mac
+      - name: Save installer and verification report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ServeSync-Mac-Apple-Silicon
+          path: output/macos/*/*
+          if-no-files-found: error
+          retention-days: 14

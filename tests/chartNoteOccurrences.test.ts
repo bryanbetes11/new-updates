@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';
+import { withChartNoteOccurrences } from '../src/lib/chartNoteOccurrences';
+
+const verse = { key: 'verse-1', label: 'Verse', body: 'Original chart' };
+const chorus = { key: 'chorus-1', label: 'Chorus', body: 'Chorus chart' };
+const input = [verse, chorus, verse, verse];
+const arranged = withChartNoteOccurrences(input);
+assert.deepEqual(arranged.map(section => section.noteKey), ['verse-1', 'chorus-1', 'verse-1:repeat:2', 'verse-1:repeat:3']);
+assert.equal(arranged[0].noteLabel, 'Verse');
+assert.equal(arranged[2].noteLabel, 'Verse · repeat 2');
+assert.equal(input[0], input[2], 'input references are not mutated to add repeat anchors');
+assert.deepEqual(verse, { key: 'verse-1', label: 'Verse', body: 'Original chart' });
+assert.notEqual(arranged[0], arranged[2]);
+const legacyNotes: Record<string, string> = { 'verse-1': 'Section cue', 'verse-1:line:0': 'First-line cue' };
+assert.deepEqual(arranged.map(section => legacyNotes[section.noteKey] || ''), ['Section cue', '', '', ''], 'legacy section note appears only on the first occurrence');
+assert.deepEqual(arranged.map(section => legacyNotes[`${section.noteKey}:line:0`] || ''), ['First-line cue', '', '', ''], 'line notes also stay on the first occurrence');
+const distinctNotes: Record<string, string> = { ...legacyNotes, 'verse-1:repeat:2': 'Second-pass cue', 'verse-1:repeat:2:line:0': 'Second-pass line cue' };
+assert.equal(distinctNotes[arranged[0].noteKey], 'Section cue');
+assert.equal(distinctNotes[arranged[2].noteKey], 'Second-pass cue');
+assert.equal(distinctNotes[`${arranged[2].noteKey}:line:0`], 'Second-pass line cue');
+const reordered = withChartNoteOccurrences([chorus, verse, verse]);
+assert.deepEqual(reordered.map(section => section.noteKey), ['chorus-1', 'verse-1', 'verse-1:repeat:2'], 'moving a different section does not change verse note anchors');
+assert.deepEqual(withChartNoteOccurrences([verse, { key: 'verse-2', label: 'Verse' }]).map(section => section.noteKey), ['verse-1', 'verse-2'], 'distinct original verses retain their original keys');
+assert.deepEqual(withChartNoteOccurrences([]), []);

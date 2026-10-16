@@ -12,7 +12,7 @@ const notification = '00000000-0000-4000-8000-000000000031';
 async function run(overrides = {}) {
   const options = { native: true, web: true, androidEnabled: 'true', enabled: true, quiet: false, stale: false, nativeFail: false, ...overrides };
   let handler;
-  const calls = { web: 0, native: 0, updates: [], queries: [] };
+  const calls = { web: 0, native: 0, updates: [], queries: [], payloads: [] };
   const rows = {
     profiles: { org_id: org }, notifications: { id: notification, org_id: options.wrongOrg ? 'other' : org, type: 'assignment', priority: 'normal', required: false },
     organizations: { name: 'Fixture Church' }, notification_system_settings: { push_delivery_enabled: true },
@@ -38,12 +38,12 @@ async function run(overrides = {}) {
   vm.runInNewContext(code, {
     Deno: { env: { get: key => ({ ANDROID_PUSH_ENABLED: options.androidEnabled, ANDROID_PUSH_TEST_USER_IDS: 'different-legacy-test-user' })[key] }, serve: callback => { handler = callback; } },
     createClient: () => client,
-    createFcmSender: () => async message => { calls.native++; assert.equal(message.userId, user); return { ok: !options.nativeFail && !options.stale, stale: options.stale }; },
-    webpush: { setVapidDetails() {}, sendNotification: async () => { calls.web++; } },
+    createFcmSender: () => async message => { calls.native++; calls.payloads.push(message); assert.equal(message.userId, user); return { ok: !options.nativeFail && !options.stale, stale: options.stale }; },
+    webpush: { setVapidDetails() {}, sendNotification: async (_subscription, payload) => { calls.web++; calls.payloads.push(JSON.parse(payload)); } },
     Request, Response, Date, Intl, console,
   });
   const response = await handler(new Request('https://fixture.invalid/send-push', { method: 'POST', headers: { 'x-internal-secret': options.badSecret ? 'wrong' : 'fixture-secret' },
-    body: JSON.stringify({ user_id: user, notification_id: notification, title: 'Test', body: 'Fixture only', data: { url: '/notifications' } }) }));
+    body: JSON.stringify({ user_id: user, notification_id: notification, title: 'Test', body: 'Fixture only', data: { url: '/notifications' }, ...options.payload }) }));
   return { calls, status: response.status, body: await response.json() };
 }
 let result = await run();
@@ -69,4 +69,21 @@ result = await run({ stale: true });
 assert.ok(result.calls.queries.some(q => q.table === 'native_push_devices' && q.mutation?.enabled === false && q.filters.some(([key, value]) => key === 'token' && value === 'fixture-token')), 'cleanup is conditional on exact stale token');
 assert.equal((await run({ badSecret: true })).status, 401);
 assert.equal((await run({ wrongOrg: true })).status, 403);
+const longBody = 'a'.repeat(998) + '😀' + 'b'.repeat(200);
+result = await run({ payload: { title: 'T'.repeat(200), body: longBody } });
+assert.equal(result.status, 200, 'long inbox text is accepted for a bounded push preview');
+assert.equal(result.body.sent, 2, 'long revisions reach both transports');
+for (const payload of result.calls.payloads) {
+  assert.ok(payload.title.length <= 160);
+  assert.ok(payload.body.length <= 1000);
+  assert.ok(payload.body.endsWith('…'));
+  assert.equal(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(payload.body), false, 'no split emoji');
+}
+assert.ok(result.calls.updates.every(update => !('body' in update.value) && !('title' in update.value)), 'inbox copy is never truncated');
+result = await run({ payload: { body: 'b'.repeat(1000) } });
+assert.ok(result.calls.payloads.every(payload => payload.body === 'b'.repeat(1000)), 'boundary text is preserved');
+assert.equal((await run({ payload: { title: ' ' } })).status, 400);
+assert.equal((await run({ payload: { body: 42 } })).status, 400);
+assert.equal((await run({ payload: { user_id: 'invalid' } })).status, 400);
+assert.equal((await run({ payload: { notification_id: 'invalid' } })).status, 400);
 console.log('PASS native push dispatch: custom auth, org/user scope, all opted-in recipients, kill switch, preferences, quiet hours, native-only, partial delivery, stale-token refresh protection');

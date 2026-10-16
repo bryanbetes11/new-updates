@@ -1,4 +1,5 @@
 import { isNativeApp } from './nativePlatform';
+import { isDesktopApp } from './desktopPlatform';
 import {
   APP_BUILD_ID,
   APP_BUILD_NUMBER,
@@ -275,7 +276,7 @@ export function shouldRequireAppUpdate() {
 }
 
 async function performAppUpdateCheck(): Promise<AppUpdateCheckResult> {
-  if (isNativeApp()) return { status: 'native-managed' };
+  if (isNativeApp() || isDesktopApp()) return { status: 'native-managed' };
   if (import.meta.env.DEV || isLocalPreviewHost() || !('serviceWorker' in navigator)) {
     return { status: 'up-to-date', manifest: currentManifest };
   }
@@ -342,7 +343,7 @@ export function checkForAppUpdate(): Promise<AppUpdateCheckResult> {
 }
 
 export async function applyPendingAppUpdate() {
-  if (isNativeApp()) return false;
+  if (isNativeApp() || isDesktopApp()) return false;
   const latestCheck = await checkForAppUpdate();
   if (latestCheck.status === 'native-managed') return false;
 
@@ -400,7 +401,7 @@ export async function applyPendingAppUpdate() {
 export function registerAppServiceWorker() {
   // Packaged apps update their bundled assets through a new native build.
   // Do not register a web worker or clear native-origin caches as localhost QA.
-  if (isNativeApp()) return;
+  if (isNativeApp() || isDesktopApp()) return;
   if (!('serviceWorker' in navigator)) return;
   if (import.meta.env.DEV || isLocalPreviewHost()) {
     window.addEventListener('load', async () => {

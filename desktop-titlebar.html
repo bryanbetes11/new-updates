@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ServeSync window controls</title>
+    <style>
+      :root{font-family:"Segoe UI",sans-serif;color:#475569;background:#f6f8fb;color-scheme:light}
+      :root.dark{color:#aab4c2;background:#101512;color-scheme:dark}
+      *{box-sizing:border-box}body{margin:0;overflow:hidden;user-select:none}
+      .caption{height:38px;display:flex;align-items:center;border-bottom:1px solid #0f172a0c;padding-left:14px}
+      .dark .caption{border-color:#ffffff0c}
+      .brand{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;letter-spacing:.015em;pointer-events:none}
+      .brand img{width:17px;height:17px}.drag-space{flex:1;height:100%}
+      .controls{height:100%;display:flex}button{width:46px;height:100%;border:0;background:transparent;color:inherit;display:grid;place-items:center;cursor:default}
+      button:hover{background:#0f172a0b}.dark button:hover{background:#ffffff12}button:focus-visible{outline:2px solid #22a06b;outline-offset:-3px}
+      button.close:hover{background:#c42b1c;color:#fff}svg{width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:1.1}
+      #error{font-size:11px;color:#b45309;margin-right:10px}
+    </style>
+  </head>
+  <body>
+    <header class="caption" data-tauri-drag-region>
+      <span class="brand"><img src="/favicon-64.png" alt="" />ServeSync</span>
+      <div class="drag-space" data-tauri-drag-region></div>
+      <span id="error" role="status"></span>
+      <div class="controls" aria-label="Window controls">
+        <button id="minimize" aria-label="Minimize" title="Minimize"><svg viewBox="0 0 12 12"><path d="M1 6h10"/></svg></button>
+        <button id="maximize" aria-label="Maximize" title="Maximize"><svg viewBox="0 0 12 12"><rect x="1.5" y="1.5" width="9" height="9"/></svg></button>
+        <button id="close" class="close" aria-label="Close ServeSync" title="Close"><svg viewBox="0 0 12 12"><path d="m1.5 1.5 9 9m0-9-9 9"/></svg></button>
+      </div>
+    </header>
+    <script type="module" src="/src/desktop/titlebar.ts"></script>
+  </body>
+</html>

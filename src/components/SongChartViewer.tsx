@@ -8,19 +8,24 @@ import { createBufferedDraftWriter } from '../lib/bufferedDraftWriter';
 import { cachedSongNotes, loadSongNotes, subscribeSongNotes, updateCachedSongNote } from '../lib/songNoteCache';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowDown, ArrowUp, Bold, Captions, Check, ChevronLeft, Copy, Edit3, FileText, Gauge, Italic, ListOrdered, Lock, Minus, Music2, Pause, Play, Plus, RotateCcw, Save, Settings2, StickyNote, Trash2, Users, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Bold, Captions, Check, ChevronLeft, Copy, Edit3, FileText, Gauge, Italic, ListOrdered, Lock, Minus, Music2, Pause, Play, Plus, RotateCcw, Save, Settings2, StickyNote, Trash2, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useRecoverableDraft } from '../hooks/useRecoverableDraft';
 import { draftRecoveryKey } from '../lib/draftRecovery';
 import { useChartTextGestures } from '../hooks/useChartTextGestures';
 import { ChartLineNote } from './ChartLineNote';
+import { ChartNoteEditor } from './ChartNoteEditor';
 import { ChartNoteTrigger } from './ChartNoteTrigger';
 import { usePrivateSongNotes } from '../hooks/usePrivateSongNotes';
 import { AlignedChartLine } from './AlignedChartLine';
 import { useAuth } from '../contexts/AuthContext';
 import { loadSyncedPreference, saveSyncedPreference } from '../lib/syncedPreferences';
 import { usePersonalChartKey } from '../hooks/usePersonalChartKey';
-import { ChordProLine, detectChordProKey, formatChordProForPlainEditor, getKeyTransposeOffset, parseChordPro, parseChordProMetadata, plainEditorSectionsToChordPro, plainEditorToChordPro, transposeChordPro, transposeKey } from '../lib/chordPro';
+import { usePersonalCapo } from '../hooks/usePersonalCapo';
+import { getCapoChartView } from '../lib/personalCapo';
+import { withChartNoteOccurrences } from '../lib/chartNoteOccurrences';
+import { GuitarCapoControl } from './GuitarCapoControl';
+import { ChordProLine, detectChordProKey, formatChordProForPlainEditor, parseChordPro, parseChordProMetadata, plainEditorSectionsToChordPro, plainEditorToChordPro, transposeChordPro } from '../lib/chordPro';
 
 const SECTION_TONES = [
   {
@@ -305,6 +310,8 @@ interface SongChartViewerProps {
   artist?: string | null;
   songKey?: string | null;
   performedKey?: string | null;
+  capoEnabled?: boolean;
+  capoSongId?: string;
   chordproText?: string | null;
   editable?: boolean;
   fullBleed?: boolean;
@@ -574,6 +581,8 @@ export function SongChartViewer({
   artist,
   songKey,
   performedKey,
+  capoEnabled = false,
+  capoSongId,
   chordproText,
   editable = false,
   fullBleed = false,
@@ -607,6 +616,7 @@ export function SongChartViewer({
   const initialSourceChartKey = initialMetadata.key || songKey || initialDetectedKey || '';
   const personalKeyPreference = usePersonalChartKey(profile?.org_id, user?.id, songId);
   const personalKey = personalKeyPreference.key;
+  const capoPreference = usePersonalCapo(profile?.org_id, user?.id, capoSongId || songId, capoEnabled);
   const [isEditing, setIsEditing] = useState(initialEditorState.isEditing);
   const [draft, setDraft] = useState(initialEditorState.draft);
   const [draftSections, setDraftSections] = useState<EditableChartSection[]>(initialEditorState.draftSections);
@@ -691,8 +701,11 @@ export function SongChartViewer({
   const metadata = useMemo(() => parseChordProMetadata(previewChordProText), [previewChordProText]);
   const detectedKey = useMemo(() => detectChordProKey(previewChordProText, metadata.key || ''), [metadata.key, previewChordProText]);
   const sourceChartKey = previewBaseKey || metadata.key || songKey || detectedKey || '';
-  const transpose = getKeyTransposeOffset(sourceChartKey, personalKey || performedKey || songKey || sourceChartKey);
+  const capoView = getCapoChartView(sourceChartKey, performedKey || songKey || sourceChartKey, personalKey, capoPreference.fret, capoEnabled && capoPreference.isOn);
+  const transpose = capoView.transpose;
   const selectPersonalKey = (key: string | null) => {
+    // Manual personal keys and capo shapes are separate ways to choose a view.
+    if (capoEnabled && capoPreference.isOn) void capoPreference.save(capoPreference.fret, false);
     void personalKeyPreference.save(key);
   };
   const deferredDraft = useDeferredValue(draft);
@@ -925,13 +938,13 @@ export function SongChartViewer({
     [defaultSectionOrder, sectionOrder]
   );
   const arrangedChartSections = useMemo(() => {
-    if (!sectionOrder?.length) return chartSections;
+    if (!sectionOrder?.length) return withChartNoteOccurrences(chartSections);
     const arranged = sectionOrder
       .map(token => sectionOrderLookups.byCode.get(token.toUpperCase()))
       .filter((section): section is ChartSection => Boolean(section));
-    return arranged.length > 0 ? arranged : chartSections;
+    return withChartNoteOccurrences(arranged.length > 0 ? arranged : chartSections);
   }, [chartSections, sectionOrder, sectionOrderLookups]);
-  const displayKey = sourceChartKey ? transposeKey(sourceChartKey, transpose) : '';
+  const displayKey = capoView.shapesKey;
   const keyOptions = useMemo(
     () => sourceChartKey.includes('b') ? FLAT_KEY_OPTIONS : SHARP_KEY_OPTIONS,
     [sourceChartKey]
@@ -1326,11 +1339,7 @@ export function SongChartViewer({
 
   return (
     <div
-      className={`flex h-full flex-col overflow-hidden bg-white text-gray-950 dark:bg-[#111412] dark:text-white ${
-        fullBleed
-          ? 'service-mode-chart-viewer min-h-0 rounded-none shadow-none ring-0'
-          : 'min-h-[70vh] rounded-[28px] shadow-2xl ring-1 ring-black/10 dark:ring-white/10'
-      }`}
+      className={`flex h-full min-h-0 flex-col overflow-hidden rounded-none bg-white text-gray-950 shadow-none ring-0 dark:bg-[#111412] dark:text-white ${fullBleed ? 'service-mode-chart-viewer' : ''}`}
     >
       {showTopBar && toolbarTarget !== null && (
         <ChartToolbarSlot target={toolbarTarget}>
@@ -1343,10 +1352,10 @@ export function SongChartViewer({
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-300">Song Chart</p>
                 <h2 className="truncate text-2xl font-black tracking-[-0.04em]">{metadata.title || title}</h2>
-                <p className="mt-0.5 truncate text-sm text-gray-500 dark:text-white/45">{metadata.artist || artist || 'No artist'}{displayKey ? ` · Key ${displayKey}` : ''}</p>
+                <p className="mt-0.5 truncate text-sm text-gray-500 dark:text-white/45">{metadata.artist || artist || 'No artist'}{displayKey ? capoView.capo > 0 ? ` · Shapes ${displayKey} · Band ${capoView.soundingKey}` : ` · Key ${displayKey}` : ''}</p>
               </div>
               {onClose && (
-                <button onClick={requestClose} className="rounded-full p-2 text-gray-400 transition-colors hover:bg-black/[0.04] hover:text-gray-700 dark:hover:bg-white/[0.08] dark:hover:text-white">
+                <button onClick={requestClose} aria-label="Close song chart" className="rounded-full p-2 text-gray-400 transition-colors hover:bg-black/[0.04] hover:text-gray-700 dark:hover:bg-white/[0.08] dark:hover:text-white">
                   <X className="h-5 w-5" />
                 </button>
               )}
@@ -1518,6 +1527,26 @@ export function SongChartViewer({
             </motion.div>
           )}
         </AnimatePresence>
+
+        {showControls && !isEditing && capoEnabled && <GuitarCapoControl
+          fret={capoPreference.fret}
+          isOn={capoPreference.isOn}
+          shapesKey={displayKey}
+          soundingKey={capoView.soundingKey}
+          disabled={!capoPreference.canSave || !capoView.hasKey}
+          saving={capoPreference.saving}
+          dirty={capoPreference.dirty}
+          message={capoPreference.message}
+          onChange={fret => {
+            if (personalKey) void personalKeyPreference.save(null);
+            void capoPreference.save(fret);
+          }}
+          onToggle={isOn => {
+            if (personalKey) void personalKeyPreference.save(null);
+            void capoPreference.save(isOn ? Math.max(1, capoPreference.fret) : capoPreference.fret, isOn);
+          }}
+          onRetry={() => void capoPreference.save(capoPreference.fret, capoPreference.isOn)}
+        />}
 
         <AnimatePresence initial={false}>
           {chartSaveError && (
@@ -1866,7 +1895,7 @@ export function SongChartViewer({
       )}
 
       {isEditing && sectionEditorEnabled ? (
-        <div ref={chartScrollRef} className={`min-h-0 flex-1 overflow-y-auto ${fullBleed ? 'service-mode-chart-scroll bg-white px-4 pt-4 dark:bg-[#111412] sm:px-6 sm:pt-6' : 'bg-gray-50/70 px-5 py-5 dark:bg-black/20'}`}>
+        <div ref={chartScrollRef} className={`scrollbar-none min-h-0 flex-1 overflow-y-auto ${fullBleed ? 'service-mode-chart-scroll bg-white px-4 pt-4 dark:bg-[#111412] sm:px-6 sm:pt-6' : 'bg-gray-50/70 px-5 py-5 dark:bg-black/20'}`}>
           <div className={`mx-auto ${fullBleed ? 'max-w-none space-y-0' : 'max-w-3xl space-y-3'}`}>
             {draftSections.map((section, index) => {
               const tone = getSectionTone(section.label);
@@ -1955,7 +1984,7 @@ export function SongChartViewer({
               end: event.currentTarget.selectionEnd,
             };
           }}
-          className={`min-h-0 flex-1 resize-none font-mono text-[12px] leading-7 outline-none dark:text-white/85 ${
+          className={`scrollbar-none min-h-0 flex-1 resize-none font-mono text-[12px] leading-7 outline-none dark:text-white/85 ${
             fullBleed
               ? 'bg-white px-4 py-5 dark:bg-[#111412] sm:px-6'
               : 'bg-gray-50 p-5 dark:bg-black/20'
@@ -1986,8 +2015,8 @@ export function SongChartViewer({
         </div>
       ) : (
         <>
-        <div ref={chartScrollRef} className={`min-h-0 flex-1 overflow-y-auto ${fullBleed ? 'service-mode-chart-scroll px-4 pt-4 sm:px-6 md:pt-3 md:!pb-0' : 'px-5 py-5'}`}>
-          <div className={`mx-auto ${fullBleed ? 'max-w-none space-y-0' : 'max-w-3xl space-y-4'}`}>
+        <div ref={chartScrollRef} className={`scrollbar-none min-h-0 flex-1 overflow-y-auto ${fullBleed ? `service-mode-chart-scroll ${chartFooter ? 'service-mode-navigation-scroll flex flex-col md:block' : ''} px-4 pt-4 sm:px-6 md:pt-3 md:!pb-0` : 'px-5 py-5'}`}>
+          <div className={`mx-auto w-full ${fullBleed ? `max-w-none ${chartFooter ? 'flex flex-1 flex-col md:block' : ''}` : 'max-w-3xl space-y-4'}`}>
             {noteError && (
               <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
                 {noteError}
@@ -2000,21 +2029,21 @@ export function SongChartViewer({
             )}
             {privateNotes.error && <p role="status" className="mb-2 text-xs text-amber-700 dark:text-amber-300">{privateNotes.error}</p>}
             {privateNotes.legacyCount > 0 && <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-white/70"><span>{privateNotes.legacyCount} older private notes found on this device.</span><button type="button" disabled={privateNotes.importing} onClick={() => void privateNotes.importLegacy()} className="min-h-9 rounded-lg border border-current px-2 font-semibold disabled:opacity-50">{privateNotes.importing ? 'Importing…' : 'Import to my account'}</button></div>}
-            <div ref={chartColumnsRef} className={fullBleed ? 'md:gap-8' : 'space-y-4'}>
+            <div ref={chartColumnsRef} className={fullBleed ? 'shrink-0 md:gap-8' : 'space-y-8'}>
             {arrangedChartSections.map((section, arrangementIndex) => {
-              const selfNote = selfNotes[section.key];
-              const teamNote = teamNotes[section.key]?.note;
-              const isEditingSelf = editingNote?.sectionKey === section.key && editingNote.scope === 'self';
-              const isEditingTeam = editingNote?.sectionKey === section.key && editingNote.scope === 'team';
+              const selfNote = selfNotes[section.noteKey];
+              const teamNote = teamNotes[section.noteKey]?.note;
+              const isEditingSelf = editingNote?.sectionKey === section.noteKey && editingNote.scope === 'self';
+              const isEditingTeam = editingNote?.sectionKey === section.noteKey && editingNote.scope === 'team';
 
               return (
                 <section
-                  key={`${section.key}-${arrangementIndex}`}
-                  data-chart-section={section.key}
+                  key={`${section.noteKey}-${arrangementIndex}`}
+                  data-chart-section={section.noteKey}
                   className={
                     fullBleed
                       ? 'group/section border-t border-black/[0.06] px-0.5 py-5 md:py-3 first:border-t-0 dark:border-white/[0.08]'
-                      : 'group/section rounded-[24px] border border-black/[0.05] bg-white/75 p-4 shadow-sm dark:border-white/[0.07] dark:bg-white/[0.035]'
+                      : 'group/section'
                   }
                 >
                   <div className={`${fullBleed ? 'mb-2' : 'mb-3'} relative flex min-h-5 [break-after:avoid-column] flex-wrap items-center gap-2`}>
@@ -2022,31 +2051,31 @@ export function SongChartViewer({
                       className={`mr-auto inline-flex max-w-[calc(100%-5rem)] items-center rounded-sm px-1.5 py-0.5 font-bold uppercase tracking-[0.1em] ${section.tone.highlight}`}
                       style={{ fontSize: `${sectionBadgeFontSize}px`, lineHeight: 1.15 }}
                     >
-                      <span>{section.label}</span>
+                      <span>{section.noteLabel}</span>
                     </div>
                     {songId && displaySettings.notesEnabled && (
                       <div className={`absolute right-0 top-1/2 -translate-y-1/2 inline-flex shrink-0 items-center gap-1 rounded-full border border-black/[0.04] bg-white/45 p-1 shadow-sm shadow-black/[0.02] transition dark:border-white/[0.06] dark:bg-white/[0.035] ${selfNote || teamNote || isEditingSelf || isEditingTeam ? 'opacity-100' : 'opacity-0 group-hover/section:opacity-100 group-focus-within/section:opacity-100 group-active/section:opacity-100'}`}>
                         <button
-                          onClick={() => openSectionNote(section.key, section.label, 'self')}
+                          onClick={() => openSectionNote(section.noteKey, section.noteLabel, 'self')}
                           className={`relative inline-flex h-7 w-7 items-center justify-center rounded-full transition active:scale-[0.94] ${
                             selfNote
                               ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/20'
                               : 'text-gray-400 hover:bg-gray-50 hover:text-gray-600 dark:text-white/35 dark:hover:bg-white/[0.06] dark:hover:text-white/60'
                           }`}
-                          aria-label={selfNote ? `Edit private note for ${section.label}` : `Add private note for ${section.label}`}
+                          aria-label={selfNote ? `Edit private note for ${section.noteLabel}` : `Add private note for ${section.noteLabel}`}
                           title={selfNote ? 'Private note' : 'Add private note'}
                         >
                           <Lock className="h-3.5 w-3.5" />
                           {selfNote && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-sky-500 ring-1 ring-white dark:ring-[#111412]" />}
                         </button>
                         <button
-                          onClick={() => openSectionNote(section.key, section.label, 'team')}
+                          onClick={() => openSectionNote(section.noteKey, section.noteLabel, 'team')}
                           className={`relative inline-flex h-7 w-7 items-center justify-center rounded-full transition active:scale-[0.94] ${
                             teamNote
                               ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/20'
                               : 'text-gray-400 hover:bg-emerald-50 hover:text-emerald-700 dark:text-white/35 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300'
                           }`}
-                          aria-label={teamNote ? `Edit team note for ${section.label}` : `Add team note for ${section.label}`}
+                          aria-label={teamNote ? `Edit team note for ${section.noteLabel}` : `Add team note for ${section.noteLabel}`}
                           title={teamNote ? 'Team note' : 'Add team note'}
                         >
                           {teamNote ? <StickyNote className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
@@ -2059,56 +2088,14 @@ export function SongChartViewer({
                   {(selfNote || teamNote || isEditingSelf || isEditingTeam) && (
                     <div className="mb-4 grid gap-2">
                       {selfNote && !isEditingSelf && (
-                        <button
-                          onClick={() => openSectionNote(section.key, section.label, 'self')}
-                          className="rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2 text-left text-xs font-semibold leading-relaxed text-sky-900 transition hover:bg-sky-100 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-100"
-                          style={{ fontFamily: '"Comic Sans MS", "Bradley Hand", cursive', fontSize: `${noteFontSize}px` }}
-                        >
-                          <span className="mb-1 inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-sky-700 dark:text-sky-300"><Lock className="h-3 w-3" /> Private note</span>
-                          <span className="block whitespace-pre-wrap">{selfNote}</span>
-                        </button>
+                        <ChartLineNote section label={section.noteLabel} text={selfNote} scope="self" fontSize={noteFontSize} onEdit={() => openSectionNote(section.noteKey, section.noteLabel, 'self')} />
                       )}
                       {teamNote && !isEditingTeam && (
-                        <button
-                          onClick={() => openSectionNote(section.key, section.label, 'team')}
-                          className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-left text-xs font-semibold leading-relaxed text-emerald-950 transition hover:bg-emerald-100 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-50"
-                          style={{ fontFamily: '"Comic Sans MS", "Bradley Hand", cursive', fontSize: `${noteFontSize}px` }}
-                        >
-                          <span className="mb-1 inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300"><Users className="h-3 w-3" /> Team note</span>
-                          <span className="block whitespace-pre-wrap">{teamNote}</span>
-                        </button>
+                        <ChartLineNote section label={section.noteLabel} text={teamNote} scope="team" fontSize={noteFontSize} onEdit={() => openSectionNote(section.noteKey, section.noteLabel, 'team')} />
                       )}
                       {(isEditingSelf || isEditingTeam) && (
-                        <div className="border-y border-black/[0.06] py-3 dark:border-white/[0.08]">
-                          <div className="mb-2 flex items-center justify-between gap-3">
-                            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-white/45">
-                              {editingNote.scope === 'self' ? 'Private section note' : 'Team section note'}
-                            </p>
-                            <button
-                              onClick={() => setNoteDraft('')}
-                              className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" /> Clear
-                            </button>
-                          </div>
-                          <p className="mb-2 text-xs text-gray-500 dark:text-white/65">{editingNote.scope === 'self' ? 'Only you can see this. ' : 'Shared with your team after saving. '}{noteRecoveryStatus.available ? 'Unsaved cues recover on this device.' : 'Recovery unavailable — keep this screen open.'}</p>
-                          <textarea
-                            disabled={notesSaving}
-                            value={noteDraft}
-                            onChange={event => setNoteDraft(event.target.value)}
-                            className="min-h-28 w-full resize-none rounded-none border-0 bg-transparent px-0 py-1 text-sm font-semibold leading-relaxed text-gray-900 outline-none placeholder:text-gray-400 focus:ring-0 dark:text-white dark:placeholder:text-white/35"
-                            style={{ fontFamily: '"Comic Sans MS", "Bradley Hand", cursive', fontSize: `${noteFontSize}px` }}
-                            placeholder={`Add a note for ${section.label.toLowerCase()}...`}
-                          />
-                          <div className="mt-2 flex flex-wrap justify-end gap-2 border-t border-black/[0.04] pt-2 dark:border-white/[0.06]">{(editingNote.scope === 'self' ? selfNotes[editingNote.sectionKey] : teamNotes[editingNote.sectionKey]?.note) && <button type="button" onClick={() => void saveSectionNote(true)} disabled={notesSaving} className="mr-auto inline-flex min-h-11 items-center gap-1 rounded-lg px-3 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-500/10"><Trash2 className="h-3.5 w-3.5" />Delete note</button>}
-                            <button disabled={notesSaving} onClick={() => setEditingNote(null)} className="min-h-11 rounded-full px-3 text-xs font-bold text-gray-500 hover:bg-black/[0.04] dark:text-white/50 dark:hover:bg-white/[0.06]">
-                              Discard draft
-                            </button>
-                            <button onClick={() => void saveSectionNote()} disabled={notesSaving || !noteDraft.trim()} className="min-h-11 rounded-full bg-emerald-600 px-4 text-xs font-black text-white disabled:opacity-60">
-                              {notesSaving ? 'Saving...' : 'Save note'}
-                            </button>
-                          </div>
-                        </div>
+                        <ChartNoteEditor scope={editingNote.scope} label={section.noteLabel} text={noteDraft} fontSize={noteFontSize} saving={notesSaving} hasNote={Boolean(editingNote.scope === 'self' ? selfNote : teamNote)} recoveryAvailable={noteRecoveryStatus.available}
+                          onScopeChange={scope => openSectionNote(section.noteKey, section.noteLabel, scope)} onTextChange={setNoteDraft} onSave={() => void saveSectionNote()} onDelete={() => void saveSectionNote(true)} onDiscard={() => setEditingNote(null)} />
                       )}
                     </div>
                   )}
@@ -2120,8 +2107,8 @@ export function SongChartViewer({
                       const nextLine = section.lines[index + 1];
                       const followsChordRow = !line.chords?.trim() && !!line.lyrics?.trim() && previousLine?.type === 'lyrics' && !!previousLine.chords?.trim() && !previousLine.lyrics?.trim();
                       const leadsLyricRow = !!line.chords?.trim() && !line.lyrics?.trim() && nextLine?.type === 'lyrics' && !!nextLine.lyrics?.trim() && !nextLine.chords?.trim();
-                      const lineNoteKey = `${section.key}:line:${index}`;
-                      const lineLabel = `${section.label} · line ${index + 1}`;
+                      const lineNoteKey = `${section.noteKey}:line:${index}`;
+                      const lineLabel = `${section.noteLabel} · line ${index + 1}`;
                       const lineSelfNote = selfNotes[lineNoteKey];
                       const lineTeamNote = teamNotes[lineNoteKey]?.note;
                       const isEditingLineSelf = editingNote?.sectionKey === lineNoteKey && editingNote.scope === 'self';
@@ -2132,10 +2119,10 @@ export function SongChartViewer({
                           <AlignedChartLine chords={displaySettings.lyricsOnly ? '' : line.chords || ''} lyrics={line.lyrics || ''} chordSize={chordFontSize} lyricSize={lyricFontSize} chordClass={section.tone.chord} lyricClass={section.tone.lyric} chordBold={displaySettings.chordBold} lyricBold={displaySettings.lyricBold} chordItalic={displaySettings.chordItalic} lyricItalic={displaySettings.lyricItalic} />
                           </ChartNoteTrigger>
                           {(lineSelfNote || lineTeamNote) && <div className="flex max-w-full flex-wrap items-end gap-1.5">
-                            {lineSelfNote && !isEditingLineSelf && <ChartLineNote text={lineSelfNote} scope="self" fontSize={noteFontSize} onEdit={() => openSectionNote(lineNoteKey, lineLabel, 'self')} />}
-                            {lineTeamNote && !isEditingLineTeam && <ChartLineNote text={lineTeamNote} scope="team" fontSize={noteFontSize} onEdit={() => openSectionNote(lineNoteKey, lineLabel, 'team')} />}
+                            {lineSelfNote && !isEditingLineSelf && <ChartLineNote label={lineLabel} text={lineSelfNote} scope="self" fontSize={noteFontSize} onEdit={() => openSectionNote(lineNoteKey, lineLabel, 'self')} />}
+                            {lineTeamNote && !isEditingLineTeam && <ChartLineNote label={lineLabel} text={lineTeamNote} scope="team" fontSize={noteFontSize} onEdit={() => openSectionNote(lineNoteKey, lineLabel, 'team')} />}
                           </div>}
-                          {(isEditingLineSelf || isEditingLineTeam) && <div className="mt-2 basis-full rounded-xl border border-amber-200 bg-[#fffdf4] p-2 dark:border-amber-500/20 dark:bg-amber-400/[0.06]"><div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 font-sans"><div className="inline-flex gap-1" role="group" aria-label="Note visibility">{(['self', 'team'] as const).map(scope => <button key={scope} type="button" aria-pressed={editingNote.scope === scope} disabled={notesSaving} onClick={() => openSectionNote(lineNoteKey, lineLabel, scope)} className={`min-h-8 rounded-md border px-2 text-[11px] font-semibold ${editingNote.scope === scope ? 'border-amber-400 bg-amber-200 text-amber-950' : 'border-gray-300 text-gray-600 dark:border-white/20 dark:text-white/70'}`}>{scope === 'self' ? 'Only me' : 'Team'}</button>)}</div><span className="text-[11px] leading-tight text-gray-500 dark:text-white/60">{editingNote.scope === 'self' ? 'Only you can see this' : 'Shared after saving'}</span></div><textarea aria-label="Line note text" autoFocus value={noteDraft} onChange={event => setNoteDraft(event.target.value)} disabled={notesSaving} rows={2} placeholder="Write a cue or flow note…" className="w-full resize-y border-0 bg-transparent p-0 leading-relaxed text-gray-900 outline-none focus:ring-0 dark:text-white" style={{ fontFamily: '"Comic Sans MS", "Bradley Hand", cursive', fontSize: `${noteFontSize}px` }} /><div className="mt-2 flex flex-wrap justify-end gap-2">{(editingNote.scope === 'self' ? selfNotes[editingNote.sectionKey] : teamNotes[editingNote.sectionKey]?.note) && <button type="button" onClick={() => void saveSectionNote(true)} disabled={notesSaving} className="mr-auto inline-flex min-h-11 items-center gap-1 rounded-lg px-3 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-500/10"><Trash2 className="h-3.5 w-3.5" />Delete note</button>}<button type="button" onClick={() => setEditingNote(null)} disabled={notesSaving} className="min-h-11 px-3 text-xs font-bold text-gray-500">Discard draft</button><button type="button" onClick={() => void saveSectionNote()} disabled={notesSaving || !noteDraft.trim()} className="min-h-11 rounded-lg bg-amber-500 px-3 text-xs font-black text-amber-950 disabled:opacity-50">{notesSaving ? 'Saving…' : 'Save note'}</button></div></div>}
+                          {(isEditingLineSelf || isEditingLineTeam) && <div className="basis-full"><ChartNoteEditor line scope={editingNote.scope} label={lineLabel} text={noteDraft} fontSize={noteFontSize} saving={notesSaving} hasNote={Boolean(editingNote.scope === 'self' ? lineSelfNote : lineTeamNote)} recoveryAvailable={noteRecoveryStatus.available} onScopeChange={scope => openSectionNote(lineNoteKey, lineLabel, scope)} onTextChange={setNoteDraft} onSave={() => void saveSectionNote()} onDelete={() => void saveSectionNote(true)} onDiscard={() => setEditingNote(null)} /></div>}
                         </div>
                       );
                     })}
@@ -2144,7 +2131,7 @@ export function SongChartViewer({
               );
             })}
             </div>
-            <div className={fullBleed ? 'md:hidden' : ''}>{chartFooter}</div>
+            <div className={fullBleed ? 'mt-auto shrink-0 pt-4 md:hidden' : ''}>{chartFooter}</div>
           </div>
         </div>
         {fullBleed && !externalDesktopNavigation && <div className="hidden shrink-0 border-t border-black/[0.06] bg-white px-4 py-2 dark:border-white/[0.08] dark:bg-[#111412] md:block" style={{paddingBottom:'max(8px, env(safe-area-inset-bottom))'}}>{chartFooter}</div>}

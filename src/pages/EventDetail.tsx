@@ -52,6 +52,7 @@ import { hasEventScheduleEnded, isEventCompleted, type EventLifecycleOverride } 
 import { isSetlistMeaningfullyCreated } from '../lib/setlistPersistence';
 import { getPendingAssignmentUserCount } from '../lib/eventAssignmentReminder';
 import { getPendingUserEventAssignments, getUserEventAssignments, shouldBlockEventDetails } from '../lib/eventAssignmentGate';
+import { isEventGuitarist } from '../lib/personalCapo';
 import { getPostEventObservationViewers } from '../lib/postEventObservationViews';
 import { normalizeSongTitle } from '../lib/songTitle';
 import { calculatePolicyProposalDueDate, DEFAULT_EVENT_TEMPLATE_POLICIES, eventTemplateFor, normalizeEventTemplatePolicies, type EventTemplatePolicies, type SetlistSubmissionMode } from '../lib/eventPolicy';
@@ -4248,6 +4249,7 @@ const openLyricsModal = (ss: SetlistSong) => {
   );
 
   const myAssignments = getUserEventAssignments(assignments, user?.id);
+  const canUseGuitarCapo = visibleDetailIdentity === activeDetailIdentity && isEventGuitarist(assignments, user?.id);
   const responseEligibleAssignments = assignments.filter(assignment => assignment.profiles?.ministry_status !== 'inactive'
     && !(assignment.user_id === user?.id && profile?.ministry_status === 'inactive'));
   const myPendingAssignments = getPendingUserEventAssignments(responseEligibleAssignments, user?.id);
@@ -4583,6 +4585,7 @@ const openLyricsModal = (ss: SetlistSong) => {
     }
   };
   const serviceModeSong = serviceModeIndex === null ? null : serviceModeSongs[serviceModeIndex] || null;
+  const serviceModeBandKey = serviceModeSong?.performed_key || serviceModeSong?.songs?.song_key || '';
   const serviceModeSongKey = serviceModeDisplayKey || serviceModeSong?.performed_key || serviceModeSong?.songs?.song_key || '';
 	const techPerformers = assignments
 	  .filter(assignment => {
@@ -6915,8 +6918,8 @@ const openLyricsModal = (ss: SetlistSong) => {
           </div>
         )}
 
-        {!assignmentDetailsBlocked && (!postEventFeedbackOpen || showPastEventDetails) && (
-        <div id="event-panel-team" role="tabpanel" aria-labelledby="event-tab-team" hidden={activeEventTab !== 'team'} className={`animate-slide-up pt-4 ${inDialog ? '!mt-0' : ''}`} style={{ animationDelay: '150ms' }}>
+        {!assignmentDetailsBlocked && (!postEventFeedbackOpen || showPastEventDetails) && activeEventTab === 'team' && (
+        <div id="event-panel-team" role="tabpanel" aria-labelledby="event-tab-team" className={`pt-4 ${inDialog ? '!mt-0' : ''}`}>
           <div>
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <h2 className="flex min-w-0 items-center gap-2 text-lg font-black text-gray-900 dark:text-white">
@@ -8332,8 +8335,10 @@ const openLyricsModal = (ss: SetlistSong) => {
           open={!!chartModalSong}
           onClose={closeChartModal}
           title="Song Chart"
-          size="lg"
+          size="xl"
           hideHeader
+          bodyClassName="!overflow-hidden !p-0"
+          dialogClassName="h-[92dvh] sm:h-[85vh]"
         >
           {chartModalSong?.songs && (
             <SongChartViewer
@@ -8344,6 +8349,7 @@ const openLyricsModal = (ss: SetlistSong) => {
               artist={chartModalSong.songs.artist}
               songKey={chartModalSong.songs.song_key}
               performedKey={chartModalSong.performed_key}
+              capoEnabled={canUseGuitarCapo}
               chordproText={getSetlistSongChartText(chartModalSong)}
               editable={canManageSetlist || canEditSetlist}
               saving={chartSaving}
@@ -8593,7 +8599,7 @@ const openLyricsModal = (ss: SetlistSong) => {
                                 ) : <>
                                 {serviceModeSongKey && (
                                   <span className="inline-flex h-5 min-w-8 shrink-0 items-center justify-center rounded-full border border-amber-300 bg-amber-100 px-2 text-[10px] font-black uppercase tracking-[0.08em] text-amber-800 shadow-sm shadow-amber-500/10 dark:border-amber-400/35 dark:bg-amber-400/15 dark:text-amber-200">
-                                    {serviceModeSongKey}
+                                    {canUseGuitarCapo && serviceModeBandKey ? `Band ${serviceModeBandKey}` : serviceModeSongKey}
                                   </span>
                                 )}
                                 <span className="min-w-0 truncate text-sm font-bold text-gray-900 dark:text-white">
@@ -8820,6 +8826,8 @@ const openLyricsModal = (ss: SetlistSong) => {
                                   artist={song.songs.artist}
                                   songKey={song.songs.song_key}
                                   performedKey={song.performed_key}
+                                  capoEnabled={canUseGuitarCapo}
+                                  capoSongId={song.song_id}
                                   chordproText={getSetlistSongChartText(song)}
 								  editable={offset === 0 && !serviceRefreshing && (canEditSetlistSongDetails || isOrgAdmin || isAdmin || isPlatformOwner)}
                                   fullBleed

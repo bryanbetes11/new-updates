@@ -1,7 +1,7 @@
 {
   "name": "servesync",
   "private": true,
-  "version": "1.4.19",
+  "version": "1.4.20",
   "type": "module",
   "scripts": {
     "test:attendance-privacy": "node tests/privacyInternalNotes.mjs && node tests/leadershipRoleAssignments.mjs && node tests/attendanceTeamMemberships.mjs && node tests/attendanceTeamAccess.mjs && node tests/attendanceReminderPrivacy.mjs",
@@ -23,7 +23,13 @@
     "mobile:doctor": "node scripts/mobile-doctor.mjs",
     "mobile:apk": "node scripts/build-android.mjs --push",
     "mobile:play": "node scripts/build-android.mjs --play",
-    "test:attendance-foundation": "node tests/privacyInternalNotes.mjs && node tests/leadershipRoleAssignments.mjs && node tests/attendanceTeamMemberships.mjs"
+    "test:attendance-foundation": "node tests/privacyInternalNotes.mjs && node tests/leadershipRoleAssignments.mjs && node tests/attendanceTeamMemberships.mjs",
+    "desktop:web": "vite --host 127.0.0.1 --port 5175 --strictPort",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "node scripts/build-windows.mjs",
+    "desktop:build:mac": "node scripts/build-macos.mjs",
+    "desktop:info": "tauri info",
+    "desktop:test": "cargo test --manifest-path src-tauri/Cargo.toml"
   },
   "dependencies": {
     "@capacitor/android": "8.5.2",
@@ -33,6 +39,10 @@
     "@capacitor/push-notifications": "8.1.2",
     "@phosphor-icons/react": "2.1.10",
     "@supabase/supabase-js": "^2.57.4",
+    "@tauri-apps/api": "2.12.2",
+    "@tauri-apps/plugin-notification": "2.5.1",
+    "@tauri-apps/plugin-process": "2.4.0",
+    "@tauri-apps/plugin-updater": "2.13.2",
     "chordsheetjs": "^15.2.0",
     "date-fns": "^4.1.0",
     "date-fns-tz": "^3.2.0",
@@ -50,6 +60,7 @@
     "@capacitor/cli": "8.5.2",
     "@electric-sql/pglite": "^0.5.8",
     "@eslint/js": "^9.9.1",
+    "@tauri-apps/cli": "2.12.1",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",

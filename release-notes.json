@@ -1,10 +1,10 @@
 {
-  "headline": "See the full song set while browsing worship videos.",
+  "headline": "Personal guitar capo settings and clearer chord charts.",
   "highlights": [
-    "Videos show every song from the matching approved set, in set order.",
-    "Use the Show sets toggle beside Add Video to show or hide song lists.",
-    "On mobile, showing sets uses one column for readable song lists; hiding sets restores two columns.",
-    "Search videos by song title, and see song artists and keys in the video player.",
-    "Choose the matching service when more than one approved set shares a recording date."
+    "Guitarists can save a separate capo fret and on/off setting for each song without changing other musicians' charts.",
+    "Keep the band key visible while playing capo chord shapes, and restore your settings when reopening a song.",
+    "Notes stay on the selected verse occurrence, with redesigned private and team note cards and editors.",
+    "Chord charts use a wider, cleaner modal with hidden scrollbars and mobile song navigation at the bottom of short charts.",
+    "Includes notification preview fixes, event Team-tab improvements, and native desktop support in the shared source."
   ]
 }

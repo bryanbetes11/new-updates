@@ -1,0 +1,19 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "platforms": ["windows"],
+  "description": "Only the bundled main view can check and install signed updates.",
+  "webviews": [
+    "main"
+  ],
+  "permissions": [
+    "updater:allow-check",
+    "updater:allow-download-and-install",
+    "core:resources:allow-close",
+    "process:allow-restart",
+    "core:app:allow-version",
+    "notification:allow-is-permission-granted",
+    "notification:allow-request-permission",
+    "notification:allow-notify"
+  ]
+}

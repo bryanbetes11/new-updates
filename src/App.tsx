@@ -1,3 +1,4 @@
+import { DesktopNotificationBridge } from './components/DesktopNotificationBridge';
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   BrowserRouter,
@@ -18,6 +19,7 @@ import { MemberAppAccessTracker } from './components/MemberAppAccessTracker';
 import { AndroidAppOfferProvider } from './components/AndroidAppOfferProvider';
 import { NativeTapFeedback } from './components/NativeTapFeedback';
 import { NativeAppUpdateWatcher } from './components/NativeAppUpdate';
+import { DesktopAppUpdateWatcher } from './components/DesktopAppUpdate';
 import { NativeNavigation } from './components/NativeNavigation';
 import { AndroidDownload } from './pages/AndroidDownload';
 import { ToastProvider } from "./contexts/ToastContext";
@@ -238,7 +240,7 @@ const AuthConfirm = lazy(() =>
 function OnlineSessionEffects() {
   const { offlineMode, loading } = useAuth();
   if (offlineMode || loading) return null;
-  return <><NotificationOpenTracker /><NativePushBridge /><MemberAppAccessTracker /></>;
+  return <><NotificationOpenTracker /><NativePushBridge /><DesktopNotificationBridge /><MemberAppAccessTracker /></>;
 }
 
 
@@ -587,6 +589,7 @@ export default function App() {
       <InteractiveLabelCase />
       <NativeTapFeedback />
       <NativeAppUpdateWatcher />
+      <DesktopAppUpdateWatcher />
       <NativeNavigation />
       <PasswordRecoveryRedirect />
       <ThemeProvider>

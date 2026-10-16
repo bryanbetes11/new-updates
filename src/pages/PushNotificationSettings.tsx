@@ -1,3 +1,4 @@
+import { isDesktopApp } from '../lib/desktopPlatform';
 import { useEffect, useState } from 'react';
 import { ArrowDown, BellRing, CheckCircle2, Sparkles, X } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
@@ -53,7 +54,7 @@ export function PushNotificationSettings() {
               className="absolute inset-x-3 -top-[4.9rem] z-20 flex items-center gap-2 rounded-2xl border border-emerald-300/35 bg-[#123327] px-3 py-2.5 text-left text-emerald-50 shadow-xl shadow-black/35 sm:inset-x-6"
             >
               <Sparkles className="h-4 w-4 shrink-0 text-emerald-300" />
-              <p className="min-w-0 flex-1 text-[12px] font-bold leading-4">Enable Push Notifications here to receive assignments, reminders, and team updates.</p>
+              <p className="min-w-0 flex-1 text-[12px] font-bold leading-4">{isDesktopApp() ? 'Enable Windows notifications for alerts while ServeSync is open or minimized.' : 'Enable Push Notifications here to receive assignments, reminders, and team updates.'}</p>
               <button
                 type="button"
                 onClick={() => setShowSetupGuide(false)}
@@ -84,7 +85,7 @@ export function PushNotificationSettings() {
             <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" aria-hidden="true" />
             <div>
               <p className="text-sm font-extrabold">You’re all set.</p>
-              <p className="mt-1 text-sm leading-5 text-emerald-800/80 dark:text-emerald-100/75">Notifications are enabled for this device. You can now receive assignments, reminders, and team updates.</p>
+              <p className="mt-1 text-sm leading-5 text-emerald-800/80 dark:text-emerald-100/75">{isDesktopApp() ? 'Windows alerts are enabled while ServeSync is open or minimized. Use Test notification to check delivery on this PC.' : 'Notifications are enabled for this device. You can now receive assignments, reminders, and team updates.'}</p>
             </div>
           </motion.section>
         )}

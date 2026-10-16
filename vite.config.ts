@@ -143,8 +143,17 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['lucide-react'],
   },
+  server: {
+    watch: {
+      ignored: ['**/src-tauri/target/**', '**/src-tauri/gen/**'],
+    },
+  },
   build: {
     rollupOptions: {
+      input: {
+        app: path.resolve(__dirname, 'index.html'),
+        desktopTitlebar: path.resolve(__dirname, 'desktop-titlebar.html'),
+      },
       output: {
         manualChunks: {
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],

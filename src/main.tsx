@@ -1,3 +1,5 @@
+import './desktop-window.css';
+import { isDesktopApp } from './lib/desktopPlatform';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
@@ -12,6 +14,7 @@ import {
   RouteRecoveryBoundary,
 } from './components/RouteRecoveryBoundary.tsx';
 
+if (isDesktopApp()) document.documentElement.dataset.desktopApp = 'true';
 initializeDeviceLayout();
 capturePushNotificationOpen();
 installVitePreloadFailureLogging();

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isDesktopApp } from '../lib/desktopPlatform';
 import { useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
@@ -2415,6 +2416,9 @@ export function Navigation({
           {!collapsed && (
             <div className="desktop-sidebar-utilities flex shrink-0 flex-col items-stretch border-t border-[#d3d4dd] bg-transparent px-[11px] py-2 dark:border-white/[0.09]">
               <div className="mb-1 border-b border-slate-300/80 pb-1 dark:border-white/[0.08]">
+                {isDesktopApp() && <button type="button" onClick={() => handleNav('/settings/app')} aria-current={isDesktopListItemActive('/settings/app') ? 'page' : undefined} className="desktop-sidebar-utility-link flex h-9 w-full items-center gap-2 rounded-[5px] px-2 text-xs font-semibold text-slate-600 transition-colors dark:text-slate-300">
+                  <RefreshCw className="h-[18px] w-[18px]" /> App updates
+                </button>}
                 <button type="button" onClick={() => handleNav('/settings/privacy')} aria-current={isDesktopListItemActive('/settings/privacy') ? 'page' : undefined} className="desktop-sidebar-utility-link flex h-9 w-full items-center gap-2 rounded-[5px] px-2 text-xs font-semibold text-slate-600 transition-colors dark:text-slate-300">
                   <PrivacyNavIcon active={isDesktopListItemActive('/settings/privacy')} className="h-[18px] w-[18px]" />
                   Privacy &amp; Account
@@ -2442,6 +2446,9 @@ export function Navigation({
           )}
           {collapsed && (
             <div className="desktop-sidebar-utilities mt-auto flex flex-col items-center gap-2 border-t border-[#d3d4dd] bg-transparent px-2 py-3 dark:border-white/[0.09]">
+              {isDesktopApp() && <Tooltip label="App updates" active={isDesktopListItemActive('/settings/app')} onActivate={() => handleNav('/settings/app')}>
+                <button type="button" onClick={() => handleNav('/settings/app')} aria-label="App updates" aria-current={isDesktopListItemActive('/settings/app') ? 'page' : undefined} className="desktop-sidebar-utility-link flex h-10 w-10 items-center justify-center rounded-[5px] text-slate-600 transition-colors dark:text-slate-300"><RefreshCw className="h-[19px] w-[19px]" /></button>
+              </Tooltip>}
               <Tooltip label="Privacy & Account" active={isDesktopListItemActive('/settings/privacy')} onActivate={() => handleNav('/settings/privacy')}>
                 <button type="button" onClick={() => handleNav('/settings/privacy')} aria-label="Privacy & Account" aria-current={isDesktopListItemActive('/settings/privacy') ? 'page' : undefined} className="desktop-sidebar-utility-link flex h-10 w-10 items-center justify-center rounded-[5px] text-slate-600 transition-colors dark:text-slate-300">
                   <PrivacyNavIcon active={isDesktopListItemActive('/settings/privacy')} className="h-[19px] w-[19px]" />

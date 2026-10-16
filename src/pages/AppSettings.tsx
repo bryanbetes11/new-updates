@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { App } from '@capacitor/app';
 import { RefreshCw, Settings } from 'lucide-react';
 import { NativeAppUpdateCard } from '../components/NativeAppUpdate';
+import { DesktopAppUpdateCard } from '../components/DesktopAppUpdate';
+import { desktopPlatformName, isDesktopApp } from '../lib/desktopPlatform';
 import { DeviceCacheSetting } from '../components/DeviceCacheSetting';
 import { APP_VERSION_LABEL } from '../lib/appUpdate';
 import { checkForAppUpdate } from '../lib/serviceWorkerUpdate';
@@ -71,9 +73,9 @@ export function AppSettings() {
         <section aria-labelledby="app-updates-title" className="space-y-4 rounded-3xl border border-gray-200/80 bg-white p-5 dark:border-white/[0.07] dark:bg-white/[0.025] sm:p-6">
           <div>
             <h2 id="app-updates-title" className="text-base font-bold text-gray-950 dark:text-white">App Updates</h2>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">ServeSync {installed ? `v${installed.version}` : APP_VERSION_LABEL}</p>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{isDesktopApp() ? `ServeSync for ${desktopPlatformName()}` : `ServeSync ${installed ? `v${installed.version}` : APP_VERSION_LABEL}`}</p>
           </div>
-          {isPlayAndroidApp() ? (
+          {isDesktopApp() ? <DesktopAppUpdateCard /> : isPlayAndroidApp() ? (
             <a href={PLAY_STORE_URL} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white hover:bg-emerald-700">
               Open Google Play
             </a>

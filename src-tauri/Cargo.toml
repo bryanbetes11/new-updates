@@ -1,0 +1,33 @@
+[package]
+name = "servesync-desktop"
+version = "1.4.21"
+description = "ServeSync desktop app"
+authors = ["BAB Creations"]
+license = ""
+repository = ""
+edition = "2024"
+rust-version = "1.90"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.1", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.12.1", features = ["unstable"] }
+tauri-plugin-opener = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+
+tauri-plugin-notification = "2"
+
+[dev-dependencies]
+base64 = "0.22"
+minisign-verify = "0.2"

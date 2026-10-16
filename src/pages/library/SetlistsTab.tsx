@@ -17,6 +17,7 @@ import { Modal } from '../../components/Modal';
 import { EmptyState } from '../../components/EmptyState';
 import { Avatar } from '../../components/Avatar';
 import { SongChartViewer } from '../../components/SongChartViewer';
+import { isGuitarRole } from '../../lib/personalCapo';
 import { SongArtwork } from '../../components/SongArtwork';
 import { parseChordProMetadata } from '../../lib/chordPro';
 import { readChartUploadFiles } from '../../lib/songBookProImport';
@@ -167,7 +168,8 @@ interface SetlistsTabProps {
 }
 
 export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTabProps) {
-  const { user, profile, loading: authLoading, offlineMode, isOrgAdmin, isAdmin, isPlatformOwner } = useAuth();
+  const { user, profile, userRoles, loading: authLoading, offlineMode, isOrgAdmin, isAdmin, isPlatformOwner } = useAuth();
+  const canUseGuitarCapo = userRoles.some(role => role.user_id === user?.id && isGuitarRole(role.roles?.name));
   const viewScope = !authLoading && user?.id && profile?.id === user.id && profile.org_id ? JSON.stringify([user.id, profile.org_id]) : null;
   const cacheScope = viewScope ? deviceCacheScope(user?.id, profile?.org_id) : null;
   const activeScopeRef = useRef(viewScope);
@@ -1520,6 +1522,7 @@ export function SetlistsTab({ initialView = 'setlists', fixedView }: SetlistsTab
                 title={selectedChartSong.title}
                 artist={selectedChartSong.artist}
                 songKey={selectedChartSong.song_key}
+                capoEnabled={canUseGuitarCapo}
                 chordproText={selectedChartSong.chordpro_text}
                 editable={cacheState === 'fresh'}
                 fullBleed

@@ -1,3 +1,5 @@
+import { isDesktopApp } from '../lib/desktopPlatform';
+import { DesktopNotificationSetting } from './DesktopNotificationSetting';
 import { useCallback, useEffect, useState } from 'react';
 import { Bell, BellOff, Check, Loader2, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -26,7 +28,7 @@ function urlBase64ToUint8Array(base64String: string) {
   return outputArray;
 }
 
-export function PushNotificationSetting({ surface = 'profile', onEnabled }: PushNotificationSettingProps) {
+function BrowserPushNotificationSetting({ surface = 'profile', onEnabled }: PushNotificationSettingProps) {
   const { user, profile } = useAuth();
   const { toast } = useToast();
   const [pushEnabled, setPushEnabled] = useState<boolean | null>(null);
@@ -316,4 +318,8 @@ export function PushNotificationSetting({ surface = 'profile', onEnabled }: Push
       </div>
     </div>
   );
+}
+
+export function PushNotificationSetting(props: PushNotificationSettingProps) {
+ return isDesktopApp() ? <DesktopNotificationSetting {...props} /> : <BrowserPushNotificationSetting {...props} />;
 }

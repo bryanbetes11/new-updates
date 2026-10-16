@@ -1,3 +1,4 @@
+import { isDesktopApp } from '../lib/desktopPlatform';
 import {
   useState,
   useEffect,
@@ -351,7 +352,7 @@ export function Layout() {
   }, [shouldShiftForMobileMenu]);
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id || isDesktopApp()) return;
     if (
       !("serviceWorker" in navigator) ||
       !("PushManager" in window) ||

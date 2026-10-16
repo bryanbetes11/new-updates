@@ -27,6 +27,7 @@ Follow Bryan's shared [efficiency guide](C:/Users/Bryan/Documents/ChatGPT/Portfo
 - Missing system Node: see the exact PowerShell fallback in [docs/VERIFICATION.md](docs/VERIFICATION.md).
 - Supabase is canonical for shared data. Preserve draft recovery on failed saves, app switching, and navigation. Keep recovery scoped to the appropriate user and organization.
 - Do not send test cues, notifications, or assignment responses to real members. Use isolated fixtures or safely rolled-back database checks; transaction rollback does not undo external side effects.
+- Local testing must never notify real users. Create and mutate test events only in an isolated fixture/backend with external notification and production-backend connections blocked; an unchecked notification option alone is insufficient. Authenticated production-backed local previews are read-only for testing. Preserve this rule for future local tests.
 - Apply schema changes through migrations and check authorization/RLS. Do not expose credentials in commands, logs, or documentation.
 
 ## Read only what the task needs

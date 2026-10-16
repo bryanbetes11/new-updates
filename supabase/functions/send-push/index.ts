@@ -19,6 +19,14 @@ interface PushPayload {
   data?: Record<string, unknown>;
 }
 
+// Push providers receive a preview; the full notification stays in the inbox.
+function pushPreview(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  // Do not split an emoji's UTF-16 surrogate pair at the preview boundary.
+  const preview = text.slice(0, maxLength - 1).replace(/[\uD800-\uDBFF]$/, "");
+  return `${preview.trimEnd()}…`;
+}
+
 type ProfileOrgRow = {
   org_id: string | null;
 };
@@ -190,8 +198,7 @@ Deno.serve(async (req: Request) => {
       !user_id ||
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(user_id) ||
       (notification_id && !/^[0-9a-f-]{36}$/i.test(notification_id)) ||
-      typeof title !== "string" || typeof body !== "string" || !title.trim() ||
-      title.length > 160 || body.length > 1000
+      typeof title !== "string" || typeof body !== "string" || !title.trim()
     ) return json({ error: "Invalid push payload" }, 400);
 
     const updateStatus = async (values: Record<string, unknown>) => {
@@ -267,7 +274,8 @@ Deno.serve(async (req: Request) => {
       console.error("Failed to look up push organization name", organizationError);
     }
     const organizationName = (organizationRow as OrganizationRow | null)?.name?.trim() || null;
-    const resolvedTitle = resolvePushTitle(title, organizationName, type);
+    const resolvedTitle = pushPreview(resolvePushTitle(title, organizationName, type), 160);
+    const previewBody = pushPreview(body, 1000);
     const { data: subscriptions, error: subscriptionError } = await supabase
       .from("push_subscriptions")
       .select("id, endpoint, p256dh, auth_key")
@@ -292,7 +300,7 @@ Deno.serve(async (req: Request) => {
     const results = await Promise.all([
       ...(subscriptions as PushSubscriptionRow[] || []).map(async (sub) => {
       const result = vapidPrivateKey
-        ? await sendWebPush(sub, { title: resolvedTitle, body, data }, priority, type)
+        ? await sendWebPush(sub, { title: resolvedTitle, body: previewBody, data }, priority, type)
         : { ok: false, stale: false };
       if (!result.ok && result.stale && sub.id) {
         await supabase.from("push_subscriptions").delete().eq("id", sub.id);
@@ -301,7 +309,7 @@ Deno.serve(async (req: Request) => {
       }),
       ...(devices || []).map(async device => {
         const options = pushOptions(priority, type);
-        const result = await sendFcm({ token: device.token, title: resolvedTitle, body,
+        const result = await sendFcm({ token: device.token, title: resolvedTitle, body: previewBody,
           userId: user_id, notificationId: notification_id, url: data?.url,
           highPriority: options.urgency === 'high', ttl: options.TTL });
         if (result.stale) {

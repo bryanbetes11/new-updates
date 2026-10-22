@@ -24,7 +24,7 @@ expectEqual(neverUsed.readyDate, null, 'never-used songs do not need an eligibil
 
 const recentlyUsedDate = '2026-09-01';
 const targetDate = '2026-09-20';
-for (const eventType of ['Prayer Meeting', 'LGTF (Midweek)', 'Midweek', '  PRAYER   MEETING  ']) {
+for (const eventType of ['Custom', '  CUSTOM  ', 'Prayer Meeting', 'LGTF (Midweek)', 'Midweek', '  PRAYER   MEETING  ']) {
   const projection = projectSongReadinessForEvent(recentlyUsedDate, targetDate, eventType);
   expectEqual(projection.isExempt, true, `${eventType} is marked exempt`);
   expectEqual(projection.meetsRule, true, `${eventType} bypasses the 90-day rule`);
@@ -36,4 +36,9 @@ const sundayProjection = projectSongReadinessForEvent(recentlyUsedDate, targetDa
 expectEqual(sundayProjection.isExempt, false, 'Sunday Service is not exempt');
 expectEqual(sundayProjection.meetsRule, false, 'Sunday Service still enforces the 90-day rule');
 expectEqual(sundayProjection.shortfallDays, 71, 'Sunday Service keeps the calculated shortfall');
-expectEqual(isSongReadinessRuleExempt('Midweek Rehearsal'), false, 'similar custom event types are not exempt');
+expectEqual(isSongReadinessRuleExempt('Midweek Rehearsal'), false, 'similar event type names are not exempt');
+
+const customProjection = projectSongReadinessForEvent('2026-10-11', '2026-10-24', 'Custom');
+expectEqual(customProjection.daysAtTarget, 13, 'Custom events preserve actual song usage history');
+expectEqual(customProjection.meetsRule, true, 'Custom events allow a song used only 13 days earlier');
+expectEqual(customProjection.shortfallDays, 0, 'Custom events do not retain the 77-day lock');

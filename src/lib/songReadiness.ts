@@ -11,6 +11,7 @@ export interface SongReadinessProjection {
 }
 
 const SONG_READINESS_EXEMPT_EVENT_TYPES = new Set([
+  'custom',
   'prayer meeting',
   'lgtf (midweek)',
   'midweek',

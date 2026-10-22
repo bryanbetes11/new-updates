@@ -1,10 +1,8 @@
 {
-  "headline": "Personal guitar capo settings and clearer chord charts.",
+  "headline": "Custom event setlists can reuse songs without waiting 90 days.",
   "highlights": [
-    "Guitarists can save a separate capo fret and on/off setting for each song without changing other musicians' charts.",
-    "Keep the band key visible while playing capo chord shapes, and restore your settings when reopening a song.",
-    "Notes stay on the selected verse occurrence, with redesigned private and team note cards and editors.",
-    "Chord charts use a wider, cleaner modal with hidden scrollbars and mobile song navigation at the bottom of short charts.",
-    "Includes notification preview fixes, event Team-tab improvements, and native desktop support in the shared source."
+    "Custom events are exempt from the 90-day song reuse rule when building and submitting setlists.",
+    "Song readiness shows Exempt for Custom events while retaining the last approved usage history.",
+    "Sunday Service restrictions and existing Prayer Meeting and Midweek exemptions remain unchanged."
   ]
 }
